@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import math
+from collections import namedtuple
 from copy import deepcopy
 from typing import Any, Protocol
 
@@ -13,9 +15,32 @@ from .policy import PlanetPolicy
 from .ppo import sample_actions
 
 
+Planet = namedtuple("Planet", ["id", "owner", "x", "y", "radius", "ships", "production"])
+
+
 class OpponentPolicy(Protocol):
     def act(self, observation: Any) -> list[list[float | int]]:
         ...
+
+
+class SniperOpponent:
+    def act(self, observation: Any) -> list[list[float | int]]:
+        moves: list[list[float | int]] = []
+        player = obs_get(observation, "player", 0)
+        raw_planets = obs_get(observation, "planets", [])
+        planets = [Planet(*planet) for planet in raw_planets]
+        my_planets = [planet for planet in planets if planet.owner == player]
+        targets = [planet for planet in planets if planet.owner != player]
+        if not targets:
+            return moves
+        for source in my_planets:
+            nearest = min(targets, key=lambda target: math.hypot(source.x - target.x, source.y - target.y))
+            ships_needed = max(nearest.ships + 1, 20)
+            if source.ships < ships_needed:
+                continue
+            angle = math.atan2(nearest.y - source.y, nearest.x - source.x)
+            moves.append([source.id, angle, ships_needed])
+        return moves
 
 
 class KaggleRandomOpponent:
@@ -95,6 +120,8 @@ def build_opponent(
     cfg: TrainConfig | None = None,
     device: torch.device | None = None,
 ) -> OpponentPolicy:
+    if name == "sniper":
+        return SniperOpponent()
     if name == "random":
         return KaggleRandomOpponent()
     if name == "self":
