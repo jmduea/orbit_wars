@@ -14,6 +14,7 @@ from .env import OrbitWarsEnv
 from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim
 from .game_types import PlanetState
 from .opponents import SelfPlayOpponent, build_opponent
+from .normalization import ObservationNormalizer
 from .policy import PlanetPolicy
 from .ppo import TransitionBatch, ppo_update, sample_actions
 
@@ -52,6 +53,7 @@ def collect_rollout(
     cfg: TrainConfig,
     device: torch.device,
     next_seed: int,
+    normalizer: ObservationNormalizer | None = None,
 ) -> tuple[TransitionBatch, list[TurnBatch], int, dict[str, float]]:
     empty_candidate = (cfg.env.candidate_count, candidate_feature_dim())
     self_rows: list[np.ndarray] = []
@@ -68,14 +70,19 @@ def collect_rollout(
     for _ in range(cfg.ppo.rollout_steps):
         offsets = np.cumsum([0] + [batch.self_features.shape[0] for batch in batches[:-1]])
         merged = merge_batches(batches)
+        if normalizer is not None:
+            normalizer.update(merged)
+            policy_batch = normalizer.normalize_batch(merged)
+        else:
+            policy_batch = merged
         row_values = np.zeros((merged.self_features.shape[0],), dtype=np.float32)
         if merged.self_features.shape[0] > 0:
             with torch.inference_mode():
                 outputs = policy(
-                    torch.from_numpy(merged.self_features).to(device),
-                    torch.from_numpy(merged.candidate_features).to(device),
-                    torch.from_numpy(merged.global_features).to(device),
-                    torch.from_numpy(merged.candidate_mask).to(device).bool(),
+                    torch.from_numpy(policy_batch.self_features).to(device),
+                    torch.from_numpy(policy_batch.candidate_features).to(device),
+                    torch.from_numpy(policy_batch.global_features).to(device),
+                    torch.from_numpy(policy_batch.candidate_mask).to(device).bool(),
                 )
                 sampled = sample_actions(outputs, deterministic=False)
                 row_values = outputs.value.detach().cpu().numpy()
@@ -93,9 +100,9 @@ def collect_rollout(
             group_indices: list[int] = []
             for local_idx, context in enumerate(batch.contexts):
                 global_idx = start + local_idx
-                self_rows.append(batch.self_features[local_idx])
-                candidate_rows.append(batch.candidate_features[local_idx])
-                global_rows.append(batch.global_features[local_idx])
+                self_rows.append(policy_batch.self_features[global_idx])
+                candidate_rows.append(policy_batch.candidate_features[global_idx])
+                global_rows.append(policy_batch.global_features[global_idx])
                 candidate_masks.append(batch.candidate_mask[local_idx])
                 values.append(float(row_values[global_idx]))
                 tgt_idx = int(sampled_target_index[global_idx]) if batch.self_features.shape[0] > 0 else 0
@@ -130,7 +137,7 @@ def collect_rollout(
 
     returns: list[float] = [0.0] * len(values)
     advantages: list[float] = [0.0] * len(values)
-    next_state_values = bootstrap_values(policy, batches, device)
+    next_state_values = bootstrap_values(policy, batches, device, normalizer)
     for env_idx, groups in enumerate(groups_per_env):
         future_return = next_state_values[env_idx]
         for group in reversed(groups):
@@ -158,17 +165,23 @@ def collect_rollout(
     return batch, batches, next_seed, stats
 
 
-def bootstrap_values(policy: PlanetPolicy, batches: list[TurnBatch], device: torch.device) -> list[float]:
+def bootstrap_values(
+    policy: PlanetPolicy,
+    batches: list[TurnBatch],
+    device: torch.device,
+    normalizer: ObservationNormalizer | None = None,
+) -> list[float]:
     merged = merge_batches(batches)
     if merged.self_features.shape[0] == 0:
         return [0.0 for _ in batches]
     offsets = np.cumsum([0] + [batch.self_features.shape[0] for batch in batches[:-1]])
+    policy_batch = normalizer.normalize_batch(merged) if normalizer is not None else merged
     with torch.inference_mode():
         outputs = policy(
-            torch.from_numpy(merged.self_features).to(device),
-            torch.from_numpy(merged.candidate_features).to(device),
-            torch.from_numpy(merged.global_features).to(device),
-            torch.from_numpy(merged.candidate_mask).to(device).bool(),
+            torch.from_numpy(policy_batch.self_features).to(device),
+            torch.from_numpy(policy_batch.candidate_features).to(device),
+            torch.from_numpy(policy_batch.global_features).to(device),
+            torch.from_numpy(policy_batch.candidate_mask).to(device).bool(),
         )
     values = outputs.value.detach().cpu().numpy()
     per_env = []
@@ -220,6 +233,7 @@ def save_checkpoint(
     policy: PlanetPolicy,
     optimizer: torch.optim.Optimizer,
     cfg: TrainConfig,
+    normalizer: ObservationNormalizer | None = None,
 ) -> None:
     run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -229,6 +243,7 @@ def save_checkpoint(
             "policy": policy.state_dict(),
             "optimizer": optimizer.state_dict(),
             "config": cfg,
+            "normalizer": normalizer.state_dict() if normalizer is not None else None,
         },
         run_dir / "ckpt_last.pt",
     )
@@ -238,6 +253,7 @@ def save_checkpoint(
             "policy": policy.state_dict(),
             "optimizer": optimizer.state_dict(),
             "config": cfg,
+            "normalizer": normalizer.state_dict() if normalizer is not None else None,
         },
         run_dir / f"ckpt_{update:06d}.pt",
     )
@@ -269,12 +285,17 @@ def main() -> None:
         candidate_count=cfg.env.candidate_count,
         hidden_size=cfg.model.hidden_size,
     ).to(device)
+    normalizer = (
+        ObservationNormalizer(clip=cfg.model.obs_norm_clip)
+        if cfg.model.normalize_observations
+        else None
+    )
     if isinstance(opponent, SelfPlayOpponent):
-        opponent.sync_from(policy)
+        opponent.sync_from(policy, normalizer)
     optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.ppo.lr)
     save_dir = Path(cfg.save_dir)
     for update in range(1, cfg.ppo.total_updates + 1):
-        batch, batches, next_seed, stats = collect_rollout(envs, batches, policy, cfg, device, next_seed)
+        batch, batches, next_seed, stats = collect_rollout(envs, batches, policy, cfg, device, next_seed, normalizer)
         metrics = ppo_update(
             policy,
             optimizer,
@@ -288,7 +309,7 @@ def main() -> None:
             device=device,
         )
         if isinstance(opponent, SelfPlayOpponent) and update % cfg.self_play_update_interval == 0:
-            opponent.sync_from(policy)
+            opponent.sync_from(policy, normalizer)
         if update % cfg.log_every == 0:
             print(
                 f"update={update} episode_reward_mean={stats['episode_reward_mean']:.4f} "
@@ -296,7 +317,7 @@ def main() -> None:
                 f"loss={metrics['loss']:.4f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-            save_checkpoint(save_dir, cfg.run_name, update, policy, optimizer, cfg)
+            save_checkpoint(save_dir, cfg.run_name, update, policy, optimizer, cfg, normalizer)
 
 
 if __name__ == "__main__":

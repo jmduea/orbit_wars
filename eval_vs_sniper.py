@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.config import TrainConfig, default_train_config_path, load_train_config
 from src.features import TurnBatch, candidate_feature_dim, encode_turn, global_feature_dim, self_feature_dim
+from src.normalization import ObservationNormalizer
 from src.policy import PlanetPolicy
 from src.ppo import sample_actions
 
@@ -72,6 +73,7 @@ def register_checkpoint_module_aliases() -> None:
         "opponents": ["src.rl_template.opponents", "src.opponents", "opponents"],
         "env": ["src.rl_template.env", "src.env", "env"],
         "train": ["src.rl_template.train", "src.train", "train"],
+        "normalization": ["src.rl_template.normalization", "src.normalization", "normalization"],
     }
 
     for canonical_name, candidates in module_candidates.items():
@@ -87,24 +89,39 @@ def register_checkpoint_module_aliases() -> None:
         sys.modules[f"src.rl_template.{canonical_name}"] = module
         sys.modules[f"src.{canonical_name}"] = module
 
-def load_checkpoint_if_available(policy: PlanetPolicy, checkpoint_path: str | None, device: torch.device) -> None:
+def load_checkpoint_if_available(
+    policy: PlanetPolicy,
+    normalizer: ObservationNormalizer | None,
+    checkpoint_path: str | None,
+    device: torch.device,
+) -> None:
     register_checkpoint_module_aliases()
     if checkpoint_path is None:
         return
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     state_dict = checkpoint.get("policy", checkpoint)
     policy.load_state_dict(state_dict)
+    normalizer_state = checkpoint.get("normalizer") if isinstance(checkpoint, dict) else None
+    if normalizer is not None and normalizer_state is not None:
+        normalizer.load_state_dict(normalizer_state)
 
 
-def build_moves(batch: TurnBatch, policy: PlanetPolicy, device: torch.device, deterministic: bool) -> list[list[float | int]]:
+def build_moves(
+    batch: TurnBatch,
+    policy: PlanetPolicy,
+    normalizer: ObservationNormalizer | None,
+    device: torch.device,
+    deterministic: bool,
+) -> list[list[float | int]]:
     if batch.self_features.shape[0] == 0:
         return []
+    policy_batch = normalizer.normalize_batch(batch) if normalizer is not None else batch
     with torch.inference_mode():
         outputs = policy(
-            torch.from_numpy(batch.self_features).to(device),
-            torch.from_numpy(batch.candidate_features).to(device),
-            torch.from_numpy(batch.global_features).to(device),
-            torch.from_numpy(batch.candidate_mask).to(device).bool(),
+            torch.from_numpy(policy_batch.self_features).to(device),
+            torch.from_numpy(policy_batch.candidate_features).to(device),
+            torch.from_numpy(policy_batch.global_features).to(device),
+            torch.from_numpy(policy_batch.candidate_mask).to(device).bool(),
         )
         sampled = sample_actions(outputs, deterministic=deterministic)
     target_indices = sampled.target_index.detach().cpu().numpy()
@@ -175,6 +192,7 @@ def extract_reward(state: Any) -> float:
 def play_one_game(
     cfg: TrainConfig,
     policy: PlanetPolicy,
+    normalizer: ObservationNormalizer | None,
     device: torch.device,
     *,
     seed: int,
@@ -196,7 +214,7 @@ def play_one_game(
 
     while not done:
         batch = encode_turn(player_obs, cfg.env, env_index=0)
-        player_action = build_moves(batch, policy, device, deterministic)
+        player_action = build_moves(batch, policy, normalizer, device, deterministic)
         opponent_action = nearest_planet_sniper(opponent_obs)
         states = env.step([player_action, opponent_action])
         player_obs = extract_observation(states[0])
@@ -222,7 +240,12 @@ def main() -> None:
     device = resolve_device(device_name)
     seed_everything(args.seed)
     policy = build_policy(cfg, device)
-    load_checkpoint_if_available(policy, args.checkpoint, device)
+    normalizer = (
+        ObservationNormalizer(clip=cfg.model.obs_norm_clip)
+        if cfg.model.normalize_observations
+        else None
+    )
+    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device)
     policy.eval()
 
     wins = 0
@@ -234,6 +257,7 @@ def main() -> None:
         reward, steps = play_one_game(
             cfg,
             policy,
+            normalizer,
             device,
             seed=game_seed,
             deterministic=args.deterministic,
