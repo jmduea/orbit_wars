@@ -1,7 +1,7 @@
 seed: 42
-run_name: orbit_wars_ppo_full_training
+run_name: orbit_wars_ppo_attention_candidates_16
 device: auto
-save_dir: /kaggle/working/artifacts/full_training
+save_dir: /kaggle/working/artifacts/attention_candidates_16
 checkpoint_every: 50
 log_every: 1
 opponent: self
@@ -15,7 +15,7 @@ alternate_player_sides: true
 
 env:
   # Includes reserved no-op index 0; real target slots are candidate_count - 1.
-  candidate_count: 8
+  candidate_count: 16
   ship_bucket_count: 8
   reward_capture_planet: 0.0
   reward_ship_delta: 0.0
@@ -23,7 +23,7 @@ env:
   reward_terminal_scale: 1.0
 
 model:
-  architecture: mlp  # mlp | attention
+  architecture: attention  # mlp | attention
   hidden_size: 128
   attention_heads: 4
   normalize_observations: true
