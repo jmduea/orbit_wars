@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ from .policy import PolicyOutput
 @dataclass(slots=True)
 class SampledAction:
     target_index: torch.Tensor
+    ship_bucket: torch.Tensor
     log_prob: torch.Tensor
     entropy: torch.Tensor
 
@@ -23,6 +23,7 @@ class TransitionBatch:
     global_features: torch.Tensor
     candidate_mask: torch.Tensor
     target_index: torch.Tensor
+    ship_bucket: torch.Tensor
     log_prob: torch.Tensor
     returns: torch.Tensor
     advantages: torch.Tensor
@@ -31,21 +32,35 @@ class TransitionBatch:
 def sample_actions(outputs: PolicyOutput, deterministic: bool) -> SampledAction:
     target_logits = safe_target_logits(outputs.target_logits)
     target_dist = Categorical(logits=target_logits)
-    target_index = target_logits.argmax(dim=-1) if deterministic else target_dist.sample()
+    ship_dist = Categorical(logits=outputs.ship_logits)
+    if deterministic:
+        target_index = target_logits.argmax(dim=-1)
+        ship_bucket = outputs.ship_logits.argmax(dim=-1)
+    else:
+        target_index = target_dist.sample()
+        ship_bucket = ship_dist.sample()
 
-    log_prob, entropy = action_log_prob_and_entropy(outputs=outputs, target_index=target_index)
-    return SampledAction(target_index=target_index, log_prob=log_prob, entropy=entropy)
+    log_prob, entropy = action_log_prob_and_entropy(
+        outputs=outputs,
+        target_index=target_index,
+        ship_bucket=ship_bucket,
+    )
+    return SampledAction(target_index=target_index, ship_bucket=ship_bucket, log_prob=log_prob, entropy=entropy)
 
 
 def action_log_prob_and_entropy(
     outputs: PolicyOutput,
     target_index: torch.Tensor,
+    ship_bucket: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     target_logits = safe_target_logits(outputs.target_logits)
     target_dist = Categorical(logits=target_logits)
+    ship_dist = Categorical(logits=outputs.ship_logits)
     target_log_prob = target_dist.log_prob(target_index)
+    ship_log_prob = ship_dist.log_prob(ship_bucket)
     target_entropy = target_dist.entropy()
-    return target_log_prob, target_entropy
+    ship_entropy = ship_dist.entropy()
+    return target_log_prob + ship_log_prob, target_entropy + ship_entropy
 
 
 def safe_target_logits(target_logits: torch.Tensor) -> torch.Tensor:
@@ -78,6 +93,7 @@ def ppo_update(
     candidate_mask = batch.candidate_mask.to(device).bool()
     old_log_prob = batch.log_prob.to(device)
     target_index = batch.target_index.to(device)
+    ship_bucket = batch.ship_bucket.to(device)
     returns = batch.returns.to(device)
     advantages = batch.advantages.to(device)
     advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
@@ -98,6 +114,7 @@ def ppo_update(
             new_log_prob, entropy = action_log_prob_and_entropy(
                 outputs,
                 target_index[idx],
+                ship_bucket[idx],
             )
             ratio = (new_log_prob - old_log_prob[idx]).exp()
             policy_loss = torch.maximum(

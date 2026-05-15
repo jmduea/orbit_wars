@@ -11,7 +11,7 @@ import torch
 
 from .config import TrainConfig, default_train_config_path, load_train_config
 from .env import OrbitWarsEnv
-from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim
+from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim, ship_count_for_bucket
 from .game_types import PlanetState
 from .opponents import SelfPlayOpponent, build_opponent
 from .normalization import ObservationNormalizer
@@ -61,6 +61,7 @@ def collect_rollout(
     global_rows: list[np.ndarray] = []
     candidate_masks: list[np.ndarray] = []
     target_indices: list[int] = []
+    ship_buckets: list[int] = []
     log_probs: list[float] = []
     values: list[float] = []
     groups_per_env: list[list[StepGroup]] = [[] for _ in envs]
@@ -87,9 +88,11 @@ def collect_rollout(
                 sampled = sample_actions(outputs, deterministic=False)
                 row_values = outputs.value.detach().cpu().numpy()
                 sampled_target_index = sampled.target_index.detach().cpu().numpy()
+                sampled_ship_bucket = sampled.ship_bucket.detach().cpu().numpy()
                 sampled_log_prob = sampled.log_prob.detach().cpu().numpy()
         else:
             sampled_target_index = np.zeros((0,), dtype=np.int64)
+            sampled_ship_bucket = np.zeros((0,), dtype=np.int64)
             sampled_log_prob = np.zeros((0,), dtype=np.float32)
 
         next_batches: list[TurnBatch] = []
@@ -106,18 +109,22 @@ def collect_rollout(
                 candidate_masks.append(batch.candidate_mask[local_idx])
                 values.append(float(row_values[global_idx]))
                 tgt_idx = int(sampled_target_index[global_idx]) if batch.self_features.shape[0] > 0 else 0
+                bucket_idx = int(sampled_ship_bucket[global_idx]) if batch.self_features.shape[0] > 0 else 0
                 is_valid_send = (
                     tgt_idx > 0
                     and tgt_idx < len(context.candidate_ids)
                     and context.candidate_mask[tgt_idx]
-                    and int(context.ship_counts[tgt_idx]) > 0
+                    and bucket_idx > 0
                 )
                 target_indices.append(tgt_idx)
+                ship_buckets.append(bucket_idx)
                 log_probs.append(float(sampled_log_prob[global_idx]) if batch.self_features.shape[0] > 0 else 0.0)
                 group_indices.append(len(values) - 1)
                 if not is_valid_send:
                     continue
-                ships = int(context.ship_counts[tgt_idx])
+                ships = ship_count_for_bucket(context.source_ships, bucket_idx, cfg.env.ship_bucket_count)
+                if ships <= 0:
+                    continue
                 src_planet = find_planet(batch.state.planets, context.source_id)
                 if src_planet is None or src_planet.ships < ships:
                     continue
@@ -153,6 +160,7 @@ def collect_rollout(
         global_features=torch.from_numpy(np.asarray(global_rows, dtype=np.float32).reshape(-1, global_feature_dim())),
         candidate_mask=torch.from_numpy(np.asarray(candidate_masks, dtype=bool).reshape(-1, cfg.env.candidate_count)),
         target_index=torch.tensor(target_indices, dtype=torch.long),
+        ship_bucket=torch.tensor(ship_buckets, dtype=torch.long),
         log_prob=torch.tensor(log_probs, dtype=torch.float32),
         returns=torch.tensor(returns, dtype=torch.float32),
         advantages=torch.tensor(advantages, dtype=torch.float32),
@@ -283,6 +291,7 @@ def main() -> None:
         candidate_dim=candidate_feature_dim(),
         global_dim=global_feature_dim(),
         candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
     ).to(device)
     normalizer = (
