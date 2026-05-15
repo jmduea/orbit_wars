@@ -12,7 +12,7 @@ import torch
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
 from .normalization import ObservationNormalizer
-from .policy import PlanetPolicy
+from .policy import build_policy
 from .ppo import sample_actions
 
 
@@ -65,18 +65,20 @@ class SelfPlayOpponent:
         self.cfg = cfg
         self.device = device
         self.deterministic = deterministic
-        self.policy = PlanetPolicy(
+        self.policy = build_policy(
+            architecture=cfg.model.architecture,
             self_dim=self_feature_dim(),
             candidate_dim=candidate_feature_dim(),
             global_dim=global_feature_dim(),
             candidate_count=cfg.env.candidate_count,
             ship_bucket_count=cfg.env.ship_bucket_count,
             hidden_size=cfg.model.hidden_size,
+            attention_heads=cfg.model.attention_heads,
         ).to(device)
         self.policy.eval()
         self.normalizer: ObservationNormalizer | None = None
 
-    def sync_from(self, source_policy: PlanetPolicy, normalizer: ObservationNormalizer | None = None) -> None:
+    def sync_from(self, source_policy: torch.nn.Module, normalizer: ObservationNormalizer | None = None) -> None:
         self.policy.load_state_dict(source_policy.state_dict())
         self.policy.eval()
         self.normalizer = clone_normalizer(normalizer)
@@ -141,7 +143,7 @@ class SelfPlayOpponentPool:
 
     def sync_from(
         self,
-        source_policy: PlanetPolicy,
+        source_policy: torch.nn.Module,
         normalizer: ObservationNormalizer | None = None,
         update: int = 0,
     ) -> None:
@@ -150,7 +152,7 @@ class SelfPlayOpponentPool:
 
     def add_snapshot(
         self,
-        source_policy: PlanetPolicy,
+        source_policy: torch.nn.Module,
         normalizer: ObservationNormalizer | None = None,
         update: int = 0,
     ) -> None:

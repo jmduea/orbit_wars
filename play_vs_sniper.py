@@ -21,7 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.config import TrainConfig, default_train_config_path, load_train_config
 from src.features import TurnBatch, candidate_feature_dim, encode_turn, global_feature_dim, self_feature_dim, ship_count_for_bucket
 from src.normalization import ObservationNormalizer
-from src.policy import PlanetPolicy
+from src.policy import build_policy as create_policy
 from src.ppo import sample_actions
 
 Planet = namedtuple("Planet", ["id", "owner", "x", "y", "radius", "ships", "production"])
@@ -54,14 +54,16 @@ def seed_everything(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def build_policy(cfg: TrainConfig, device: torch.device) -> PlanetPolicy:
-    return PlanetPolicy(
+def build_policy(cfg: TrainConfig, device: torch.device) -> torch.nn.Module:
+    return create_policy(
+        architecture=cfg.model.architecture,
         self_dim=self_feature_dim(),
         candidate_dim=candidate_feature_dim(),
         global_dim=global_feature_dim(),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
+        attention_heads=cfg.model.attention_heads,
     ).to(device)
 
 def register_checkpoint_module_aliases() -> None:
@@ -93,7 +95,7 @@ def register_checkpoint_module_aliases() -> None:
         sys.modules[f"src.{canonical_name}"] = module
 
 def load_checkpoint_if_available(
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     normalizer: ObservationNormalizer | None,
     checkpoint_path: str | None,
     device: torch.device,
@@ -111,7 +113,7 @@ def load_checkpoint_if_available(
 
 def build_moves(
     batch: TurnBatch,
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     normalizer: ObservationNormalizer | None,
     device: torch.device,
     deterministic: bool,
@@ -197,7 +199,7 @@ def extract_reward(state: Any) -> float:
 
 def run_match(
     cfg: TrainConfig,
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     normalizer: ObservationNormalizer | None,
     device: torch.device,
     *,
