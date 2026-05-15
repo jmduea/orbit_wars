@@ -32,12 +32,14 @@ class TransitionBatch:
 def sample_actions(outputs: PolicyOutput, deterministic: bool) -> SampledAction:
     target_logits = safe_target_logits(outputs.target_logits)
     target_dist = Categorical(logits=target_logits)
-    ship_dist = Categorical(logits=outputs.ship_logits)
     if deterministic:
         target_index = target_logits.argmax(dim=-1)
-        ship_bucket = outputs.ship_logits.argmax(dim=-1)
+        selected_ship_logits = gather_target_ship_logits(outputs.ship_logits, target_index)
+        ship_bucket = selected_ship_logits.argmax(dim=-1)
     else:
         target_index = target_dist.sample()
+        selected_ship_logits = gather_target_ship_logits(outputs.ship_logits, target_index)
+        ship_dist = Categorical(logits=selected_ship_logits)
         ship_bucket = ship_dist.sample()
 
     log_prob, entropy = action_log_prob_and_entropy(
@@ -55,12 +57,26 @@ def action_log_prob_and_entropy(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     target_logits = safe_target_logits(outputs.target_logits)
     target_dist = Categorical(logits=target_logits)
-    ship_dist = Categorical(logits=outputs.ship_logits)
+    selected_ship_logits = gather_target_ship_logits(outputs.ship_logits, target_index)
+    ship_dist = Categorical(logits=selected_ship_logits)
     target_log_prob = target_dist.log_prob(target_index)
     ship_log_prob = ship_dist.log_prob(ship_bucket)
     target_entropy = target_dist.entropy()
     ship_entropy = ship_dist.entropy()
     return target_log_prob + ship_log_prob, target_entropy + ship_entropy
+
+
+def gather_target_ship_logits(ship_logits: torch.Tensor, target_index: torch.Tensor) -> torch.Tensor:
+    if ship_logits.ndim == 2:
+        return ship_logits
+    if ship_logits.ndim != 3:
+        raise ValueError(
+            f"ship_logits must have shape [batch, ship_bucket_count] or "
+            f"[batch, candidate_count, ship_bucket_count], got {tuple(ship_logits.shape)}"
+        )
+    batch_size, _, ship_bucket_count = ship_logits.shape
+    gather_index = target_index.reshape(batch_size, 1, 1).expand(-1, 1, ship_bucket_count)
+    return ship_logits.gather(dim=1, index=gather_index).squeeze(1)
 
 
 def safe_target_logits(target_logits: torch.Tensor) -> torch.Tensor:
