@@ -51,7 +51,7 @@ class PlanetPolicy(nn.Module):
             nn.Linear(hidden_size, 1),
         )
         self.ship_head = nn.Sequential(
-            nn.Linear(hidden_size * 2, hidden_size),
+            nn.Linear(hidden_size * 3, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, ship_bucket_count),
         )
@@ -76,7 +76,7 @@ class PlanetPolicy(nn.Module):
         joint = torch.cat([expanded_self, expanded_global, candidate_hidden], dim=-1)
         target_logits = self.target_head(joint).squeeze(-1)
         target_logits = target_logits.masked_fill(~candidate_mask, torch.finfo(target_logits.dtype).min)
-        ship_logits = self.ship_head(torch.cat([self_hidden, global_hidden], dim=-1))
+        ship_logits = self.ship_head(joint)
         pooled_candidates = candidate_hidden.mean(dim=1)
         value = self.value_head(torch.cat([self_hidden, global_hidden, pooled_candidates], dim=-1)).squeeze(-1)
         return PolicyOutput(target_logits=target_logits, ship_logits=ship_logits, value=value)
@@ -86,8 +86,8 @@ class AttentionPlanetPolicy(nn.Module):
     """Experimental attention policy with the same action/value interface as PlanetPolicy.
 
     The policy keeps the current target-index and ship-bucket action semantics: it
-    returns one target logit per candidate, one categorical distribution over ship
-    buckets, and one scalar value per source planet decision row.
+    returns one target logit per candidate, one ship-bucket distribution per
+    candidate target, and one scalar value per source planet decision row.
     """
 
     def __init__(
@@ -147,7 +147,7 @@ class AttentionPlanetPolicy(nn.Module):
             nn.Linear(hidden_size, 1),
         )
         self.ship_head = nn.Sequential(
-            nn.Linear(hidden_size * 3, hidden_size),
+            nn.Linear(hidden_size * 4, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, ship_bucket_count),
         )
@@ -197,7 +197,7 @@ class AttentionPlanetPolicy(nn.Module):
         target_logits = target_logits.masked_fill(~candidate_mask, torch.finfo(target_logits.dtype).min)
 
         pooled_candidates = _masked_mean(attended_candidates, candidate_mask)
-        ship_logits = self.ship_head(torch.cat([self_hidden, global_hidden, attended_context], dim=-1))
+        ship_logits = self.ship_head(target_input)
         value = self.value_head(
             torch.cat([self_hidden, global_hidden, attended_context, pooled_candidates], dim=-1)
         ).squeeze(-1)
