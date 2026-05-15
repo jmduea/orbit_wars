@@ -1,0 +1,15 @@
+[project]
+name = "orbit-wars"
+version = "0.1.0"
+description = "Versioned Orbit Wars reinforcement-learning tutorial implementation"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "kaggle-environments",
+    "numpy",
+    "pyyaml",
+    "torch",
+]
+
+[tool.uv]
+package = false
