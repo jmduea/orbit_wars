@@ -1,12 +1,14 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Protocol
 
 import torch
 
 from .config import TrainConfig
 from .features import encode_turn
+from .normalization import ObservationNormalizer
 from .policy import PlanetPolicy
 from .ppo import sample_actions
 
@@ -45,21 +47,27 @@ class SelfPlayOpponent:
             hidden_size=cfg.model.hidden_size,
         ).to(device)
         self.policy.eval()
+        self.normalizer: ObservationNormalizer | None = None
 
-    def sync_from(self, source_policy: PlanetPolicy) -> None:
+    def sync_from(self, source_policy: PlanetPolicy, normalizer: ObservationNormalizer | None = None) -> None:
         self.policy.load_state_dict(source_policy.state_dict())
         self.policy.eval()
+        self.normalizer = None
+        if normalizer is not None:
+            self.normalizer = ObservationNormalizer(clip=normalizer.clip)
+            self.normalizer.load_state_dict(deepcopy(normalizer.state_dict()))
 
     def act(self, observation: Any) -> list[list[float | int]]:
         batch = encode_turn(observation, self.cfg.env, env_index=0)
         if batch.self_features.shape[0] == 0:
             return []
+        policy_batch = self.normalizer.normalize_batch(batch) if self.normalizer is not None else batch
         with torch.inference_mode():
             outputs = self.policy(
-                torch.from_numpy(batch.self_features).to(self.device),
-                torch.from_numpy(batch.candidate_features).to(self.device),
-                torch.from_numpy(batch.global_features).to(self.device),
-                torch.from_numpy(batch.candidate_mask).to(self.device).bool(),
+                torch.from_numpy(policy_batch.self_features).to(self.device),
+                torch.from_numpy(policy_batch.candidate_features).to(self.device),
+                torch.from_numpy(policy_batch.global_features).to(self.device),
+                torch.from_numpy(policy_batch.candidate_mask).to(self.device).bool(),
             )
             sampled = sample_actions(outputs, deterministic=self.deterministic)
         target_indices = sampled.target_index.detach().cpu().numpy()

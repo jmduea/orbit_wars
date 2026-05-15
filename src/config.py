@@ -22,6 +22,8 @@ class EnvConfig:
 @dataclass(slots=True)
 class ModelConfig:
     hidden_size: int = 128
+    normalize_observations: bool = True
+    obs_norm_clip: float = 10.0
 
 
 @dataclass(slots=True)
