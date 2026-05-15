@@ -17,6 +17,10 @@ class EnvConfig:
     max_planets: int = 48
     max_ships: float = 400.0
     max_production: float = 5.0
+    reward_capture_planet: float = 0.0
+    reward_ship_delta: float = 0.0
+    reward_production_delta: float = 0.0
+    reward_terminal_scale: float = 1.0
 
 
 @dataclass(slots=True)

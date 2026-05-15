@@ -1,8 +1,7 @@
-
 seed: 42
-run_name: orbit_wars_ppo
+run_name: orbit_wars_ppo_shaped_reward
 device: auto
-save_dir: /kaggle/working/artifacts
+save_dir: /kaggle/working/artifacts/shaped_reward_training
 checkpoint_every: 50
 log_every: 1
 opponent: self
@@ -13,9 +12,10 @@ alternate_player_sides: true
 env:
   candidate_count: 8
   ship_bucket_count: 8
-  reward_capture_planet: 0.0
-  reward_ship_delta: 0.0
-  reward_production_delta: 0.0
+  # Conservative shaping: keep terminal win/loss as the dominant signal.
+  reward_capture_planet: 0.1
+  reward_ship_delta: 0.001
+  reward_production_delta: 0.02
   reward_terminal_scale: 1.0
 
 model:
@@ -24,14 +24,14 @@ model:
   obs_norm_clip: 10.0
 
 ppo:
-  rollout_steps: 64
-  num_envs: 2
-  total_updates: 100 # Fast notebook/demo setting. Use configs/full_training.yaml for reproducible 2000-update training.
+  rollout_steps: 512
+  num_envs: 8
+  total_updates: 2000
   epochs: 4
-  minibatch_size: 256
+  minibatch_size: 512
   gamma: 0.99
   clip_coef: 0.2
-  ent_coef: 0.01
+  ent_coef: 0.02
   vf_coef: 0.5
-  lr: 0.0003
+  lr: 0.0001
   max_grad_norm: 0.5
