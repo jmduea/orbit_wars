@@ -8,6 +8,10 @@ log_every: 1
 opponent: self
 self_play_update_interval: 50
 self_play_deterministic: false
+self_play_enabled: false
+self_play_pool_size: 5
+self_play_snapshot_interval: 50
+self_play_latest_probability: 0.5
 alternate_player_sides: true
 
 env:

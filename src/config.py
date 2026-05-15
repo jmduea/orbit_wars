@@ -56,6 +56,10 @@ class TrainConfig:
     opponent: str = "random"
     self_play_update_interval: int = 10
     self_play_deterministic: bool = False
+    self_play_enabled: bool = False
+    self_play_pool_size: int = 5
+    self_play_snapshot_interval: int = 25
+    self_play_latest_probability: float = 0.5
     alternate_player_sides: bool = True
     env: EnvConfig = field(default_factory=EnvConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
