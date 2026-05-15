@@ -25,7 +25,7 @@ from src.env import extract_observation, extract_reward, extract_status
 from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim
 from src.normalization import ObservationNormalizer
 from src.opponents import KaggleRandomOpponent, SelfPlayOpponent, SniperOpponent
-from src.policy import PlanetPolicy
+from src.policy import build_policy as create_policy
 
 
 @dataclass(slots=True)
@@ -125,14 +125,16 @@ def parse_seed_spec(value: str | None, *, start_seed: int, games: int) -> list[i
     return seeds[:games]
 
 
-def build_policy(cfg: TrainConfig, device: torch.device) -> PlanetPolicy:
-    return PlanetPolicy(
+def build_policy(cfg: TrainConfig, device: torch.device) -> torch.nn.Module:
+    return create_policy(
+        architecture=cfg.model.architecture,
         self_dim=self_feature_dim(),
         candidate_dim=candidate_feature_dim(),
         global_dim=global_feature_dim(),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
+        attention_heads=cfg.model.attention_heads,
     ).to(device)
 
 
@@ -166,7 +168,7 @@ def register_checkpoint_module_aliases() -> None:
 
 
 def load_checkpoint_if_available(
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     normalizer: ObservationNormalizer | None,
     checkpoint_path: str | None,
     device: torch.device,
@@ -185,7 +187,7 @@ def load_checkpoint_if_available(
 def build_opponent(
     name: str,
     cfg: TrainConfig,
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     normalizer: ObservationNormalizer | None,
     device: torch.device,
     deterministic: bool,

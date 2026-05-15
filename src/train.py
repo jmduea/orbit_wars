@@ -16,7 +16,7 @@ from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self
 from .game_types import PlanetState
 from .opponents import SelfPlayOpponent, SelfPlayOpponentPool, build_opponent
 from .normalization import ObservationNormalizer
-from .policy import PlanetPolicy
+from .policy import build_policy
 from .ppo import TransitionBatch, ppo_update, sample_actions
 
 
@@ -50,7 +50,7 @@ def seed_everything(seed: int) -> None:
 def collect_rollout(
     envs: list[OrbitWarsEnv],
     batches: list[TurnBatch],
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     cfg: TrainConfig,
     device: torch.device,
     next_seed: int,
@@ -179,7 +179,7 @@ def collect_rollout(
 
 
 def bootstrap_values(
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     batches: list[TurnBatch],
     device: torch.device,
     normalizer: ObservationNormalizer | None = None,
@@ -243,7 +243,7 @@ def save_checkpoint(
     save_dir: Path,
     run_name: str,
     update: int,
-    policy: PlanetPolicy,
+    policy: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
     cfg: TrainConfig,
     normalizer: ObservationNormalizer | None = None,
@@ -300,13 +300,15 @@ def main() -> None:
     for env in envs:
         batches.append(env.reset(seed=next_seed))
         next_seed += 1
-    policy = PlanetPolicy(
+    policy = build_policy(
+        architecture=cfg.model.architecture,
         self_dim=self_feature_dim(),
         candidate_dim=candidate_feature_dim(),
         global_dim=global_feature_dim(),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
+        attention_heads=cfg.model.attention_heads,
     ).to(device)
     normalizer = (
         ObservationNormalizer(clip=cfg.model.obs_norm_clip)

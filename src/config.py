@@ -25,7 +25,9 @@ class EnvConfig:
 
 @dataclass(slots=True)
 class ModelConfig:
+    architecture: str = "mlp"
     hidden_size: int = 128
+    attention_heads: int = 4
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 
