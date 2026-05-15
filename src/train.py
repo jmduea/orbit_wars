@@ -14,7 +14,7 @@ from .config import TrainConfig, default_train_config_path, load_train_config
 from .env import OrbitWarsEnv
 from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim, ship_count_for_bucket
 from .game_types import PlanetState
-from .opponents import SelfPlayOpponent, build_opponent
+from .opponents import SelfPlayOpponent, SelfPlayOpponentPool, build_opponent
 from .normalization import ObservationNormalizer
 from .policy import PlanetPolicy
 from .ppo import TransitionBatch, ppo_update, sample_actions
@@ -247,6 +247,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     cfg: TrainConfig,
     normalizer: ObservationNormalizer | None = None,
+    self_play_metadata: dict[str, object] | None = None,
 ) -> None:
     run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +258,7 @@ def save_checkpoint(
             "optimizer": optimizer.state_dict(),
             "config": cfg,
             "normalizer": normalizer.state_dict() if normalizer is not None else None,
+            "self_play": self_play_metadata,
         },
         run_dir / "ckpt_last.pt",
     )
@@ -267,6 +269,7 @@ def save_checkpoint(
             "optimizer": optimizer.state_dict(),
             "config": cfg,
             "normalizer": normalizer.state_dict() if normalizer is not None else None,
+            "self_play": self_play_metadata,
         },
         run_dir / f"ckpt_{update:06d}.pt",
     )
@@ -312,6 +315,8 @@ def main() -> None:
     )
     if isinstance(opponent, SelfPlayOpponent):
         opponent.sync_from(policy, normalizer)
+    elif isinstance(opponent, SelfPlayOpponentPool):
+        opponent.sync_from(policy, normalizer, update=0)
     optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.ppo.lr)
     save_dir = Path(cfg.save_dir)
     log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}.jsonl"
@@ -354,8 +359,23 @@ def main() -> None:
             **metrics,
         }
         append_jsonl(log_path, log_record)
-        if isinstance(opponent, SelfPlayOpponent) and update % cfg.self_play_update_interval == 0:
+        if (
+            isinstance(opponent, SelfPlayOpponent)
+            and cfg.self_play_update_interval > 0
+            and update % cfg.self_play_update_interval == 0
+        ):
             opponent.sync_from(policy, normalizer)
+        elif isinstance(opponent, SelfPlayOpponentPool):
+            if (
+                cfg.self_play_snapshot_interval > 0
+                and update % cfg.self_play_snapshot_interval == 0
+            ):
+                opponent.add_snapshot(policy, normalizer, update=update)
+            if (
+                cfg.self_play_update_interval > 0
+                and update % cfg.self_play_update_interval == 0
+            ):
+                opponent.sync_from(policy, normalizer, update=update)
         if update % cfg.log_every == 0:
             print(
                 f"update={update} steps={total_env_steps} episodes={completed_episodes} "
@@ -365,7 +385,17 @@ def main() -> None:
                 f"clip={metrics['clip_fraction']:.3f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-            save_checkpoint(save_dir, cfg.run_name, update, policy, optimizer, cfg, normalizer)
+            self_play_metadata = opponent.metadata() if isinstance(opponent, SelfPlayOpponentPool) else None
+            save_checkpoint(
+                save_dir,
+                cfg.run_name,
+                update,
+                policy,
+                optimizer,
+                cfg,
+                normalizer,
+                self_play_metadata,
+            )
 
 
 if __name__ == "__main__":

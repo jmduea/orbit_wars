@@ -28,6 +28,7 @@ class OrbitWarsEnv:
     ) -> None:
         self.cfg = cfg
         self.opponent = opponent
+        self.active_opponent = opponent
         self.make_fn = make_fn
         self.env_index = env_index
         self.env: Any | None = None
@@ -48,6 +49,8 @@ class OrbitWarsEnv:
             self.learner_player = (self.env_index + self.episode_index) % 2
         else:
             self.learner_player = 0
+        sampler = getattr(self.opponent, "sample_opponent", None)
+        self.active_opponent = sampler() if callable(sampler) else self.opponent
         self.env = make_fn("orbit_wars", configuration=configuration, debug=False)
         self.env.reset(num_agents=2)
         states = self.env.step([[], []])
@@ -63,7 +66,7 @@ class OrbitWarsEnv:
     def step(self, player_action: list[list[float | int]]) -> StepResult:
         if self.env is None:
             raise RuntimeError("Call reset() before step().")
-        opponent_action = self.opponent.act(self.last_opp_obs)
+        opponent_action = self.active_opponent.act(self.last_opp_obs)
         if self.learner_player == 0:
             joint_action = [player_action, opponent_action]
         else:

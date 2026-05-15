@@ -1,9 +1,10 @@
-
 from __future__ import annotations
 
 import math
-from collections import namedtuple
+import random
+from collections import deque, namedtuple
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import torch
@@ -78,10 +79,7 @@ class SelfPlayOpponent:
     def sync_from(self, source_policy: PlanetPolicy, normalizer: ObservationNormalizer | None = None) -> None:
         self.policy.load_state_dict(source_policy.state_dict())
         self.policy.eval()
-        self.normalizer = None
-        if normalizer is not None:
-            self.normalizer = ObservationNormalizer(clip=normalizer.clip)
-            self.normalizer.load_state_dict(deepcopy(normalizer.state_dict()))
+        self.normalizer = clone_normalizer(normalizer)
 
     def act(self, observation: Any) -> list[list[float | int]]:
         batch = encode_turn(observation, self.cfg.env, env_index=0)
@@ -115,6 +113,89 @@ class SelfPlayOpponent:
         return moves
 
 
+@dataclass(slots=True)
+class SnapshotMetadata:
+    snapshot_id: int
+    update: int
+    source: str
+
+
+@dataclass(slots=True)
+class HistoricalSnapshot:
+    metadata: SnapshotMetadata
+    opponent: SelfPlayOpponent
+
+
+class SelfPlayOpponentPool:
+    """Episode-level opponent sampler with bot baselines plus policy snapshots."""
+
+    def __init__(self, cfg: TrainConfig, device: torch.device) -> None:
+        self.cfg = cfg
+        self.device = device
+        self.random_bot = KaggleRandomOpponent()
+        self.sniper_bot = SniperOpponent()
+        self.latest = SelfPlayOpponent(cfg, device=device, deterministic=cfg.self_play_deterministic)
+        self.history: deque[HistoricalSnapshot] = deque(maxlen=max(0, cfg.self_play_pool_size))
+        self.latest_metadata = SnapshotMetadata(snapshot_id=0, update=0, source="latest")
+        self._next_snapshot_id = 1
+
+    def sync_from(
+        self,
+        source_policy: PlanetPolicy,
+        normalizer: ObservationNormalizer | None = None,
+        update: int = 0,
+    ) -> None:
+        self.latest.sync_from(source_policy, normalizer)
+        self.latest_metadata = SnapshotMetadata(snapshot_id=0, update=update, source="latest")
+
+    def add_snapshot(
+        self,
+        source_policy: PlanetPolicy,
+        normalizer: ObservationNormalizer | None = None,
+        update: int = 0,
+    ) -> None:
+        if self.history.maxlen == 0:
+            return
+        snapshot = SelfPlayOpponent(self.cfg, device=self.device, deterministic=self.cfg.self_play_deterministic)
+        snapshot.sync_from(source_policy, normalizer)
+        metadata = SnapshotMetadata(snapshot_id=self._next_snapshot_id, update=update, source="historical")
+        self._next_snapshot_id += 1
+        self.history.append(HistoricalSnapshot(metadata=metadata, opponent=snapshot))
+
+    def sample_opponent(self) -> OpponentPolicy:
+        latest_probability = min(max(self.cfg.self_play_latest_probability, 0.0), 1.0)
+        if random.random() < latest_probability:
+            return self.latest
+        choices: list[OpponentPolicy] = [self.random_bot, self.sniper_bot]
+        choices.extend(snapshot.opponent for snapshot in self.history)
+        return random.choice(choices)
+
+    def act(self, observation: Any) -> list[list[float | int]]:
+        return self.sample_opponent().act(observation)
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "enabled": True,
+            "latest": dataclass_to_dict(self.latest_metadata),
+            "pool_size": len(self.history),
+            "max_pool_size": self.history.maxlen or 0,
+            "snapshots": [dataclass_to_dict(snapshot.metadata) for snapshot in self.history],
+            "next_snapshot_id": self._next_snapshot_id,
+        }
+
+
+def clone_normalizer(normalizer: ObservationNormalizer | None) -> ObservationNormalizer | None:
+    if normalizer is None:
+        return None
+    cloned = ObservationNormalizer(clip=normalizer.clip)
+    cloned.load_state_dict(deepcopy(normalizer.state_dict()))
+    return cloned
+
+
+def dataclass_to_dict(metadata: SnapshotMetadata) -> dict[str, int | str]:
+    return {"snapshot_id": metadata.snapshot_id, "update": metadata.update, "source": metadata.source}
+
+
 def build_opponent(
     name: str,
     cfg: TrainConfig | None = None,
@@ -127,6 +208,8 @@ def build_opponent(
     if name == "self":
         if cfg is None or device is None:
             raise ValueError("cfg and device are required for self opponent")
+        if cfg.self_play_enabled:
+            return SelfPlayOpponentPool(cfg, device=device)
         return SelfPlayOpponent(cfg, device=device, deterministic=cfg.self_play_deterministic)
     raise ValueError(f"Unknown opponent: {name}")
 
