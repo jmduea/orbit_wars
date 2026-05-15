@@ -86,7 +86,17 @@ def ppo_update(
     device: torch.device,
 ) -> dict[str, float]:
     if batch.self_features.shape[0] == 0:
-        return {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0}
+        return {
+            "approx_kl": 0.0,
+            "entropy_mean": 0.0,
+            "clip_fraction": 0.0,
+            "policy_loss": 0.0,
+            "value_loss": 0.0,
+            "total_loss": 0.0,
+            "explained_variance": 0.0,
+            "loss": 0.0,
+            "entropy": 0.0,
+        }
     self_features = batch.self_features.to(device)
     candidate_features = batch.candidate_features.to(device)
     global_features = batch.global_features.to(device)
@@ -99,8 +109,15 @@ def ppo_update(
     advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     size = self_features.shape[0]
     minibatch_size = min(size, max(1, minibatch_size))
-    metrics = {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0}
-    updates = 0
+    metrics = {
+        "approx_kl": 0.0,
+        "entropy_mean": 0.0,
+        "clip_fraction": 0.0,
+        "policy_loss": 0.0,
+        "value_loss": 0.0,
+        "total_loss": 0.0,
+    }
+    metric_samples = 0
     for _ in range(epochs):
         order = torch.randperm(size, device=device)
         for start in range(0, size, minibatch_size):
@@ -116,7 +133,8 @@ def ppo_update(
                 target_index[idx],
                 ship_bucket[idx],
             )
-            ratio = (new_log_prob - old_log_prob[idx]).exp()
+            log_ratio = new_log_prob - old_log_prob[idx]
+            ratio = log_ratio.exp()
             policy_loss = torch.maximum(
                 -advantages[idx] * ratio,
                 -advantages[idx] * torch.clamp(ratio, 1.0 - clip_coef, 1.0 + clip_coef),
@@ -128,9 +146,30 @@ def ppo_update(
             loss.backward()
             torch.nn.utils.clip_grad_norm_(policy.parameters(), max_grad_norm)
             optimizer.step()
-            metrics["loss"] += float(loss.detach().cpu())
-            metrics["policy_loss"] += float(policy_loss.detach().cpu())
-            metrics["value_loss"] += float(value_loss.detach().cpu())
-            metrics["entropy"] += float(entropy_mean.detach().cpu())
-            updates += 1
-    return {key: value / max(updates, 1) for key, value in metrics.items()}
+
+            batch_size = int(idx.numel())
+            with torch.no_grad():
+                approx_kl = ((ratio - 1.0) - log_ratio).mean()
+                clip_fraction = ((ratio - 1.0).abs() > clip_coef).float().mean()
+            metrics["approx_kl"] += float(approx_kl.detach().cpu()) * batch_size
+            metrics["entropy_mean"] += float(entropy_mean.detach().cpu()) * batch_size
+            metrics["clip_fraction"] += float(clip_fraction.detach().cpu()) * batch_size
+            metrics["policy_loss"] += float(policy_loss.detach().cpu()) * batch_size
+            metrics["value_loss"] += float(value_loss.detach().cpu()) * batch_size
+            metrics["total_loss"] += float(loss.detach().cpu()) * batch_size
+            metric_samples += batch_size
+
+    averaged_metrics = {key: value / max(metric_samples, 1) for key, value in metrics.items()}
+    with torch.inference_mode():
+        value_outputs = policy(self_features, candidate_features, global_features, candidate_mask)
+        value_predictions = value_outputs.value
+        return_variance = returns.var(unbiased=False)
+        if float(return_variance.detach().cpu()) <= 1e-12:
+            explained_variance = torch.tensor(0.0, device=device)
+        else:
+            explained_variance = 1.0 - (returns - value_predictions).var(unbiased=False) / return_variance
+    averaged_metrics["explained_variance"] = float(explained_variance.detach().cpu())
+    # Backward-compatible aliases for existing callers and notebooks.
+    averaged_metrics["loss"] = averaged_metrics["total_loss"]
+    averaged_metrics["entropy"] = averaged_metrics["entropy_mean"]
+    return averaged_metrics

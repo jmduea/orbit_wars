@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,7 @@ def collect_rollout(
     device: torch.device,
     next_seed: int,
     normalizer: ObservationNormalizer | None = None,
+    running_episode_rewards: list[float] | None = None,
 ) -> tuple[TransitionBatch, list[TurnBatch], int, dict[str, float]]:
     empty_candidate = (cfg.env.candidate_count, candidate_feature_dim())
     self_rows: list[np.ndarray] = []
@@ -66,7 +68,8 @@ def collect_rollout(
     values: list[float] = []
     groups_per_env: list[list[StepGroup]] = [[] for _ in envs]
     episode_rewards: list[float] = []
-    running_episode_rewards = [0.0 for _ in envs]
+    if running_episode_rewards is None:
+        running_episode_rewards = [0.0 for _ in envs]
 
     for _ in range(cfg.ppo.rollout_steps):
         offsets = np.cumsum([0] + [batch.self_features.shape[0] for batch in batches[:-1]])
@@ -167,8 +170,10 @@ def collect_rollout(
     )
     stats = {
         "episode_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
+        "episode_reward_median": float(np.median(episode_rewards)) if episode_rewards else 0.0,
         "episodes_finished": float(len(episode_rewards)),
         "samples": float(len(values)),
+        "env_steps": float(cfg.ppo.rollout_steps * len(envs)),
     }
     return batch, batches, next_seed, stats
 
@@ -274,6 +279,12 @@ def find_planet(planets: list[PlanetState], planet_id: int) -> PlanetState | Non
     return None
 
 
+def append_jsonl(path: Path, record: dict[str, float | int]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(record, sort_keys=True) + "\n")
+
+
 def main() -> None:
     args = parse_args()
     cfg = load_train_config(args.config)
@@ -303,8 +314,21 @@ def main() -> None:
         opponent.sync_from(policy, normalizer)
     optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.ppo.lr)
     save_dir = Path(cfg.save_dir)
+    log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}.jsonl"
+    total_env_steps = 0
+    completed_episodes = 0
+    running_episode_rewards = [0.0 for _ in envs]
     for update in range(1, cfg.ppo.total_updates + 1):
-        batch, batches, next_seed, stats = collect_rollout(envs, batches, policy, cfg, device, next_seed, normalizer)
+        batch, batches, next_seed, stats = collect_rollout(
+            envs,
+            batches,
+            policy,
+            cfg,
+            device,
+            next_seed,
+            normalizer,
+            running_episode_rewards,
+        )
         metrics = ppo_update(
             policy,
             optimizer,
@@ -317,13 +341,28 @@ def main() -> None:
             minibatch_size=cfg.ppo.minibatch_size,
             device=device,
         )
+        total_env_steps += int(stats["env_steps"])
+        completed_episodes += int(stats["episodes_finished"])
+        log_record: dict[str, float | int] = {
+            "update": update,
+            "total_env_steps": total_env_steps,
+            "completed_episodes": completed_episodes,
+            "episode_reward_mean": stats["episode_reward_mean"],
+            "episode_reward_median": stats["episode_reward_median"],
+            "episodes_finished": int(stats["episodes_finished"]),
+            "samples": int(stats["samples"]),
+            **metrics,
+        }
+        append_jsonl(log_path, log_record)
         if isinstance(opponent, SelfPlayOpponent) and update % cfg.self_play_update_interval == 0:
             opponent.sync_from(policy, normalizer)
         if update % cfg.log_every == 0:
             print(
-                f"update={update} episode_reward_mean={stats['episode_reward_mean']:.4f} "
-                f"episodes={int(stats['episodes_finished'])} samples={int(stats['samples'])} "
-                f"loss={metrics['loss']:.4f}"
+                f"update={update} steps={total_env_steps} episodes={completed_episodes} "
+                f"reward_mean={stats['episode_reward_mean']:.4f} "
+                f"reward_median={stats['episode_reward_median']:.4f} "
+                f"loss={metrics['total_loss']:.4f} kl={metrics['approx_kl']:.5f} "
+                f"clip={metrics['clip_fraction']:.3f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
             save_checkpoint(save_dir, cfg.run_name, update, policy, optimizer, cfg, normalizer)
