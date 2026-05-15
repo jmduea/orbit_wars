@@ -36,3 +36,22 @@ uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents snip
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
 ```
+
+## Attention candidate-count experiments
+
+Candidate index `0` is reserved for the no-op action, so an `env.candidate_count`
+of `8`, `16`, or `24` gives the policy `7`, `15`, or `23` real target slots.
+The attention configs below keep the same seed and PPO settings so their logs can
+be compared directly:
+
+```bash
+uv run python -m src.train --config configs/attention_training.yaml
+uv run python -m src.train --config configs/attention_candidates_16.yaml
+uv run python -m src.train --config configs/attention_candidates_24.yaml
+uv run python scripts/compare_attention_candidates.py
+```
+
+Training logs include `candidate_valid_avg`, `candidate_enemy_share`,
+`candidate_neutral_share`, and `candidate_friendly_share` to diagnose whether the
+candidate builder is giving the policy enough real targets from each ownership
+class.

@@ -14,6 +14,18 @@ BOARD_CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
 SUN_RADIUS = 10.0
 PLANET_LAUNCH_RADIUS_OFFSET = 0.1
+NO_OP_CANDIDATE_INDEX = 0
+
+
+def real_candidate_slots(candidate_count: int) -> int:
+    """Return target slots available after reserving index 0 for no-op.
+
+    The policy action space uses ``candidate_count`` total choices. Index 0 is
+    always the no-op action, so only ``candidate_count - 1`` slots can point at
+    actual target planets.
+    """
+
+    return max(0, candidate_count - 1)
 
 
 @dataclass(slots=True)
@@ -107,34 +119,57 @@ def encode_turn(
 
 
 def build_candidates(src: PlanetState, state: GameState, env_cfg: EnvConfig) -> list[PlanetState]:
-    others = [planet for planet in state.planets if planet.id != src.id]
-    enemy_quota = env_cfg.candidate_count // 3
-    neutral_quota = env_cfg.candidate_count // 3
-    friendly_quota = env_cfg.candidate_count - enemy_quota - neutral_quota
+    """Build real target planets for candidate slots 1..candidate_count-1.
 
+    Candidate index 0 is reserved for the no-op action by
+    :func:`build_candidate_features`. That leaves ``candidate_count - 1`` real
+    target slots. We seed the list with nearby enemies, neutrals, and friendlies
+    to preserve target diversity, then fill the rest with the closest remaining
+    planets regardless of owner. This avoids the previous hard
+    ``candidate_count // 3`` per-owner cap, which could discard useful nearby
+    targets when one ownership group dominated the board.
+    """
+
+    real_slots = real_candidate_slots(env_cfg.candidate_count)
+    if real_slots <= 0:
+        return []
+
+    others = [planet for planet in state.planets if planet.id != src.id]
     enemies = sorted(
         (planet for planet in others if planet.owner not in {-1, state.player}),
         key=lambda planet: (distance(src, planet), planet.id),
-    )[:enemy_quota]
+    )
     neutrals = sorted(
         (planet for planet in others if planet.owner == -1),
         key=lambda planet: (distance(src, planet), planet.id),
-    )[:neutral_quota]
+    )
     friendlies = sorted(
         (planet for planet in others if planet.owner == state.player),
         key=lambda planet: (distance(src, planet), planet.id),
-    )[:friendly_quota]
+    )
 
-    selected_ids = {planet.id for planet in enemies + neutrals + friendlies}
-    candidates = enemies + neutrals + friendlies
-    if len(candidates) >= env_cfg.candidate_count:
-        return candidates[: env_cfg.candidate_count]
+    # Soft diversity targets: include a useful sample from each owner group, but
+    # do not impose hard caps. The fallback below can still spend every
+    # remaining slot on whichever group contains the closest planets.
+    seed_counts = {
+        "enemy": min(len(enemies), max(1, math.ceil(real_slots * 0.40))),
+        "neutral": min(len(neutrals), max(1, math.ceil(real_slots * 0.30))),
+        "friendly": min(len(friendlies), max(1, math.ceil(real_slots * 0.15))),
+    }
 
+    candidates: list[PlanetState] = []
+    for category, planets in (("enemy", enemies), ("neutral", neutrals), ("friendly", friendlies)):
+        for planet in planets[: seed_counts[category]]:
+            if len(candidates) >= real_slots:
+                return candidates
+            candidates.append(planet)
+
+    selected_ids = {planet.id for planet in candidates}
     fallback = sorted(
         (planet for planet in others if planet.id not in selected_ids),
         key=lambda planet: (distance(src, planet), planet.id),
     )
-    candidates.extend(fallback[: env_cfg.candidate_count - len(candidates)])
+    candidates.extend(fallback[: real_slots - len(candidates)])
     return candidates
 
 
@@ -170,7 +205,8 @@ def build_candidate_features(
     ship_counts = [0] * env_cfg.candidate_count
     candidate_ids = [-1] * env_cfg.candidate_count
     target_angles = [0.0] * env_cfg.candidate_count
-    candidate_mask[0] = True
+    if env_cfg.candidate_count > NO_OP_CANDIDATE_INDEX:
+        candidate_mask[NO_OP_CANDIDATE_INDEX] = True
 
     for idx, tgt in enumerate(candidates, start=1):
         if idx >= env_cfg.candidate_count:

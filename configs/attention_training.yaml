@@ -14,6 +14,7 @@ self_play_latest_probability: 0.5
 alternate_player_sides: true
 
 env:
+  # Includes reserved no-op index 0; real target slots are candidate_count - 1.
   candidate_count: 8
   ship_bucket_count: 8
   reward_capture_planet: 0.0

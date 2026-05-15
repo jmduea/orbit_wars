@@ -12,7 +12,14 @@ import torch
 
 from .config import TrainConfig, default_train_config_path, load_train_config
 from .env import OrbitWarsEnv
-from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim, ship_count_for_bucket
+from .features import (
+    NO_OP_CANDIDATE_INDEX,
+    TurnBatch,
+    candidate_feature_dim,
+    global_feature_dim,
+    self_feature_dim,
+    ship_count_for_bucket,
+)
 from .game_types import PlanetState
 from .opponents import SelfPlayOpponent, SelfPlayOpponentPool, build_opponent
 from .normalization import ObservationNormalizer
@@ -68,12 +75,21 @@ def collect_rollout(
     values: list[float] = []
     groups_per_env: list[list[StepGroup]] = [[] for _ in envs]
     episode_rewards: list[float] = []
+    candidate_valid_total = 0.0
+    candidate_source_rows = 0
+    candidate_owner_totals = {"enemy": 0.0, "neutral": 0.0, "friendly": 0.0}
     if running_episode_rewards is None:
         running_episode_rewards = [0.0 for _ in envs]
 
     for _ in range(cfg.ppo.rollout_steps):
         offsets = np.cumsum([0] + [batch.self_features.shape[0] for batch in batches[:-1]])
         merged = merge_batches(batches)
+        rollout_candidate_stats = candidate_diagnostics(merged)
+        candidate_valid_total += rollout_candidate_stats["candidate_valid_total"]
+        candidate_source_rows += int(rollout_candidate_stats["candidate_source_rows"])
+        candidate_owner_totals["enemy"] += rollout_candidate_stats["candidate_enemy_total"]
+        candidate_owner_totals["neutral"] += rollout_candidate_stats["candidate_neutral_total"]
+        candidate_owner_totals["friendly"] += rollout_candidate_stats["candidate_friendly_total"]
         if normalizer is not None:
             normalizer.update(merged)
             policy_batch = normalizer.normalize_batch(merged)
@@ -168,14 +184,47 @@ def collect_rollout(
         returns=torch.tensor(returns, dtype=torch.float32),
         advantages=torch.tensor(advantages, dtype=torch.float32),
     )
+    candidate_owner_total = sum(candidate_owner_totals.values())
     stats = {
         "episode_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
         "episode_reward_median": float(np.median(episode_rewards)) if episode_rewards else 0.0,
         "episodes_finished": float(len(episode_rewards)),
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * len(envs)),
+        "candidate_valid_avg": candidate_valid_total / candidate_source_rows if candidate_source_rows else 0.0,
+        "candidate_enemy_share": candidate_owner_totals["enemy"] / candidate_owner_total if candidate_owner_total else 0.0,
+        "candidate_neutral_share": candidate_owner_totals["neutral"] / candidate_owner_total if candidate_owner_total else 0.0,
+        "candidate_friendly_share": candidate_owner_totals["friendly"] / candidate_owner_total if candidate_owner_total else 0.0,
     }
     return batch, batches, next_seed, stats
+
+
+def candidate_diagnostics(batch: TurnBatch) -> dict[str, float]:
+    """Summarize real, valid candidates in a batch of source-planet rows.
+
+    Index 0 is the no-op action, so diagnostics exclude it and only count
+    candidate slots that point to target planets and are currently valid.
+    """
+
+    if batch.candidate_mask.shape[0] == 0:
+        return {
+            "candidate_valid_total": 0.0,
+            "candidate_source_rows": 0.0,
+            "candidate_enemy_total": 0.0,
+            "candidate_neutral_total": 0.0,
+            "candidate_friendly_total": 0.0,
+        }
+
+    real_candidate_mask = batch.candidate_mask.copy()
+    real_candidate_mask[:, NO_OP_CANDIDATE_INDEX] = False
+    valid_targets = real_candidate_mask & (batch.candidate_features[:, :, 0] > 0.0)
+    return {
+        "candidate_valid_total": float(valid_targets.sum()),
+        "candidate_source_rows": float(valid_targets.shape[0]),
+        "candidate_enemy_total": float((valid_targets & (batch.candidate_features[:, :, 3] > 0.5)).sum()),
+        "candidate_neutral_total": float((valid_targets & (batch.candidate_features[:, :, 1] > 0.5)).sum()),
+        "candidate_friendly_total": float((valid_targets & (batch.candidate_features[:, :, 2] > 0.5)).sum()),
+    }
 
 
 def bootstrap_values(
@@ -358,6 +407,10 @@ def main() -> None:
             "episode_reward_median": stats["episode_reward_median"],
             "episodes_finished": int(stats["episodes_finished"]),
             "samples": int(stats["samples"]),
+            "candidate_valid_avg": stats["candidate_valid_avg"],
+            "candidate_enemy_share": stats["candidate_enemy_share"],
+            "candidate_neutral_share": stats["candidate_neutral_share"],
+            "candidate_friendly_share": stats["candidate_friendly_share"],
             **metrics,
         }
         append_jsonl(log_path, log_record)
@@ -384,7 +437,11 @@ def main() -> None:
                 f"reward_mean={stats['episode_reward_mean']:.4f} "
                 f"reward_median={stats['episode_reward_median']:.4f} "
                 f"loss={metrics['total_loss']:.4f} kl={metrics['approx_kl']:.5f} "
-                f"clip={metrics['clip_fraction']:.3f}"
+                f"clip={metrics['clip_fraction']:.3f} "
+                f"candidates={stats['candidate_valid_avg']:.2f} "
+                f"enemy={stats['candidate_enemy_share']:.2f} "
+                f"neutral={stats['candidate_neutral_share']:.2f} "
+                f"friendly={stats['candidate_friendly_share']:.2f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
             self_play_metadata = opponent.metadata() if isinstance(opponent, SelfPlayOpponentPool) else None
