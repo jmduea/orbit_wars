@@ -23,6 +23,7 @@ class DecisionContext:
     candidate_ids: list[int]
     candidate_mask: np.ndarray
     ship_counts: list[int]
+    source_ships: int
     target_angles: list[float]
 
 
@@ -90,6 +91,7 @@ def encode_turn(
                 candidate_ids=candidate_ids,
                 candidate_mask=cand_mask,
                 ship_counts=ship_counts,
+                source_ships=max(0, int(src.ships)),
                 target_angles=target_angles,
             )
         )
@@ -177,7 +179,6 @@ def build_candidate_features(
         dy = tgt.y - src.y
         angle = math.atan2(dy, dx)
         crosses_sun = shot_crosses_sun(src, angle, tgt)
-        ships_needed = fixed_ship_count(src, tgt)
         features[idx] = np.asarray(
             [
                 1.0,
@@ -197,8 +198,8 @@ def build_candidate_features(
             ],
             dtype=np.float32,
         )
-        ship_counts[idx] = ships_needed
-        candidate_mask[idx] = ships_needed > 0 and not crosses_sun and src.ships >= ships_needed
+        ship_counts[idx] = max(0, int(src.ships))
+        candidate_mask[idx] = not crosses_sun
         candidate_ids[idx] = tgt.id
         target_angles[idx] = angle
 
@@ -226,8 +227,18 @@ def build_global_features(state: GameState, env_cfg: EnvConfig) -> np.ndarray:
     )
 
 
-def fixed_ship_count(src: PlanetState, tgt: PlanetState) -> int:
-    return max(tgt.ships + 1, 20)
+def ship_bucket_fraction(bucket: int, bucket_count: int) -> float:
+    if bucket <= 0 or bucket_count <= 1:
+        return 0.0
+    return min(1.0, max(0.0, bucket / float(bucket_count - 1)))
+
+
+def ship_count_for_bucket(available_ships: float | int, bucket: int, bucket_count: int) -> int:
+    available = max(0, int(available_ships))
+    fraction = ship_bucket_fraction(bucket, bucket_count)
+    if available <= 0 or fraction <= 0.0:
+        return 0
+    return min(available, max(1, math.ceil(available * fraction)))
 
 
 def distance(a: PlanetState, b: PlanetState) -> float:

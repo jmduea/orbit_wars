@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,6 +9,7 @@ import torch.nn as nn
 @dataclass(slots=True)
 class PolicyOutput:
     target_logits: torch.Tensor
+    ship_logits: torch.Tensor
     value: torch.Tensor
 
 
@@ -20,10 +20,12 @@ class PlanetPolicy(nn.Module):
         candidate_dim: int,
         global_dim: int,
         candidate_count: int,
+        ship_bucket_count: int,
         hidden_size: int = 128,
     ) -> None:
         super().__init__()
         self.candidate_count = candidate_count
+        self.ship_bucket_count = ship_bucket_count
         self.self_encoder = nn.Sequential(
             nn.Linear(self_dim, hidden_size),
             nn.ReLU(),
@@ -47,6 +49,11 @@ class PlanetPolicy(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, 1),
         )
+        self.ship_head = nn.Sequential(
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, ship_bucket_count),
+        )
         self.value_head = nn.Sequential(
             nn.Linear(hidden_size * 3, hidden_size),
             nn.ReLU(),
@@ -68,6 +75,7 @@ class PlanetPolicy(nn.Module):
         joint = torch.cat([expanded_self, expanded_global, candidate_hidden], dim=-1)
         target_logits = self.target_head(joint).squeeze(-1)
         target_logits = target_logits.masked_fill(~candidate_mask, torch.finfo(target_logits.dtype).min)
+        ship_logits = self.ship_head(torch.cat([self_hidden, global_hidden], dim=-1))
         pooled_candidates = candidate_hidden.mean(dim=1)
         value = self.value_head(torch.cat([self_hidden, global_hidden, pooled_candidates], dim=-1)).squeeze(-1)
-        return PolicyOutput(target_logits=target_logits, value=value)
+        return PolicyOutput(target_logits=target_logits, ship_logits=ship_logits, value=value)

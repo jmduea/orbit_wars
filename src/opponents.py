@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import torch
 
 from .config import TrainConfig
-from .features import encode_turn
+from .features import encode_turn, ship_count_for_bucket
 from .normalization import ObservationNormalizer
 from .policy import PlanetPolicy
 from .ppo import sample_actions
@@ -44,6 +44,7 @@ class SelfPlayOpponent:
             candidate_dim=candidate_feature_dim(),
             global_dim=global_feature_dim(),
             candidate_count=cfg.env.candidate_count,
+            ship_bucket_count=cfg.env.ship_bucket_count,
             hidden_size=cfg.model.hidden_size,
         ).to(device)
         self.policy.eval()
@@ -71,16 +72,18 @@ class SelfPlayOpponent:
             )
             sampled = sample_actions(outputs, deterministic=self.deterministic)
         target_indices = sampled.target_index.detach().cpu().numpy()
+        ship_buckets = sampled.ship_bucket.detach().cpu().numpy()
         moves: list[list[float | int]] = []
         for row_idx, context in enumerate(batch.contexts):
             target_idx = int(target_indices[row_idx])
-            if target_idx == 0:
+            bucket_idx = int(ship_buckets[row_idx])
+            if target_idx == 0 or bucket_idx == 0:
                 continue
             if target_idx >= len(context.candidate_ids):
                 continue
             if not context.candidate_mask[target_idx]:
                 continue
-            ships = int(context.ship_counts[target_idx])
+            ships = ship_count_for_bucket(context.source_ships, bucket_idx, self.cfg.env.ship_bucket_count)
             if ships <= 0:
                 continue
             moves.append([context.source_id, float(context.target_angles[target_idx]), ships])
