@@ -32,6 +32,7 @@ class StepGroup:
     indices: list[int]
     reward: float
     done: bool
+    value: float
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,8 +74,13 @@ def collect_rollout(
     ship_buckets: list[int] = []
     log_probs: list[float] = []
     values: list[float] = []
+    step_ids: list[int] = []
     groups_per_env: list[list[StepGroup]] = [[] for _ in envs]
     episode_rewards: list[float] = []
+    episode_wins = 0
+    rollout_step_id = 0
+    decisions_total = 0
+    emitted_moves_total = 0
     candidate_valid_total = 0.0
     candidate_source_rows = 0
     candidate_owner_totals = {"enemy": 0.0, "neutral": 0.0, "friendly": 0.0}
@@ -127,6 +133,7 @@ def collect_rollout(
                 global_rows.append(policy_batch.global_features[global_idx])
                 candidate_masks.append(batch.candidate_mask[local_idx])
                 values.append(float(row_values[global_idx]))
+                step_ids.append(rollout_step_id)
                 tgt_idx = int(sampled_target_index[global_idx]) if batch.self_features.shape[0] > 0 else 0
                 bucket_idx = int(sampled_ship_bucket[global_idx]) if batch.self_features.shape[0] > 0 else 0
                 is_valid_send = (
@@ -148,11 +155,18 @@ def collect_rollout(
                 if src_planet is None or src_planet.ships < ships:
                     continue
                 moves.append([context.source_id, float(context.target_angles[tgt_idx]), ships])
+            decisions_total += len(group_indices)
+            emitted_moves_total += len(moves)
+            step_value = float(np.mean([values[idx] for idx in group_indices])) if group_indices else 0.0
             result = env.step(moves)
             running_episode_rewards[env_idx] += float(result.reward)
-            groups_per_env[env_idx].append(StepGroup(indices=group_indices, reward=float(result.reward), done=result.done))
+            groups_per_env[env_idx].append(
+                StepGroup(indices=group_indices, reward=float(result.reward), done=result.done, value=step_value)
+            )
+            rollout_step_id += 1
             if result.done:
                 episode_rewards.append(running_episode_rewards[env_idx])
+                episode_wins += int(float(result.info.get("terminal_reward", 0.0)) > 0.0)
                 running_episode_rewards[env_idx] = 0.0
                 next_seed += 1
                 next_batch = env.reset(seed=next_seed)
@@ -170,7 +184,7 @@ def collect_rollout(
             future_return = group.reward + cfg.ppo.gamma * future_return * (1.0 - float(group.done))
             for idx in group.indices:
                 returns[idx] = future_return
-                advantages[idx] = future_return - values[idx]
+                advantages[idx] = future_return - group.value
     batch = TransitionBatch(
         self_features=torch.from_numpy(np.asarray(self_rows, dtype=np.float32).reshape(-1, self_feature_dim())),
         candidate_features=torch.from_numpy(
@@ -183,14 +197,19 @@ def collect_rollout(
         log_prob=torch.tensor(log_probs, dtype=torch.float32),
         returns=torch.tensor(returns, dtype=torch.float32),
         advantages=torch.tensor(advantages, dtype=torch.float32),
+        step_id=torch.tensor(step_ids, dtype=torch.long),
     )
     candidate_owner_total = sum(candidate_owner_totals.values())
     stats = {
         "episode_reward_mean": float(np.mean(episode_rewards)) if episode_rewards else 0.0,
         "episode_reward_median": float(np.median(episode_rewards)) if episode_rewards else 0.0,
         "episodes_finished": float(len(episode_rewards)),
+        "win_rate": episode_wins / len(episode_rewards) if episode_rewards else 0.0,
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * len(envs)),
+        "decisions_per_step": decisions_total / max(rollout_step_id, 1),
+        "moves_emitted_per_step": emitted_moves_total / max(rollout_step_id, 1),
+        "move_emit_rate": emitted_moves_total / decisions_total if decisions_total else 0.0,
         "candidate_valid_avg": candidate_valid_total / candidate_source_rows if candidate_source_rows else 0.0,
         "candidate_enemy_share": candidate_owner_totals["enemy"] / candidate_owner_total if candidate_owner_total else 0.0,
         "candidate_neutral_share": candidate_owner_totals["neutral"] / candidate_owner_total if candidate_owner_total else 0.0,
@@ -406,7 +425,11 @@ def main() -> None:
             "episode_reward_mean": stats["episode_reward_mean"],
             "episode_reward_median": stats["episode_reward_median"],
             "episodes_finished": int(stats["episodes_finished"]),
+            "win_rate": stats["win_rate"],
             "samples": int(stats["samples"]),
+            "decisions_per_step": stats["decisions_per_step"],
+            "moves_emitted_per_step": stats["moves_emitted_per_step"],
+            "move_emit_rate": stats["move_emit_rate"],
             "candidate_valid_avg": stats["candidate_valid_avg"],
             "candidate_enemy_share": stats["candidate_enemy_share"],
             "candidate_neutral_share": stats["candidate_neutral_share"],
@@ -436,8 +459,12 @@ def main() -> None:
                 f"update={update} steps={total_env_steps} episodes={completed_episodes} "
                 f"reward_mean={stats['episode_reward_mean']:.4f} "
                 f"reward_median={stats['episode_reward_median']:.4f} "
+                f"win_rate={stats['win_rate']:.3f} "
                 f"loss={metrics['total_loss']:.4f} kl={metrics['approx_kl']:.5f} "
                 f"clip={metrics['clip_fraction']:.3f} "
+                f"ev={metrics['explained_variance']:.3f} "
+                f"decisions={stats['decisions_per_step']:.2f} "
+                f"moves={stats['moves_emitted_per_step']:.2f} "
                 f"candidates={stats['candidate_valid_avg']:.2f} "
                 f"enemy={stats['candidate_enemy_share']:.2f} "
                 f"neutral={stats['candidate_neutral_share']:.2f} "

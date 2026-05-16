@@ -27,6 +27,7 @@ class TransitionBatch:
     log_prob: torch.Tensor
     returns: torch.Tensor
     advantages: torch.Tensor
+    step_id: torch.Tensor
 
 
 def sample_actions(outputs: PolicyOutput, deterministic: bool) -> SampledAction:
@@ -88,6 +89,42 @@ def safe_target_logits(target_logits: torch.Tensor) -> torch.Tensor:
     return safe_logits
 
 
+def grouped_minibatch_indices(step_id: torch.Tensor, minibatch_size: int, device: torch.device) -> list[torch.Tensor]:
+    """Build minibatches that keep all rows from the same environment step together."""
+
+    unique_steps = step_id.unique()
+    if unique_steps.numel() == 0:
+        return []
+    shuffled_steps = unique_steps[torch.randperm(unique_steps.numel(), device=device)]
+    minibatches: list[torch.Tensor] = []
+    current_indices: list[torch.Tensor] = []
+    current_size = 0
+    for step in shuffled_steps:
+        indices = torch.nonzero(step_id == step, as_tuple=False).flatten()
+        step_size = int(indices.numel())
+        if current_indices and current_size + step_size > minibatch_size:
+            minibatches.append(torch.cat(current_indices))
+            current_indices = []
+            current_size = 0
+        current_indices.append(indices)
+        current_size += step_size
+    if current_indices:
+        minibatches.append(torch.cat(current_indices))
+    return minibatches
+
+
+def broadcast_step_mean(values: torch.Tensor, step_id: torch.Tensor) -> torch.Tensor:
+    """Average per-decision values into one critic value per step, then broadcast."""
+
+    unique_steps, inverse = step_id.unique(return_inverse=True)
+    step_sums = torch.zeros(unique_steps.shape[0], dtype=values.dtype, device=values.device)
+    step_counts = torch.zeros(unique_steps.shape[0], dtype=values.dtype, device=values.device)
+    step_sums.scatter_add_(0, inverse, values)
+    step_counts.scatter_add_(0, inverse, torch.ones_like(values))
+    step_means = step_sums / step_counts.clamp_min(1.0)
+    return step_means[inverse]
+
+
 def ppo_update(
     policy: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -122,6 +159,7 @@ def ppo_update(
     ship_bucket = batch.ship_bucket.to(device)
     returns = batch.returns.to(device)
     advantages = batch.advantages.to(device)
+    step_id = batch.step_id.to(device)
     advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
     size = self_features.shape[0]
     minibatch_size = min(size, max(1, minibatch_size))
@@ -135,9 +173,7 @@ def ppo_update(
     }
     metric_samples = 0
     for _ in range(epochs):
-        order = torch.randperm(size, device=device)
-        for start in range(0, size, minibatch_size):
-            idx = order[start : start + minibatch_size]
+        for idx in grouped_minibatch_indices(step_id, minibatch_size, device):
             outputs = policy(
                 self_features[idx],
                 candidate_features[idx],
@@ -155,7 +191,8 @@ def ppo_update(
                 -advantages[idx] * ratio,
                 -advantages[idx] * torch.clamp(ratio, 1.0 - clip_coef, 1.0 + clip_coef),
             ).mean()
-            value_loss = 0.5 * (returns[idx] - outputs.value).pow(2).mean()
+            centralized_values = broadcast_step_mean(outputs.value, step_id[idx])
+            value_loss = 0.5 * (returns[idx] - centralized_values).pow(2).mean()
             entropy_mean = entropy.mean()
             loss = policy_loss + vf_coef * value_loss - ent_coef * entropy_mean
             optimizer.zero_grad(set_to_none=True)
@@ -178,7 +215,7 @@ def ppo_update(
     averaged_metrics = {key: value / max(metric_samples, 1) for key, value in metrics.items()}
     with torch.inference_mode():
         value_outputs = policy(self_features, candidate_features, global_features, candidate_mask)
-        value_predictions = value_outputs.value
+        value_predictions = broadcast_step_mean(value_outputs.value, step_id)
         return_variance = returns.var(unbiased=False)
         if float(return_variance.detach().cpu()) <= 1e-12:
             explained_variance = torch.tensor(0.0, device=device)
