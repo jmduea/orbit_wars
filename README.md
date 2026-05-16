@@ -8,6 +8,7 @@ The Orbit Wars reinforcement-learning implementation that was previously generat
 - `default_cfg.yaml` for quick notebook/demo runs
 - `configs/full_training.yaml` for longer reproducible MLP baseline training runs
 - `configs/attention_training.yaml` for longer reproducible attention-policy training runs
+- `configs/attention_shaped_reward_training.yaml` for attention-policy training with conservative reward shaping
 - `configs/attention_self_play_pool.yaml` for attention training against a self-play opponent pool
 - `src/`
 - `evaluate.py` for checkpoint evaluation across multiple opponents
@@ -59,11 +60,47 @@ Run the extracted package and scripts through `uv run`, for example:
 uv run python -m src.train --config default_cfg.yaml
 uv run python -m src.train --config configs/full_training.yaml
 uv run python -m src.train --config configs/attention_training.yaml
+uv run python -m src.train --config configs/attention_shaped_reward_training.yaml
 uv run python -m src.train --config configs/attention_self_play_pool.yaml
 uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents sniper,random,self_play_snapshot --seeds 0:99 --deterministic
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
 ```
+
+## Shaped-reward attention experiment
+
+Train the conservative shaped-reward attention run with the same PPO budget as
+`configs/attention_training.yaml`:
+
+```bash
+uv run python -m src.train --config configs/attention_shaped_reward_training.yaml
+```
+
+Compare it against the unshaped attention run by evaluating both checkpoints
+with identical opponents and seeds:
+
+```bash
+uv run python evaluate.py \
+  --config configs/attention_training.yaml \
+  --checkpoint /kaggle/working/artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_002000.pt \
+  --games 100 \
+  --opponents sniper,random,self_play_snapshot \
+  --seeds 0:99 \
+  --deterministic \
+  --run-name attention_unshaped_ckpt_002000
+
+uv run python evaluate.py \
+  --config configs/attention_shaped_reward_training.yaml \
+  --checkpoint /kaggle/working/artifacts/attention_shaped_reward_training/orbit_wars_ppo_attention_shaped_reward/ckpt_002000.pt \
+  --games 100 \
+  --opponents sniper,random,self_play_snapshot \
+  --seeds 0:99 \
+  --deterministic \
+  --run-name attention_shaped_reward_ckpt_002000
+```
+
+Keep `--games`, `--opponents`, and `--seeds` unchanged for any earlier
+checkpoint pair so the shaped and unshaped metrics remain directly comparable.
 
 ## Attention candidate-count experiments
 
