@@ -38,6 +38,7 @@ class GameResult:
     length: int
 
 
+
 @dataclass(slots=True)
 class AggregateMetrics:
     games: int

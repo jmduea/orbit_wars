@@ -15,7 +15,6 @@ from .normalization import ObservationNormalizer
 from .policy import build_policy
 from .ppo import sample_actions
 
-
 Planet = namedtuple("Planet", ["id", "owner", "x", "y", "radius", "ships", "production"])
 
 
@@ -60,7 +59,11 @@ class KaggleRandomOpponent:
 
 class SelfPlayOpponent:
     def __init__(self, cfg: TrainConfig, device: torch.device, deterministic: bool = True) -> None:
-        from .features import candidate_feature_dim, global_feature_dim, self_feature_dim
+        from .features import (
+            candidate_feature_dim,
+            global_feature_dim,
+            self_feature_dim,
+        )
 
         self.cfg = cfg
         self.device = device

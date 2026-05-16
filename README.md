@@ -34,7 +34,7 @@ current training opponent. Use the same seed range for every checkpoint so the
 ```bash
 uv run python evaluate.py \
   --config configs/attention_self_play_pool.yaml \
-  --checkpoint /kaggle/working/artifacts/attention_self_play_pool/orbit_wars_ppo_attention_self_play_pool/ckpt_000050.pt \
+  --checkpoint /artifacts/attention_self_play_pool/orbit_wars_ppo_attention_self_play_pool/ckpt_000050.pt \
   --games 100 \
   --opponents sniper,random,self_play_snapshot \
   --seeds 0:99 \
@@ -82,21 +82,21 @@ with identical opponents and seeds:
 ```bash
 uv run python evaluate.py \
   --config configs/attention_training.yaml \
-  --checkpoint /kaggle/working/artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_002000.pt \
+  --checkpoint /artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_last.pt \
   --games 100 \
   --opponents sniper,random,self_play_snapshot \
   --seeds 0:99 \
   --deterministic \
-  --run-name attention_unshaped_ckpt_002000
+  --run-name attention_unshaped_ckpt_last
 
 uv run python evaluate.py \
   --config configs/attention_shaped_reward_training.yaml \
-  --checkpoint /kaggle/working/artifacts/attention_shaped_reward_training/orbit_wars_ppo_attention_shaped_reward/ckpt_002000.pt \
+  --checkpoint /artifacts/attention_shaped_reward_training/orbit_wars_ppo_attention_shaped_reward/ckpt_last.pt \
   --games 100 \
   --opponents sniper,random,self_play_snapshot \
   --seeds 0:99 \
   --deterministic \
-  --run-name attention_shaped_reward_ckpt_002000
+  --run-name attention_shaped_reward_ckpt_last
 ```
 
 Keep `--games`, `--opponents`, and `--seeds` unchanged for any earlier

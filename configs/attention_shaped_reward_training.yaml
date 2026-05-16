@@ -1,13 +1,13 @@
 seed: 42
 run_name: orbit_wars_ppo_attention_shaped_reward
 device: auto
-save_dir: /kaggle/working/artifacts/attention_shaped_reward_training
+save_dir: /artifacts/attention_shaped_reward_training
 checkpoint_every: 50
 log_every: 1
 opponent: self
 self_play_update_interval: 50
 self_play_deterministic: false
-self_play_enabled: false
+self_play_enabled: true
 self_play_pool_size: 5
 self_play_snapshot_interval: 50
 self_play_latest_probability: 0.5
@@ -36,7 +36,7 @@ ppo:
   total_updates: 2000
   epochs: 4
   minibatch_size: 512
-  gamma: 0.99
+  gamma: 0.999
   clip_coef: 0.2
   ent_coef: 0.02
   vf_coef: 0.5

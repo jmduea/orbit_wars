@@ -6,7 +6,12 @@ from typing import Any
 import numpy as np
 import torch
 
-from .features import TurnBatch, candidate_feature_dim, global_feature_dim, self_feature_dim
+from .features import (
+    TurnBatch,
+    candidate_feature_dim,
+    global_feature_dim,
+    self_feature_dim,
+)
 
 
 @dataclass(slots=True)
