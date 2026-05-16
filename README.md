@@ -8,6 +8,7 @@ The Orbit Wars reinforcement-learning implementation that was previously generat
 - `default_cfg.yaml` for quick notebook/demo runs
 - `configs/full_training.yaml` for longer reproducible MLP baseline training runs
 - `configs/attention_training.yaml` for longer reproducible attention-policy training runs
+- `configs/attention_self_play_pool.yaml` for attention training against a self-play opponent pool
 - `src/`
 - `evaluate.py` for checkpoint evaluation across multiple opponents
 - `eval_vs_sniper.py` as a backwards-compatible sniper-only wrapper
@@ -16,6 +17,32 @@ The Orbit Wars reinforcement-learning implementation that was previously generat
 The notebook should be treated as a tutorial wrapper around this checked-in implementation.
 For code changes, update the repository files first; do not treat notebook `%%writefile`
 cells as the canonical source of the implementation.
+
+## Attention self-play-pool experiment
+
+Train the attention policy against the self-play opponent pool with:
+
+```bash
+uv run python -m src.train --config configs/attention_self_play_pool.yaml
+```
+
+Evaluate each checkpoint against the fixed benchmark set instead of only the
+current training opponent. Use the same seed range for every checkpoint so the
+`sniper`, `random`, and `self_play_snapshot` results are directly comparable:
+
+```bash
+uv run python evaluate.py \
+  --config configs/attention_self_play_pool.yaml \
+  --checkpoint /kaggle/working/artifacts/attention_self_play_pool/orbit_wars_ppo_attention_self_play_pool/ckpt_000050.pt \
+  --games 100 \
+  --opponents sniper,random,self_play_snapshot \
+  --seeds 0:99 \
+  --deterministic \
+  --run-name attention_self_play_pool_ckpt_000050
+```
+
+Repeat the command for later `ckpt_*.pt` files while keeping `--games`,
+`--opponents`, and `--seeds` unchanged.
 
 ## Dependency management
 
@@ -32,6 +59,7 @@ Run the extracted package and scripts through `uv run`, for example:
 uv run python -m src.train --config default_cfg.yaml
 uv run python -m src.train --config configs/full_training.yaml
 uv run python -m src.train --config configs/attention_training.yaml
+uv run python -m src.train --config configs/attention_self_play_pool.yaml
 uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents sniper,random,self_play_snapshot --seeds 0:99 --deterministic
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
