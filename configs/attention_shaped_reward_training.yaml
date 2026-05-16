@@ -1,0 +1,44 @@
+seed: 42
+run_name: orbit_wars_ppo_attention_shaped_reward
+device: auto
+save_dir: /kaggle/working/artifacts/attention_shaped_reward_training
+checkpoint_every: 50
+log_every: 1
+opponent: self
+self_play_update_interval: 50
+self_play_deterministic: false
+self_play_enabled: false
+self_play_pool_size: 5
+self_play_snapshot_interval: 50
+self_play_latest_probability: 0.5
+alternate_player_sides: true
+
+env:
+  # Includes reserved no-op index 0; real target slots are candidate_count - 1.
+  candidate_count: 8
+  ship_bucket_count: 8
+  # Conservative shaping: keep terminal win/loss as the dominant signal.
+  reward_capture_planet: 0.1
+  reward_ship_delta: 0.001
+  reward_production_delta: 0.02
+  reward_terminal_scale: 1.0
+
+model:
+  architecture: attention  # mlp | attention
+  hidden_size: 128
+  attention_heads: 4
+  normalize_observations: true
+  obs_norm_clip: 10.0
+
+ppo:
+  rollout_steps: 512
+  num_envs: 8
+  total_updates: 2000
+  epochs: 4
+  minibatch_size: 512
+  gamma: 0.99
+  clip_coef: 0.2
+  ent_coef: 0.02
+  vf_coef: 0.5
+  lr: 0.0001
+  max_grad_norm: 0.5
