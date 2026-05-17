@@ -24,7 +24,7 @@ env:
   reward_terminal_scale: 1.0
 
 model:
-  architecture: mlp  # mlp | attention
+  architecture: mlp  # mlp | attention | transformer
   hidden_size: 128
   attention_heads: 4
   normalize_observations: true

@@ -19,6 +19,9 @@ The notebook should be treated as a tutorial wrapper around this checked-in impl
 For code changes, update the repository files first; do not treat notebook `%%writefile`
 cells as the canonical source of the implementation.
 
+For launch commands, backend selection, logging locations, checkpoint naming,
+evaluation protocol, and benchmark usage, see [`docs/experiments.md`](docs/experiments.md).
+
 ## Attention self-play-pool experiment
 
 Train the attention policy against the self-play opponent pool with:

@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -10,11 +9,14 @@ import yaml
 
 @dataclass(slots=True)
 class EnvConfig:
+    """Environment and feature-shape configuration shared by all backends."""
+
     board_size: float = 100.0
     episode_steps: int = 500
     candidate_count: int = 8
     ship_bucket_count: int = 8
     max_planets: int = 48
+    max_fleets: int = 256
     max_ships: float = 400.0
     max_production: float = 5.0
     reward_capture_planet: float = 0.0
@@ -25,6 +27,8 @@ class EnvConfig:
 
 @dataclass(slots=True)
 class ModelConfig:
+    """Policy architecture and observation-normalization configuration."""
+
     architecture: str = "mlp"
     hidden_size: int = 128
     attention_heads: int = 4
@@ -34,6 +38,8 @@ class ModelConfig:
 
 @dataclass(slots=True)
 class PPOConfig:
+    """PPO rollout, optimization, and loss hyperparameters."""
+
     rollout_steps: int = 32
     num_envs: int = 4
     total_updates: int = 200
@@ -49,6 +55,13 @@ class PPOConfig:
 
 @dataclass(slots=True)
 class TrainConfig:
+    """Top-level training configuration loaded from YAML files.
+
+    ``env_backend`` selects either the Kaggle/Python environment or the JAX
+    environment. ``rl_backend`` selects the Torch PPO loop or the end-to-end JAX
+    PPO loop.
+    """
+
     seed: int = 42
     run_name: str = "orbit_wars_template_ppo"
     device: str = "auto"
@@ -56,6 +69,8 @@ class TrainConfig:
     checkpoint_every: int = 10
     log_every: int = 1
     opponent: str = "random"
+    env_backend: str = "kaggle"
+    rl_backend: str = "torch"
     self_play_update_interval: int = 10
     self_play_deterministic: bool = False
     self_play_enabled: bool = False
@@ -69,10 +84,14 @@ class TrainConfig:
 
 
 def default_train_config_path() -> Path:
+    """Return the repository's default training YAML path."""
+
     return Path(__file__).resolve().parents[1] / "default_cfg.yaml"
 
 
 def load_train_config(path: str | Path) -> TrainConfig:
+    """Load a YAML training configuration into a typed ``TrainConfig``."""
+
     config_path = Path(path)
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
@@ -81,6 +100,8 @@ def load_train_config(path: str | Path) -> TrainConfig:
 
 
 def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
+    """Build ``TrainConfig`` from a nested dictionary of overrides."""
+
     cfg = TrainConfig()
     _update_dataclass(cfg, data, skip={"env", "model", "ppo"})
     _update_dataclass(cfg.env, data.get("env", {}))
@@ -89,7 +110,9 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     return cfg
 
 
-def _update_dataclass(instance: Any, values: dict[str, Any], skip: set[str] | None = None) -> None:
+def _update_dataclass(
+    instance: Any, values: dict[str, Any], skip: set[str] | None = None
+) -> None:
     if not isinstance(values, dict):
         return
     skip = skip or set()

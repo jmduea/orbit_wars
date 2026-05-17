@@ -21,3 +21,10 @@ def test_attention_shaped_reward_config_uses_conservative_shaping_values() -> No
     assert shaped["env"]["reward_ship_delta"] == 0.001
     assert shaped["env"]["reward_production_delta"] == 0.02
     assert shaped["env"]["reward_terminal_scale"] == 1.0
+
+
+def test_default_config_preserves_torch_kaggle_training_path() -> None:
+    default = load_yaml("default_cfg.yaml")
+
+    assert default["env_backend"] == "kaggle"
+    assert default["rl_backend"] == "torch"
