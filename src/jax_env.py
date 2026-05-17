@@ -187,13 +187,14 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
 
     owner = jnp.full((planet_count,), -1, dtype=jnp.int32)
     home_group = jax.random.randint(key_home, (), minval=0, maxval=group_count)
-    owner = jnp.where((group == home_group) & (quadrant == 0) & active, 0, owner)
-    owner = jnp.where((group == home_group) & (quadrant == 3) & active, 1, owner)
-    ships = jnp.where(
-        ((group == home_group) & ((quadrant == 0) | (quadrant == 3))) & active,
-        10.0,
-        ships,
-    )
+    home = (group == home_group) & active
+    if int(getattr(cfg, "player_count", 2)) == 4:
+        owner = jnp.where(home, quadrant, owner)
+        ships = jnp.where(home, 10.0, ships)
+    else:
+        owner = jnp.where(home & (quadrant == 0), 0, owner)
+        owner = jnp.where(home & (quadrant == 3), 1, owner)
+        ships = jnp.where(home & ((quadrant == 0) | (quadrant == 3)), 10.0, ships)
 
     planets = JaxPlanetState(idx, owner, x, y, radius, ships, production, active)
     empty_fleets = JaxFleetState(
@@ -219,13 +220,61 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
     return env_state, encode_turn(game, cfg)
 
 
+def _finish_step(
+    previous_game: JaxGameState,
+    state: JaxEnvState,
+    planets: JaxPlanetState,
+    fleets: JaxFleetState,
+    next_fleet_id: jax.Array,
+    cfg: EnvConfig,
+) -> tuple[JaxEnvState, JaxStepResult]:
+    planets = planets._replace(
+        ships=jnp.where(
+            (planets.owner != -1) & planets.active,
+            planets.ships + planets.production,
+            planets.ships,
+        )
+    )
+    planets, fleets = _move_and_resolve(previous_game, planets, fleets, cfg)
+
+    next_game = previous_game._replace(
+        step=previous_game.step + jnp.array(1, dtype=jnp.int32),
+        next_fleet_id=next_fleet_id,
+        planets=planets,
+        fleets=fleets,
+    )
+    done, terminal_reward = _terminal(next_game, state.learner_player, cfg)
+    shaping = _shaping(previous_game, next_game, state.learner_player, cfg)
+    reward = (
+        jnp.where(done, terminal_reward * cfg.reward_terminal_scale, 0.0)
+        + shaping[0]
+        + shaping[1]
+        + shaping[2]
+    )
+    next_state = state._replace(game=next_game)
+    batch = encode_turn(next_game._replace(player=state.learner_player), cfg)
+    result = JaxStepResult(
+        batch=batch,
+        reward=reward,
+        done=done,
+        terminal_reward=jnp.where(
+            done, terminal_reward * cfg.reward_terminal_scale, 0.0
+        ),
+        shaping_reward=shaping[0] + shaping[1] + shaping[2],
+        reward_capture_planet=shaping[0],
+        reward_ship_delta=shaping[1],
+        reward_production_delta=shaping[2],
+    )
+    return next_state, result
+
+
 def step(
     state: JaxEnvState,
     learner_action: JaxAction,
     opponent_action: JaxAction,
     cfg: EnvConfig,
 ) -> tuple[JaxEnvState, JaxStepResult]:
-    """Advance one JAX Orbit Wars environment by one turn.
+    """Advance one two-player JAX Orbit Wars environment by one turn.
 
     Parameters are pure JAX pytrees so this function can be JIT-compiled or
     vectorized. ``learner_action`` is interpreted for ``state.learner_player``;
@@ -259,45 +308,35 @@ def step(
     planets, fleets, next_fleet_id = _launch_fleets(
         planets, fleets, next_fleet_id, actions1, 1, cfg
     )
+    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg)
 
-    planets = planets._replace(
-        ships=jnp.where(
-            (planets.owner != -1) & planets.active,
-            planets.ships + planets.production,
-            planets.ships,
+
+def step_multi_player(
+    state: JaxEnvState,
+    player_actions: JaxAction,
+    cfg: EnvConfig,
+) -> tuple[JaxEnvState, JaxStepResult]:
+    """Advance a multi-player JAX Orbit Wars environment by one turn.
+
+    ``player_actions`` is a :class:`JaxAction` pytree with a leading player
+    dimension on each field, e.g. ``source_id.shape == (player_count,
+    max_fleets)``. This mirrors Kaggle's interpreter, which processes one
+    action list per player before production, movement, and combat. The existing
+    :func:`step` helper remains the two-player learner/opponent convenience API.
+    """
+
+    previous_game = state.game
+    planets = previous_game.planets
+    fleets = previous_game.fleets
+    next_fleet_id = previous_game.next_fleet_id
+    for player in range(int(getattr(cfg, "player_count", 2))):
+        action = jax.tree.map(
+            lambda x, p=player: jnp.take(x, p, axis=0), player_actions
         )
-    )
-    planets, fleets = _move_and_resolve(previous_game, planets, fleets, cfg)
-
-    next_game = previous_game._replace(
-        step=previous_game.step + jnp.array(1, dtype=jnp.int32),
-        next_fleet_id=next_fleet_id,
-        planets=planets,
-        fleets=fleets,
-    )
-    done, terminal_reward = _terminal(next_game, state.learner_player, cfg)
-    shaping = _shaping(previous_game, next_game, state.learner_player, cfg)
-    reward = (
-        jnp.where(done, terminal_reward * cfg.reward_terminal_scale, 0.0)
-        + shaping[0]
-        + shaping[1]
-        + shaping[2]
-    )
-    next_state = state._replace(game=next_game)
-    batch = encode_turn(next_game, cfg)
-    result = JaxStepResult(
-        batch=batch,
-        reward=reward,
-        done=done,
-        terminal_reward=jnp.where(
-            done, terminal_reward * cfg.reward_terminal_scale, 0.0
-        ),
-        shaping_reward=shaping[0] + shaping[1] + shaping[2],
-        reward_capture_planet=shaping[0],
-        reward_ship_delta=shaping[1],
-        reward_production_delta=shaping[2],
-    )
-    return next_state, result
+        planets, fleets, next_fleet_id = _launch_fleets(
+            planets, fleets, next_fleet_id, action, player, cfg
+        )
+    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg)
 
 
 def _launch_fleets(
@@ -383,7 +422,7 @@ def _move_and_resolve(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
 
-    speed = fleet_speed(fleets.ships)
+    speed = fleet_speed(fleets.ships, cfg.ship_speed)
     old_fx, old_fy = fleets.x, fleets.y
     new_fx = fleets.x + jnp.cos(fleets.angle) * speed
     new_fy = fleets.y + jnp.sin(fleets.angle) * speed
@@ -422,12 +461,12 @@ def _move_and_resolve(
     return moved_planets, moved_fleets
 
 
-def fleet_speed(ships: jax.Array) -> jax.Array:
+def fleet_speed(ships: jax.Array, ship_speed: float = DEFAULT_SHIP_SPEED) -> jax.Array:
     """Compute Orbit Wars fleet speed from ship count using game scaling."""
 
     safe = jnp.maximum(ships, 1.0)
-    speed = 1.0 + (DEFAULT_SHIP_SPEED - 1.0) * (jnp.log(safe) / jnp.log(1000.0)) ** 1.5
-    return jnp.minimum(speed, DEFAULT_SHIP_SPEED)
+    speed = 1.0 + (ship_speed - 1.0) * (jnp.log(safe) / jnp.log(1000.0)) ** 1.5
+    return jnp.minimum(speed, ship_speed)
 
 
 def swept_pair_hit(ax, ay, bx, by, p0x, p0y, p1x, p1y, radius):
@@ -475,12 +514,23 @@ def _resolve_combat(
     hit_weights = jax.nn.one_hot(hit_idx, cfg.max_planets, dtype=jnp.float32) * hit_any[
         :, None
     ].astype(jnp.float32)
-    ships0 = hit_weights.T @ jnp.where(fleets.owner == 0, fleets.ships, 0.0)
-    ships1 = hit_weights.T @ jnp.where(fleets.owner == 1, fleets.ships, 0.0)
-    top_owner = jnp.where(ships0 >= ships1, 0, 1)
-    top = jnp.maximum(ships0, ships1)
-    second = jnp.minimum(ships0, ships1)
-    survivors = jnp.where(ships0 == ships1, 0.0, top - second)
+    owners = jnp.arange(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)
+    ships_by_owner = jax.vmap(
+        lambda owner: (
+            hit_weights.T @ jnp.where(fleets.owner == owner, fleets.ships, 0.0)
+        )
+    )(owners)
+    top_owner_idx = jnp.argmax(ships_by_owner, axis=0)
+    top_owner = jnp.take(owners, top_owner_idx)
+    top = jnp.max(ships_by_owner, axis=0)
+    tied_for_top = (ships_by_owner == top[None, :]) & (top[None, :] > 0.0)
+    unique_top = tied_for_top.sum(axis=0) == 1
+    second = jnp.max(
+        jnp.where(owners[:, None] == top_owner[None, :], -jnp.inf, ships_by_owner),
+        axis=0,
+    )
+    second = jnp.where(jnp.isfinite(second), second, 0.0)
+    survivors = jnp.where(unique_top, top - second, 0.0)
     has_attack = survivors > 0.0
     same_owner = planets.owner == top_owner
     new_ships_same = planets.ships + survivors
@@ -499,34 +549,32 @@ def _resolve_combat(
 
 
 def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
-    alive0 = ((game.planets.owner == 0) & game.planets.active).any() | (
-        (game.fleets.owner == 0) & game.fleets.active
-    ).any()
-    alive1 = ((game.planets.owner == 1) & game.planets.active).any() | (
-        (game.fleets.owner == 1) & game.fleets.active
-    ).any()
-    done = (game.step >= cfg.episode_steps - 2) | (
-        (alive0.astype(jnp.int32) + alive1.astype(jnp.int32)) <= 1
-    )
-    score0 = (
-        jnp.where(
-            (game.planets.owner == 0) & game.planets.active, game.planets.ships, 0.0
-        ).sum()
-        + jnp.where(
-            (game.fleets.owner == 0) & game.fleets.active, game.fleets.ships, 0.0
-        ).sum()
-    )
-    score1 = (
-        jnp.where(
-            (game.planets.owner == 1) & game.planets.active, game.planets.ships, 0.0
-        ).sum()
-        + jnp.where(
-            (game.fleets.owner == 1) & game.fleets.active, game.fleets.ships, 0.0
-        ).sum()
-    )
-    learner_score = jnp.where(learner_player == 0, score0, score1)
-    opp_score = jnp.where(learner_player == 0, score1, score0)
-    reward = jnp.where((learner_score >= opp_score) & (learner_score > 0.0), 1.0, -1.0)
+    owners = jnp.arange(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)
+    planet_alive = jax.vmap(
+        lambda owner: ((game.planets.owner == owner) & game.planets.active).any()
+    )(owners)
+    fleet_alive = jax.vmap(
+        lambda owner: ((game.fleets.owner == owner) & game.fleets.active).any()
+    )(owners)
+    alive = planet_alive | fleet_alive
+    done = (game.step >= cfg.episode_steps - 2) | (alive.astype(jnp.int32).sum() <= 1)
+    scores = jax.vmap(
+        lambda owner: (
+            jnp.where(
+                (game.planets.owner == owner) & game.planets.active,
+                game.planets.ships,
+                0.0,
+            ).sum()
+            + jnp.where(
+                (game.fleets.owner == owner) & game.fleets.active,
+                game.fleets.ships,
+                0.0,
+            ).sum()
+        )
+    )(owners)
+    learner_score = jnp.take(scores, jnp.clip(learner_player, 0, owners.shape[0] - 1))
+    best_score = jnp.max(scores)
+    reward = jnp.where((learner_score == best_score) & (learner_score > 0.0), 1.0, -1.0)
     return done, reward
 
 
@@ -582,6 +630,7 @@ def _shaping(
 
 batched_reset = jax.vmap(reset, in_axes=(0, None))
 batched_step = jax.vmap(step, in_axes=(0, 0, 0, None))
+batched_step_multi_player = jax.vmap(step_multi_player, in_axes=(0, 0, None))
 
 
 def jit_reset(key: jax.Array, cfg: EnvConfig):
