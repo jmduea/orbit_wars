@@ -24,7 +24,7 @@ env:
   reward_terminal_scale: 1.0
 
 model:
-  architecture: attention  # mlp | attention
+  architecture: attention  # mlp | attention | transformer
   hidden_size: 128
   attention_heads: 4
   normalize_observations: true
@@ -36,7 +36,7 @@ ppo:
   total_updates: 2000
   epochs: 4
   minibatch_size: 512
-  gamma: 0.999
+  gamma: 0.99
   clip_coef: 0.2
   ent_coef: 0.02
   vf_coef: 0.5

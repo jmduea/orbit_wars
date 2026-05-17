@@ -4,7 +4,7 @@ import torch
 from src.policy import build_policy
 
 
-@pytest.mark.parametrize("architecture", ["mlp", "attention"])
+@pytest.mark.parametrize("architecture", ["mlp", "attention", "transformer"])
 def test_policy_returns_per_candidate_ship_logits(architecture: str) -> None:
     policy = build_policy(
         architecture=architecture,
@@ -20,7 +20,12 @@ def test_policy_returns_per_candidate_ship_logits(architecture: str) -> None:
         self_features=torch.randn(2, 4),
         candidate_features=torch.randn(2, 6, 5),
         global_features=torch.randn(2, 3),
-        candidate_mask=torch.tensor([[True, False, True, True, False, True], [True, True, False, False, False, True]]),
+        candidate_mask=torch.tensor(
+            [
+                [True, False, True, True, False, True],
+                [True, True, False, False, False, True],
+            ]
+        ),
     )
 
     assert outputs.target_logits.shape == (2, 6)
