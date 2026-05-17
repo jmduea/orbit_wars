@@ -6,6 +6,8 @@ save_dir: /kaggle/working/artifacts
 checkpoint_every: 50
 log_every: 1
 opponent: self
+env_backend: jax  # jax | kaggle
+rl_backend: jax  # jax | torch
 self_play_update_interval: 50
 self_play_deterministic: false
 self_play_enabled: false

@@ -5,6 +5,9 @@ description = "Versioned Orbit Wars reinforcement-learning tutorial implementati
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "flax",
+    "jax",
+    "optax",
     "kaggle-environments",
     "numpy",
     "pyyaml",

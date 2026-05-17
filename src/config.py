@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,6 +14,7 @@ class EnvConfig:
     candidate_count: int = 8
     ship_bucket_count: int = 8
     max_planets: int = 48
+    max_fleets: int = 256
     max_ships: float = 400.0
     max_production: float = 5.0
     reward_capture_planet: float = 0.0
@@ -56,6 +56,8 @@ class TrainConfig:
     checkpoint_every: int = 10
     log_every: int = 1
     opponent: str = "random"
+    env_backend: str = "jax"
+    rl_backend: str = "jax"
     self_play_update_interval: int = 10
     self_play_deterministic: bool = False
     self_play_enabled: bool = False
@@ -89,7 +91,9 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     return cfg
 
 
-def _update_dataclass(instance: Any, values: dict[str, Any], skip: set[str] | None = None) -> None:
+def _update_dataclass(
+    instance: Any, values: dict[str, Any], skip: set[str] | None = None
+) -> None:
     if not isinstance(values, dict):
         return
     skip = skip or set()
