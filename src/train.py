@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -393,7 +394,10 @@ def main() -> None:
     total_env_steps = 0
     completed_episodes = 0
     running_episode_rewards = [0.0 for _ in envs]
+    train_start_time = time.perf_counter()
     for update in range(1, cfg.ppo.total_updates + 1):
+        update_start_time = time.perf_counter()
+        rollout_start_time = time.perf_counter()
         batch, batches, next_seed, stats = collect_rollout(
             envs,
             batches,
@@ -404,6 +408,8 @@ def main() -> None:
             normalizer,
             running_episode_rewards,
         )
+        rollout_seconds = time.perf_counter() - rollout_start_time
+        ppo_start_time = time.perf_counter()
         metrics = ppo_update(
             policy,
             optimizer,
@@ -416,6 +422,13 @@ def main() -> None:
             minibatch_size=cfg.ppo.minibatch_size,
             device=device,
         )
+        ppo_seconds = time.perf_counter() - ppo_start_time
+        update_seconds = time.perf_counter() - update_start_time
+        elapsed_seconds = time.perf_counter() - train_start_time
+        env_steps_per_sec = stats["env_steps"] / max(update_seconds, 1e-9)
+        rollout_env_steps_per_sec = stats["env_steps"] / max(rollout_seconds, 1e-9)
+        samples_per_sec = stats["samples"] / max(update_seconds, 1e-9)
+        ppo_samples_per_sec = stats["samples"] / max(ppo_seconds, 1e-9)
         total_env_steps += int(stats["env_steps"])
         completed_episodes += int(stats["episodes_finished"])
         log_record: dict[str, float | int] = {
@@ -427,6 +440,14 @@ def main() -> None:
             "episodes_finished": int(stats["episodes_finished"]),
             "win_rate": stats["win_rate"],
             "samples": int(stats["samples"]),
+            "update_seconds": update_seconds,
+            "elapsed_seconds": elapsed_seconds,
+            "rollout_seconds": rollout_seconds,
+            "ppo_seconds": ppo_seconds,
+            "env_steps_per_sec": env_steps_per_sec,
+            "rollout_env_steps_per_sec": rollout_env_steps_per_sec,
+            "samples_per_sec": samples_per_sec,
+            "ppo_samples_per_sec": ppo_samples_per_sec,
             "decisions_per_step": stats["decisions_per_step"],
             "moves_emitted_per_step": stats["moves_emitted_per_step"],
             "move_emit_rate": stats["move_emit_rate"],
@@ -461,6 +482,8 @@ def main() -> None:
                 f"reward_median={stats['episode_reward_median']:.4f} "
                 f"win_rate={stats['win_rate']:.3f} "
                 f"loss={metrics['total_loss']:.4f} kl={metrics['approx_kl']:.5f} "
+                f"sps={samples_per_sec:.1f} rollout_s={rollout_seconds:.3f} "
+                f"ppo_s={ppo_seconds:.3f} "
                 f"clip={metrics['clip_fraction']:.3f} "
                 f"ev={metrics['explained_variance']:.3f} "
                 f"decisions={stats['decisions_per_step']:.2f} "
