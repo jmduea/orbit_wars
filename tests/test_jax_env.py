@@ -9,11 +9,16 @@ from src.features import (
     global_feature_dim,
     self_feature_dim,
 )
+from src.jax_features import encode_turn
 from src.jax_env import (
     JaxAction,
+    JaxFleetState,
+    JaxGameState,
+    JaxPlanetState,
     batched_reset,
     batched_step,
     empty_action,
+    max_fleets,
     reset,
     step,
 )
@@ -69,6 +74,61 @@ def test_noop_candidate_slot_is_valid_for_owned_planets_only():
 
     assert masks[decision_mask, NO_OP_CANDIDATE_INDEX].all()
     assert not masks[~decision_mask, NO_OP_CANDIDATE_INDEX].any()
+
+
+def test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker():
+    cfg = EnvConfig(max_planets=16, max_fleets=16, candidate_count=3)
+    planet_ids = jnp.arange(cfg.max_planets, dtype=jnp.int32)
+    owner = jnp.full((cfg.max_planets,), -1, dtype=jnp.int32)
+    owner = owner.at[0].set(0)
+    owner = owner.at[1].set(1)
+    owner = owner.at[15].set(1)
+    active = jnp.zeros((cfg.max_planets,), dtype=bool)
+    active = active.at[jnp.array([0, 1, 15])].set(True)
+    x = jnp.zeros((cfg.max_planets,), dtype=jnp.float32)
+    y = jnp.zeros((cfg.max_planets,), dtype=jnp.float32)
+    x = x.at[0].set(10.0)
+    y = y.at[0].set(10.0)
+    x = x.at[15].set(11.1)
+    y = y.at[15].set(10.0)
+    x = x.at[1].set(11.9)
+    y = y.at[1].set(10.0)
+    planets = JaxPlanetState(
+        id=planet_ids,
+        owner=owner,
+        x=x,
+        y=y,
+        radius=jnp.ones((cfg.max_planets,), dtype=jnp.float32),
+        ships=jnp.ones((cfg.max_planets,), dtype=jnp.float32) * 10.0,
+        production=jnp.ones((cfg.max_planets,), dtype=jnp.float32),
+        active=active,
+    )
+    fleet_count = max_fleets(cfg)
+    fleets = JaxFleetState(
+        id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        x=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        y=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        angle=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        from_planet_id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        ships=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        active=jnp.zeros((fleet_count,), dtype=bool),
+    )
+    game = JaxGameState(
+        step=jnp.array(0, dtype=jnp.int32),
+        player=jnp.array(0, dtype=jnp.int32),
+        angular_velocity=jnp.array(0.0, dtype=jnp.float32),
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        planets=planets,
+        initial_planets=planets,
+        fleets=fleets,
+    )
+
+    encoded = encode_turn(game, cfg)
+
+    np.testing.assert_array_equal(
+        np.asarray(encoded.candidate_ids[0]), np.array([-1, 15, 1])
+    )
 
 
 def test_launch_and_production_match_core_orbit_wars_mechanics():

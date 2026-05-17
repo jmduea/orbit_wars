@@ -113,10 +113,9 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
     )
     # JAX-friendly approximation of the Python encoder's sorted candidate list:
     # closest active non-self planets fill slots 1..N while slot 0 remains no-op.
-    sort_key = jnp.where(
-        valid_target, dist * (p + 1.0) + planets.id[None, :].astype(jnp.float32), 1e9
-    )
-    order = jnp.argsort(sort_key, axis=1)[:, : max(0, c - 1)]
+    sort_distance = jnp.where(valid_target, dist, jnp.inf)
+    sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
+    order = jnp.lexsort((sort_id, sort_distance), axis=1)[:, : max(0, c - 1)]
     pad_width = max(0, c - 1) - order.shape[1]
     if pad_width:
         order = jnp.pad(order, ((0, 0), (0, pad_width)), constant_values=0)
