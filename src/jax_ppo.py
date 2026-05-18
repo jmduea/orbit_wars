@@ -12,13 +12,13 @@ from .features import candidate_feature_dim, global_feature_dim, self_feature_di
 from .jax_env import (
     JaxAction,
     JaxEnvState,
+    assign_learner_players,
     batched_reset,
     batched_step,
     batched_step_multi_player,
 )
 from .jax_features import JaxTurnBatch, encode_turn
 from .jax_policy import action_log_prob_and_entropy, sample_actions
-
 
 _MIN_JAX_UPDATE_CHUNK_ROWS = 8192
 
@@ -243,6 +243,8 @@ def collect_rollout_jax(
     returns PPO transitions plus rollout metrics.
     """
 
+    env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32)
+
     def scan_step(carry, _):
         key, state, batch = carry
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
@@ -259,7 +261,7 @@ def collect_rollout_jax(
 
         if cfg.env.player_count == 2:
             opp_game = state.game._replace(
-                player=jnp.ones_like(state.game.step, dtype=jnp.int32)
+                player=(1 - state.learner_player).astype(jnp.int32)
             )
             opp_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(opp_game)
             if cfg.opponent == "self":
@@ -349,6 +351,14 @@ def collect_rollout_jax(
             )
         reset_keys = jax.random.split(reset_key, batch.self_features.shape[0])
         reset_states, reset_batches = batched_reset(reset_keys, cfg.env)
+        reset_episode_counts = state.episode_count + result.done.astype(jnp.int32)
+        reset_states, reset_batches = assign_learner_players(
+            reset_states,
+            env_indices,
+            reset_episode_counts,
+            cfg.env,
+            cfg.alternate_player_sides,
+        )
 
         def maybe_reset(new, old):
             cond = result.done.reshape(result.done.shape + (1,) * (old.ndim - 1))
@@ -535,9 +545,12 @@ def ppo_update_jax(
         if name != "sample_count"
     }
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
-    return JaxTrainState(
-        params=params, opt_state=opt_state, optimizer=train_state.optimizer
-    ), metrics
+    return (
+        JaxTrainState(
+            params=params, opt_state=opt_state, optimizer=train_state.optimizer
+        ),
+        metrics,
+    )
 
 
 def _reshape_minibatches(

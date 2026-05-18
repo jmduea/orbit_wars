@@ -154,3 +154,67 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
     assert (
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
     )
+
+
+def test_assign_learner_players_uses_env_index_and_episode_count():
+    from src.jax_env import assign_learner_players
+
+    cfg = TrainConfig()
+    cfg.env.player_count = 4
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.ppo.num_envs = 5
+    reset_keys = jax.random.split(jax.random.PRNGKey(20), cfg.ppo.num_envs)
+    env_state, _turn_batch = batched_reset(reset_keys, cfg.env)
+
+    env_indices = jax.numpy.arange(cfg.ppo.num_envs, dtype=jax.numpy.int32)
+    episode_counts = jax.numpy.array([0, 0, 1, 2, 3], dtype=jax.numpy.int32)
+    env_state, turn_batch = assign_learner_players(
+        env_state, env_indices, episode_counts, cfg.env, True
+    )
+
+    expected = (env_indices + episode_counts) % cfg.env.player_count
+    assert jax.numpy.array_equal(env_state.learner_player, expected)
+    assert jax.numpy.array_equal(env_state.episode_count, episode_counts)
+    assert turn_batch.self_features.shape[:2] == (cfg.ppo.num_envs, cfg.env.max_planets)
+
+
+def test_collect_rollout_jax_rotates_learner_after_reset_done():
+    from src.jax_env import assign_learner_players
+
+    cfg = TrainConfig()
+    cfg.env.player_count = 4
+    cfg.env.episode_steps = 2
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 4
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+    reset_keys = jax.random.split(jax.random.PRNGKey(30), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    env_indices = jax.numpy.arange(cfg.ppo.num_envs, dtype=jax.numpy.int32)
+    episode_counts = jax.numpy.zeros((cfg.ppo.num_envs,), dtype=jax.numpy.int32)
+    env_state, turn_batch = assign_learner_players(
+        env_state, env_indices, episode_counts, cfg.env, cfg.alternate_player_sides
+    )
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(31), policy, cfg)
+
+    _key, env_state, _turn_batch, _transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(32), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    expected_episode_counts = jax.numpy.ones((cfg.ppo.num_envs,), dtype=jax.numpy.int32)
+    expected_players = (env_indices + expected_episode_counts) % cfg.env.player_count
+    assert float(rollout_metrics["episode_done"]) == cfg.ppo.num_envs
+    assert jax.numpy.array_equal(env_state.episode_count, expected_episode_counts)
+    assert jax.numpy.array_equal(env_state.learner_player, expected_players)

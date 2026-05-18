@@ -14,7 +14,7 @@ configure_jax_platform_for_host()
 
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
-from .jax_env import batched_reset  # noqa: E402
+from .jax_env import assign_learner_players, batched_reset  # noqa: E402
 from .jax_policy import build_jax_policy  # noqa: E402
 from .jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax  # noqa: E402
 
@@ -33,6 +33,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     key, reset_key, policy_key = jax.random.split(key, 3)
     reset_keys = jax.random.split(reset_key, cfg.ppo.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    env_indices = jnp.arange(cfg.ppo.num_envs, dtype=jnp.int32)
+    episode_counts = jnp.zeros((cfg.ppo.num_envs,), dtype=jnp.int32)
+    env_state, turn_batch = assign_learner_players(
+        env_state,
+        env_indices,
+        episode_counts,
+        cfg.env,
+        cfg.alternate_player_sides,
+    )
     policy = build_jax_policy(
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
