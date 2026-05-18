@@ -113,3 +113,44 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
     assert completed_episodes == 3
     assert jax.numpy.array_equal(key, jax.random.PRNGKey(9))
     assert loaded_state.opt_state is not None
+
+
+def test_collect_rollout_jax_supports_four_player_multi_player_step():
+    cfg = TrainConfig()
+    cfg.env.player_count = 4
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 2
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+    reset_keys = jax.random.split(jax.random.PRNGKey(10), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(11), policy, cfg)
+
+    _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(12), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    assert transitions.self_features.shape[:3] == (
+        cfg.ppo.rollout_steps,
+        cfg.ppo.num_envs,
+        cfg.env.max_planets,
+    )
+    assert transitions.decision_mask.shape == (
+        cfg.ppo.rollout_steps,
+        cfg.ppo.num_envs,
+        cfg.env.max_planets,
+    )
+    assert (
+        float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
+    )
