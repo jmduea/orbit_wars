@@ -14,6 +14,9 @@ from .jax_features import JaxTurnBatch, encode_turn
 from .jax_policy import action_log_prob_and_entropy, sample_actions
 
 
+_MIN_JAX_UPDATE_CHUNK_ROWS = 8192
+
+
 class JaxTransitionBatch(NamedTuple):
     """Rollout data consumed by the JAX PPO update.
 
@@ -298,7 +301,16 @@ def ppo_update_jax(
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    """Apply one full-batch PPO gradient update to the JAX policy."""
+    """Apply one PPO epoch using memory-bounded minibatches.
+
+    Rollouts can be large when benchmarking long attention-policy runs. Running
+    the policy over every rollout row in a single XLA program forces the GPU to
+    materialize attention intermediates for the entire rollout at once. Instead,
+    flatten once, pad to static memory chunks, and scan sequential optimizer
+    steps over those chunks. The chunk size honors large configured minibatches
+    but does not go below ``_MIN_JAX_UPDATE_CHUNK_ROWS`` so long rollouts do not
+    devolve into thousands of tiny GPU launches.
+    """
 
     mask = batch.decision_mask.reshape(-1).astype(jnp.float32)
     self_features = batch.self_features.reshape(-1, self_feature_dim())
@@ -312,48 +324,119 @@ def ppo_update_jax(
     old_log_prob = batch.log_prob.reshape(-1)
     returns = batch.returns.reshape(-1)
     advantages = batch.advantages.reshape(-1)
-    advantages = (advantages - masked_mean(advantages, mask)) / jnp.sqrt(
-        masked_mean((advantages - masked_mean(advantages, mask)) ** 2, mask) + 1e-8
+    advantage_mean = masked_mean(advantages, mask)
+    advantages = (advantages - advantage_mean) / jnp.sqrt(
+        masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
     )
 
-    def loss_fn(params):
-        output = policy.apply(
-            params, self_features, candidate_features, global_features, candidate_mask
-        )
-        new_log_prob, entropy = action_log_prob_and_entropy(output, target, bucket)
-        ratio = jnp.exp(new_log_prob - old_log_prob)
-        policy_loss = -masked_mean(
-            jnp.minimum(
-                advantages * ratio,
-                advantages
-                * jnp.clip(ratio, 1.0 - cfg.ppo.clip_coef, 1.0 + cfg.ppo.clip_coef),
-            ),
-            mask,
-        )
-        value_loss = 0.5 * masked_mean((returns - output.value) ** 2, mask)
-        entropy_loss = masked_mean(entropy, mask)
-        loss = (
-            policy_loss + cfg.ppo.vf_coef * value_loss - cfg.ppo.ent_coef * entropy_loss
-        )
-        return loss, {
-            "policy_loss": policy_loss,
-            "value_loss": value_loss,
-            "entropy": entropy_loss,
-            "loss": loss,
-        }
+    total_rows = mask.shape[0]
+    minibatch_size = min(
+        max(int(cfg.ppo.minibatch_size), _MIN_JAX_UPDATE_CHUNK_ROWS), total_rows
+    )
+    minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
+    minibatches = {
+        "mask": _reshape_minibatches(mask, minibatch_count, minibatch_size, 0.0),
+        "self_features": _reshape_minibatches(
+            self_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "candidate_features": _reshape_minibatches(
+            candidate_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "global_features": _reshape_minibatches(
+            global_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "candidate_mask": _reshape_minibatches(
+            candidate_mask, minibatch_count, minibatch_size, False
+        ),
+        "target": _reshape_minibatches(target, minibatch_count, minibatch_size, 0),
+        "bucket": _reshape_minibatches(bucket, minibatch_count, minibatch_size, 0),
+        "old_log_prob": _reshape_minibatches(
+            old_log_prob, minibatch_count, minibatch_size, 0.0
+        ),
+        "returns": _reshape_minibatches(returns, minibatch_count, minibatch_size, 0.0),
+        "advantages": _reshape_minibatches(
+            advantages, minibatch_count, minibatch_size, 0.0
+        ),
+    }
 
-    (loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-        train_state.params
+    def update_minibatch(carry, minibatch):
+        params, opt_state = carry
+
+        def loss_fn(params):
+            output = policy.apply(
+                params,
+                minibatch["self_features"],
+                minibatch["candidate_features"],
+                minibatch["global_features"],
+                minibatch["candidate_mask"],
+            )
+            new_log_prob, entropy = action_log_prob_and_entropy(
+                output, minibatch["target"], minibatch["bucket"]
+            )
+            ratio = jnp.exp(new_log_prob - minibatch["old_log_prob"])
+            policy_loss = -masked_mean(
+                jnp.minimum(
+                    minibatch["advantages"] * ratio,
+                    minibatch["advantages"]
+                    * jnp.clip(
+                        ratio, 1.0 - cfg.ppo.clip_coef, 1.0 + cfg.ppo.clip_coef
+                    ),
+                ),
+                minibatch["mask"],
+            )
+            value_loss = 0.5 * masked_mean(
+                (minibatch["returns"] - output.value) ** 2, minibatch["mask"]
+            )
+            entropy_loss = masked_mean(entropy, minibatch["mask"])
+            loss = (
+                policy_loss
+                + cfg.ppo.vf_coef * value_loss
+                - cfg.ppo.ent_coef * entropy_loss
+            )
+            return loss, {
+                "policy_loss": policy_loss,
+                "value_loss": value_loss,
+                "entropy": entropy_loss,
+                "loss": loss,
+                "sample_count": minibatch["mask"].sum(),
+            }
+
+        (loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
+        metrics = dict(metrics)
+        metrics["total_loss"] = loss
+        return (params, opt_state), metrics
+
+    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
+        update_minibatch, (train_state.params, train_state.opt_state), minibatches
     )
-    updates, opt_state = train_state.optimizer.update(
-        grads, train_state.opt_state, train_state.params
-    )
-    params = optax.apply_updates(train_state.params, updates)
-    metrics = dict(metrics)
-    metrics["total_loss"] = loss
+    metric_weights = jnp.where(metrics_by_minibatch["sample_count"] > 0.0, 1.0, 0.0)
+    metric_denominator = jnp.maximum(metric_weights.sum(), 1.0)
+    metrics = {
+        name: (values * metric_weights).sum() / metric_denominator
+        for name, values in metrics_by_minibatch.items()
+        if name != "sample_count"
+    }
+    metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
     return JaxTrainState(
         params=params, opt_state=opt_state, optimizer=train_state.optimizer
     ), metrics
+
+
+def _reshape_minibatches(
+    value: jax.Array,
+    minibatch_count: int,
+    minibatch_size: int,
+    padding_value: float | int | bool,
+) -> jax.Array:
+    """Pad and reshape a flat leading axis into static minibatches."""
+
+    padded_rows = minibatch_count * minibatch_size
+    pad_rows = padded_rows - value.shape[0]
+    pad_width = [(0, pad_rows)] + [(0, 0)] * (value.ndim - 1)
+    padded = jnp.pad(value, pad_width, constant_values=padding_value)
+    return padded.reshape((minibatch_count, minibatch_size) + value.shape[1:])
 
 
 def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
