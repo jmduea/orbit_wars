@@ -21,12 +21,31 @@ env:
   # Includes reserved no-op index 0; real target slots are candidate_count - 1.
   candidate_count: 8
   ship_bucket_count: 8
+  player_count: 2
   max_planets: 48
   max_fleets: 256
   reward_capture_planet: 0.0
   reward_ship_delta: 0.0
   reward_production_delta: 0.0
   reward_terminal_scale: 1.0
+
+training_format:
+  # env.player_count is the default; this schedule introduces 4-player episodes later.
+  format_schedule:
+    - player_count: 2
+      start_update: 0
+      weight: 1.0
+    - player_count: 4
+      start_update: 1000
+      weight: 1.0
+  format_mix: []
+  rollout_groups:
+    - name: two_player
+      player_count: 2
+      num_envs: 4
+    - name: four_player
+      player_count: 4
+      num_envs: 4
 
 model:
   architecture: attention  # mlp | attention | transformer
@@ -38,6 +57,8 @@ model:
 ppo:
   rollout_steps: 512
   num_envs: 8
+  num_envs_2p: 4
+  num_envs_4p: 4
   total_updates: 2000
   epochs: 4
   minibatch_size: 512

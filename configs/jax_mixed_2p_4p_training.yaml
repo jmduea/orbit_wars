@@ -1,27 +1,49 @@
 seed: 42
-run_name: orbit_wars_ppo_attention_self_play_pool
+run_name: orbit_wars_ppo_jax_mixed_2p_4p
+# JAX selects its accelerator internally; keep this for schema parity with Torch configs.
 device: auto
-save_dir: /artifacts/attention_self_play_pool
+save_dir: /artifacts/jax_mixed_2p_4p_training
 checkpoint_every: 50
 log_every: 1
 opponent: self
 self_play_update_interval: 50
 self_play_deterministic: false
-self_play_enabled: true
+self_play_enabled: false
 self_play_pool_size: 5
 self_play_snapshot_interval: 50
 self_play_latest_probability: 0.5
 alternate_player_sides: true
 
+# End-to-end JAX path: fixed-shape JAX environment plus JAX PPO updates.
+env_backend: jax
+rl_backend: jax
+
 env:
-  # Includes reserved no-op index 0; real target slots are candidate_count - 1.
+  # Default format. Mixed-format trainers sample overrides from training_format.format_mix.
   candidate_count: 8
   ship_bucket_count: 8
   player_count: 2
+  max_planets: 48
+  max_fleets: 256
   reward_capture_planet: 0.0
   reward_ship_delta: 0.0
   reward_production_delta: 0.0
   reward_terminal_scale: 1.0
+
+training_format:
+  format_schedule: []
+  format_mix:
+    - player_count: 2
+      weight: 0.5
+    - player_count: 4
+      weight: 0.5
+  rollout_groups:
+    - name: two_player
+      player_count: 2
+      num_envs: 4
+    - name: four_player
+      player_count: 4
+      num_envs: 4
 
 model:
   architecture: attention  # mlp | attention | transformer
@@ -33,6 +55,8 @@ model:
 ppo:
   rollout_steps: 512
   num_envs: 8
+  num_envs_2p: 4
+  num_envs_4p: 4
   total_updates: 2000
   epochs: 4
   minibatch_size: 512

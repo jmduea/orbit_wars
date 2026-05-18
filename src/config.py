@@ -44,6 +44,9 @@ class PPOConfig:
 
     rollout_steps: int = 32
     num_envs: int = 4
+    num_envs_2p: int | None = None
+    num_envs_4p: int | None = None
+    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512
@@ -53,6 +56,23 @@ class PPOConfig:
     vf_coef: float = 0.5
     lr: float = 3e-4
     max_grad_norm: float = 0.5
+
+
+@dataclass(slots=True)
+class TrainingFormatConfig:
+    """Curriculum and mixture configuration for multi-format training.
+
+    ``env.player_count`` remains the default environment format. The optional
+    ``format_schedule`` and ``format_mix`` lists describe curriculum phases or
+    sampling mixtures whose entries can override ``player_count`` and carry
+    additional backend-specific metadata, such as update ranges or weights.
+    ``rollout_groups`` can be used by trainers that allocate separate rollout
+    workers to individual formats.
+    """
+
+    format_schedule: list[dict[str, Any]] = field(default_factory=list)
+    format_mix: list[dict[str, Any]] = field(default_factory=list)
+    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -83,6 +103,7 @@ class TrainConfig:
     env: EnvConfig = field(default_factory=EnvConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
+    training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
 
 
 def default_train_config_path() -> Path:
@@ -105,10 +126,11 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo"})
+    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format"})
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))
+    _update_dataclass(cfg.training_format, data.get("training_format", {}))
     return cfg
 
 

@@ -20,6 +20,7 @@ env:
   # Includes reserved no-op index 0; real target slots are candidate_count - 1.
   candidate_count: 8
   ship_bucket_count: 8
+  player_count: 2
   reward_capture_planet: 0.0
   reward_ship_delta: 0.0
   reward_production_delta: 0.0
