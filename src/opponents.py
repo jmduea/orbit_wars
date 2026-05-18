@@ -76,9 +76,9 @@ class SelfPlayOpponent:
         self.deterministic = deterministic
         self.policy = build_policy(
             architecture=cfg.model.architecture,
-            self_dim=self_feature_dim(),
-            candidate_dim=candidate_feature_dim(),
-            global_dim=global_feature_dim(),
+            self_dim=self_feature_dim(cfg.env),
+            candidate_dim=candidate_feature_dim(cfg.env),
+            global_dim=global_feature_dim(cfg.env),
             candidate_count=cfg.env.candidate_count,
             ship_bucket_count=cfg.env.ship_bucket_count,
             hidden_size=cfg.model.hidden_size,

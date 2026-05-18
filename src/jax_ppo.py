@@ -22,7 +22,6 @@ from .jax_policy import action_log_prob_and_entropy, sample_actions
 from .opponent_pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
-    OPPONENT_RANDOM,
     OPPONENT_SCRIPTED_SNIPER,
     OpponentRegistry,
     OpponentRegistryConfig,
@@ -64,11 +63,11 @@ class JaxTrainState:
 def init_train_state(key: jax.Array, policy: object, cfg: TrainConfig) -> JaxTrainState:
     """Initialize policy parameters and optimizer state for JAX PPO."""
 
-    dummy_self = jnp.zeros((1, self_feature_dim()), dtype=jnp.float32)
+    dummy_self = jnp.zeros((1, self_feature_dim(cfg.env)), dtype=jnp.float32)
     dummy_candidate = jnp.zeros(
-        (1, cfg.env.candidate_count, candidate_feature_dim()), dtype=jnp.float32
+        (1, cfg.env.candidate_count, candidate_feature_dim(cfg.env)), dtype=jnp.float32
     )
-    dummy_global = jnp.zeros((1, global_feature_dim()), dtype=jnp.float32)
+    dummy_global = jnp.zeros((1, global_feature_dim(cfg.env)), dtype=jnp.float32)
     dummy_mask = jnp.ones((1, cfg.env.candidate_count), dtype=bool)
     params = policy.init(key, dummy_self, dummy_candidate, dummy_global, dummy_mask)
     optimizer = optax.chain(
@@ -85,11 +84,11 @@ def flatten_batch(
     """Flatten environment/source dimensions into policy decision rows."""
 
     return (
-        batch.self_features.reshape(-1, self_feature_dim()),
+        batch.self_features.reshape(-1, batch.self_features.shape[-1]),
         batch.candidate_features.reshape(
-            -1, batch.candidate_features.shape[-2], candidate_feature_dim()
+            -1, batch.candidate_features.shape[-2], batch.candidate_features.shape[-1]
         ),
-        batch.global_features.reshape(-1, global_feature_dim()),
+        batch.global_features.reshape(-1, batch.global_features.shape[-1]),
         batch.candidate_mask.reshape(-1, batch.candidate_mask.shape[-1]),
         batch.decision_mask.reshape(-1),
     )
@@ -187,8 +186,6 @@ def build_random_action_from_batch(
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
-
-
 def build_sniper_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> JaxAction:
     """JAX-compatible scripted sniper: use nearest candidate slot aggressively."""
 
@@ -201,6 +198,8 @@ def build_sniper_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> Jax
     bucket = jnp.full_like(target, max(cfg.env.ship_bucket_count - 1, 1))
     bucket = jnp.where(has_target.reshape(-1), bucket, 0)
     return build_action_from_batch(batch, target, bucket, cfg)
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     batch: JaxTurnBatch,
@@ -382,9 +381,15 @@ def collect_rollout_jax(
                     use_latest = slot_type == OPPONENT_LATEST
                     use_historical = slot_type == OPPONENT_HISTORICAL
                     use_scripted = slot_type == OPPONENT_SCRIPTED_SNIPER
-                    action = _select_env_action(use_latest, current_action, random_action)
-                    action = _select_env_action(use_historical, historical_action, action)
-                    opponent_action = _select_env_action(use_scripted, scripted_action, action)
+                    action = _select_env_action(
+                        use_latest, current_action, random_action
+                    )
+                    action = _select_env_action(
+                        use_historical, historical_action, action
+                    )
+                    opponent_action = _select_env_action(
+                        use_scripted, scripted_action, action
+                    )
                 elif cfg.opponent == "random":
                     opponent_action = build_random_action_from_batch(
                         player_key, player_batch, cfg
@@ -614,11 +619,11 @@ def ppo_update_jax(
     """
 
     mask = batch.decision_mask.reshape(-1).astype(jnp.float32)
-    self_features = batch.self_features.reshape(-1, self_feature_dim())
+    self_features = batch.self_features.reshape(-1, self_feature_dim(cfg.env))
     candidate_features = batch.candidate_features.reshape(
-        -1, cfg.env.candidate_count, candidate_feature_dim()
+        -1, cfg.env.candidate_count, candidate_feature_dim(cfg.env)
     )
-    global_features = batch.global_features.reshape(-1, global_feature_dim())
+    global_features = batch.global_features.reshape(-1, global_feature_dim(cfg.env))
     candidate_mask = batch.candidate_mask.reshape(-1, cfg.env.candidate_count)
     target = batch.target_index.reshape(-1)
     bucket = batch.ship_bucket.reshape(-1)

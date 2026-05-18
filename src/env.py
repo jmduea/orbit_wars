@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from .config import EnvConfig, TrainConfig
-from .features import TurnBatch, encode_turn
+from .features import (
+    FeatureHistoryBuffer,
+    TurnBatch,
+    build_feature_snapshot,
+    encode_turn,
+)
 from .game_types import GameState, PlanetState, parse_observation
 from .opponents import OpponentPolicy
 
@@ -41,6 +46,9 @@ class OrbitWarsEnv:
         self.previous_opponent_states: dict[int, GameState] = {}
         self.episode_index = 0
         self.learner_player = 0
+        self.feature_history = FeatureHistoryBuffer(
+            max(0, self.cfg.env.feature_history_steps - 1)
+        )
 
     def reset(self, seed: int | None = None) -> TurnBatch:
         make_fn = self.make_fn or default_make_fn()
@@ -55,6 +63,9 @@ class OrbitWarsEnv:
             self.learner_player = (self.env_index + self.episode_index) % player_count
         else:
             self.learner_player = 0
+        self.feature_history = FeatureHistoryBuffer(
+            max(0, self.cfg.env.feature_history_steps - 1)
+        )
         opponent_players = [
             player for player in range(player_count) if player != self.learner_player
         ]
@@ -96,9 +107,14 @@ class OrbitWarsEnv:
             else None
         )
         self.episode_index += 1
-        return encode_turn(
-            self.previous_player_state, self.cfg.env, env_index=self.env_index
+        batch = encode_turn(
+            self.previous_player_state,
+            self.cfg.env,
+            env_index=self.env_index,
+            feature_history=self.feature_history,
         )
+        self.feature_history.append(build_feature_snapshot(batch))
+        return batch
 
     def step(self, player_action: list[list[float | int]]) -> StepResult:
         if self.env is None:
@@ -153,7 +169,13 @@ class OrbitWarsEnv:
             next_opponent_states.get(opponent_players[0]) if opponent_players else None
         )
 
-        batch = encode_turn(next_player_state, self.cfg.env, env_index=self.env_index)
+        batch = encode_turn(
+            next_player_state,
+            self.cfg.env,
+            env_index=self.env_index,
+            feature_history=self.feature_history,
+        )
+        self.feature_history.append(build_feature_snapshot(batch))
         opponent_statuses = {
             player: extract_status(state) for player, state in opponent_states.items()
         }

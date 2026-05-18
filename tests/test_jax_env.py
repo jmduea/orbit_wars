@@ -225,3 +225,18 @@ def test_jax_owner_relative_feature_shapes_and_values_for_four_players():
         np.asarray(encoded.global_features[0, 20:24]), np.ones(4)
     )
     np.testing.assert_allclose(np.asarray(encoded.global_features[0, 24]), 1.0)
+
+
+def test_jax_history_shapes_use_configured_window():
+    cfg = EnvConfig(
+        max_planets=12, max_fleets=16, candidate_count=5, feature_history_steps=3
+    )
+    _state, batch = reset(jax.random.PRNGKey(11), cfg)
+
+    assert batch.self_features.shape == (cfg.max_planets, self_feature_dim(cfg))
+    assert batch.candidate_features.shape == (
+        cfg.max_planets,
+        cfg.candidate_count,
+        candidate_feature_dim(cfg),
+    )
+    assert batch.global_features.shape == (cfg.max_planets, global_feature_dim(cfg))
