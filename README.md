@@ -11,6 +11,7 @@ The Orbit Wars reinforcement-learning implementation that was previously generat
 - `configs/attention_shaped_reward_training.yaml` for attention-policy training with conservative reward shaping
 - `configs/attention_self_play_pool.yaml` for attention training against a self-play opponent pool
 - `configs/jax_training.yaml` for end-to-end JAX environment plus JAX PPO training
+- `configs/jax_self_play_shaped_reward_training.yaml` for JAX self-play training with conservative reward shaping
 - `src/`
 - `evaluate.py` for checkpoint evaluation across multiple opponents
 - `eval_vs_sniper.py` as a backwards-compatible sniper-only wrapper
@@ -74,6 +75,7 @@ uv run python -m src.train --config configs/attention_training.yaml
 uv run python -m src.train --config configs/attention_shaped_reward_training.yaml
 uv run python -m src.train --config configs/attention_self_play_pool.yaml
 uv run python -m src.train --config configs/jax_training.yaml
+uv run python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml
 uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents sniper,random,self_play_snapshot --seeds 0:99 --deterministic
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
@@ -102,6 +104,18 @@ uv run python -m src.train \
 `ppo.total_updates` remains the final target update number, so resuming from
 `jax_ckpt_000050.pkl` with `total_updates: 2000` continues at update 51 and stops
 after update 2000.
+
+For JAX self-play with the same conservative reward-shaping values used by the
+attention shaped-reward experiment, launch:
+
+```bash
+uv run python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml
+```
+
+The JAX self-play shaped config keeps `env_backend: jax`, `rl_backend: jax`, and
+`opponent: self`, sets `self_play_enabled: true` to identify the experiment, and
+uses `reward_capture_planet: 0.1`, `reward_ship_delta: 0.001`,
+`reward_production_delta: 0.02`, and `reward_terminal_scale: 1.0`.
 
 ## Shaped-reward attention experiment
 

@@ -55,6 +55,12 @@ The checked-in end-to-end JAX config can be launched directly with:
 uv run python -m src.train --config configs/jax_training.yaml
 ```
 
+For self-play plus conservative reward shaping on the end-to-end JAX stack, use:
+
+```bash
+uv run python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml
+```
+
 ## Reproducible training configs
 
 The `configs/` directory contains longer-running experiment presets:
@@ -68,6 +74,7 @@ The `configs/` directory contains longer-running experiment presets:
 | `configs/attention_candidates_16.yaml` | Attention policy with 15 real target slots plus no-op. |
 | `configs/attention_candidates_24.yaml` | Attention policy with 23 real target slots plus no-op. |
 | `configs/jax_training.yaml` | End-to-end JAX environment plus JAX PPO training. |
+| `configs/jax_self_play_shaped_reward_training.yaml` | JAX self-play with conservative reward shaping. |
 
 Launch any preset with:
 
