@@ -10,6 +10,7 @@ import jax.numpy as jnp
 from .config import EnvConfig
 from .features import (
     BOARD_CENTER,
+    MAX_OWNER_FEATURE_PLAYERS,
     NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
@@ -50,7 +51,7 @@ def encode_turn(game, env_cfg: EnvConfig) -> JaxTurnBatch:
     player = game.player
     mine = planets.active & (planets.owner == player)
     global_features = _global_features(game, env_cfg)
-    self_features = _self_features(planets, player, env_cfg)
+    self_features = _self_features(planets, game.fleets, player, env_cfg)
     candidate_ids, candidate_features, candidate_mask, target_angles = (
         _candidate_features(planets, player, env_cfg)
     )
@@ -69,15 +70,30 @@ def encode_turn(game, env_cfg: EnvConfig) -> JaxTurnBatch:
     )
 
 
-def _self_features(planets, player, env_cfg: EnvConfig):
+def _self_features(planets, fleets, player, env_cfg: EnvConfig):
     mine = planets.active & (planets.owner == player)
     enemy = planets.active & (planets.owner != -1) & (planets.owner != player)
     my_count = mine.astype(jnp.float32).sum()
     enemy_count = enemy.astype(jnp.float32).sum()
     my_ships = jnp.where(mine, planets.ships, 0.0).sum()
     enemy_ships = jnp.where(enemy, planets.ships, 0.0).sum()
+    owner_counts, owner_ships, _owner_fleets, active_mask, player_count_feature = (
+        owner_relative_summary(planets, fleets, player, env_cfg)
+    )
+    p = env_cfg.max_planets
+    owner_context = jnp.broadcast_to(
+        jnp.concatenate(
+            [
+                owner_counts,
+                owner_ships,
+                active_mask,
+                jnp.asarray([player_count_feature], dtype=jnp.float32),
+            ]
+        ),
+        (p, 13),
+    )
     rotating = is_rotating_xy(planets.x, planets.y, planets.radius)
-    features = jnp.stack(
+    base_features = jnp.stack(
         [
             planets.active.astype(jnp.float32),
             planets.x / env_cfg.board_size,
@@ -97,6 +113,7 @@ def _self_features(planets, player, env_cfg: EnvConfig):
         ],
         axis=-1,
     )
+    features = jnp.concatenate([base_features, owner_context], axis=-1)
     return jnp.where(planets.active[:, None], features, jnp.zeros_like(features))
 
 
@@ -133,7 +150,7 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
     crosses = shot_crosses_sun_xy(
         src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
     )
-    real_features = jnp.stack(
+    base_real_features = jnp.stack(
         [
             tgt_active.astype(jnp.float32),
             (tgt_owner == -1).astype(jnp.float32),
@@ -155,6 +172,9 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
             ),
         ],
         axis=-1,
+    )
+    real_features = jnp.concatenate(
+        [base_real_features, target_owner_one_hot(tgt_owner, player, env_cfg)], axis=-1
     )
     noop_features = jnp.zeros((p, 1, candidate_feature_dim()), dtype=jnp.float32)
     features = jnp.concatenate([noop_features, real_features], axis=1)
@@ -181,7 +201,10 @@ def _global_features(game, env_cfg: EnvConfig):
     my_fleet = fleets.active & (fleets.owner == player)
     enemy_fleet = fleets.active & (fleets.owner != player)
     denom = env_cfg.max_planets * env_cfg.max_ships
-    return jnp.asarray(
+    owner_counts, owner_ships, owner_fleets, active_mask, player_count_feature = (
+        owner_relative_summary(planets, fleets, player, env_cfg)
+    )
+    base_features = jnp.asarray(
         [
             game.step.astype(jnp.float32) / env_cfg.episode_steps,
             mine.astype(jnp.float32).sum() / env_cfg.max_planets,
@@ -194,6 +217,79 @@ def _global_features(game, env_cfg: EnvConfig):
         ],
         dtype=jnp.float32,
     )
+    return jnp.concatenate(
+        [
+            base_features,
+            owner_counts,
+            owner_ships,
+            owner_fleets,
+            active_mask,
+            jnp.asarray([player_count_feature], dtype=jnp.float32),
+        ]
+    )
+
+
+def owner_relative_summary(planets, fleets, player, env_cfg: EnvConfig):
+    """Return fixed-size owner-relative summaries for up to four players."""
+
+    player_count = clipped_player_count(env_cfg)
+    denom = env_cfg.max_planets * env_cfg.max_ships
+
+    planet_slots = relative_owner_slots(planets.owner, player, player_count)
+    valid_planets = (
+        planets.active & (planets.owner >= 0) & (planets.owner < player_count)
+    )
+    owner_counts = jnp.bincount(
+        planet_slots,
+        weights=valid_planets.astype(jnp.float32),
+        length=MAX_OWNER_FEATURE_PLAYERS,
+    )[:MAX_OWNER_FEATURE_PLAYERS]
+    owner_ships = jnp.bincount(
+        planet_slots,
+        weights=jnp.where(valid_planets, planets.ships, 0.0),
+        length=MAX_OWNER_FEATURE_PLAYERS,
+    )[:MAX_OWNER_FEATURE_PLAYERS]
+
+    fleet_slots = relative_owner_slots(fleets.owner, player, player_count)
+    valid_fleets = fleets.active & (fleets.owner >= 0) & (fleets.owner < player_count)
+    owner_fleets = jnp.bincount(
+        fleet_slots,
+        weights=jnp.where(valid_fleets, fleets.ships, 0.0),
+        length=MAX_OWNER_FEATURE_PLAYERS,
+    )[:MAX_OWNER_FEATURE_PLAYERS]
+    active_mask = (
+        jnp.arange(MAX_OWNER_FEATURE_PLAYERS, dtype=jnp.int32) < player_count
+    ).astype(jnp.float32)
+    return (
+        owner_counts / env_cfg.max_planets,
+        owner_ships / denom,
+        owner_fleets / denom,
+        active_mask,
+        jnp.asarray(player_count / MAX_OWNER_FEATURE_PLAYERS, dtype=jnp.float32),
+    )
+
+
+def target_owner_one_hot(owner, player, env_cfg: EnvConfig):
+    """Encode target owners relative to ``player`` with neutral as all-zero."""
+
+    player_count = clipped_player_count(env_cfg)
+    slots = relative_owner_slots(owner, player, player_count)
+    valid_owner = (owner >= 0) & (owner < player_count)
+    return jax.nn.one_hot(
+        jnp.where(valid_owner, slots, 0),
+        MAX_OWNER_FEATURE_PLAYERS,
+        dtype=jnp.float32,
+    ) * valid_owner[..., None].astype(jnp.float32)
+
+
+def clipped_player_count(env_cfg: EnvConfig) -> int:
+    return max(
+        1, min(MAX_OWNER_FEATURE_PLAYERS, int(getattr(env_cfg, "player_count", 2)))
+    )
+
+
+def relative_owner_slots(owner, player, player_count: int):
+    return (owner.astype(jnp.int32) - player.astype(jnp.int32)) % player_count
 
 
 def is_rotating_xy(x, y, radius):
