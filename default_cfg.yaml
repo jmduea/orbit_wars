@@ -2,7 +2,7 @@
 seed: 42
 run_name: orbit_wars_ppo
 device: auto
-save_dir: /kaggle/working/artifacts
+save_dir: /artifacts
 checkpoint_every: 50
 log_every: 1
 opponent: self
