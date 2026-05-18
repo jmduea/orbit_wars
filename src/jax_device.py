@@ -33,11 +33,31 @@ def nvidia_gpu_present() -> bool:
     return False
 
 
-def configure_jax_platform_for_host() -> None:
-    """Avoid probing CUDA plugins on hosts without visible NVIDIA hardware."""
+def configure_jax_runtime_for_host() -> None:
+    """Set JAX/XLA runtime defaults before JAX is imported.
 
-    if not nvidia_gpu_present():
+    CUDA-enabled JAX uses XLA's BFC allocator by default. Long attention-policy
+    benchmarks can otherwise fail from allocator fragmentation on GPUs while XLA
+    is compiling or autotuning large programs. ``cuda_malloc_async`` lets the
+    CUDA driver reuse freed blocks more effectively and matches XLA's own OOM
+    guidance. Hosts without visible NVIDIA hardware are pinned to CPU so CUDA
+    plugins are not probed unnecessarily.
+    """
+
+    if nvidia_gpu_present():
+        os.environ.setdefault("TF_GPU_ALLOCATOR", "cuda_malloc_async")
+    else:
         os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
+
+def configure_jax_platform_for_host() -> None:
+    """Avoid probing CUDA plugins on hosts without visible NVIDIA hardware.
+
+    Deprecated compatibility wrapper; new code should call
+    :func:`configure_jax_runtime_for_host`.
+    """
+
+    configure_jax_runtime_for_host()
 
 
 def ensure_cuda_jax_if_nvidia_present() -> None:
@@ -48,9 +68,10 @@ def ensure_cuda_jax_if_nvidia_present() -> None:
     """
 
     if os.environ.get("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA") == "1":
+        os.environ.setdefault("JAX_PLATFORMS", "cpu")
         return
+    configure_jax_runtime_for_host()
     if not nvidia_gpu_present():
-        configure_jax_platform_for_host()
         return
 
     import jax
