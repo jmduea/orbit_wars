@@ -36,3 +36,19 @@ def test_jax_training_config_selects_jax_backends() -> None:
     assert jax_cfg["env_backend"] == "jax"
     assert jax_cfg["rl_backend"] == "jax"
     assert jax_cfg["opponent"] in {"self", "random"}
+
+
+def test_jax_self_play_shaped_reward_config_combines_jax_self_play_and_shaping() -> None:
+    shaped = load_yaml("configs/jax_self_play_shaped_reward_training.yaml")
+    unshaped = load_yaml("configs/jax_training.yaml")
+
+    assert shaped["env_backend"] == "jax"
+    assert shaped["rl_backend"] == "jax"
+    assert shaped["opponent"] == "self"
+    assert shaped["self_play_enabled"] is True
+    assert shaped["model"]["architecture"] == "attention"
+    assert shaped["ppo"] == unshaped["ppo"]
+    assert shaped["env"]["reward_capture_planet"] == 0.1
+    assert shaped["env"]["reward_ship_delta"] == 0.001
+    assert shaped["env"]["reward_production_delta"] == 0.02
+    assert shaped["env"]["reward_terminal_scale"] == 1.0
