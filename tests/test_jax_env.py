@@ -211,7 +211,7 @@ def test_jax_owner_relative_feature_shapes_and_values_for_four_players():
     np.testing.assert_allclose(np.asarray(encoded.self_features[0, 19:23]), np.ones(4))
     np.testing.assert_allclose(np.asarray(encoded.self_features[0, 23]), 1.0)
     np.testing.assert_allclose(
-        np.asarray(encoded.candidate_features[0, 1, -4:]),
+        np.asarray(encoded.candidate_features[0, 1, -5:-1]),
         np.array([0.0, 1.0, 0.0, 0.0]),
     )
     np.testing.assert_allclose(

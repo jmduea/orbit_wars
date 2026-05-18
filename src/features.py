@@ -51,7 +51,7 @@ class TurnBatch:
 
 
 BASE_SELF_FEATURE_DIM = 24
-BASE_CANDIDATE_FEATURE_DIM = 18
+BASE_CANDIDATE_FEATURE_DIM = 19
 BASE_GLOBAL_FEATURE_DIM = 25
 
 
@@ -76,7 +76,7 @@ def global_feature_dim(env_cfg: EnvConfig | None = None) -> int:
 @dataclass(slots=True)
 class FeatureSnapshot:
     self_by_source: dict[int, np.ndarray]
-    candidate_by_source_target: dict[tuple[int, int], np.ndarray]
+    candidate_by_source_target: dict[tuple[int, int, int], np.ndarray]
     global_features: np.ndarray
 
 
@@ -148,7 +148,12 @@ def encode_turn(
         )
         candidate_rows.append(
             _stack_candidate_history(
-                src.id, candidate_ids, cand_feat, feature_history, history_steps
+                env_index,
+                src.id,
+                candidate_ids,
+                cand_feat,
+                feature_history,
+                history_steps,
             )
         )
         candidate_masks.append(cand_mask)
@@ -200,6 +205,7 @@ def _stack_self_history(
 
 
 def _stack_candidate_history(
+    env_index: int,
     source_id: int,
     candidate_ids: list[int],
     current: np.ndarray,
@@ -211,13 +217,19 @@ def _stack_candidate_history(
     snapshots = list(history.snapshots)[-(steps - 1) :] if history is not None else []
     rows = []
     for candidate_index, candidate_id in enumerate(candidate_ids):
-        candidate_history = [
-            snapshot.candidate_by_source_target.get(
-                (source_id, candidate_id),
-                np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32),
-            )
-            for snapshot in snapshots
-        ]
+        if candidate_id == -1:
+            candidate_history = [
+                np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32)
+                for _snapshot in snapshots
+            ]
+        else:
+            candidate_history = [
+                snapshot.candidate_by_source_target.get(
+                    (env_index, source_id, candidate_id),
+                    np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32),
+                )
+                for snapshot in snapshots
+            ]
         while len(candidate_history) < steps - 1:
             candidate_history.insert(
                 0, np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32)
@@ -242,7 +254,7 @@ def _stack_global_history(
 
 def build_feature_snapshot(batch: TurnBatch) -> FeatureSnapshot:
     self_by_source: dict[int, np.ndarray] = {}
-    candidate_by_source_target: dict[tuple[int, int], np.ndarray] = {}
+    candidate_by_source_target: dict[tuple[int, int, int], np.ndarray] = {}
     global_features = np.zeros(BASE_GLOBAL_FEATURE_DIM, dtype=np.float32)
     if batch.global_features.shape[0] > 0:
         global_features = batch.global_features[0, -BASE_GLOBAL_FEATURE_DIM:].astype(
@@ -253,11 +265,13 @@ def build_feature_snapshot(batch: TurnBatch) -> FeatureSnapshot:
             row_index, -BASE_SELF_FEATURE_DIM:
         ].astype(np.float32, copy=True)
         for candidate_index, candidate_id in enumerate(context.candidate_ids):
-            candidate_by_source_target[(context.source_id, candidate_id)] = (
-                batch.candidate_features[
-                    row_index, candidate_index, -BASE_CANDIDATE_FEATURE_DIM:
-                ].astype(np.float32, copy=True)
-            )
+            if candidate_id == -1:
+                continue
+            candidate_by_source_target[
+                (context.env_index, context.source_id, candidate_id)
+            ] = batch.candidate_features[
+                row_index, candidate_index, -BASE_CANDIDATE_FEATURE_DIM:
+            ].astype(np.float32, copy=True)
     return FeatureSnapshot(self_by_source, candidate_by_source_target, global_features)
 
 
@@ -394,6 +408,7 @@ def build_candidate_features(
                 1.0 if crosses_sun else 0.0,
                 min(src.ships, env_cfg.max_ships) / env_cfg.max_ships,
                 *target_owner_one_hot(tgt.owner, state, env_cfg).tolist(),
+                1.0,
             ],
             dtype=np.float32,
         )
