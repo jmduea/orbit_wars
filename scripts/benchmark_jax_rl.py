@@ -9,16 +9,13 @@ import time
 from copy import deepcopy
 from pathlib import Path
 
-import jax
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import default_train_config_path, load_train_config  # noqa: E402
-from src.jax_env import batched_reset  # noqa: E402
-from src.jax_policy import build_jax_policy  # noqa: E402
-from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax  # noqa: E402
+from src.jax_device import ensure_cuda_jax_if_nvidia_present  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +40,14 @@ def main() -> None:
     """Run the JAX rollout/update benchmark and print aggregate metrics."""
 
     args = parse_args()
+    ensure_cuda_jax_if_nvidia_present()
+
+    import jax
+
+    from src.jax_env import batched_reset
+    from src.jax_policy import build_jax_policy
+    from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+
     cfg = deepcopy(load_train_config(args.config))
     if args.num_envs is not None:
         cfg.ppo.num_envs = args.num_envs

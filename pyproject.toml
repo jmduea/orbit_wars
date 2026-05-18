@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "flax",
-    "jax",
+    "jax[cuda13]; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "jax; sys_platform != 'linux' or platform_machine != 'x86_64'",
     "optax",
     "kaggle-environments",
     "numpy",

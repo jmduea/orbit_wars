@@ -57,6 +57,13 @@ Install the runtime dependencies into a local `.venv` with:
 uv sync
 ```
 
+On Linux x86_64, the project depends on `jax[cuda13]` so `uv sync` installs
+JAX's CUDA 13 plugin instead of a CPU-only JAX stack. The JAX training and
+benchmark entry points fail fast when NVIDIA hardware is visible but JAX only
+initializes CPU devices; set `ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA=1` only when
+you intentionally want to debug on CPU. Non-Linux or non-x86_64 machines keep
+the standard CPU JAX dependency.
+
 Run the extracted package and scripts through `uv run`, for example:
 
 ```bash
