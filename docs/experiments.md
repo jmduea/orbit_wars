@@ -30,10 +30,11 @@ Use the default config for a short Kaggle/Torch run:
 uv run python -m src.train --config default_cfg.yaml
 ```
 
-For a short end-to-end JAX smoke run, copy `default_cfg.yaml`, change the two
-backend fields, and optionally lower the rollout budget:
+For a short end-to-end JAX smoke run, copy `configs/jax_training.yaml` and lower
+the rollout budget:
 
 ```yaml
+# Keep both backend fields set to jax.
 env_backend: jax
 rl_backend: jax
 ppo:
@@ -48,6 +49,12 @@ Then launch it with:
 uv run python -m src.train --config path/to/jax_smoke.yaml
 ```
 
+The checked-in end-to-end JAX config can be launched directly with:
+
+```bash
+uv run python -m src.train --config configs/jax_training.yaml
+```
+
 ## Reproducible training configs
 
 The `configs/` directory contains longer-running experiment presets:
@@ -60,6 +67,7 @@ The `configs/` directory contains longer-running experiment presets:
 | `configs/attention_self_play_pool.yaml` | Attention policy trained against the self-play opponent pool. |
 | `configs/attention_candidates_16.yaml` | Attention policy with 15 real target slots plus no-op. |
 | `configs/attention_candidates_24.yaml` | Attention policy with 23 real target slots plus no-op. |
+| `configs/jax_training.yaml` | End-to-end JAX environment plus JAX PPO training. |
 
 Launch any preset with:
 
@@ -92,6 +100,33 @@ Checkpoints are saved under:
 
 Torch checkpoints use `ckpt_last.pt` and numbered `ckpt_*.pt` files. JAX
 checkpoints use `jax_ckpt_last.pkl` and numbered `jax_ckpt_*.pkl` files.
+
+## Resuming training from a checkpoint
+
+Use `--resume-checkpoint` with the same config family that created the checkpoint.
+The config's `ppo.total_updates` is interpreted as the final update to run, not
+as an additional number of updates. For example, resuming a JAX run from update
+50 with `total_updates: 2000` starts at update 51 and stops after update 2000:
+
+```bash
+uv run python -m src.train \
+  --config configs/jax_training.yaml \
+  --resume-checkpoint /artifacts/jax_training/orbit_wars_ppo_jax_training/jax_ckpt_000050.pkl
+```
+
+The same flag works for Torch PPO checkpoints when using a Torch training config:
+
+```bash
+uv run python -m src.train \
+  --config configs/attention_training.yaml \
+  --resume-checkpoint /artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_000050.pt
+```
+
+When resuming JAX checkpoints produced by older code that did not include Optax
+optimizer state or RNG state, training still loads the policy parameters and
+reinitializes any missing state from the current config. New JAX checkpoints save
+policy parameters, optimizer state, RNG key, update number, environment-step
+counter, and completed-episode counter.
 
 ## Evaluation protocol
 

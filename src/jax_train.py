@@ -5,7 +5,10 @@ import time
 from pathlib import Path
 
 from .config import TrainConfig
-from .jax_device import configure_jax_platform_for_host, ensure_cuda_jax_if_nvidia_present
+from .jax_device import (
+    configure_jax_platform_for_host,
+    ensure_cuda_jax_if_nvidia_present,
+)
 
 configure_jax_platform_for_host()
 
@@ -16,7 +19,7 @@ from .jax_policy import build_jax_policy  # noqa: E402
 from .jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax  # noqa: E402
 
 
-def run_jax_training(cfg: TrainConfig) -> None:
+def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
     """Run an end-to-end JAX training loop for the JAX environment backend.
 
     This path keeps environment state, feature encoding, action sampling, rollout
@@ -38,6 +41,16 @@ def run_jax_training(cfg: TrainConfig) -> None:
         attention_heads=cfg.model.attention_heads,
     )
     train_state = init_train_state(policy_key, policy, cfg)
+    total_env_steps = 0
+    completed_episodes = 0
+    start_update = 1
+    if resume_checkpoint is not None:
+        train_state, key, start_update, total_env_steps, completed_episodes = (
+            load_jax_checkpoint(resume_checkpoint, train_state, cfg)
+        )
+        print(
+            f"Resuming JAX training from {resume_checkpoint} at update {start_update}"
+        )
     collect_fn = jax.jit(
         lambda rollout_key, state, batch, ts: collect_rollout_jax(
             rollout_key, state, batch, ts, policy, cfg
@@ -48,11 +61,9 @@ def run_jax_training(cfg: TrainConfig) -> None:
     )
     save_dir = Path(cfg.save_dir)
     log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}_jax.jsonl"
-    total_env_steps = 0
-    completed_episodes = 0
     train_start_time = time.perf_counter()
 
-    for update in range(1, cfg.ppo.total_updates + 1):
+    for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start = time.perf_counter()
         rollout_start = time.perf_counter()
         key, rollout_key = jax.random.split(key)
@@ -107,7 +118,16 @@ def run_jax_training(cfg: TrainConfig) -> None:
                 f"entropy={record['entropy']:.3f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-            save_jax_checkpoint(save_dir, cfg.run_name, update, train_state.params, cfg)
+            save_jax_checkpoint(
+                save_dir,
+                cfg.run_name,
+                update,
+                train_state,
+                cfg,
+                key=key,
+                total_env_steps=total_env_steps,
+                completed_episodes=completed_episodes,
+            )
 
 
 def append_jsonl(path: Path, record: dict[str, float | int]) -> None:
@@ -118,8 +138,58 @@ def append_jsonl(path: Path, record: dict[str, float | int]) -> None:
         file.write(json.dumps(record, sort_keys=True) + "\n")
 
 
+def load_jax_checkpoint(
+    checkpoint_path: str, train_state: object, cfg: TrainConfig
+) -> tuple[object, jax.Array, int, int, int]:
+    """Load JAX training state and counters from a checkpoint payload."""
+
+    import pickle
+
+    with Path(checkpoint_path).open("rb") as file:
+        checkpoint = pickle.load(file)
+    if not isinstance(checkpoint, dict) or "params" not in checkpoint:
+        raise ValueError(
+            f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
+        )
+    params = jax.device_put(checkpoint["params"])
+    opt_state = checkpoint.get("opt_state")
+    if opt_state is None:
+        opt_state = train_state.optimizer.init(params)
+    else:
+        opt_state = jax.device_put(opt_state)
+    checkpoint_update = int(checkpoint.get("update", 0))
+    key_payload = checkpoint.get("rng_key")
+    key = (
+        jax.device_put(key_payload)
+        if key_payload is not None
+        else jax.random.PRNGKey(cfg.seed + checkpoint_update)
+    )
+    total_env_steps = int(
+        checkpoint.get(
+            "total_env_steps",
+            checkpoint_update * cfg.ppo.rollout_steps * cfg.ppo.num_envs,
+        )
+    )
+    completed_episodes = int(checkpoint.get("completed_episodes", 0))
+    return (
+        train_state.replace(params=params, opt_state=opt_state),
+        key,
+        checkpoint_update + 1,
+        total_env_steps,
+        completed_episodes,
+    )
+
+
 def save_jax_checkpoint(
-    save_dir: Path, run_name: str, update: int, params: dict, cfg: TrainConfig
+    save_dir: Path,
+    run_name: str,
+    update: int,
+    train_state: object,
+    cfg: TrainConfig,
+    *,
+    key: jax.Array,
+    total_env_steps: int,
+    completed_episodes: int,
 ) -> None:
     """Persist the latest and update-numbered JAX checkpoint payloads."""
 
@@ -127,7 +197,15 @@ def save_jax_checkpoint(
 
     run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
-    payload = {"update": update, "params": jax.device_get(params), "config": cfg}
+    payload = {
+        "update": update,
+        "params": jax.device_get(train_state.params),
+        "opt_state": jax.device_get(train_state.opt_state),
+        "rng_key": jax.device_get(key),
+        "config": cfg,
+        "total_env_steps": total_env_steps,
+        "completed_episodes": completed_episodes,
+    }
     with (run_dir / "jax_ckpt_last.pkl").open("wb") as file:
         pickle.dump(payload, file)
     with (run_dir / f"jax_ckpt_{update:06d}.pkl").open("wb") as file:

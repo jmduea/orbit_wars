@@ -28,3 +28,11 @@ def test_default_config_preserves_torch_kaggle_training_path() -> None:
 
     assert default["env_backend"] == "kaggle"
     assert default["rl_backend"] == "torch"
+
+
+def test_jax_training_config_selects_jax_backends() -> None:
+    jax_cfg = load_yaml("configs/jax_training.yaml")
+
+    assert jax_cfg["env_backend"] == "jax"
+    assert jax_cfg["rl_backend"] == "jax"
+    assert jax_cfg["opponent"] in {"self", "random"}

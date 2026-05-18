@@ -72,3 +72,44 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
 
     assert random_action.source_id.shape == (cfg.ppo.num_envs, cfg.env.max_fleets)
     assert random_action.valid.shape == (cfg.ppo.num_envs, cfg.env.max_fleets)
+
+
+def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
+    from src.jax_train import load_jax_checkpoint, save_jax_checkpoint
+
+    cfg = TrainConfig()
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.rollout_steps = 3
+    cfg.ppo.num_envs = 2
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(5), policy, cfg)
+
+    save_jax_checkpoint(
+        tmp_path,
+        "roundtrip",
+        7,
+        train_state,
+        cfg,
+        key=jax.random.PRNGKey(9),
+        total_env_steps=42,
+        completed_episodes=3,
+    )
+    loaded_state, key, start_update, total_env_steps, completed_episodes = (
+        load_jax_checkpoint(
+            str(tmp_path / "roundtrip" / "jax_ckpt_000007.pkl"), train_state, cfg
+        )
+    )
+
+    assert start_update == 8
+    assert total_env_steps == 42
+    assert completed_episodes == 3
+    assert jax.numpy.array_equal(key, jax.random.PRNGKey(9))
+    assert loaded_state.opt_state is not None
