@@ -95,6 +95,12 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default=str(default_train_config_path()))
+    parser.add_argument(
+        "--resume-checkpoint",
+        type=str,
+        default=None,
+        help="Resume training from a Torch .pt or JAX .pkl checkpoint.",
+    )
     return parser.parse_args()
 
 
@@ -952,6 +958,8 @@ def save_checkpoint(
     cfg: TrainConfig,
     normalizer: ObservationNormalizer | None = None,
     self_play_metadata: dict[str, object] | None = None,
+    total_env_steps: int = 0,
+    completed_episodes: int = 0,
 ) -> None:
     """Write latest and numbered Torch PPO checkpoints for a training run."""
 
@@ -965,6 +973,8 @@ def save_checkpoint(
             "config": cfg,
             "normalizer": normalizer.state_dict() if normalizer is not None else None,
             "self_play": self_play_metadata,
+            "total_env_steps": total_env_steps,
+            "completed_episodes": completed_episodes,
         },
         run_dir / "ckpt_last.pt",
     )
@@ -976,6 +986,8 @@ def save_checkpoint(
             "config": cfg,
             "normalizer": normalizer.state_dict() if normalizer is not None else None,
             "self_play": self_play_metadata,
+            "total_env_steps": total_env_steps,
+            "completed_episodes": completed_episodes,
         },
         run_dir / f"ckpt_{update:06d}.pt",
     )
@@ -1009,7 +1021,7 @@ def main() -> None:
     ):
         from .jax_train import run_jax_training
 
-        run_jax_training(cfg)
+        run_jax_training(cfg, resume_checkpoint=args.resume_checkpoint)
         return
     seed_everything(cfg.seed)
     device = resolve_device(cfg.device)
@@ -1058,10 +1070,42 @@ def main() -> None:
     log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}.jsonl"
     total_env_steps = 0
     completed_episodes = 0
+    start_update = 1
+    if args.resume_checkpoint is not None:
+        checkpoint = torch.load(
+            args.resume_checkpoint, map_location=device, weights_only=False
+        )
+        if not isinstance(checkpoint, dict):
+            raise ValueError(
+                f"Training checkpoint must be a dictionary: {args.resume_checkpoint}"
+            )
+        policy.load_state_dict(checkpoint.get("policy", checkpoint))
+        if "optimizer" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+        normalizer_state = checkpoint.get("normalizer")
+        if normalizer is not None and normalizer_state is not None:
+            normalizer.load_state_dict(normalizer_state)
+        checkpoint_update = int(checkpoint.get("update", 0))
+        start_update = checkpoint_update + 1
+        total_env_steps = int(
+            checkpoint.get(
+                "total_env_steps",
+                checkpoint_update * cfg.ppo.rollout_steps * cfg.ppo.num_envs,
+            )
+        )
+        completed_episodes = int(checkpoint.get("completed_episodes", 0))
+        if isinstance(opponent, SelfPlayOpponent):
+            opponent.sync_from(policy, normalizer)
+        elif isinstance(opponent, SelfPlayOpponentPool):
+            opponent.sync_from(policy, normalizer, update=checkpoint_update)
+        print(
+            f"Resuming Torch training from {args.resume_checkpoint} "
+            f"at update {start_update}"
+        )
     env_count = cfg.ppo.num_envs if isinstance(envs, JaxBatchedEnv) else len(envs)
     running_episode_rewards = [0.0 for _ in range(env_count)]
     train_start_time = time.perf_counter()
-    for update in range(1, cfg.ppo.total_updates + 1):
+    for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start_time = time.perf_counter()
         rollout_start_time = time.perf_counter()
         batch, batches, next_seed, stats = collect_rollout(
@@ -1174,6 +1218,8 @@ def main() -> None:
                 cfg,
                 normalizer,
                 self_play_metadata,
+                total_env_steps=total_env_steps,
+                completed_episodes=completed_episodes,
             )
 
 

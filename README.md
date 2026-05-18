@@ -10,6 +10,7 @@ The Orbit Wars reinforcement-learning implementation that was previously generat
 - `configs/attention_training.yaml` for longer reproducible attention-policy training runs
 - `configs/attention_shaped_reward_training.yaml` for attention-policy training with conservative reward shaping
 - `configs/attention_self_play_pool.yaml` for attention training against a self-play opponent pool
+- `configs/jax_training.yaml` for end-to-end JAX environment plus JAX PPO training
 - `src/`
 - `evaluate.py` for checkpoint evaluation across multiple opponents
 - `eval_vs_sniper.py` as a backwards-compatible sniper-only wrapper
@@ -72,10 +73,35 @@ uv run python -m src.train --config configs/full_training.yaml
 uv run python -m src.train --config configs/attention_training.yaml
 uv run python -m src.train --config configs/attention_shaped_reward_training.yaml
 uv run python -m src.train --config configs/attention_self_play_pool.yaml
+uv run python -m src.train --config configs/jax_training.yaml
 uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents sniper,random,self_play_snapshot --seeds 0:99 --deterministic
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
 ```
+
+## JAX environment/RL training
+
+Launch the end-to-end JAX backend with the checked-in JAX config:
+
+```bash
+uv run python -m src.train --config configs/jax_training.yaml
+```
+
+This config sets both `env_backend: jax` and `rl_backend: jax`, writes metrics to
+`artifacts/rl_template/logs/orbit_wars_ppo_jax_training_jax.jsonl`, and saves
+checkpoints under `/artifacts/jax_training/orbit_wars_ppo_jax_training/` as
+`jax_ckpt_last.pkl` and numbered `jax_ckpt_*.pkl` files. Resume from any saved
+JAX checkpoint with:
+
+```bash
+uv run python -m src.train \
+  --config configs/jax_training.yaml \
+  --resume-checkpoint /artifacts/jax_training/orbit_wars_ppo_jax_training/jax_ckpt_000050.pkl
+```
+
+`ppo.total_updates` remains the final target update number, so resuming from
+`jax_ckpt_000050.pkl` with `total_updates: 2000` continues at update 51 and stops
+after update 2000.
 
 ## Shaped-reward attention experiment
 
