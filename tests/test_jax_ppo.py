@@ -156,6 +156,38 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
     )
 
 
+
+
+def test_collect_rollout_jax_two_player_static_shapes():
+    cfg = TrainConfig()
+    cfg.env.player_count = 2
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 3
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+
+    reset_keys = jax.random.split(jax.random.PRNGKey(60), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(61), policy, cfg)
+
+    _key, _env_state, _turn_batch, transitions, metrics = collect_rollout_jax(
+        jax.random.PRNGKey(62), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    assert transitions.self_features.shape == (1, 3, 8, transitions.self_features.shape[-1])
+    assert transitions.decision_mask.shape == (1, 3, 8)
+    assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
     from src.jax_env import assign_learner_players
 
@@ -279,3 +311,76 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
         4,
         cfg.env.max_planets,
     )
+
+
+def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
+    from src.jax_env import assign_learner_players
+
+    cfg = TrainConfig()
+    cfg.env.player_count = 4
+    cfg.env.episode_steps = 2
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 4
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+
+    env_indices = jax.numpy.arange(cfg.ppo.num_envs, dtype=jax.numpy.int32)
+    reset_keys = jax.random.split(jax.random.PRNGKey(70), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    env_state, turn_batch = assign_learner_players(
+        env_state,
+        env_indices,
+        jax.numpy.zeros((cfg.ppo.num_envs,), dtype=jax.numpy.int32),
+        cfg.env,
+        cfg.alternate_player_sides,
+    )
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(71), policy, cfg)
+
+    _key, env_state, _turn_batch, _transitions, _metrics = collect_rollout_jax(
+        jax.random.PRNGKey(72), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    assert jax.numpy.array_equal(jax.numpy.sort(env_state.learner_player), jax.numpy.arange(4, dtype=jax.numpy.int32))
+
+
+def test_ppo_update_jax_accepts_four_player_rollout_transitions():
+    cfg = TrainConfig()
+    cfg.env.player_count = 4
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 2
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+
+    reset_keys = jax.random.split(jax.random.PRNGKey(80), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(81), policy, cfg)
+
+    _key, _env_state, _turn_batch, transitions, _metrics = collect_rollout_jax(
+        jax.random.PRNGKey(82), env_state, turn_batch, train_state, policy, cfg
+    )
+    next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert "total_loss" in metrics
+    assert next_train_state.params is not train_state.params

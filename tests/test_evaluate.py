@@ -106,3 +106,25 @@ def test_aggregate_format_reports_four_player_metrics_per_seat() -> None:
     assert metrics.average_placement_4p == 2.0
     assert metrics.per_seat["0"]["first_place_rate_4p"] == 1.0
     assert metrics.per_seat["1"]["average_placement_4p"] == 3.0
+
+
+def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(monkeypatch: Any) -> None:
+    env = FakeKaggleEnv()
+    install_fake_kaggle(monkeypatch, env)
+    learner = RecordingAgent([[7, 1.25, 3]])
+    opponent = RecordingAgent([[8, 0.75, 2]])
+
+    outcome = evaluate.play_one_game(
+        learner,
+        [opponent],
+        seed=9,
+        player_count=2,
+        learner_seat=0,
+    )
+
+    assert env.reset_num_agents == 2
+    assert env.actions[0] == [[], []]
+    assert env.actions[1] == [[[7, 1.25, 3]], [[8, 0.75, 2]]]
+    assert learner.observations[0]["player"] == 0
+    assert opponent.observations[0]["player"] == 1
+    assert outcome.placement == 1.0
