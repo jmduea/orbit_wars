@@ -1,7 +1,7 @@
 seed: 42
 run_name: orbit_wars_ppo_attention_training
 device: auto
-save_dir: /artifacts/attention_training
+save_dir: artifacts/attention_training
 checkpoint_every: 50
 log_every: 1
 opponent: self

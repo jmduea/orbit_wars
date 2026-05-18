@@ -2,7 +2,7 @@ seed: 42
 run_name: orbit_wars_ppo_jax_self_play_shaped_reward
 # JAX selects its accelerator internally; keep this for schema parity with Torch configs.
 device: auto
-save_dir: /artifacts/jax_self_play_shaped_reward_training
+save_dir: artifacts/jax_self_play_shaped_reward_training
 checkpoint_every: 50
 log_every: 1
 # End-to-end JAX self-play currently trains against the learner's current policy.
@@ -46,10 +46,10 @@ training_format:
   rollout_groups:
     - name: two_player
       player_count: 2
-      num_envs: 4
+      num_envs: 16
     - name: four_player
       player_count: 4
-      num_envs: 4
+      num_envs: 16
 
 model:
   architecture: attention  # mlp | attention | transformer
@@ -59,13 +59,13 @@ model:
   obs_norm_clip: 10.0
 
 ppo:
-  rollout_steps: 512
-  num_envs: 8
-  num_envs_2p: 4
-  num_envs_4p: 4
+  rollout_steps: 500
+  num_envs: 32
+  num_envs_2p: 16
+  num_envs_4p: 16
   total_updates: 2000
   epochs: 4
-  minibatch_size: 512
+  minibatch_size: 500
   gamma: 0.99
   clip_coef: 0.2
   ent_coef: 0.02

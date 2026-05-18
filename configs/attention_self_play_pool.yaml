@@ -1,7 +1,7 @@
 seed: 42
 run_name: orbit_wars_ppo_attention_self_play_pool
 device: auto
-save_dir: /artifacts/attention_self_play_pool
+save_dir: artifacts/attention_self_play_pool
 checkpoint_every: 50
 log_every: 1
 opponent: self
