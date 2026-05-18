@@ -152,6 +152,12 @@ def collect_rollout(
     groups_per_env: list[list[StepGroup]] = [[] for _ in envs]
     episode_rewards: list[float] = []
     episode_wins = 0
+    first_place_4p = 0.0
+    placement_sum_4p = 0.0
+    episodes_2p = 0.0
+    episodes_4p = 0.0
+    survival_time_sum = 0.0
+    score_share_sum = 0.0
     rollout_step_id = 0
     decisions_total = 0
     emitted_moves_total = 0
@@ -277,9 +283,19 @@ def collect_rollout(
             rollout_step_id += 1
             if result.done:
                 episode_rewards.append(running_episode_rewards[env_idx])
-                episode_wins += int(
-                    float(result.info.get("terminal_reward", 0.0)) > 0.0
+                is_first = float(result.info.get("terminal_is_first", 0.0))
+                placement = float(result.info.get("terminal_placement", 0.0))
+                episode_wins += int(is_first > 0.0)
+                survival_time_sum += float(
+                    result.info.get("terminal_survival_time", 0.0)
                 )
+                score_share_sum += float(result.info.get("terminal_score_share", 0.0))
+                if cfg.env.player_count == 2:
+                    episodes_2p += 1.0
+                elif cfg.env.player_count == 4:
+                    episodes_4p += 1.0
+                    first_place_4p += is_first
+                    placement_sum_4p += placement
                 running_episode_rewards[env_idx] = 0.0
                 next_seed += 1
                 next_batch = env.reset(seed=next_seed)
@@ -332,6 +348,15 @@ def collect_rollout(
         ),
         "episodes_finished": float(len(episode_rewards)),
         "win_rate": episode_wins / len(episode_rewards) if episode_rewards else 0.0,
+        "win_rate_2p": episode_wins / episodes_2p if episodes_2p else 0.0,
+        "first_place_rate_4p": first_place_4p / episodes_4p if episodes_4p else 0.0,
+        "average_placement_4p": placement_sum_4p / episodes_4p if episodes_4p else 0.0,
+        "survival_time": (
+            survival_time_sum / len(episode_rewards) if episode_rewards else 0.0
+        ),
+        "score_share": score_share_sum / len(episode_rewards)
+        if episode_rewards
+        else 0.0,
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * len(envs)),
         "decisions_per_step": decisions_total / max(rollout_step_id, 1),
@@ -406,6 +431,12 @@ def collect_jax_rollout(
     groups_per_env: list[list[StepGroup]] = [[] for _ in range(num_envs)]
     episode_rewards: list[float] = []
     episode_wins = 0
+    first_place_4p = 0.0
+    placement_sum_4p = 0.0
+    episodes_2p = 0.0
+    episodes_4p = 0.0
+    survival_time_sum = 0.0
+    score_share_sum = 0.0
     rollout_step_id = 0
     decisions_total = 0
     emitted_moves_total = 0
@@ -524,7 +555,6 @@ def collect_jax_rollout(
         states, results = step_fn(states, learner_action, opponent_action)
         rewards = np.asarray(results.reward)
         dones = np.asarray(results.done)
-        terminals = np.asarray(results.terminal_reward)
         for env_idx in range(num_envs):
             running_episode_rewards[env_idx] += float(rewards[env_idx])
             groups_per_env[env_idx][-1].reward = float(rewards[env_idx])
@@ -532,7 +562,21 @@ def collect_jax_rollout(
             rollout_step_id += 1
             if dones[env_idx]:
                 episode_rewards.append(running_episode_rewards[env_idx])
-                episode_wins += int(float(terminals[env_idx]) > 0.0)
+                is_first = float(np.asarray(results.terminal_is_first)[env_idx])
+                placement = float(np.asarray(results.terminal_placement)[env_idx])
+                episode_wins += int(is_first > 0.0)
+                survival_time_sum += float(
+                    np.asarray(results.terminal_survival_time)[env_idx]
+                )
+                score_share_sum += float(
+                    np.asarray(results.terminal_score_share)[env_idx]
+                )
+                if cfg.env.player_count == 2:
+                    episodes_2p += 1.0
+                elif cfg.env.player_count == 4:
+                    episodes_4p += 1.0
+                    first_place_4p += is_first
+                    placement_sum_4p += placement
                 running_episode_rewards[env_idx] = 0.0
                 next_seed += 1
                 new_state, new_batch = reset_fn(jax.random.PRNGKey(next_seed))
@@ -593,6 +637,15 @@ def collect_jax_rollout(
         ),
         "episodes_finished": float(len(episode_rewards)),
         "win_rate": episode_wins / len(episode_rewards) if episode_rewards else 0.0,
+        "win_rate_2p": episode_wins / episodes_2p if episodes_2p else 0.0,
+        "first_place_rate_4p": first_place_4p / episodes_4p if episodes_4p else 0.0,
+        "average_placement_4p": placement_sum_4p / episodes_4p if episodes_4p else 0.0,
+        "survival_time": (
+            survival_time_sum / len(episode_rewards) if episode_rewards else 0.0
+        ),
+        "score_share": score_share_sum / len(episode_rewards)
+        if episode_rewards
+        else 0.0,
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * num_envs),
         "decisions_per_step": decisions_total / max(rollout_step_id, 1),
@@ -1199,6 +1252,11 @@ def main() -> None:
             "episode_reward_median": stats["episode_reward_median"],
             "episodes_finished": int(stats["episodes_finished"]),
             "win_rate": stats["win_rate"],
+            "win_rate_2p": stats["win_rate_2p"],
+            "first_place_rate_4p": stats["first_place_rate_4p"],
+            "average_placement_4p": stats["average_placement_4p"],
+            "survival_time": stats["survival_time"],
+            "score_share": stats["score_share"],
             "samples": int(stats["samples"]),
             "update_seconds": update_seconds,
             "elapsed_seconds": elapsed_seconds,

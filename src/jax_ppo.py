@@ -415,6 +415,10 @@ def collect_rollout_jax(
             "value": output.value.reshape(batch.decision_mask.shape),
             "reward": result.reward,
             "done": result.done,
+            "terminal_is_first": result.terminal_is_first,
+            "terminal_placement": result.terminal_placement,
+            "terminal_score_share": result.terminal_score_share,
+            "terminal_survival_time": result.terminal_survival_time,
         }
         return (key, next_state, next_batch), transition
 
@@ -482,12 +486,42 @@ def collect_rollout_jax(
             else jnp.array(0.0, dtype=jnp.float32)
         )
     )
+    done_float = data["done"].astype(jnp.float32)
+    episode_done = done_float.sum()
+    episodes_2p = jnp.where(cfg.env.player_count == 2, episode_done, 0.0)
+    episodes_4p = jnp.where(cfg.env.player_count == 4, episode_done, 0.0)
+    first_place_sum = (data["terminal_is_first"] * done_float).sum()
+    placement_4p_sum = jnp.where(
+        cfg.env.player_count == 4, (data["terminal_placement"] * done_float).sum(), 0.0
+    )
+    survival_time_sum = (data["terminal_survival_time"] * done_float).sum()
+    score_share_sum = (data["terminal_score_share"] * done_float).sum()
     metrics = {
         "env_steps": jnp.array(
             cfg.ppo.rollout_steps * turn_batch.self_features.shape[0], dtype=jnp.float32
         ),
         "samples": transitions.decision_mask.astype(jnp.float32).sum(),
-        "episode_done": data["done"].astype(jnp.float32).sum(),
+        "episode_done": episode_done,
+        "episodes_2p": episodes_2p,
+        "episodes_4p": episodes_4p,
+        "wins_2p": jnp.where(cfg.env.player_count == 2, first_place_sum, 0.0),
+        "first_places_4p": jnp.where(cfg.env.player_count == 4, first_place_sum, 0.0),
+        "placement_4p_sum": placement_4p_sum,
+        "survival_time_sum": survival_time_sum,
+        "score_share_sum": score_share_sum,
+        "win_rate_2p": jnp.where(episodes_2p > 0.0, first_place_sum / episodes_2p, 0.0),
+        "first_place_rate_4p": jnp.where(
+            episodes_4p > 0.0, first_place_sum / episodes_4p, 0.0
+        ),
+        "average_placement_4p": jnp.where(
+            episodes_4p > 0.0, placement_4p_sum / episodes_4p, 0.0
+        ),
+        "survival_time": jnp.where(
+            episode_done > 0.0, survival_time_sum / episode_done, 0.0
+        ),
+        "score_share": jnp.where(
+            episode_done > 0.0, score_share_sum / episode_done, 0.0
+        ),
         "opponent_current_slots": opponent_slots * current_share,
         "opponent_random_slots": opponent_slots * random_share,
         "opponent_snapshot_slots": opponent_slots * snapshot_share,

@@ -114,6 +114,11 @@ class JaxStepResult(NamedTuple):
     reward_capture_planet: jax.Array
     reward_ship_delta: jax.Array
     reward_production_delta: jax.Array
+    terminal_rank: jax.Array
+    terminal_placement: jax.Array
+    terminal_is_first: jax.Array
+    terminal_score_share: jax.Array
+    terminal_survival_time: jax.Array
 
 
 def max_fleets(cfg: EnvConfig) -> int:
@@ -302,7 +307,15 @@ def _finish_step(
         planets=planets,
         fleets=fleets,
     )
-    done, terminal_reward = _terminal(next_game, state.learner_player, cfg)
+    (
+        done,
+        terminal_reward,
+        learner_rank,
+        learner_placement,
+        learner_is_first,
+        score_share,
+        survival_time,
+    ) = _terminal(next_game, state.learner_player, cfg)
     shaping = _shaping(previous_game, next_game, state.learner_player, cfg)
     reward = (
         jnp.where(done, terminal_reward * cfg.reward_terminal_scale, 0.0)
@@ -323,6 +336,11 @@ def _finish_step(
         reward_capture_planet=shaping[0],
         reward_ship_delta=shaping[1],
         reward_production_delta=shaping[2],
+        terminal_rank=jnp.where(done, learner_rank, 0.0),
+        terminal_placement=jnp.where(done, learner_placement, 0.0),
+        terminal_is_first=jnp.where(done, learner_is_first, 0.0),
+        terminal_score_share=jnp.where(done, score_share, 0.0),
+        terminal_survival_time=jnp.where(done, survival_time, 0.0),
     )
     return next_state, result
 
@@ -633,8 +651,42 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
     )(owners)
     learner_score = jnp.take(scores, jnp.clip(learner_player, 0, owners.shape[0] - 1))
     best_score = jnp.max(scores)
-    reward = jnp.where((learner_score == best_score) & (learner_score > 0.0), 1.0, -1.0)
-    return done, reward
+    total_score = jnp.sum(scores)
+    rank = 1.0 + (scores > learner_score).astype(jnp.float32).sum()
+    tied = (scores == learner_score).astype(jnp.float32).sum()
+    placement = rank + (tied - 1.0) * 0.5
+    is_first = ((learner_score == best_score) & (learner_score > 0.0)).astype(
+        jnp.float32
+    )
+    score_share = jnp.where(total_score > 0.0, learner_score / total_score, 0.0)
+    player_count = jnp.asarray(owners.shape[0], dtype=jnp.float32)
+    ranked_reward = jnp.where(
+        player_count > 1.0,
+        1.0 - 2.0 * (placement - 1.0) / (player_count - 1.0),
+        1.0,
+    )
+    binary_reward = jnp.where(is_first > 0.0, 1.0, -1.0)
+    share_reward = score_share
+    survival_time = jnp.minimum(
+        game.step.astype(jnp.float32) + 1.0,
+        jnp.asarray(cfg.episode_steps, dtype=jnp.float32),
+    ) / jnp.maximum(jnp.asarray(cfg.episode_steps, dtype=jnp.float32), 1.0)
+    survival_rank_reward = 0.5 * ranked_reward + 0.5 * survival_time
+    mode = getattr(cfg, "terminal_reward_mode", "binary_win").strip().lower()
+    if mode == "binary_win":
+        reward = binary_reward
+    elif mode == "ranked":
+        reward = ranked_reward
+    elif mode == "score_share":
+        reward = share_reward
+    elif mode == "survival_plus_rank":
+        reward = survival_rank_reward
+    else:
+        raise ValueError(
+            "env.terminal_reward_mode must be one of binary_win, ranked, "
+            f"score_share, or survival_plus_rank; got {mode!r}."
+        )
+    return done, reward, rank, placement, is_first, score_share, survival_time
 
 
 def _ship_advantage(game: JaxGameState, player: jax.Array):
