@@ -76,7 +76,6 @@ class TrainingFormatConfig:
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
 
 
-
 @dataclass(slots=True)
 class WandBConfig:
     """Optional Weights & Biases telemetry settings."""
@@ -105,6 +104,8 @@ class OpponentMixConfig:
     )
     temperature: float = 1.0
     curriculum: list[dict[str, Any]] = field(default_factory=list)
+
+
 @dataclass(slots=True)
 class TrainConfig:
     """Top-level training configuration loaded from YAML files.
@@ -137,6 +138,12 @@ class TrainConfig:
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
+    reseed_every_updates: int = 0
+    reseed_on_plateau: bool = False
+    plateau_metric: str = "episode_reward_mean"
+    plateau_window: int = 10
+    plateau_delta: float = 0.0
+    heldout_eval_seed_set: list[int] = field(default_factory=list)
 
 
 def default_train_config_path() -> Path:
@@ -166,7 +173,33 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     _update_dataclass(cfg.training_format, data.get("training_format", {}))
     _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
     _update_dataclass(cfg.wandb, data.get("wandb", {}))
+    cfg.heldout_eval_seed_set = _parse_seed_set(
+        data.get("heldout_eval_seed_set", cfg.heldout_eval_seed_set)
+    )
     return cfg
+
+
+def _parse_seed_set(raw: object) -> list[int]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        text = raw.strip()
+        if ".." in text:
+            start_s, end_s = text.split("..", maxsplit=1)
+            start = int(start_s)
+            end = int(end_s)
+            step = 1 if end >= start else -1
+            return list(range(start, end + step, step))
+        if "-" in text and text.count("-") == 1 and text.replace("-", "").isdigit():
+            start_s, end_s = text.split("-", maxsplit=1)
+            start = int(start_s)
+            end = int(end_s)
+            step = 1 if end >= start else -1
+            return list(range(start, end + step, step))
+        return [int(part.strip()) for part in text.split(",") if part.strip()]
+    if isinstance(raw, list | tuple | set):
+        return [int(v) for v in raw]
+    return []
 
 
 def _update_dataclass(
