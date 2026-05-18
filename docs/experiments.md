@@ -175,6 +175,30 @@ uv run python evaluate.py \
   --run-name attention_training_ckpt_last
 ```
 
+Mixed-format checkpoints should be evaluated in both canonical Orbit Wars match
+formats. Use `--formats 2p,4p` (equivalently `--player-counts 2,4`) so the
+evaluation runner calls Kaggle with the matching player count and reports
+format-specific summaries:
+
+```bash
+uv run python evaluate.py \
+  --config configs/attention_training.yaml \
+  --checkpoint /artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_last.pt \
+  --games 100 \
+  --opponents sniper,random,self_play_snapshot \
+  --formats 2p,4p \
+  --learner-seats all \
+  --seeds 0:99 \
+  --deterministic \
+  --run-name attention_training_ckpt_last_mixed_formats
+```
+
+The 2-player summary reports `win_rate_2p`. The 4-player summary constructs
+three opponent slots for each game and reports `first_place_rate_4p`,
+`average_placement_4p`, and `per_seat` metrics for each learner seat. Keep
+`--learner-seats all` for canonical reports; use a comma-separated subset such
+as `--learner-seats 0,2` only for targeted debugging.
+
 When comparing shaped vs. unshaped rewards, candidate counts, or self-play
 settings, keep `--games`, `--opponents`, and `--seeds` unchanged. This makes the
 reported win rates and rewards directly comparable across checkpoints.
