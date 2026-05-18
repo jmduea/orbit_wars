@@ -55,6 +55,30 @@ The checked-in end-to-end JAX config can be launched directly with:
 uv run python -m src.train --config configs/jax_training.yaml
 ```
 
+The JAX trainer uses **Option A: separate compiled rollout/update functions per
+format** for mixed 2-player/4-player experiments. Each configured rollout group
+gets its own environment state, turn batch, and statically compiled collector
+(`player_count: 2` or `player_count: 4`). The trainer collects those groups
+independently, concatenates their compatible transition tensors along the
+environment axis, and then runs a shared PPO update on the combined batch. This
+avoids recompilation or shape errors from switching a single jitted collector
+between player formats while preserving one policy and optimizer.
+
+To exercise both formats in one run, keep `training_format.rollout_groups`
+declared with separate 2p and 4p entries, as in `configs/jax_training.yaml` and
+`configs/jax_mixed_2p_4p_training.yaml`:
+
+```yaml
+training_format:
+  rollout_groups:
+    - name: two_player
+      player_count: 2
+      num_envs: 4
+    - name: four_player
+      player_count: 4
+      num_envs: 4
+```
+
 For self-play plus conservative reward shaping on the end-to-end JAX stack, use:
 
 ```bash

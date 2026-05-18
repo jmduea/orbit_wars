@@ -409,6 +409,34 @@ def collect_rollout_jax(
     return key, env_state, turn_batch, transitions, metrics
 
 
+def concatenate_transition_batches(
+    batches: tuple[JaxTransitionBatch, ...] | list[JaxTransitionBatch],
+) -> JaxTransitionBatch:
+    """Concatenate compatible rollout batches along the environment axis.
+
+    Mixed-format JAX training uses one compiled collector per static player
+    count. The resulting transition tensors share rollout and feature shapes,
+    so PPO can consume a single larger batch by joining their independent
+    environment axes.
+    """
+
+    if not batches:
+        raise ValueError("At least one transition batch is required.")
+    if len(batches) == 1:
+        return batches[0]
+    reference_shape = batches[0].self_features.shape
+    for batch in batches[1:]:
+        if (
+            batch.self_features.shape[0] != reference_shape[0]
+            or batch.self_features.shape[2:] != reference_shape[2:]
+        ):
+            raise ValueError(
+                "Transition batches must share rollout and feature dimensions "
+                "to concatenate along the environment axis."
+            )
+    return jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=1), *batches)
+
+
 def discounted_returns(rewards: jax.Array, done: jax.Array, gamma: float) -> jax.Array:
     """Compute discounted returns over rollout time with terminal resets."""
 

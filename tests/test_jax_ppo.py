@@ -218,3 +218,64 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     assert float(rollout_metrics["episode_done"]) == cfg.ppo.num_envs
     assert jax.numpy.array_equal(env_state.episode_count, expected_episode_counts)
     assert jax.numpy.array_equal(env_state.learner_player, expected_players)
+
+
+def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
+    from src.jax_ppo import concatenate_transition_batches
+    from src.jax_train import init_rollout_groups
+
+    cfg = TrainConfig()
+    cfg.env.max_planets = 8
+    cfg.env.max_fleets = 16
+    cfg.env.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.ppo.num_envs = 4
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+    cfg.training_format.rollout_groups = [
+        {"name": "two_player", "player_count": 2, "num_envs": 2},
+        {"name": "four_player", "player_count": 4, "num_envs": 2},
+    ]
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+    train_state = init_train_state(jax.random.PRNGKey(41), policy, cfg)
+    _key, groups = init_rollout_groups(jax.random.PRNGKey(40), cfg, policy)
+
+    transitions_by_group = []
+    for index, group in enumerate(groups):
+        _key, _env_state, _turn_batch, transitions, rollout_metrics = group.collect_fn(
+            jax.random.PRNGKey(50 + index),
+            group.env_state,
+            group.turn_batch,
+            train_state,
+        )
+        transitions_by_group.append(transitions)
+        assert transitions.self_features.shape[:3] == (
+            cfg.ppo.rollout_steps,
+            group.cfg.ppo.num_envs,
+            cfg.env.max_planets,
+        )
+        assert (
+            float(rollout_metrics["env_steps"])
+            == cfg.ppo.rollout_steps * group.cfg.ppo.num_envs
+        )
+
+    combined = concatenate_transition_batches(transitions_by_group)
+
+    assert [group.cfg.env.player_count for group in groups] == [2, 4]
+    assert combined.self_features.shape[:3] == (
+        cfg.ppo.rollout_steps,
+        4,
+        cfg.env.max_planets,
+    )
+    assert combined.decision_mask.shape == (
+        cfg.ppo.rollout_steps,
+        4,
+        cfg.env.max_planets,
+    )

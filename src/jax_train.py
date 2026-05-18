@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import dataclass
 import json
 import time
 from pathlib import Path
+from typing import Callable
 
 from .config import TrainConfig
 from .jax_device import (
@@ -14,34 +17,163 @@ configure_jax_platform_for_host()
 
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
-from .jax_env import assign_learner_players, batched_reset  # noqa: E402
+from .jax_env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
+from .jax_features import JaxTurnBatch  # noqa: E402
 from .jax_policy import build_jax_policy  # noqa: E402
-from .jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax  # noqa: E402
+from .jax_ppo import (  # noqa: E402
+    JaxTransitionBatch,
+    collect_rollout_jax,
+    concatenate_transition_batches,
+    init_train_state,
+    ppo_update_jax,
+)
+
+
+@dataclass(slots=True)
+class JaxRolloutGroup:
+    """State for one statically compiled JAX rollout format."""
+
+    name: str
+    cfg: TrainConfig
+    env_state: JaxEnvState
+    turn_batch: JaxTurnBatch
+    collect_fn: Callable
+
+
+def _copy_config_for_rollout_group(
+    cfg: TrainConfig, *, player_count: int, num_envs: int
+) -> TrainConfig:
+    """Return a rollout-specific config with static player/env counts."""
+
+    group_cfg = deepcopy(cfg)
+    group_cfg.env.player_count = int(player_count)
+    group_cfg.ppo.num_envs = int(num_envs)
+    return group_cfg
+
+
+def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
+    """Resolve rollout group declarations for Option A mixed-format training.
+
+    The JAX trainer keeps independent 2-player and 4-player environment states
+    and compiles one collector per declared static format. If no groups are
+    configured, it falls back to the legacy single-format collector.
+    """
+
+    raw_groups = cfg.training_format.rollout_groups or cfg.ppo.rollout_groups
+    groups: list[dict[str, int | str]] = []
+    for index, group in enumerate(raw_groups):
+        player_count = int(group.get("player_count", cfg.env.player_count))
+        if player_count not in {2, 4}:
+            raise ValueError(
+                "JAX rollout groups support player_count 2 or 4, "
+                f"got {player_count}."
+            )
+        num_envs = int(group.get("num_envs", cfg.ppo.num_envs))
+        if num_envs <= 0:
+            continue
+        groups.append(
+            {
+                "name": str(group.get("name", f"{player_count}p_{index}")),
+                "player_count": player_count,
+                "num_envs": num_envs,
+            }
+        )
+    if groups:
+        return groups
+    return [
+        {
+            "name": f"{cfg.env.player_count}p",
+            "player_count": int(cfg.env.player_count),
+            "num_envs": int(cfg.ppo.num_envs),
+        }
+    ]
+
+
+def _init_rollout_group(
+    key: jax.Array,
+    cfg: TrainConfig,
+    policy: object,
+    *,
+    name: str,
+    player_count: int,
+    num_envs: int,
+) -> JaxRolloutGroup:
+    """Initialize env state and a dedicated compiled collector for one format."""
+
+    group_cfg = _copy_config_for_rollout_group(
+        cfg, player_count=player_count, num_envs=num_envs
+    )
+    reset_keys = jax.random.split(key, group_cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, group_cfg.env)
+    env_indices = jnp.arange(group_cfg.ppo.num_envs, dtype=jnp.int32)
+    episode_counts = jnp.zeros((group_cfg.ppo.num_envs,), dtype=jnp.int32)
+    env_state, turn_batch = assign_learner_players(
+        env_state,
+        env_indices,
+        episode_counts,
+        group_cfg.env,
+        group_cfg.alternate_player_sides,
+    )
+    collect_fn = jax.jit(
+        lambda rollout_key, state, batch, ts: collect_rollout_jax(
+            rollout_key, state, batch, ts, policy, group_cfg
+        )
+    )
+    return JaxRolloutGroup(
+        name=name,
+        cfg=group_cfg,
+        env_state=env_state,
+        turn_batch=turn_batch,
+        collect_fn=collect_fn,
+    )
+
+
+def init_rollout_groups(
+    key: jax.Array, cfg: TrainConfig, policy: object
+) -> tuple[jax.Array, list[JaxRolloutGroup]]:
+    """Create separate JAX rollout groups for all configured static formats."""
+
+    specs = _configured_rollout_groups(cfg)
+    key, *group_keys = jax.random.split(key, len(specs) + 1)
+    groups = [
+        _init_rollout_group(
+            group_key,
+            cfg,
+            policy,
+            name=str(spec["name"]),
+            player_count=int(spec["player_count"]),
+            num_envs=int(spec["num_envs"]),
+        )
+        for group_key, spec in zip(group_keys, specs, strict=True)
+    ]
+    return key, groups
+
+
+def _replace_rollout_group_state(
+    group: JaxRolloutGroup, env_state: JaxEnvState, turn_batch: JaxTurnBatch
+) -> JaxRolloutGroup:
+    return JaxRolloutGroup(
+        name=group.name,
+        cfg=group.cfg,
+        env_state=env_state,
+        turn_batch=turn_batch,
+        collect_fn=group.collect_fn,
+    )
 
 
 def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
     """Run an end-to-end JAX training loop for the JAX environment backend.
 
     This path keeps environment state, feature encoding, action sampling, rollout
-    storage, return/advantage computation, and PPO updates in JAX. Both the MLP
-    and attention/transformer policy architectures are supported.
+    storage, return/advantage computation, and PPO updates in JAX. Mixed 2p/4p
+    training uses Option A: each format owns its env state and jitted collector,
+    then compatible transition batches are concatenated before PPO updates.
     """
 
     ensure_cuda_jax_if_nvidia_present()
 
     key = jax.random.PRNGKey(cfg.seed)
-    key, reset_key, policy_key = jax.random.split(key, 3)
-    reset_keys = jax.random.split(reset_key, cfg.ppo.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
-    env_indices = jnp.arange(cfg.ppo.num_envs, dtype=jnp.int32)
-    episode_counts = jnp.zeros((cfg.ppo.num_envs,), dtype=jnp.int32)
-    env_state, turn_batch = assign_learner_players(
-        env_state,
-        env_indices,
-        episode_counts,
-        cfg.env,
-        cfg.alternate_player_sides,
-    )
+    key, rollout_init_key, policy_key = jax.random.split(key, 3)
     policy = build_jax_policy(
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
@@ -50,6 +182,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         attention_heads=cfg.model.attention_heads,
     )
     train_state = init_train_state(policy_key, policy, cfg)
+    key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
     total_env_steps = 0
     completed_episodes = 0
     start_update = 1
@@ -60,11 +193,6 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         print(
             f"Resuming JAX training from {resume_checkpoint} at update {start_update}"
         )
-    collect_fn = jax.jit(
-        lambda rollout_key, state, batch, ts: collect_rollout_jax(
-            rollout_key, state, batch, ts, policy, cfg
-        )
-    )
     update_fn = jax.jit(
         lambda ts, transitions: ppo_update_jax(ts, policy, transitions, cfg)
     )
@@ -75,9 +203,27 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start = time.perf_counter()
         rollout_start = time.perf_counter()
-        key, rollout_key = jax.random.split(key)
-        key, env_state, turn_batch, transitions, rollout_metrics = collect_fn(
-            rollout_key, env_state, turn_batch, train_state
+        transitions_by_group: list[JaxTransitionBatch] = []
+        rollout_metrics_by_group: list[dict[str, jax.Array]] = []
+        next_groups: list[JaxRolloutGroup] = []
+        key, *rollout_keys = jax.random.split(key, len(rollout_groups) + 1)
+        for group, rollout_key in zip(rollout_groups, rollout_keys, strict=True):
+            (
+                _next_rollout_key,
+                env_state,
+                turn_batch,
+                transitions,
+                rollout_metrics,
+            ) = group.collect_fn(
+                rollout_key, group.env_state, group.turn_batch, train_state
+            )
+            next_groups.append(_replace_rollout_group_state(group, env_state, turn_batch))
+            transitions_by_group.append(transitions)
+            rollout_metrics_by_group.append(rollout_metrics)
+        rollout_groups = next_groups
+        transitions = concatenate_transition_batches(transitions_by_group)
+        rollout_metrics = jax.tree.map(
+            lambda *xs: sum(xs), *rollout_metrics_by_group
         )
         # Block once so timing reflects device work, not just dispatch.
         rollout_samples = float(jax.device_get(rollout_metrics["samples"]))
