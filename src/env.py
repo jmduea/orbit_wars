@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,13 +28,16 @@ class OrbitWarsEnv:
         self.cfg = cfg
         self.opponent = opponent
         self.active_opponent = opponent
+        self.active_opponents: dict[int, OpponentPolicy] = {}
         self.make_fn = make_fn
         self.env_index = env_index
         self.env: Any | None = None
         self.last_obs: Any | None = None
         self.last_opp_obs: Any | None = None
+        self.last_opponent_obs: dict[int, Any] = {}
         self.previous_player_state: GameState | None = None
         self.previous_opp_state: GameState | None = None
+        self.previous_opponent_states: dict[int, GameState] = {}
         self.episode_index = 0
         self.learner_player = 0
 
@@ -45,64 +47,124 @@ class OrbitWarsEnv:
         if seed is not None:
             configuration["seed"] = int(seed)
             configuration["randomSeed"] = int(seed)
+        player_count = self.cfg.env.player_count
+        if player_count < 1:
+            raise ValueError("cfg.env.player_count must be at least 1")
         if self.cfg.alternate_player_sides:
-            self.learner_player = (self.env_index + self.episode_index) % 2
+            self.learner_player = (self.env_index + self.episode_index) % player_count
         else:
             self.learner_player = 0
-        sampler = getattr(self.opponent, "sample_opponent", None)
-        self.active_opponent = sampler() if callable(sampler) else self.opponent
+        opponent_players = [
+            player for player in range(player_count) if player != self.learner_player
+        ]
+        self.active_opponents = {
+            player: self._sample_opponent() for player in opponent_players
+        }
+        self.active_opponent = (
+            self.active_opponents[opponent_players[0]]
+            if opponent_players
+            else self.opponent
+        )
         self.env = make_fn("orbit_wars", configuration=configuration, debug=False)
-        self.env.reset(num_agents=2)
-        states = self.env.step([[], []])
+        self.env.reset(num_agents=player_count)
+        states = self.env.step([[] for _ in range(player_count)])
         learner_state = states[self.learner_player]
-        opponent_state = states[1 - self.learner_player]
         self.last_obs = extract_observation(learner_state)
-        self.last_opp_obs = extract_observation(opponent_state)
+        self.last_opponent_obs = {
+            player: extract_observation(states[player]) for player in opponent_players
+        }
+        self.last_opp_obs = (
+            self.last_opponent_obs.get(opponent_players[0])
+            if opponent_players
+            else None
+        )
         self.previous_player_state = parse_observation(self.last_obs)
-        self.previous_opp_state = parse_observation(self.last_opp_obs)
+        self.previous_opponent_states = {
+            player: parse_observation(observation)
+            for player, observation in self.last_opponent_obs.items()
+        }
+        self.previous_opp_state = (
+            self.previous_opponent_states.get(opponent_players[0])
+            if opponent_players
+            else None
+        )
         self.episode_index += 1
-        return encode_turn(self.previous_player_state, self.cfg.env, env_index=self.env_index)
+        return encode_turn(
+            self.previous_player_state, self.cfg.env, env_index=self.env_index
+        )
 
     def step(self, player_action: list[list[float | int]]) -> StepResult:
         if self.env is None:
             raise RuntimeError("Call reset() before step().")
-        opponent_action = self.active_opponent.act(self.last_opp_obs)
-        if self.learner_player == 0:
-            joint_action = [player_action, opponent_action]
-        else:
-            joint_action = [opponent_action, player_action]
+        player_count = self.cfg.env.player_count
+        joint_action: list[list[list[float | int]]] = [[] for _ in range(player_count)]
+        joint_action[self.learner_player] = player_action
+        for player, opponent in self.active_opponents.items():
+            joint_action[player] = opponent.act(self.last_opponent_obs[player])
+
         states = self.env.step(joint_action)
         player_state = states[self.learner_player]
-        opp_state = states[1 - self.learner_player]
+        opponent_players = [
+            player for player in range(player_count) if player != self.learner_player
+        ]
+        opponent_states = {player: states[player] for player in opponent_players}
         next_obs = extract_observation(player_state)
-        next_opp_obs = extract_observation(opp_state)
+        next_opponent_obs = {
+            player: extract_observation(state)
+            for player, state in opponent_states.items()
+        }
         next_player_state = parse_observation(next_obs)
-        next_opp_state = parse_observation(next_opp_obs)
+        next_opponent_states = {
+            player: parse_observation(observation)
+            for player, observation in next_opponent_obs.items()
+        }
         done = extract_status(player_state) != "ACTIVE"
 
         terminal_component = (
-            terminal_reward(player_state, opp_state) * self.cfg.env.reward_terminal_scale if done else 0.0
+            terminal_reward(player_state, list(opponent_states.values()))
+            * self.cfg.env.reward_terminal_scale
+            if done
+            else 0.0
         )
-        shaping_components = shaped_reward_components(self.previous_player_state, next_player_state, self.cfg.env)
+        shaping_components = shaped_reward_components(
+            self.previous_player_state, next_player_state, self.cfg.env
+        )
         shaping_component = sum(shaping_components.values())
         reward = terminal_component + shaping_component
 
         self.last_obs = next_obs
-        self.last_opp_obs = next_opp_obs
+        self.last_opponent_obs = next_opponent_obs
+        self.last_opp_obs = (
+            next_opponent_obs.get(opponent_players[0]) if opponent_players else None
+        )
         self.previous_player_state = next_player_state
-        self.previous_opp_state = next_opp_state
+        self.previous_opponent_states = next_opponent_states
+        self.previous_opp_state = (
+            next_opponent_states.get(opponent_players[0]) if opponent_players else None
+        )
 
         batch = encode_turn(next_player_state, self.cfg.env, env_index=self.env_index)
+        opponent_statuses = {
+            player: extract_status(state) for player, state in opponent_states.items()
+        }
         info = {
             "learner_player": self.learner_player,
+            "opponent_players": opponent_players,
             "player_status": extract_status(player_state),
-            "opponent_status": extract_status(opp_state),
+            "opponent_status": opponent_statuses.get(opponent_players[0])
+            if opponent_players
+            else None,
+            "opponent_statuses": opponent_statuses,
             "reward": reward,
             "terminal_reward": terminal_component,
             "shaping_reward": shaping_component,
             **shaping_components,
         }
         return StepResult(batch=batch, reward=reward, done=done, info=info)
+
+    def _sample_opponent(self) -> OpponentPolicy:
+        sampler = getattr(self.opponent, "sample_opponent", None)
+        return sampler() if callable(sampler) else self.opponent
 
 
 def shaped_reward_components(
@@ -133,15 +195,21 @@ def shaped_reward_components(
         elif previous_planet.owner == player and current_planet.owner != player:
             lost += 1
 
-    components["reward_capture_planet"] = env_cfg.reward_capture_planet * float(captured - lost)
+    components["reward_capture_planet"] = env_cfg.reward_capture_planet * float(
+        captured - lost
+    )
 
     previous_ship_advantage = ship_advantage(previous_state, player)
     current_ship_advantage = ship_advantage(current_state, player)
-    components["reward_ship_delta"] = env_cfg.reward_ship_delta * (current_ship_advantage - previous_ship_advantage)
+    components["reward_ship_delta"] = env_cfg.reward_ship_delta * (
+        current_ship_advantage - previous_ship_advantage
+    )
 
     previous_production = controlled_production(previous_state.planets, player)
     current_production = controlled_production(current_state.planets, player)
-    components["reward_production_delta"] = env_cfg.reward_production_delta * (current_production - previous_production)
+    components["reward_production_delta"] = env_cfg.reward_production_delta * (
+        current_production - previous_production
+    )
     return components
 
 
@@ -150,10 +218,16 @@ def planets_by_id(planets: list[PlanetState]) -> dict[int, PlanetState]:
 
 
 def ship_advantage(state: GameState, player: int) -> float:
-    player_ships = sum(planet.ships for planet in state.planets if planet.owner == player)
+    player_ships = sum(
+        planet.ships for planet in state.planets if planet.owner == player
+    )
     player_ships += sum(fleet.ships for fleet in state.fleets if fleet.owner == player)
-    opponent_ships = sum(planet.ships for planet in state.planets if planet.owner not in {-1, player})
-    opponent_ships += sum(fleet.ships for fleet in state.fleets if fleet.owner not in {-1, player})
+    opponent_ships = sum(
+        planet.ships for planet in state.planets if planet.owner not in {-1, player}
+    )
+    opponent_ships += sum(
+        fleet.ships for fleet in state.fleets if fleet.owner not in {-1, player}
+    )
     return float(player_ships - opponent_ships)
 
 
@@ -187,9 +261,13 @@ def extract_reward(state: Any) -> float:
     return 0.0 if value is None else float(value)
 
 
-def terminal_reward(player_state: Any, opp_state: Any) -> float:
+def terminal_reward(player_state: Any, opponent_states: Any) -> float:
     player_reward = extract_reward(player_state)
-    opponent_reward = extract_reward(opp_state)
-    if player_reward > 0.0 and opponent_reward > 0.0:
+    if not isinstance(opponent_states, (list, tuple)):
+        opponent_states = [opponent_states]
+    opponent_rewards = [extract_reward(opp_state) for opp_state in opponent_states]
+    if player_reward > 0.0 and any(
+        opponent_reward > 0.0 for opponent_reward in opponent_rewards
+    ):
         return 0.0
     return player_reward
