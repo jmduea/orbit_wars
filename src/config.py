@@ -25,6 +25,7 @@ class EnvConfig:
     reward_ship_delta: float = 0.0
     reward_production_delta: float = 0.0
     reward_terminal_scale: float = 1.0
+    terminal_reward_mode: str = "binary_win"
 
 
 @dataclass(slots=True)

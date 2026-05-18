@@ -127,8 +127,11 @@ class OrbitWarsEnv:
         }
         done = extract_status(player_state) != "ACTIVE"
 
+        terminal_diagnostics = terminal_reward_diagnostics(
+            next_player_state, self.cfg.env
+        )
         terminal_component = (
-            terminal_reward(player_state, list(opponent_states.values()))
+            terminal_diagnostics["terminal_reward_unscaled"]
             * self.cfg.env.reward_terminal_scale
             if done
             else 0.0
@@ -165,6 +168,19 @@ class OrbitWarsEnv:
             "opponent_composition": self.active_opponent_metadata,
             "reward": reward,
             "terminal_reward": terminal_component,
+            "terminal_rank": terminal_diagnostics["terminal_rank"] if done else 0.0,
+            "terminal_placement": (
+                terminal_diagnostics["terminal_placement"] if done else 0.0
+            ),
+            "terminal_is_first": (
+                terminal_diagnostics["terminal_is_first"] if done else 0.0
+            ),
+            "terminal_score_share": (
+                terminal_diagnostics["terminal_score_share"] if done else 0.0
+            ),
+            "terminal_survival_time": (
+                terminal_diagnostics["terminal_survival_time"] if done else 0.0
+            ),
             "shaping_reward": shaping_component,
             **shaping_components,
         }
@@ -177,6 +193,15 @@ class OrbitWarsEnv:
         if callable(sampler):
             selections = sampler(count)
             return [(selection.policy, selection.metadata) for selection in selections]
+        single_sampler = getattr(self.opponent, "sample_opponent", None)
+        if callable(single_sampler):
+            return [
+                (
+                    single_sampler(),
+                    {"snapshot_id": -1, "update": 0, "source": self.cfg.opponent},
+                )
+                for _ in range(count)
+            ]
         return [
             (
                 self.opponent,
@@ -283,13 +308,95 @@ def extract_reward(state: Any) -> float:
     return 0.0 if value is None else float(value)
 
 
-def terminal_reward(player_state: Any, opponent_states: Any) -> float:
+def terminal_reward(
+    player_state: Any, opponent_states: Any, env_cfg: EnvConfig | None = None
+) -> float:
     player_reward = extract_reward(player_state)
+    if env_cfg is None:
+        if not isinstance(opponent_states, (list, tuple)):
+            opponent_states = [opponent_states]
+        opponent_rewards = [extract_reward(opp_state) for opp_state in opponent_states]
+        if player_reward > 0.0 and any(
+            opponent_reward > 0.0 for opponent_reward in opponent_rewards
+        ):
+            return 0.0
+        return player_reward
+    player_count = int(getattr(env_cfg, "player_count", 2))
+    rewards = [player_reward]
     if not isinstance(opponent_states, (list, tuple)):
         opponent_states = [opponent_states]
-    opponent_rewards = [extract_reward(opp_state) for opp_state in opponent_states]
-    if player_reward > 0.0 and any(
-        opponent_reward > 0.0 for opponent_reward in opponent_rewards
+    rewards.extend(extract_reward(opp_state) for opp_state in opponent_states)
+    return terminal_reward_from_scores(rewards[:player_count], env_cfg)[
+        "terminal_reward_unscaled"
+    ]
+
+
+def terminal_reward_diagnostics(
+    state: GameState, env_cfg: EnvConfig
+) -> dict[str, float]:
+    player_count = int(getattr(env_cfg, "player_count", 2))
+    scores = []
+    for player in range(player_count):
+        score = sum(planet.ships for planet in state.planets if planet.owner == player)
+        score += sum(fleet.ships for fleet in state.fleets if fleet.owner == player)
+        scores.append(float(score))
+    diagnostics = terminal_reward_from_scores(
+        scores, env_cfg, learner_index=state.player
+    )
+    diagnostics["terminal_survival_time"] = min(
+        float(state.step + 1), float(env_cfg.episode_steps)
+    ) / max(float(env_cfg.episode_steps), 1.0)
+    if getattr(env_cfg, "terminal_reward_mode", "binary_win").strip().lower() == (
+        "survival_plus_rank"
     ):
-        return 0.0
-    return player_reward
+        diagnostics["terminal_reward_unscaled"] = (
+            0.5 * diagnostics["terminal_ranked_reward"]
+            + 0.5 * diagnostics["terminal_survival_time"]
+        )
+    return diagnostics
+
+
+def terminal_reward_from_scores(
+    scores: list[float], env_cfg: EnvConfig, learner_index: int = 0
+) -> dict[str, float]:
+    player_count = max(int(getattr(env_cfg, "player_count", len(scores))), 1)
+    padded_scores = [0.0 for _ in range(player_count)]
+    for index, score in enumerate(scores[:player_count]):
+        padded_scores[index] = float(score)
+    learner_index = min(max(int(learner_index), 0), player_count - 1)
+    learner_score = padded_scores[learner_index]
+    best_score = max(padded_scores) if padded_scores else 0.0
+    rank = 1.0 + sum(score > learner_score for score in padded_scores)
+    ties = sum(score == learner_score for score in padded_scores)
+    placement = rank + (float(ties) - 1.0) * 0.5
+    is_first = 1.0 if learner_score == best_score and learner_score > 0.0 else 0.0
+    total_score = sum(padded_scores)
+    score_share = learner_score / total_score if total_score > 0.0 else 0.0
+    ranked_reward = (
+        1.0 - 2.0 * (placement - 1.0) / (player_count - 1.0)
+        if player_count > 1
+        else 1.0
+    )
+    mode = getattr(env_cfg, "terminal_reward_mode", "binary_win").strip().lower()
+    if mode == "binary_win":
+        reward = 1.0 if is_first > 0.0 else -1.0
+    elif mode == "ranked":
+        reward = ranked_reward
+    elif mode == "score_share":
+        reward = score_share
+    elif mode == "survival_plus_rank":
+        reward = ranked_reward
+    else:
+        raise ValueError(
+            "env.terminal_reward_mode must be one of binary_win, ranked, "
+            f"score_share, or survival_plus_rank; got {mode!r}."
+        )
+    return {
+        "terminal_reward_unscaled": float(reward),
+        "terminal_rank": float(rank),
+        "terminal_placement": float(placement),
+        "terminal_is_first": float(is_first),
+        "terminal_score_share": float(score_share),
+        "terminal_survival_time": 0.0,
+        "terminal_ranked_reward": float(ranked_reward),
+    }

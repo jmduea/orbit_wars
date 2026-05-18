@@ -65,8 +65,7 @@ def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
         player_count = int(group.get("player_count", cfg.env.player_count))
         if player_count not in {2, 4}:
             raise ValueError(
-                "JAX rollout groups support player_count 2 or 4, "
-                f"got {player_count}."
+                f"JAX rollout groups support player_count 2 or 4, got {player_count}."
             )
         num_envs = int(group.get("num_envs", cfg.ppo.num_envs))
         if num_envs <= 0:
@@ -245,8 +244,37 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         metrics = jax.device_get(metrics)
         ppo_seconds = time.perf_counter() - ppo_start
         update_seconds = time.perf_counter() - update_start
-        env_steps = int(jax.device_get(rollout_metrics["env_steps"]))
-        episodes = int(jax.device_get(rollout_metrics["episode_done"]))
+        rollout_metrics_host = jax.device_get(rollout_metrics)
+        env_steps = int(rollout_metrics_host["env_steps"])
+        episodes = int(rollout_metrics_host["episode_done"])
+        episodes_2p = float(rollout_metrics_host.get("episodes_2p", 0.0))
+        episodes_4p = float(rollout_metrics_host.get("episodes_4p", 0.0))
+        episode_count = float(rollout_metrics_host.get("episode_done", 0.0))
+        win_rate_2p = (
+            float(rollout_metrics_host.get("wins_2p", 0.0)) / episodes_2p
+            if episodes_2p
+            else 0.0
+        )
+        first_place_rate_4p = (
+            float(rollout_metrics_host.get("first_places_4p", 0.0)) / episodes_4p
+            if episodes_4p
+            else 0.0
+        )
+        average_placement_4p = (
+            float(rollout_metrics_host.get("placement_4p_sum", 0.0)) / episodes_4p
+            if episodes_4p
+            else 0.0
+        )
+        survival_time = (
+            float(rollout_metrics_host.get("survival_time_sum", 0.0)) / episode_count
+            if episode_count
+            else 0.0
+        )
+        score_share = (
+            float(rollout_metrics_host.get("score_share_sum", 0.0)) / episode_count
+            if episode_count
+            else 0.0
+        )
         total_env_steps += env_steps
         completed_episodes += episodes
         record: dict[str, object] = {
@@ -254,6 +282,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
             "samples": int(rollout_samples),
+            "win_rate_2p": win_rate_2p,
+            "first_place_rate_4p": first_place_rate_4p,
+            "average_placement_4p": average_placement_4p,
+            "survival_time": survival_time,
+            "score_share": score_share,
             "update_seconds": update_seconds,
             "elapsed_seconds": time.perf_counter() - train_start_time,
             "rollout_seconds": rollout_seconds,
@@ -264,10 +297,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
             **{name: float(value) for name, value in metrics.items()},
             "opponent_composition": {
-                "latest": float(rollout_metrics.get("opponent_current_slots", 0.0)),
-                "random": float(rollout_metrics.get("opponent_random_slots", 0.0)),
+                "latest": float(
+                    rollout_metrics_host.get("opponent_current_slots", 0.0)
+                ),
+                "random": float(rollout_metrics_host.get("opponent_random_slots", 0.0)),
                 "historical": float(
-                    rollout_metrics.get("opponent_snapshot_slots", 0.0)
+                    rollout_metrics_host.get("opponent_snapshot_slots", 0.0)
                 ),
             },
         }
