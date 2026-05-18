@@ -74,10 +74,16 @@ class JaxGameState(NamedTuple):
 
 
 class JaxEnvState(NamedTuple):
-    """Environment wrapper state containing game data and learner side."""
+    """Environment wrapper state containing game data and learner side.
+
+    ``episode_count`` tracks how many completed episodes each vectorized
+    environment has reset through so training can rotate learner sides
+    deterministically across both environment slots and episodes.
+    """
 
     game: JaxGameState
     learner_player: jax.Array
+    episode_count: jax.Array
 
 
 class JaxAction(NamedTuple):
@@ -216,8 +222,61 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
         initial_planets=planets,
         fleets=empty_fleets,
     )
-    env_state = JaxEnvState(game=game, learner_player=jnp.array(0, dtype=jnp.int32))
+    env_state = JaxEnvState(
+        game=game,
+        learner_player=jnp.array(0, dtype=jnp.int32),
+        episode_count=jnp.array(0, dtype=jnp.int32),
+    )
     return env_state, encode_turn(game, cfg)
+
+
+def learner_player_for_episode(
+    env_index: jax.Array,
+    episode_count: jax.Array,
+    cfg: EnvConfig,
+    alternate_player_sides: bool = True,
+) -> jax.Array:
+    """Return the learner player id for an environment episode.
+
+    When side alternation is enabled the assignment follows the Python training
+    environment convention: ``(env_index + episode_count) % player_count``.
+    Otherwise the learner always controls player 0.
+    """
+
+    player_count = max(1, int(getattr(cfg, "player_count", 2)))
+    if alternate_player_sides:
+        return (
+            env_index.astype(jnp.int32) + episode_count.astype(jnp.int32)
+        ) % jnp.array(player_count, dtype=jnp.int32)
+    return jnp.zeros_like(env_index, dtype=jnp.int32)
+
+
+def assign_learner_players(
+    env_state: JaxEnvState,
+    env_index: jax.Array,
+    episode_count: jax.Array,
+    cfg: EnvConfig,
+    alternate_player_sides: bool = True,
+) -> tuple[JaxEnvState, JaxTurnBatch]:
+    """Assign learner player ids and rebuild observations from those perspectives.
+
+    ``reset`` itself creates a neutral player-0 learner state. Batched training
+    calls this helper immediately after resets so each vectorized environment
+    receives a deterministic learner side based on its slot index and per-slot
+    completed episode count.
+    """
+
+    learner_player = learner_player_for_episode(
+        env_index, episode_count, cfg, alternate_player_sides
+    )
+    env_state = env_state._replace(
+        learner_player=learner_player.astype(jnp.int32),
+        episode_count=episode_count.astype(jnp.int32),
+    )
+    turn_batch = jax.vmap(
+        lambda game, player: encode_turn(game._replace(player=player), cfg)
+    )(env_state.game, env_state.learner_player)
+    return env_state, turn_batch
 
 
 def _finish_step(

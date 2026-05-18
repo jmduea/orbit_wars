@@ -104,7 +104,9 @@ def _state(
         fleets=fleet_state,
     )
     return JaxEnvState(
-        game=game, learner_player=jnp.array(learner_player, dtype=jnp.int32)
+        game=game,
+        learner_player=jnp.array(learner_player, dtype=jnp.int32),
+        episode_count=jnp.array(0, dtype=jnp.int32),
     )
 
 
