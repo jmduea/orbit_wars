@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import TrainConfig
+from .checkpoint_retention import prune_checkpoints
 from .replay import maybe_write_jax_checkpoint_replay
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .curriculum import CurriculumController
@@ -394,6 +395,23 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 key=key,
                 total_env_steps=total_env_steps,
                 completed_episodes=completed_episodes,
+            )
+            retention = cfg.checkpoint_retention
+            pruning = prune_checkpoints(
+                save_dir / cfg.run_name,
+                log_path=log_path,
+                keep_last_n=retention.keep_last_n,
+                keep_every_n_updates=retention.keep_every_n_updates,
+                keep_best_k_by_metric=retention.keep_best_k_by_metric,
+                best_metric_name=retention.best_metric_name,
+                best_metric_mode=retention.best_metric_mode,
+                min_update_for_pruning=retention.min_update_for_pruning,
+                dry_run_pruning=retention.dry_run_pruning,
+            )
+            action_label = "would prune" if pruning.dry_run else "pruned"
+            print(
+                f"checkpoint retention: {action_label} {len(pruning.deleted)} files, "
+                f"reclaimed_bytes={pruning.reclaimed_bytes}"
             )
             telemetry.log_checkpoint(checkpoint_path, update=update)
             replay_meta_path = maybe_write_jax_checkpoint_replay(

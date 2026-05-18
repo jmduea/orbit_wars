@@ -121,6 +121,19 @@ class ReplayConfig:
 
 
 @dataclass(slots=True)
+class CheckpointRetentionConfig:
+    """Policy for pruning historical checkpoints after each save."""
+
+    keep_last_n: int = 5
+    keep_every_n_updates: int = 0
+    keep_best_k_by_metric: int = 0
+    best_metric_name: str = "episode_reward_mean"
+    best_metric_mode: str = "max"
+    min_update_for_pruning: int = 0
+    dry_run_pruning: bool = False
+
+
+@dataclass(slots=True)
 class TrainConfig:
     """Top-level training configuration loaded from YAML files.
 
@@ -153,6 +166,7 @@ class TrainConfig:
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
+    checkpoint_retention: CheckpointRetentionConfig = field(default_factory=CheckpointRetentionConfig)
     reseed_every_updates: int = 0
     reseed_on_plateau: bool = False
     plateau_metric: str = "episode_reward_mean"
@@ -181,7 +195,7 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb", "replay"})
+    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb", "replay", "checkpoint_retention"})
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))
@@ -189,6 +203,7 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
     _update_dataclass(cfg.wandb, data.get("wandb", {}))
     _update_dataclass(cfg.replay, data.get("replay", {}))
+    _update_dataclass(cfg.checkpoint_retention, data.get("checkpoint_retention", {}))
     cfg.heldout_eval_seed_set = _parse_seed_set(
         data.get("heldout_eval_seed_set", cfg.heldout_eval_seed_set)
     )
