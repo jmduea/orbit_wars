@@ -26,6 +26,7 @@ from .opponents import SelfPlayOpponent, SelfPlayOpponentPool, build_opponent
 from .normalization import ObservationNormalizer
 from .policy import build_policy
 from .ppo import TransitionBatch, ppo_update, sample_actions
+from .telemetry import build_telemetry
 
 if TYPE_CHECKING:
     from .jax_env import JaxAction
@@ -112,7 +113,7 @@ def resolve_device(name: str) -> torch.device:
     return torch.device(name)
 
 
-def seed_everything(seed: int) -> None:
+def seed_everything(seed: int) -> Path:
     """Seed Python, NumPy, and Torch random number generators."""
 
     random.seed(seed)
@@ -1063,11 +1064,13 @@ def save_checkpoint(
     self_play_metadata: dict[str, object] | None = None,
     total_env_steps: int = 0,
     completed_episodes: int = 0,
-) -> None:
+) -> Path:
     """Write latest and numbered Torch PPO checkpoints for a training run."""
 
     run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
+    last_path = run_dir / "ckpt_last.pt"
+    update_path = run_dir / f"ckpt_{update:06d}.pt"
     torch.save(
         {
             "update": update,
@@ -1079,7 +1082,7 @@ def save_checkpoint(
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
         },
-        run_dir / "ckpt_last.pt",
+        last_path,
     )
     torch.save(
         {
@@ -1092,8 +1095,9 @@ def save_checkpoint(
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
         },
-        run_dir / f"ckpt_{update:06d}.pt",
+        update_path,
     )
+    return update_path
 
 
 def find_planet(planets: list[PlanetState], planet_id: int) -> PlanetState | None:
@@ -1207,6 +1211,16 @@ def main() -> None:
         )
     env_count = cfg.ppo.num_envs if isinstance(envs, JaxBatchedEnv) else len(envs)
     running_episode_rewards = [0.0 for _ in range(env_count)]
+    telemetry = build_telemetry(
+        cfg,
+        {
+            "backend": "torch",
+            "env_backend": cfg.env_backend,
+            "rl_backend": cfg.rl_backend,
+            "seed": cfg.seed,
+        },
+    )
+    telemetry.watch_model(policy)
     train_start_time = time.perf_counter()
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start_time = time.perf_counter()
@@ -1277,6 +1291,7 @@ def main() -> None:
             "opponent_composition": stats.get("opponent_composition", {}),
         }
         append_jsonl(log_path, log_record)
+        telemetry.log(log_record, step=update)
         if (
             isinstance(opponent, SelfPlayOpponent)
             and cfg.self_play_update_interval > 0
@@ -1318,7 +1333,7 @@ def main() -> None:
                 if isinstance(opponent, SelfPlayOpponentPool)
                 else None
             )
-            save_checkpoint(
+            checkpoint_path = save_checkpoint(
                 save_dir,
                 cfg.run_name,
                 update,
@@ -1330,6 +1345,10 @@ def main() -> None:
                 total_env_steps=total_env_steps,
                 completed_episodes=completed_episodes,
             )
+            telemetry.log_checkpoint(checkpoint_path, update=update)
+            telemetry.log_replay(log_path, update=update)
+
+    telemetry.finish()
 
 
 if __name__ == "__main__":

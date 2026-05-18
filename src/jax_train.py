@@ -197,6 +197,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     )
     save_dir = Path(cfg.save_dir)
     log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}_jax.jsonl"
+    telemetry = build_telemetry(
+        cfg,
+        {"backend": "jax", "env_backend": cfg.env_backend, "rl_backend": cfg.rl_backend, "seed": cfg.seed},
+    )
     train_start_time = time.perf_counter()
 
     for update in range(start_update, cfg.ppo.total_updates + 1):
@@ -311,6 +315,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             },
         }
         append_jsonl(log_path, record)
+        telemetry.log(record, step=update)
         if update % cfg.log_every == 0:
             print(
                 f"update={update} steps={total_env_steps} episodes={completed_episodes} "
@@ -319,7 +324,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 f"entropy={record['entropy']:.3f}"
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-            save_jax_checkpoint(
+            checkpoint_path = save_jax_checkpoint(
                 save_dir,
                 cfg.run_name,
                 update,
@@ -329,7 +334,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 total_env_steps=total_env_steps,
                 completed_episodes=completed_episodes,
             )
+            telemetry.log_checkpoint(checkpoint_path, update=update)
+            telemetry.log_replay(log_path, update=update)
 
+    telemetry.finish()
 
 def append_jsonl(path: Path, record: dict[str, object]) -> None:
     """Append a JSON metrics record to ``path``, creating parents as needed."""
