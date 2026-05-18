@@ -67,3 +67,27 @@ ppo:
   vf_coef: 0.5
   lr: 0.0001
   max_grad_norm: 0.5
+
+opponent_mix:
+  weights:
+    latest: 0.7
+    historical: 0.1
+    scripted_sniper: 0.1
+    random: 0.1
+  temperature: 1.0
+  curriculum:
+    - start_update: 1
+      end_update: 500
+      weights:
+        latest: 1.0
+        historical: 0.0
+        scripted_sniper: 0.0
+        random: 0.0
+    - start_update: 501
+      end_update: -1
+      weights:
+        latest: 0.6
+        historical: 0.2
+        scripted_sniper: 0.1
+        random: 0.1
+      temperature: 0.8

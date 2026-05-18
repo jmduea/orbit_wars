@@ -19,6 +19,15 @@ from .jax_env import (
 )
 from .jax_features import JaxTurnBatch, encode_turn
 from .jax_policy import action_log_prob_and_entropy, sample_actions
+from .opponent_pool import (
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+    OPPONENT_RANDOM,
+    OPPONENT_SCRIPTED_SNIPER,
+    OpponentRegistry,
+    OpponentRegistryConfig,
+    sample_opponent_type_ids_jax,
+)
 
 _MIN_JAX_UPDATE_CHUNK_ROWS = 8192
 
@@ -178,6 +187,20 @@ def build_random_action_from_batch(
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
+
+
+def build_sniper_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> JaxAction:
+    """JAX-compatible scripted sniper: use nearest candidate slot aggressively."""
+
+    real_candidate_mask = batch.candidate_mask & (
+        jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :] > 0
+    )
+    nearest_slot = jnp.argmax(real_candidate_mask.astype(jnp.int32), axis=-1)
+    has_target = real_candidate_mask.any(axis=-1)
+    target = jnp.where(has_target, nearest_slot, 0).reshape(-1)
+    bucket = jnp.full_like(target, max(cfg.env.ship_bucket_count - 1, 1))
+    bucket = jnp.where(has_target.reshape(-1), bucket, 0)
+    return build_action_from_batch(batch, target, bucket, cfg)
 def _sample_policy_action_with_params(
     key: jax.Array,
     batch: JaxTurnBatch,
@@ -252,6 +275,7 @@ def collect_rollout_jax(
     policy: object,
     cfg: TrainConfig,
     opponent_params_by_player: tuple[dict, ...] | None = None,
+    update: int = 0,
 ) -> tuple[
     jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]
 ]:
@@ -308,6 +332,23 @@ def collect_rollout_jax(
             )
         elif cfg.env.player_count == 4:
             player_actions = []
+            registry = OpponentRegistry(
+                OpponentRegistryConfig(
+                    weights=dict(cfg.opponent_mix.weights),
+                    temperature=cfg.opponent_mix.temperature,
+                    curriculum=list(cfg.opponent_mix.curriculum),
+                )
+            )
+            ids_py, probs_py = registry.ids_and_probs(update)
+            ids = jnp.asarray(ids_py, dtype=jnp.int32)
+            probs = jnp.asarray(probs_py, dtype=jnp.float32)
+            opponent_type_ids = sample_opponent_type_ids_jax(
+                jax.random.fold_in(opp_key, 9973),
+                state.learner_player.shape[0],
+                cfg.env.player_count,
+                ids=ids,
+                probs=probs,
+            )
             for player_id in range(cfg.env.player_count):
                 player_game = state.game._replace(
                     player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
@@ -316,6 +357,7 @@ def collect_rollout_jax(
                     player_game
                 )
                 player_key = jax.random.fold_in(opp_key, player_id)
+                slot_type = opponent_type_ids[:, player_id]
                 if cfg.opponent == "self":
                     opponent_params = (
                         train_state.params
@@ -330,36 +372,19 @@ def collect_rollout_jax(
                         cfg,
                         deterministic=cfg.self_play_deterministic,
                     )
+                    historical_action = current_action
                     random_action = build_random_action_from_batch(
                         jax.random.fold_in(player_key, cfg.env.player_count),
                         player_batch,
                         cfg,
                     )
-                    mode = (
-                        cfg.multi_opponent_mode.strip().lower()
-                        if cfg.self_play_enabled
-                        else "shared_current"
-                    )
-                    if mode in {"shared_current", "sampled_pool"}:
-                        opponent_action = current_action
-                    elif mode == "mixed":
-                        use_current = (
-                            jax.random.uniform(
-                                jax.random.fold_in(
-                                    player_key, cfg.env.player_count + 1
-                                ),
-                                state.learner_player.shape,
-                            )
-                            < cfg.self_play_latest_probability
-                        )
-                        opponent_action = _select_env_action(
-                            use_current, current_action, random_action
-                        )
-                    else:
-                        raise ValueError(
-                            "multi_opponent_mode must be one of shared_current, "
-                            f"sampled_pool, or mixed; got {cfg.multi_opponent_mode!r}."
-                        )
+                    scripted_action = build_sniper_action_from_batch(player_batch, cfg)
+                    use_latest = slot_type == OPPONENT_LATEST
+                    use_historical = slot_type == OPPONENT_HISTORICAL
+                    use_scripted = slot_type == OPPONENT_SCRIPTED_SNIPER
+                    action = _select_env_action(use_latest, current_action, random_action)
+                    action = _select_env_action(use_historical, historical_action, action)
+                    opponent_action = _select_env_action(use_scripted, scripted_action, action)
                 elif cfg.opponent == "random":
                     opponent_action = build_random_action_from_batch(
                         player_key, player_batch, cfg

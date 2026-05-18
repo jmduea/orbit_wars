@@ -76,6 +76,22 @@ class TrainingFormatConfig:
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
 
 
+
+
+@dataclass(slots=True)
+class OpponentMixConfig:
+    """Opponent mixture configuration for backend-agnostic registry."""
+
+    weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "latest": 1.0,
+            "historical": 0.0,
+            "scripted_sniper": 0.0,
+            "random": 0.0,
+        }
+    )
+    temperature: float = 1.0
+    curriculum: list[dict[str, Any]] = field(default_factory=list)
 @dataclass(slots=True)
 class TrainConfig:
     """Top-level training configuration loaded from YAML files.
@@ -106,6 +122,7 @@ class TrainConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
+    opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
 
 
 def default_train_config_path() -> Path:
@@ -128,11 +145,12 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format"})
+    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix"})
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))
     _update_dataclass(cfg.training_format, data.get("training_format", {}))
+    _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
     return cfg
 
 
