@@ -10,6 +10,7 @@ from typing import Callable
 from .config import TrainConfig
 from .replay import maybe_write_jax_checkpoint_replay
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
+from .curriculum import CurriculumController
 from .jax_device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
@@ -162,6 +163,16 @@ def _replace_rollout_group_state(
     )
 
 
+
+
+def _active_group_indices(groups: list[JaxRolloutGroup], format_weights: dict[int, float]) -> list[int]:
+    active: list[int] = []
+    for idx, group in enumerate(groups):
+        player_count = int(group.cfg.env.player_count)
+        if float(format_weights.get(player_count, 0.0)) > 0.0:
+            active.append(idx)
+    return active or list(range(len(groups)))
+
 def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
     """Run an end-to-end JAX training loop for the JAX environment backend.
 
@@ -214,6 +225,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             heldout_eval_seed_set=cfg.heldout_eval_seed_set,
         ),
     )
+    curriculum = CurriculumController(cfg.training_format.phases)
+    curriculum.apply(cfg)
+    phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
 
     for update in range(start_update, cfg.ppo.total_updates + 1):
@@ -234,8 +248,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "reason": reseed_event.reason,
                 "policy": reseed_event.policy,
             })
-        key, *rollout_keys = jax.random.split(key, len(rollout_groups) + 1)
-        for group, rollout_key in zip(rollout_groups, rollout_keys, strict=True):
+        curriculum.apply(cfg)
+        active_indices = _active_group_indices(rollout_groups, curriculum.current_format_weights())
+        key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
+        for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
+            group = rollout_groups[group_idx]
             (
                 _next_rollout_key,
                 env_state,
@@ -254,7 +271,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             transitions_by_group.append(transitions)
             rollout_metrics_by_group.append(rollout_metrics)
-        rollout_groups = next_groups
+        merged_groups = list(rollout_groups)
+        for group_idx, updated_group in zip(active_indices, next_groups, strict=True):
+            merged_groups[group_idx] = updated_group
+        rollout_groups = merged_groups
         transitions = concatenate_transition_batches(transitions_by_group)
         rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
         # Block once so timing reflects device work, not just dispatch.
@@ -342,7 +362,19 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     rollout_metrics_host.get("opponent_snapshot_slots", 0.0)
                 ),
             },
+            "curriculum_phase_id": curriculum.current_phase_id(),
+            "curriculum_phase_events": list(phase_events),
         }
+        phase_events = []
+        transition = curriculum.update(update, {
+            "win_rate_2p": win_rate_2p,
+            "first_place_rate_4p": first_place_rate_4p,
+            "survival_time": survival_time,
+            "score_share": score_share,
+            "kl_stability": float(record.get("approx_kl", 0.0)),
+        })
+        if transition is not None:
+            phase_events.append(transition)
         append_jsonl(log_path, record)
         telemetry.log(record, step=update)
         if update % cfg.log_every == 0:

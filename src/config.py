@@ -48,6 +48,7 @@ class PPOConfig:
     num_envs_2p: int | None = None
     num_envs_4p: int | None = None
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
+    phases: list[dict[str, Any]] = field(default_factory=list)
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512
@@ -74,6 +75,7 @@ class TrainingFormatConfig:
     format_schedule: list[dict[str, Any]] = field(default_factory=list)
     format_mix: list[dict[str, Any]] = field(default_factory=list)
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
+    phases: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
