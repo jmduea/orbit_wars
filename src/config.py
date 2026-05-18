@@ -77,6 +77,19 @@ class TrainingFormatConfig:
 
 
 
+@dataclass(slots=True)
+class WandBConfig:
+    """Optional Weights & Biases telemetry settings."""
+
+    enabled: bool = False
+    project: str | None = None
+    entity: str | None = None
+    group: str | None = None
+    tags: list[str] = field(default_factory=list)
+    log_artifacts: bool = False
+    log_model_every: int = 100
+    watch_model: bool = False
+
 
 @dataclass(slots=True)
 class OpponentMixConfig:
@@ -123,6 +136,7 @@ class TrainConfig:
     ppo: PPOConfig = field(default_factory=PPOConfig)
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
+    wandb: WandBConfig = field(default_factory=WandBConfig)
 
 
 def default_train_config_path() -> Path:
@@ -145,12 +159,13 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix"})
+    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb"})
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))
     _update_dataclass(cfg.training_format, data.get("training_format", {}))
     _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
+    _update_dataclass(cfg.wandb, data.get("wandb", {}))
     return cfg
 
 
