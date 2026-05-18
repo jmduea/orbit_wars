@@ -26,6 +26,7 @@ class EnvConfig:
     reward_production_delta: float = 0.0
     reward_terminal_scale: float = 1.0
     terminal_reward_mode: str = "binary_win"
+    feature_history_steps: int = 1
 
 
 @dataclass(slots=True)
@@ -166,7 +167,9 @@ class TrainConfig:
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
-    checkpoint_retention: CheckpointRetentionConfig = field(default_factory=CheckpointRetentionConfig)
+    checkpoint_retention: CheckpointRetentionConfig = field(
+        default_factory=CheckpointRetentionConfig
+    )
     reseed_every_updates: int = 0
     reseed_on_plateau: bool = False
     plateau_metric: str = "episode_reward_mean"
@@ -195,7 +198,20 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb", "replay", "checkpoint_retention"})
+    _update_dataclass(
+        cfg,
+        data,
+        skip={
+            "env",
+            "model",
+            "ppo",
+            "training_format",
+            "opponent_mix",
+            "wandb",
+            "replay",
+            "checkpoint_retention",
+        },
+    )
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))

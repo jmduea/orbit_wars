@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from .config import EnvConfig
 from .features import (
     TurnBatch,
     candidate_feature_dim,
@@ -38,10 +39,17 @@ class RunningMeanStd:
             return
         batch_mean = tensor.mean(dim=0)
         batch_var = tensor.var(dim=0, unbiased=False)
-        batch_count = torch.tensor(float(tensor.shape[0]), dtype=torch.float64, device=self.mean.device)
+        batch_count = torch.tensor(
+            float(tensor.shape[0]), dtype=torch.float64, device=self.mean.device
+        )
         self._update_from_moments(batch_mean, batch_var, batch_count)
 
-    def _update_from_moments(self, batch_mean: torch.Tensor, batch_var: torch.Tensor, batch_count: torch.Tensor) -> None:
+    def _update_from_moments(
+        self,
+        batch_mean: torch.Tensor,
+        batch_var: torch.Tensor,
+        batch_count: torch.Tensor,
+    ) -> None:
         delta = batch_mean - self.mean
         total_count = self.count + batch_count
         new_mean = self.mean + delta * batch_count / total_count
@@ -52,7 +60,9 @@ class RunningMeanStd:
         self.var = m_2 / total_count
         self.count = total_count
 
-    def normalize(self, values: np.ndarray | torch.Tensor, clip: float | None = None) -> torch.Tensor:
+    def normalize(
+        self, values: np.ndarray | torch.Tensor, clip: float | None = None
+    ) -> torch.Tensor:
         tensor = torch.as_tensor(values)
         mean = self.mean.to(device=tensor.device, dtype=tensor.dtype)
         std = torch.sqrt(self.var.to(device=tensor.device, dtype=tensor.dtype) + 1e-8)
@@ -77,11 +87,11 @@ class RunningMeanStd:
 class ObservationNormalizer:
     """Normalize PlanetPolicy observation tensors with candidate-mask-aware stats."""
 
-    def __init__(self, clip: float = 10.0) -> None:
+    def __init__(self, clip: float = 10.0, env_cfg: EnvConfig | None = None) -> None:
         self.clip = float(clip)
-        self.self_features = RunningMeanStd((self_feature_dim(),))
-        self.candidate_features = RunningMeanStd((candidate_feature_dim(),))
-        self.global_features = RunningMeanStd((global_feature_dim(),))
+        self.self_features = RunningMeanStd((self_feature_dim(env_cfg),))
+        self.candidate_features = RunningMeanStd((candidate_feature_dim(env_cfg),))
+        self.global_features = RunningMeanStd((global_feature_dim(env_cfg),))
 
     def update(self, batch: TurnBatch) -> None:
         if batch.self_features.shape[0] == 0:
@@ -100,23 +110,39 @@ class ObservationNormalizer:
         candidate_mask: np.ndarray | torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         normalized_self = self.self_features.normalize(self_features, self.clip).float()
-        normalized_candidates = self.candidate_features.normalize(candidate_features, self.clip).float()
-        mask = torch.as_tensor(candidate_mask, device=normalized_candidates.device).bool()
-        normalized_candidates = torch.where(mask.unsqueeze(-1), normalized_candidates, torch.zeros_like(normalized_candidates))
-        normalized_global = self.global_features.normalize(global_features, self.clip).float()
+        normalized_candidates = self.candidate_features.normalize(
+            candidate_features, self.clip
+        ).float()
+        mask = torch.as_tensor(
+            candidate_mask, device=normalized_candidates.device
+        ).bool()
+        normalized_candidates = torch.where(
+            mask.unsqueeze(-1),
+            normalized_candidates,
+            torch.zeros_like(normalized_candidates),
+        )
+        normalized_global = self.global_features.normalize(
+            global_features, self.clip
+        ).float()
         return normalized_self, normalized_candidates, normalized_global
 
     def normalize_batch(self, batch: TurnBatch) -> TurnBatch:
-        normalized_self, normalized_candidates, normalized_global = self.normalize_tensors(
-            batch.self_features,
-            batch.candidate_features,
-            batch.global_features,
-            batch.candidate_mask,
+        normalized_self, normalized_candidates, normalized_global = (
+            self.normalize_tensors(
+                batch.self_features,
+                batch.candidate_features,
+                batch.global_features,
+                batch.candidate_mask,
+            )
         )
         return TurnBatch(
             self_features=normalized_self.cpu().numpy().astype(np.float32, copy=False),
-            candidate_features=normalized_candidates.cpu().numpy().astype(np.float32, copy=False),
-            global_features=normalized_global.cpu().numpy().astype(np.float32, copy=False),
+            candidate_features=normalized_candidates.cpu()
+            .numpy()
+            .astype(np.float32, copy=False),
+            global_features=normalized_global.cpu()
+            .numpy()
+            .astype(np.float32, copy=False),
             candidate_mask=batch.candidate_mask,
             contexts=batch.contexts,
             state=batch.state,

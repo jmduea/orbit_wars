@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -49,16 +50,48 @@ class TurnBatch:
     state: GameState
 
 
-def self_feature_dim() -> int:
-    return 24
+BASE_SELF_FEATURE_DIM = 24
+BASE_CANDIDATE_FEATURE_DIM = 18
+BASE_GLOBAL_FEATURE_DIM = 25
 
 
-def candidate_feature_dim() -> int:
-    return 18
+def feature_history_steps(env_cfg: EnvConfig | None = None) -> int:
+    if env_cfg is None:
+        return 1
+    return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
 
 
-def global_feature_dim() -> int:
-    return 25
+def self_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+    return BASE_SELF_FEATURE_DIM * feature_history_steps(env_cfg)
+
+
+def candidate_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+    return BASE_CANDIDATE_FEATURE_DIM * feature_history_steps(env_cfg)
+
+
+def global_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+    return BASE_GLOBAL_FEATURE_DIM * feature_history_steps(env_cfg)
+
+
+@dataclass(slots=True)
+class FeatureSnapshot:
+    self_by_source: dict[int, np.ndarray]
+    candidate_by_source_target: dict[tuple[int, int], np.ndarray]
+    global_features: np.ndarray
+
+
+@dataclass(slots=True)
+class FeatureHistoryBuffer:
+    max_steps: int
+    snapshots: deque[FeatureSnapshot] = field(default_factory=deque)
+
+    def append(self, snapshot: FeatureSnapshot) -> None:
+        self.snapshots.append(snapshot)
+        while len(self.snapshots) > max(0, self.max_steps):
+            self.snapshots.popleft()
+
+    def clear(self) -> None:
+        self.snapshots.clear()
 
 
 def encode_turn(
@@ -66,6 +99,7 @@ def encode_turn(
     env_cfg: EnvConfig,
     *,
     env_index: int = 0,
+    feature_history: FeatureHistoryBuffer | None = None,
 ) -> TurnBatch:
     state = (
         observation
@@ -78,17 +112,21 @@ def encode_turn(
     )
     if not my_planets:
         return TurnBatch(
-            self_features=np.zeros((0, self_feature_dim()), dtype=np.float32),
+            self_features=np.zeros((0, self_feature_dim(env_cfg)), dtype=np.float32),
             candidate_features=np.zeros(
-                (0, env_cfg.candidate_count, candidate_feature_dim()), dtype=np.float32
+                (0, env_cfg.candidate_count, candidate_feature_dim(env_cfg)),
+                dtype=np.float32,
             ),
-            global_features=np.zeros((0, global_feature_dim()), dtype=np.float32),
+            global_features=np.zeros(
+                (0, global_feature_dim(env_cfg)), dtype=np.float32
+            ),
             candidate_mask=np.zeros((0, env_cfg.candidate_count), dtype=bool),
             contexts=[],
             state=state,
         )
 
     global_feat = build_global_features(state, env_cfg)
+    history_steps = feature_history_steps(env_cfg)
     self_rows: list[np.ndarray] = []
     candidate_rows: list[np.ndarray] = []
     candidate_masks: list[np.ndarray] = []
@@ -104,8 +142,15 @@ def encode_turn(
                 env_cfg,
             )
         )
-        self_rows.append(build_self_features(src, state, env_cfg))
-        candidate_rows.append(cand_feat)
+        self_feat = build_self_features(src, state, env_cfg)
+        self_rows.append(
+            _stack_self_history(src.id, self_feat, feature_history, history_steps)
+        )
+        candidate_rows.append(
+            _stack_candidate_history(
+                src.id, candidate_ids, cand_feat, feature_history, history_steps
+            )
+        )
         candidate_masks.append(cand_mask)
         contexts.append(
             DecisionContext(
@@ -122,11 +167,98 @@ def encode_turn(
     return TurnBatch(
         self_features=np.asarray(self_rows, dtype=np.float32),
         candidate_features=np.asarray(candidate_rows, dtype=np.float32),
-        global_features=np.repeat(global_feat[None, :], len(self_rows), axis=0),
+        global_features=np.repeat(
+            _stack_global_history(global_feat, feature_history, history_steps)[None, :],
+            len(self_rows),
+            axis=0,
+        ),
         candidate_mask=np.asarray(candidate_masks, dtype=bool),
         contexts=contexts,
         state=state,
     )
+
+
+def _stack_self_history(
+    source_id: int,
+    current: np.ndarray,
+    history: FeatureHistoryBuffer | None,
+    steps: int,
+) -> np.ndarray:
+    if steps <= 1:
+        return current
+    snapshots = list(history.snapshots)[-(steps - 1) :] if history is not None else []
+    rows = [
+        snapshot.self_by_source.get(
+            source_id, np.zeros(BASE_SELF_FEATURE_DIM, dtype=np.float32)
+        )
+        for snapshot in snapshots
+    ]
+    while len(rows) < steps - 1:
+        rows.insert(0, np.zeros(BASE_SELF_FEATURE_DIM, dtype=np.float32))
+    rows.append(current)
+    return np.concatenate(rows).astype(np.float32, copy=False)
+
+
+def _stack_candidate_history(
+    source_id: int,
+    candidate_ids: list[int],
+    current: np.ndarray,
+    history: FeatureHistoryBuffer | None,
+    steps: int,
+) -> np.ndarray:
+    if steps <= 1:
+        return current
+    snapshots = list(history.snapshots)[-(steps - 1) :] if history is not None else []
+    rows = []
+    for candidate_index, candidate_id in enumerate(candidate_ids):
+        candidate_history = [
+            snapshot.candidate_by_source_target.get(
+                (source_id, candidate_id),
+                np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32),
+            )
+            for snapshot in snapshots
+        ]
+        while len(candidate_history) < steps - 1:
+            candidate_history.insert(
+                0, np.zeros(BASE_CANDIDATE_FEATURE_DIM, dtype=np.float32)
+            )
+        candidate_history.append(current[candidate_index])
+        rows.append(np.concatenate(candidate_history).astype(np.float32, copy=False))
+    return np.asarray(rows, dtype=np.float32)
+
+
+def _stack_global_history(
+    current: np.ndarray, history: FeatureHistoryBuffer | None, steps: int
+) -> np.ndarray:
+    if steps <= 1:
+        return current
+    snapshots = list(history.snapshots)[-(steps - 1) :] if history is not None else []
+    rows = [snapshot.global_features for snapshot in snapshots]
+    while len(rows) < steps - 1:
+        rows.insert(0, np.zeros(BASE_GLOBAL_FEATURE_DIM, dtype=np.float32))
+    rows.append(current)
+    return np.concatenate(rows).astype(np.float32, copy=False)
+
+
+def build_feature_snapshot(batch: TurnBatch) -> FeatureSnapshot:
+    self_by_source: dict[int, np.ndarray] = {}
+    candidate_by_source_target: dict[tuple[int, int], np.ndarray] = {}
+    global_features = np.zeros(BASE_GLOBAL_FEATURE_DIM, dtype=np.float32)
+    if batch.global_features.shape[0] > 0:
+        global_features = batch.global_features[0, -BASE_GLOBAL_FEATURE_DIM:].astype(
+            np.float32, copy=True
+        )
+    for row_index, context in enumerate(batch.contexts):
+        self_by_source[context.source_id] = batch.self_features[
+            row_index, -BASE_SELF_FEATURE_DIM:
+        ].astype(np.float32, copy=True)
+        for candidate_index, candidate_id in enumerate(context.candidate_ids):
+            candidate_by_source_target[(context.source_id, candidate_id)] = (
+                batch.candidate_features[
+                    row_index, candidate_index, -BASE_CANDIDATE_FEATURE_DIM:
+                ].astype(np.float32, copy=True)
+            )
+    return FeatureSnapshot(self_by_source, candidate_by_source_target, global_features)
 
 
 def build_candidates(
@@ -229,7 +361,7 @@ def build_candidate_features(
     env_cfg: EnvConfig,
 ) -> tuple[np.ndarray, np.ndarray, list[int], list[int], list[float]]:
     features = np.zeros(
-        (env_cfg.candidate_count, candidate_feature_dim()), dtype=np.float32
+        (env_cfg.candidate_count, BASE_CANDIDATE_FEATURE_DIM), dtype=np.float32
     )
     candidate_mask = np.zeros((env_cfg.candidate_count,), dtype=bool)
     ship_counts = [0] * env_cfg.candidate_count

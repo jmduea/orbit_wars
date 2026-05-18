@@ -144,7 +144,7 @@ def collect_rollout(
             envs, policy, cfg, device, next_seed, normalizer, running_episode_rewards
         )
 
-    empty_candidate = (cfg.env.candidate_count, candidate_feature_dim())
+    empty_candidate = (cfg.env.candidate_count, candidate_feature_dim(cfg.env))
     self_rows: list[np.ndarray] = []
     candidate_rows: list[np.ndarray] = []
     global_rows: list[np.ndarray] = []
@@ -323,7 +323,9 @@ def collect_rollout(
                 advantages[idx] = future_return - group.value
     batch = TransitionBatch(
         self_features=torch.from_numpy(
-            np.asarray(self_rows, dtype=np.float32).reshape(-1, self_feature_dim())
+            np.asarray(self_rows, dtype=np.float32).reshape(
+                -1, self_feature_dim(cfg.env)
+            )
         ),
         candidate_features=torch.from_numpy(
             np.asarray(candidate_rows, dtype=np.float32).reshape(
@@ -331,7 +333,9 @@ def collect_rollout(
             )
         ),
         global_features=torch.from_numpy(
-            np.asarray(global_rows, dtype=np.float32).reshape(-1, global_feature_dim())
+            np.asarray(global_rows, dtype=np.float32).reshape(
+                -1, global_feature_dim(cfg.env)
+            )
         ),
         candidate_mask=torch.from_numpy(
             np.asarray(candidate_masks, dtype=bool).reshape(-1, cfg.env.candidate_count)
@@ -612,15 +616,19 @@ def collect_jax_rollout(
 
     batch = TransitionBatch(
         self_features=torch.from_numpy(
-            np.asarray(self_rows, dtype=np.float32).reshape(-1, self_feature_dim())
+            np.asarray(self_rows, dtype=np.float32).reshape(
+                -1, self_feature_dim(cfg.env)
+            )
         ),
         candidate_features=torch.from_numpy(
             np.asarray(candidate_rows, dtype=np.float32).reshape(
-                -1, cfg.env.candidate_count, candidate_feature_dim()
+                -1, cfg.env.candidate_count, candidate_feature_dim(cfg.env)
             )
         ),
         global_features=torch.from_numpy(
-            np.asarray(global_rows, dtype=np.float32).reshape(-1, global_feature_dim())
+            np.asarray(global_rows, dtype=np.float32).reshape(
+                -1, global_feature_dim(cfg.env)
+            )
         ),
         candidate_mask=torch.from_numpy(
             np.asarray(candidate_masks, dtype=bool).reshape(-1, cfg.env.candidate_count)
@@ -1027,20 +1035,24 @@ def merge_batches(batches: list[TurnBatch]) -> TurnBatch:
     self_rows = (
         np.concatenate([batch.self_features for batch in batches], axis=0)
         if has_rows
-        else np.zeros((0, self_feature_dim()), dtype=np.float32)
+        else np.zeros((0, batches[0].self_features.shape[1]), dtype=np.float32)
     )
     candidate_rows = (
         np.concatenate([batch.candidate_features for batch in batches], axis=0)
         if has_rows
         else np.zeros(
-            (0, batches[0].candidate_features.shape[1], candidate_feature_dim()),
+            (
+                0,
+                batches[0].candidate_features.shape[1],
+                batches[0].candidate_features.shape[2],
+            ),
             dtype=np.float32,
         )
     )
     global_rows = (
         np.concatenate([batch.global_features for batch in batches], axis=0)
         if has_rows
-        else np.zeros((0, global_feature_dim()), dtype=np.float32)
+        else np.zeros((0, batches[0].global_features.shape[1]), dtype=np.float32)
     )
     candidate_masks = (
         np.concatenate([batch.candidate_mask for batch in batches], axis=0)
@@ -1171,16 +1183,16 @@ def main() -> None:
         )
     policy = build_policy(
         architecture=cfg.model.architecture,
-        self_dim=self_feature_dim(),
-        candidate_dim=candidate_feature_dim(),
-        global_dim=global_feature_dim(),
+        self_dim=self_feature_dim(cfg.env),
+        candidate_dim=candidate_feature_dim(cfg.env),
+        global_dim=global_feature_dim(cfg.env),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
         attention_heads=cfg.model.attention_heads,
     ).to(device)
     normalizer = (
-        ObservationNormalizer(clip=cfg.model.obs_norm_clip)
+        ObservationNormalizer(clip=cfg.model.obs_norm_clip, env_cfg=cfg.env)
         if cfg.model.normalize_observations
         else None
     )
@@ -1241,23 +1253,26 @@ def main() -> None:
     curriculum.apply(cfg)
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
+    stats: dict[str, object] = {}
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start_time = time.perf_counter()
         reseed_events: list[dict[str, object]] = []
         if update > start_update:
-            metric_value = float(stats.get(cfg.plateau_metric, 0.0)) if "stats" in locals() else 0.0
+            metric_value = float(stats.get(cfg.plateau_metric, 0.0))
             seed_scheduler.update_metric(metric_value)
         should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
         if should_reseed:
             reseed_event = seed_scheduler.reseed(update, reseed_reason)
             next_seed = reseed_event.new_seed
-            reseed_events.append({
-                "update": reseed_event.update,
-                "old_seed": reseed_event.old_seed,
-                "new_seed": reseed_event.new_seed,
-                "reason": reseed_event.reason,
-                "policy": reseed_event.policy,
-            })
+            reseed_events.append(
+                {
+                    "update": reseed_event.update,
+                    "old_seed": reseed_event.old_seed,
+                    "new_seed": reseed_event.new_seed,
+                    "reason": reseed_event.reason,
+                    "policy": reseed_event.policy,
+                }
+            )
         curriculum.apply(cfg)
         rollout_start_time = time.perf_counter()
         batch, batches, next_seed, stats = collect_rollout(
@@ -1331,13 +1346,16 @@ def main() -> None:
             "curriculum_phase_events": list(phase_events),
         }
         phase_events = []
-        transition = curriculum.update(update, {
-            "win_rate_2p": float(log_record["win_rate_2p"]),
-            "first_place_rate_4p": float(log_record["first_place_rate_4p"]),
-            "survival_time": float(log_record["survival_time"]),
-            "score_share": float(log_record["score_share"]),
-            "kl_stability": float(log_record.get("approx_kl", 0.0)),
-        })
+        transition = curriculum.update(
+            update,
+            {
+                "win_rate_2p": float(log_record["win_rate_2p"]),
+                "first_place_rate_4p": float(log_record["first_place_rate_4p"]),
+                "survival_time": float(log_record["survival_time"]),
+                "score_share": float(log_record["score_share"]),
+                "kl_stability": float(log_record.get("approx_kl", 0.0)),
+            },
+        )
         if transition is not None:
             phase_events.append(transition)
         append_jsonl(log_path, log_record)

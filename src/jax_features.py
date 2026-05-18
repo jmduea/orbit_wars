@@ -15,8 +15,16 @@ from .features import (
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
-    candidate_feature_dim,
+    BASE_CANDIDATE_FEATURE_DIM,
+    BASE_GLOBAL_FEATURE_DIM,
+    BASE_SELF_FEATURE_DIM,
 )
+
+
+class JaxFeatureHistory(NamedTuple):
+    self_features: jax.Array
+    candidate_features: jax.Array
+    global_features: jax.Array
 
 
 class JaxTurnBatch(NamedTuple):
@@ -39,7 +47,9 @@ class JaxTurnBatch(NamedTuple):
     target_angles: jax.Array
 
 
-def encode_turn(game, env_cfg: EnvConfig) -> JaxTurnBatch:
+def encode_turn(
+    game, env_cfg: EnvConfig, history: JaxFeatureHistory | None = None
+) -> JaxTurnBatch:
     """Encode a JAX game state into fixed-shape policy inputs.
 
     The encoder mirrors the Torch/Python feature schema while avoiding dynamic
@@ -56,10 +66,14 @@ def encode_turn(game, env_cfg: EnvConfig) -> JaxTurnBatch:
         _candidate_features(planets, player, env_cfg)
     )
     return JaxTurnBatch(
-        self_features=self_features,
-        candidate_features=candidate_features,
+        self_features=_stack_self_history(self_features, history, env_cfg),
+        candidate_features=_stack_candidate_history(
+            candidate_features, history, env_cfg
+        ),
         global_features=jnp.repeat(
-            global_features[None, :], env_cfg.max_planets, axis=0
+            _stack_global_history(global_features, history, env_cfg)[None, :],
+            env_cfg.max_planets,
+            axis=0,
         ),
         candidate_mask=candidate_mask & mine[:, None],
         decision_mask=mine,
@@ -67,6 +81,95 @@ def encode_turn(game, env_cfg: EnvConfig) -> JaxTurnBatch:
         source_ships=jnp.maximum(planets.ships, 0.0),
         candidate_ids=candidate_ids,
         target_angles=target_angles,
+    )
+
+
+def feature_history_steps(env_cfg: EnvConfig) -> int:
+    return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
+
+
+def empty_feature_history(env_cfg: EnvConfig) -> JaxFeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    return JaxFeatureHistory(
+        self_features=jnp.zeros(
+            (steps, env_cfg.max_planets, BASE_SELF_FEATURE_DIM), dtype=jnp.float32
+        ),
+        candidate_features=jnp.zeros(
+            (
+                steps,
+                env_cfg.max_planets,
+                env_cfg.candidate_count,
+                BASE_CANDIDATE_FEATURE_DIM,
+            ),
+            dtype=jnp.float32,
+        ),
+        global_features=jnp.zeros((steps, BASE_GLOBAL_FEATURE_DIM), dtype=jnp.float32),
+    )
+
+
+def current_feature_snapshot(game, env_cfg: EnvConfig) -> JaxFeatureHistory:
+    candidates = _candidate_features(game.planets, game.player, env_cfg)[1]
+    return JaxFeatureHistory(
+        self_features=_self_features(game.planets, game.fleets, game.player, env_cfg)[
+            None, ...
+        ],
+        candidate_features=candidates[None, ...],
+        global_features=_global_features(game, env_cfg)[None, ...],
+    )
+
+
+def append_feature_history(
+    history: JaxFeatureHistory | None, game, env_cfg: EnvConfig
+) -> JaxFeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    if steps == 0:
+        return empty_feature_history(env_cfg)
+    base = empty_feature_history(env_cfg) if history is None else history
+    current = current_feature_snapshot(game, env_cfg)
+    return JaxFeatureHistory(
+        self_features=jnp.concatenate(
+            [base.self_features, current.self_features], axis=0
+        )[-steps:],
+        candidate_features=jnp.concatenate(
+            [base.candidate_features, current.candidate_features], axis=0
+        )[-steps:],
+        global_features=jnp.concatenate(
+            [base.global_features, current.global_features], axis=0
+        )[-steps:],
+    )
+
+
+def _stack_self_history(
+    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+) -> jax.Array:
+    if feature_history_steps(env_cfg) <= 1:
+        return current
+    base = empty_feature_history(env_cfg) if history is None else history
+    return jnp.transpose(
+        jnp.concatenate([base.self_features, current[None, ...]], axis=0), (1, 0, 2)
+    ).reshape(env_cfg.max_planets, -1)
+
+
+def _stack_candidate_history(
+    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+) -> jax.Array:
+    if feature_history_steps(env_cfg) <= 1:
+        return current
+    base = empty_feature_history(env_cfg) if history is None else history
+    stacked = jnp.concatenate([base.candidate_features, current[None, ...]], axis=0)
+    return jnp.transpose(stacked, (1, 2, 0, 3)).reshape(
+        env_cfg.max_planets, env_cfg.candidate_count, -1
+    )
+
+
+def _stack_global_history(
+    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+) -> jax.Array:
+    if feature_history_steps(env_cfg) <= 1:
+        return current
+    base = empty_feature_history(env_cfg) if history is None else history
+    return jnp.concatenate([base.global_features, current[None, ...]], axis=0).reshape(
+        -1
     )
 
 
@@ -176,7 +279,7 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
     real_features = jnp.concatenate(
         [base_real_features, target_owner_one_hot(tgt_owner, player, env_cfg)], axis=-1
     )
-    noop_features = jnp.zeros((p, 1, candidate_feature_dim()), dtype=jnp.float32)
+    noop_features = jnp.zeros((p, 1, BASE_CANDIDATE_FEATURE_DIM), dtype=jnp.float32)
     features = jnp.concatenate([noop_features, real_features], axis=1)
     noop_ids = jnp.full((p, 1), -1, dtype=jnp.int32)
     ids = jnp.concatenate([noop_ids, jnp.take(planets.id, order, axis=0)], axis=1)

@@ -15,7 +15,13 @@ import jax.numpy as jnp
 
 from .config import EnvConfig
 from .features import PLANET_LAUNCH_RADIUS_OFFSET, SUN_RADIUS
-from .jax_features import JaxTurnBatch, encode_turn
+from .jax_features import (
+    JaxFeatureHistory,
+    JaxTurnBatch,
+    append_feature_history,
+    encode_turn,
+    empty_feature_history,
+)
 
 BOARD_CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
@@ -84,6 +90,7 @@ class JaxEnvState(NamedTuple):
     game: JaxGameState
     learner_player: jax.Array
     episode_count: jax.Array
+    feature_history: JaxFeatureHistory | None = None
 
 
 class JaxAction(NamedTuple):
@@ -227,12 +234,15 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
         initial_planets=planets,
         fleets=empty_fleets,
     )
+    history = empty_feature_history(cfg)
+    batch = encode_turn(game, cfg, history)
     env_state = JaxEnvState(
         game=game,
         learner_player=jnp.array(0, dtype=jnp.int32),
         episode_count=jnp.array(0, dtype=jnp.int32),
+        feature_history=append_feature_history(history, game, cfg),
     )
-    return env_state, encode_turn(game, cfg)
+    return env_state, batch
 
 
 def learner_player_for_episode(
@@ -274,13 +284,21 @@ def assign_learner_players(
     learner_player = learner_player_for_episode(
         env_index, episode_count, cfg, alternate_player_sides
     )
+    games = jax.vmap(lambda game, player: game._replace(player=player))(
+        env_state.game, learner_player.astype(jnp.int32)
+    )
+    histories = jax.vmap(lambda game: empty_feature_history(cfg))(games)
+    turn_batch = jax.vmap(lambda game, history: encode_turn(game, cfg, history))(
+        games, histories
+    )
     env_state = env_state._replace(
+        game=games,
         learner_player=learner_player.astype(jnp.int32),
         episode_count=episode_count.astype(jnp.int32),
+        feature_history=jax.vmap(
+            lambda history, game: append_feature_history(history, game, cfg)
+        )(histories, games),
     )
-    turn_batch = jax.vmap(
-        lambda game, player: encode_turn(game._replace(player=player), cfg)
-    )(env_state.game, env_state.learner_player)
     return env_state, turn_batch
 
 
@@ -323,8 +341,14 @@ def _finish_step(
         + shaping[1]
         + shaping[2]
     )
-    next_state = state._replace(game=next_game)
-    batch = encode_turn(next_game._replace(player=state.learner_player), cfg)
+    learner_game = next_game._replace(player=state.learner_player)
+    batch = encode_turn(learner_game, cfg, state.feature_history)
+    next_state = state._replace(
+        game=next_game,
+        feature_history=append_feature_history(
+            state.feature_history, learner_game, cfg
+        ),
+    )
     result = JaxStepResult(
         batch=batch,
         reward=reward,

@@ -11,6 +11,7 @@ from .config import TrainConfig
 from .checkpoint_retention import prune_checkpoints
 from .replay import maybe_write_jax_checkpoint_replay
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
+from .telemetry import build_telemetry
 from .curriculum import CurriculumController
 from .jax_device import (
     configure_jax_platform_for_host,
