@@ -2,11 +2,14 @@ import numpy as np
 
 from src.config import EnvConfig
 from src.features import (
+    candidate_feature_dim,
     build_candidate_features,
     build_candidates,
     build_global_features,
     build_self_features,
+    global_feature_dim,
     real_candidate_slots,
+    self_feature_dim,
 )
 from src.game_types import GameState, PlanetState
 from src.train import candidate_diagnostics
@@ -94,9 +97,9 @@ def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
     candidate_features, *_ = build_candidate_features(src, targets, state, cfg)
     global_features = build_global_features(state, cfg)
 
-    assert self_features.shape == (24,)
-    assert candidate_features.shape == (cfg.candidate_count, 18)
-    assert global_features.shape == (25,)
+    assert self_features.shape == (self_feature_dim(),)
+    assert candidate_features.shape == (cfg.candidate_count, candidate_feature_dim())
+    assert global_features.shape == (global_feature_dim(),)
     np.testing.assert_allclose(self_features[11:15], np.full(4, 1.0 / cfg.max_planets))
     np.testing.assert_allclose(
         self_features[15:19],
@@ -105,13 +108,13 @@ def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
     np.testing.assert_allclose(self_features[19:23], np.ones(4))
     np.testing.assert_allclose(self_features[23], 1.0)
     np.testing.assert_allclose(
-        candidate_features[1, -4:], np.array([0.0, 1.0, 0.0, 0.0])
+        candidate_features[1, 14:18], np.array([0.0, 1.0, 0.0, 0.0])
     )
     np.testing.assert_allclose(
-        candidate_features[2, -4:], np.array([0.0, 0.0, 1.0, 0.0])
+        candidate_features[2, 14:18], np.array([0.0, 0.0, 1.0, 0.0])
     )
     np.testing.assert_allclose(
-        candidate_features[3, -4:], np.array([0.0, 0.0, 0.0, 1.0])
+        candidate_features[3, 14:18], np.array([0.0, 0.0, 0.0, 1.0])
     )
     np.testing.assert_allclose(global_features[8:12], np.full(4, 1.0 / cfg.max_planets))
     np.testing.assert_allclose(
