@@ -86,3 +86,16 @@ def test_torch_kaggle_mixed_training_config_declares_2p_4p_mix() -> None:
     assert [entry["player_count"] for entry in mixed["training_format"]["format_mix"]] == [2, 4]
     assert mixed["ppo"]["num_envs_2p"] == 4
     assert mixed["ppo"]["num_envs_4p"] == 4
+
+
+def test_train_config_loads_jax_mixed_format_mix_and_rollout_groups() -> None:
+    from src.config import load_train_config
+
+    cfg = load_train_config("configs/jax_mixed_2p_4p_training.yaml")
+
+    assert cfg.env.player_count == 2
+    assert [entry["player_count"] for entry in cfg.training_format.format_mix] == [2, 4]
+    assert [entry["weight"] for entry in cfg.training_format.format_mix] == [0.5, 0.5]
+    assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [2, 4]
+    assert cfg.ppo.num_envs_2p == 4
+    assert cfg.ppo.num_envs_4p == 4
