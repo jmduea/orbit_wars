@@ -151,3 +151,77 @@ def test_launch_and_production_match_core_orbit_wars_mechanics():
     ships_after = float(np.asarray(next_state.game.planets.ships)[source_id])
     assert ships_after == ships_before - 3.0 + production
     assert int(np.asarray(next_state.game.fleets.active).sum()) == 1
+
+
+def test_jax_owner_relative_feature_shapes_and_values_for_four_players():
+    cfg = EnvConfig(max_planets=8, max_fleets=8, candidate_count=4, player_count=4)
+    planet_ids = jnp.arange(cfg.max_planets, dtype=jnp.int32)
+    owner = jnp.array([2, 3, 0, 1, -1, -1, -1, -1], dtype=jnp.int32)
+    active = jnp.array([True, True, True, True, True, False, False, False])
+    x = jnp.array([10.0, 12.0, 14.0, 16.0, 18.0, 0.0, 0.0, 0.0], dtype=jnp.float32)
+    y = jnp.array([10.0, 10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0], dtype=jnp.float32)
+    planets = JaxPlanetState(
+        id=planet_ids,
+        owner=owner,
+        x=x,
+        y=y,
+        radius=jnp.ones((cfg.max_planets,), dtype=jnp.float32),
+        ships=jnp.array(
+            [20.0, 30.0, 40.0, 50.0, 60.0, 0.0, 0.0, 0.0], dtype=jnp.float32
+        ),
+        production=jnp.ones((cfg.max_planets,), dtype=jnp.float32),
+        active=active,
+    )
+    fleets = JaxFleetState(
+        id=jnp.arange(cfg.max_fleets, dtype=jnp.int32),
+        owner=jnp.array([2, 3, 0, 1, -1, -1, -1, -1], dtype=jnp.int32),
+        x=jnp.zeros((cfg.max_fleets,), dtype=jnp.float32),
+        y=jnp.zeros((cfg.max_fleets,), dtype=jnp.float32),
+        angle=jnp.zeros((cfg.max_fleets,), dtype=jnp.float32),
+        from_planet_id=jnp.full((cfg.max_fleets,), -1, dtype=jnp.int32),
+        ships=jnp.array([5.0, 6.0, 7.0, 8.0, 0.0, 0.0, 0.0, 0.0], dtype=jnp.float32),
+        active=jnp.array([True, True, True, True, False, False, False, False]),
+    )
+    game = JaxGameState(
+        step=jnp.array(25, dtype=jnp.int32),
+        player=jnp.array(2, dtype=jnp.int32),
+        angular_velocity=jnp.array(0.0, dtype=jnp.float32),
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        planets=planets,
+        initial_planets=planets,
+        fleets=fleets,
+    )
+
+    encoded = encode_turn(game, cfg)
+
+    assert encoded.self_features.shape == (cfg.max_planets, self_feature_dim())
+    assert encoded.candidate_features.shape == (
+        cfg.max_planets,
+        cfg.candidate_count,
+        candidate_feature_dim(),
+    )
+    assert encoded.global_features.shape == (cfg.max_planets, global_feature_dim())
+    np.testing.assert_allclose(
+        np.asarray(encoded.self_features[0, 11:15]), np.full(4, 1.0 / cfg.max_planets)
+    )
+    np.testing.assert_allclose(
+        np.asarray(encoded.self_features[0, 15:19]),
+        np.array([20, 30, 40, 50]) / (cfg.max_planets * cfg.max_ships),
+    )
+    np.testing.assert_allclose(np.asarray(encoded.self_features[0, 19:23]), np.ones(4))
+    np.testing.assert_allclose(np.asarray(encoded.self_features[0, 23]), 1.0)
+    np.testing.assert_allclose(
+        np.asarray(encoded.candidate_features[0, 1, -4:]),
+        np.array([0.0, 1.0, 0.0, 0.0]),
+    )
+    np.testing.assert_allclose(
+        np.asarray(encoded.global_features[0, 8:12]), np.full(4, 1.0 / cfg.max_planets)
+    )
+    np.testing.assert_allclose(
+        np.asarray(encoded.global_features[0, 16:20]),
+        np.array([5, 6, 7, 8]) / (cfg.max_planets * cfg.max_ships),
+    )
+    np.testing.assert_allclose(
+        np.asarray(encoded.global_features[0, 20:24]), np.ones(4)
+    )
+    np.testing.assert_allclose(np.asarray(encoded.global_features[0, 24]), 1.0)
