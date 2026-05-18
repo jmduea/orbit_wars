@@ -178,6 +178,27 @@ def build_random_action_from_batch(
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
+def _sample_policy_action_with_params(
+    key: jax.Array,
+    batch: JaxTurnBatch,
+    params: dict,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+) -> JaxAction:
+    """Sample a fixed-size action buffer from a JAX policy parameter set."""
+
+    flat_self, flat_candidate, flat_global, flat_mask, _flat_decision = flatten_batch(
+        batch
+    )
+    output = policy.apply(params, flat_self, flat_candidate, flat_global, flat_mask)
+    target, bucket, _log_prob, _entropy = sample_actions(
+        key, output, deterministic=deterministic
+    )
+    return build_action_from_batch(batch, target, bucket, cfg)
+
+
 def _sample_policy_action(
     key: jax.Array,
     batch: JaxTurnBatch,
@@ -189,16 +210,14 @@ def _sample_policy_action(
 ) -> JaxAction:
     """Sample a fixed-size action buffer from the trainable JAX policy."""
 
-    flat_self, flat_candidate, flat_global, flat_mask, _flat_decision = flatten_batch(
-        batch
+    return _sample_policy_action_with_params(
+        key,
+        batch,
+        train_state.params,
+        policy,
+        cfg,
+        deterministic=deterministic,
     )
-    output = policy.apply(
-        train_state.params, flat_self, flat_candidate, flat_global, flat_mask
-    )
-    target, bucket, _log_prob, _entropy = sample_actions(
-        key, output, deterministic=deterministic
-    )
-    return build_action_from_batch(batch, target, bucket, cfg)
 
 
 def _select_env_action(
@@ -232,6 +251,7 @@ def collect_rollout_jax(
     train_state: JaxTrainState,
     policy: object,
     cfg: TrainConfig,
+    opponent_params_by_player: tuple[dict, ...] | None = None,
 ) -> tuple[
     jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]
 ]:
@@ -297,21 +317,33 @@ def collect_rollout_jax(
                 )
                 player_key = jax.random.fold_in(opp_key, player_id)
                 if cfg.opponent == "self":
-                    opponent_action = _sample_policy_action(
+                    opponent_params = (
+                        train_state.params
+                        if opponent_params_by_player is None
+                        else opponent_params_by_player[player_id]
+                    )
+                    current_action = _sample_policy_action_with_params(
                         player_key,
                         player_batch,
-                        train_state,
+                        opponent_params,
                         policy,
                         cfg,
                         deterministic=cfg.self_play_deterministic,
                     )
-                    if cfg.self_play_enabled:
-                        pool_random_action = build_random_action_from_batch(
-                            jax.random.fold_in(player_key, cfg.env.player_count),
-                            player_batch,
-                            cfg,
-                        )
-                        use_latest = (
+                    random_action = build_random_action_from_batch(
+                        jax.random.fold_in(player_key, cfg.env.player_count),
+                        player_batch,
+                        cfg,
+                    )
+                    mode = (
+                        cfg.multi_opponent_mode.strip().lower()
+                        if cfg.self_play_enabled
+                        else "shared_current"
+                    )
+                    if mode in {"shared_current", "sampled_pool"}:
+                        opponent_action = current_action
+                    elif mode == "mixed":
+                        use_current = (
                             jax.random.uniform(
                                 jax.random.fold_in(
                                     player_key, cfg.env.player_count + 1
@@ -321,7 +353,12 @@ def collect_rollout_jax(
                             < cfg.self_play_latest_probability
                         )
                         opponent_action = _select_env_action(
-                            use_latest, opponent_action, pool_random_action
+                            use_current, current_action, random_action
+                        )
+                    else:
+                        raise ValueError(
+                            "multi_opponent_mode must be one of shared_current, "
+                            f"sampled_pool, or mixed; got {cfg.multi_opponent_mode!r}."
                         )
                 elif cfg.opponent == "random":
                     opponent_action = build_random_action_from_batch(
@@ -399,12 +436,61 @@ def collect_rollout_jax(
         returns=returns,
         advantages=advantages,
     )
+    opponent_slots = jnp.array(
+        cfg.ppo.rollout_steps
+        * turn_batch.self_features.shape[0]
+        * max(cfg.env.player_count - 1, 0),
+        dtype=jnp.float32,
+    )
+    mode = (
+        cfg.multi_opponent_mode.strip().lower()
+        if cfg.self_play_enabled
+        else "shared_current"
+    )
+    snapshot_share = (
+        jnp.array(1.0, dtype=jnp.float32)
+        if (
+            cfg.opponent == "self"
+            and mode == "sampled_pool"
+            and opponent_params_by_player is not None
+        )
+        else jnp.array(0.0, dtype=jnp.float32)
+    )
+    current_share = (
+        jnp.array(1.0, dtype=jnp.float32)
+        if (
+            cfg.opponent == "self"
+            and (
+                mode == "shared_current"
+                or (mode == "sampled_pool" and opponent_params_by_player is None)
+            )
+        )
+        else (
+            jnp.array(
+                min(max(cfg.self_play_latest_probability, 0.0), 1.0), dtype=jnp.float32
+            )
+            if cfg.opponent == "self" and mode == "mixed"
+            else jnp.array(0.0, dtype=jnp.float32)
+        )
+    )
+    random_share = (
+        jnp.array(1.0, dtype=jnp.float32)
+        if cfg.opponent == "random"
+        else (
+            (1.0 - current_share)
+            if cfg.opponent == "self" and mode == "mixed"
+            else jnp.array(0.0, dtype=jnp.float32)
+        )
+    )
     metrics = {
         "env_steps": jnp.array(
             cfg.ppo.rollout_steps * turn_batch.self_features.shape[0], dtype=jnp.float32
         ),
         "samples": transitions.decision_mask.astype(jnp.float32).sum(),
         "episode_done": data["done"].astype(jnp.float32).sum(),
+        "opponent_current_slots": opponent_slots * current_share,
+        "opponent_random_slots": opponent_slots * random_share,
+        "opponent_snapshot_slots": opponent_slots * snapshot_share,
     }
     return key, env_state, turn_batch, transitions, metrics
 

@@ -131,7 +131,7 @@ def collect_rollout(
     next_seed: int,
     normalizer: ObservationNormalizer | None = None,
     running_episode_rewards: list[float] | None = None,
-) -> tuple[TransitionBatch, list[TurnBatch] | JaxBatchedEnv, int, dict[str, float]]:
+) -> tuple[TransitionBatch, list[TurnBatch] | JaxBatchedEnv, int, dict[str, object]]:
     """Collect one PPO rollout from either configured environment backend."""
 
     if isinstance(envs, JaxBatchedEnv):
@@ -158,6 +158,7 @@ def collect_rollout(
     candidate_valid_total = 0.0
     candidate_source_rows = 0
     candidate_owner_totals = {"enemy": 0.0, "neutral": 0.0, "friendly": 0.0}
+    opponent_composition = opponent_composition_from_envs(envs)
     if running_episode_rewards is None:
         running_episode_rewards = [0.0 for _ in envs]
 
@@ -261,6 +262,9 @@ def collect_rollout(
                 else 0.0
             )
             result = env.step(moves)
+            merge_opponent_composition(
+                opponent_composition, result.info.get("opponent_composition", {})
+            )
             running_episode_rewards[env_idx] += float(result.reward)
             groups_per_env[env_idx].append(
                 StepGroup(
@@ -320,35 +324,42 @@ def collect_rollout(
     )
     candidate_owner_total = sum(candidate_owner_totals.values())
     stats = {
-        "episode_reward_mean": float(np.mean(episode_rewards))
-        if episode_rewards
-        else 0.0,
-        "episode_reward_median": float(np.median(episode_rewards))
-        if episode_rewards
-        else 0.0,
+        "episode_reward_mean": (
+            float(np.mean(episode_rewards)) if episode_rewards else 0.0
+        ),
+        "episode_reward_median": (
+            float(np.median(episode_rewards)) if episode_rewards else 0.0
+        ),
         "episodes_finished": float(len(episode_rewards)),
         "win_rate": episode_wins / len(episode_rewards) if episode_rewards else 0.0,
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * len(envs)),
         "decisions_per_step": decisions_total / max(rollout_step_id, 1),
         "moves_emitted_per_step": emitted_moves_total / max(rollout_step_id, 1),
-        "move_emit_rate": emitted_moves_total / decisions_total
-        if decisions_total
-        else 0.0,
-        "candidate_valid_avg": candidate_valid_total / candidate_source_rows
-        if candidate_source_rows
-        else 0.0,
-        "candidate_enemy_share": candidate_owner_totals["enemy"] / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
-        "candidate_neutral_share": candidate_owner_totals["neutral"]
-        / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
-        "candidate_friendly_share": candidate_owner_totals["friendly"]
-        / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
+        "move_emit_rate": (
+            emitted_moves_total / decisions_total if decisions_total else 0.0
+        ),
+        "candidate_valid_avg": (
+            candidate_valid_total / candidate_source_rows
+            if candidate_source_rows
+            else 0.0
+        ),
+        "candidate_enemy_share": (
+            candidate_owner_totals["enemy"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "candidate_neutral_share": (
+            candidate_owner_totals["neutral"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "candidate_friendly_share": (
+            candidate_owner_totals["friendly"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "opponent_composition": dict(opponent_composition),
     }
     return batch, batches, next_seed, stats
 
@@ -401,6 +412,7 @@ def collect_jax_rollout(
     candidate_valid_total = 0.0
     candidate_source_rows = 0
     candidate_owner_totals = {"enemy": 0.0, "neutral": 0.0, "friendly": 0.0}
+    opponent_composition: dict[str, int] = {}
 
     states = envs.states
     jax_batches = envs.turn_batches
@@ -500,7 +512,7 @@ def collect_jax_rollout(
         opponent_batches = jax_turn_batches_to_numpy(
             opponent_encode_fn(states.game), cfg
         )
-        opponent_action = build_jax_opponent_action(
+        opponent_action, opponent_step_composition = build_jax_opponent_action(
             opponent_batches,
             policy,
             cfg,
@@ -508,6 +520,7 @@ def collect_jax_rollout(
             normalizer,
             num_envs,
         )
+        merge_count_dict(opponent_composition, opponent_step_composition)
         states, results = step_fn(states, learner_action, opponent_action)
         rewards = np.asarray(results.reward)
         dones = np.asarray(results.done)
@@ -572,35 +585,42 @@ def collect_jax_rollout(
     )
     candidate_owner_total = sum(candidate_owner_totals.values())
     stats = {
-        "episode_reward_mean": float(np.mean(episode_rewards))
-        if episode_rewards
-        else 0.0,
-        "episode_reward_median": float(np.median(episode_rewards))
-        if episode_rewards
-        else 0.0,
+        "episode_reward_mean": (
+            float(np.mean(episode_rewards)) if episode_rewards else 0.0
+        ),
+        "episode_reward_median": (
+            float(np.median(episode_rewards)) if episode_rewards else 0.0
+        ),
         "episodes_finished": float(len(episode_rewards)),
         "win_rate": episode_wins / len(episode_rewards) if episode_rewards else 0.0,
         "samples": float(len(values)),
         "env_steps": float(cfg.ppo.rollout_steps * num_envs),
         "decisions_per_step": decisions_total / max(rollout_step_id, 1),
         "moves_emitted_per_step": emitted_moves_total / max(rollout_step_id, 1),
-        "move_emit_rate": emitted_moves_total / decisions_total
-        if decisions_total
-        else 0.0,
-        "candidate_valid_avg": candidate_valid_total / candidate_source_rows
-        if candidate_source_rows
-        else 0.0,
-        "candidate_enemy_share": candidate_owner_totals["enemy"] / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
-        "candidate_neutral_share": candidate_owner_totals["neutral"]
-        / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
-        "candidate_friendly_share": candidate_owner_totals["friendly"]
-        / candidate_owner_total
-        if candidate_owner_total
-        else 0.0,
+        "move_emit_rate": (
+            emitted_moves_total / decisions_total if decisions_total else 0.0
+        ),
+        "candidate_valid_avg": (
+            candidate_valid_total / candidate_source_rows
+            if candidate_source_rows
+            else 0.0
+        ),
+        "candidate_enemy_share": (
+            candidate_owner_totals["enemy"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "candidate_neutral_share": (
+            candidate_owner_totals["neutral"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "candidate_friendly_share": (
+            candidate_owner_totals["friendly"] / candidate_owner_total
+            if candidate_owner_total
+            else 0.0
+        ),
+        "opponent_composition": dict(opponent_composition),
     }
     return (
         batch,
@@ -614,6 +634,30 @@ def collect_jax_rollout(
         next_seed,
         stats,
     )
+
+
+def merge_count_dict(target: dict[str, int], source: dict[str, int]) -> None:
+    for key, value in source.items():
+        target[key] = target.get(key, 0) + int(value)
+
+
+def merge_opponent_composition(target: dict[str, int], composition: object) -> None:
+    if not isinstance(composition, dict):
+        return
+    for metadata in composition.values():
+        if not isinstance(metadata, dict):
+            continue
+        source = str(metadata.get("source", "unknown"))
+        target[source] = target.get(source, 0) + 1
+
+
+def opponent_composition_from_envs(envs: list[OrbitWarsEnv]) -> dict[str, int]:
+    composition: dict[str, int] = {}
+    for env in envs:
+        merge_opponent_composition(
+            composition, getattr(env, "active_opponent_metadata", {})
+        )
+    return composition
 
 
 def sample_policy_for_batches(
@@ -732,7 +776,7 @@ def build_jax_opponent_action(
     device: torch.device,
     normalizer: ObservationNormalizer | None,
     num_envs: int,
-) -> "JaxAction":
+) -> tuple["JaxAction", dict[str, int]]:
     """Build opponent actions for the mixed JAX-env/Torch-policy path."""
 
     import jax.numpy as jnp
@@ -740,7 +784,9 @@ def build_jax_opponent_action(
     from .jax_env import JaxAction
 
     source_id, angle, ships_arr, valid = empty_action_arrays(num_envs, cfg)
+    composition: dict[str, int] = {}
     if cfg.opponent == "self":
+        composition["latest"] = num_envs
         sample = sample_policy_for_batches(
             batches,
             policy,
@@ -771,6 +817,7 @@ def build_jax_opponent_action(
                     valid,
                 )
     elif cfg.opponent == "random":
+        composition["random"] = num_envs
         rng = np.random.default_rng()
         for env_idx, batch in enumerate(batches):
             move_slot = 0
@@ -789,11 +836,14 @@ def build_jax_opponent_action(
                 ships_arr[env_idx, move_slot] = max(1, context.source_ships // 2)
                 valid[env_idx, move_slot] = True
                 move_slot += 1
-    return JaxAction(
-        jnp.asarray(source_id),
-        jnp.asarray(angle),
-        jnp.asarray(ships_arr),
-        jnp.asarray(valid),
+    return (
+        JaxAction(
+            jnp.asarray(source_id),
+            jnp.asarray(angle),
+            jnp.asarray(ships_arr),
+            jnp.asarray(valid),
+        ),
+        composition,
     )
 
 
@@ -1002,7 +1052,7 @@ def find_planet(planets: list[PlanetState], planet_id: int) -> PlanetState | Non
     return None
 
 
-def append_jsonl(path: Path, record: dict[str, float | int]) -> None:
+def append_jsonl(path: Path, record: dict[str, object]) -> None:
     """Append one JSON metrics record, creating the log directory if needed."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1141,7 +1191,7 @@ def main() -> None:
         ppo_samples_per_sec = stats["samples"] / max(ppo_seconds, 1e-9)
         total_env_steps += int(stats["env_steps"])
         completed_episodes += int(stats["episodes_finished"])
-        log_record: dict[str, float | int] = {
+        log_record: dict[str, object] = {
             "update": update,
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
@@ -1166,6 +1216,7 @@ def main() -> None:
             "candidate_neutral_share": stats["candidate_neutral_share"],
             "candidate_friendly_share": stats["candidate_friendly_share"],
             **metrics,
+            "opponent_composition": stats.get("opponent_composition", {}),
         }
         append_jsonl(log_path, log_record)
         if (
