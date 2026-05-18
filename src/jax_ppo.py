@@ -9,7 +9,13 @@ import optax
 
 from .config import TrainConfig
 from .features import candidate_feature_dim, global_feature_dim, self_feature_dim
-from .jax_env import JaxAction, JaxEnvState, batched_reset, batched_step
+from .jax_env import (
+    JaxAction,
+    JaxEnvState,
+    batched_reset,
+    batched_step,
+    batched_step_multi_player,
+)
 from .jax_features import JaxTurnBatch, encode_turn
 from .jax_policy import action_log_prob_and_entropy, sample_actions
 
@@ -172,6 +178,53 @@ def build_random_action_from_batch(
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
+def _sample_policy_action(
+    key: jax.Array,
+    batch: JaxTurnBatch,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+) -> JaxAction:
+    """Sample a fixed-size action buffer from the trainable JAX policy."""
+
+    flat_self, flat_candidate, flat_global, flat_mask, _flat_decision = flatten_batch(
+        batch
+    )
+    output = policy.apply(
+        train_state.params, flat_self, flat_candidate, flat_global, flat_mask
+    )
+    target, bucket, _log_prob, _entropy = sample_actions(
+        key, output, deterministic=deterministic
+    )
+    return build_action_from_batch(batch, target, bucket, cfg)
+
+
+def _select_env_action(
+    condition: jax.Array,
+    true_action: JaxAction,
+    false_action: JaxAction,
+) -> JaxAction:
+    """Select between two batched actions independently for each environment."""
+
+    return jax.tree.map(
+        lambda true, false: jnp.where(
+            condition.reshape((condition.shape[0],) + (1,) * (true.ndim - 1)),
+            true,
+            false,
+        ),
+        true_action,
+        false_action,
+    )
+
+
+def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
+    """Stack per-player batched actions into batched_step_multi_player layout."""
+
+    return jax.tree.map(lambda *xs: jnp.stack(xs, axis=1), *player_actions)
+
+
 def collect_rollout_jax(
     key: jax.Array,
     env_state: JaxEnvState,
@@ -204,31 +257,96 @@ def collect_rollout_jax(
         )
         learner_action = build_action_from_batch(batch, target, bucket, cfg)
 
-        opp_game = state.game._replace(
-            player=jnp.ones_like(state.game.step, dtype=jnp.int32)
-        )
-        opp_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(opp_game)
-        if cfg.opponent == "self":
-            opp_flat = flatten_batch(opp_batch)
-            opp_output = policy.apply(
-                train_state.params, opp_flat[0], opp_flat[1], opp_flat[2], opp_flat[3]
+        if cfg.env.player_count == 2:
+            opp_game = state.game._replace(
+                player=jnp.ones_like(state.game.step, dtype=jnp.int32)
             )
-            opp_target, opp_bucket, _opp_lp, _ = sample_actions(
-                opp_key, opp_output, deterministic=cfg.self_play_deterministic
+            opp_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(opp_game)
+            if cfg.opponent == "self":
+                opponent_action = _sample_policy_action(
+                    opp_key,
+                    opp_batch,
+                    train_state,
+                    policy,
+                    cfg,
+                    deterministic=cfg.self_play_deterministic,
+                )
+            elif cfg.opponent == "random":
+                opponent_action = build_random_action_from_batch(
+                    opp_key, opp_batch, cfg
+                )
+            else:
+                raise ValueError(
+                    "JAX training supports opponent='self' or opponent='random', "
+                    f"got {cfg.opponent!r}."
+                )
+
+            next_state, result = batched_step(
+                state, learner_action, opponent_action, cfg.env
             )
-            opponent_action = build_action_from_batch(
-                opp_batch, opp_target, opp_bucket, cfg
+        elif cfg.env.player_count == 4:
+            player_actions = []
+            for player_id in range(cfg.env.player_count):
+                player_game = state.game._replace(
+                    player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
+                )
+                player_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(
+                    player_game
+                )
+                player_key = jax.random.fold_in(opp_key, player_id)
+                if cfg.opponent == "self":
+                    opponent_action = _sample_policy_action(
+                        player_key,
+                        player_batch,
+                        train_state,
+                        policy,
+                        cfg,
+                        deterministic=cfg.self_play_deterministic,
+                    )
+                    if cfg.self_play_enabled:
+                        pool_random_action = build_random_action_from_batch(
+                            jax.random.fold_in(player_key, cfg.env.player_count),
+                            player_batch,
+                            cfg,
+                        )
+                        use_latest = (
+                            jax.random.uniform(
+                                jax.random.fold_in(
+                                    player_key, cfg.env.player_count + 1
+                                ),
+                                state.learner_player.shape,
+                            )
+                            < cfg.self_play_latest_probability
+                        )
+                        opponent_action = _select_env_action(
+                            use_latest, opponent_action, pool_random_action
+                        )
+                elif cfg.opponent == "random":
+                    opponent_action = build_random_action_from_batch(
+                        player_key, player_batch, cfg
+                    )
+                else:
+                    raise ValueError(
+                        "JAX training supports opponent='self' or opponent='random', "
+                        f"got {cfg.opponent!r}."
+                    )
+
+                is_learner_player = state.learner_player == player_id
+                player_actions.append(
+                    _select_env_action(
+                        is_learner_player, learner_action, opponent_action
+                    )
+                )
+
+            multi_player_action = _stack_player_actions(tuple(player_actions))
+            next_state, result = batched_step_multi_player(
+                state, multi_player_action, cfg.env
             )
-        elif cfg.opponent == "random":
-            opponent_action = build_random_action_from_batch(opp_key, opp_batch, cfg)
         else:
             raise ValueError(
-                f"JAX training supports opponent='self' or opponent='random', got {cfg.opponent!r}."
+                "JAX PPO rollout supports env.player_count of 2 or 4, "
+                f"got {cfg.env.player_count}."
             )
-
-        next_state, result = batched_step(
-            state, learner_action, opponent_action, cfg.env
-        )
         reset_keys = jax.random.split(reset_key, batch.self_features.shape[0])
         reset_states, reset_batches = batched_reset(reset_keys, cfg.env)
 
@@ -378,9 +496,7 @@ def ppo_update_jax(
                 jnp.minimum(
                     minibatch["advantages"] * ratio,
                     minibatch["advantages"]
-                    * jnp.clip(
-                        ratio, 1.0 - cfg.ppo.clip_coef, 1.0 + cfg.ppo.clip_coef
-                    ),
+                    * jnp.clip(ratio, 1.0 - cfg.ppo.clip_coef, 1.0 + cfg.ppo.clip_coef),
                 ),
                 minibatch["mask"],
             )
