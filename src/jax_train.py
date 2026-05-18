@@ -114,8 +114,8 @@ def _init_rollout_group(
         group_cfg.alternate_player_sides,
     )
     collect_fn = jax.jit(
-        lambda rollout_key, state, batch, ts: collect_rollout_jax(
-            rollout_key, state, batch, ts, policy, group_cfg
+        lambda rollout_key, state, batch, ts, update_idx: collect_rollout_jax(
+            rollout_key, state, batch, ts, policy, group_cfg, update=update_idx
         )
     )
     return JaxRolloutGroup(
@@ -214,7 +214,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 transitions,
                 rollout_metrics,
             ) = group.collect_fn(
-                rollout_key, group.env_state, group.turn_batch, train_state
+                rollout_key,
+                group.env_state,
+                group.turn_batch,
+                train_state,
+                jnp.asarray(update, dtype=jnp.int32),
             )
             next_groups.append(
                 _replace_rollout_group_state(group, env_state, turn_batch)
