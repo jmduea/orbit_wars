@@ -4,13 +4,16 @@ import json
 import time
 from pathlib import Path
 
-import jax
-import jax.numpy as jnp
-
 from .config import TrainConfig
-from .jax_env import batched_reset
-from .jax_policy import build_jax_policy
-from .jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+from .jax_device import configure_jax_platform_for_host, ensure_cuda_jax_if_nvidia_present
+
+configure_jax_platform_for_host()
+
+import jax  # noqa: E402
+import jax.numpy as jnp  # noqa: E402
+from .jax_env import batched_reset  # noqa: E402
+from .jax_policy import build_jax_policy  # noqa: E402
+from .jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax  # noqa: E402
 
 
 def run_jax_training(cfg: TrainConfig) -> None:
@@ -20,6 +23,8 @@ def run_jax_training(cfg: TrainConfig) -> None:
     storage, return/advantage computation, and PPO updates in JAX. Both the MLP
     and attention/transformer policy architectures are supported.
     """
+
+    ensure_cuda_jax_if_nvidia_present()
 
     key = jax.random.PRNGKey(cfg.seed)
     key, reset_key, policy_key = jax.random.split(key, 3)
