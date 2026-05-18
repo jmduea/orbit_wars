@@ -20,21 +20,27 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import TrainConfig, default_train_config_path, load_train_config
-from src.env import extract_observation, extract_reward, extract_status
-from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim
-from src.normalization import ObservationNormalizer
-from src.opponents import KaggleRandomOpponent, SelfPlayOpponent, SniperOpponent
-from src.policy import build_policy as create_policy
+from src.config import TrainConfig, default_train_config_path, load_train_config  # noqa: E402
+from src.env import extract_observation, extract_reward, extract_status  # noqa: E402
+from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim  # noqa: E402
+from src.normalization import ObservationNormalizer  # noqa: E402
+from src.opponents import KaggleRandomOpponent, SelfPlayOpponent, SniperOpponent  # noqa: E402
+from src.policy import build_policy as create_policy  # noqa: E402
 
 
 @dataclass(slots=True)
 class GameResult:
+    format: str
+    player_count: int
     opponent: str
     game_index: int
     seed: int
+    learner_seat: int
+    opponent_slots: int
     reward: float
     result: str
+    placement: float
+    first_place: bool
     length: int
 
 
@@ -55,6 +61,27 @@ class AggregateMetrics:
     win_rate_ci95_high: float
 
 
+@dataclass(slots=True)
+class FormatMetrics:
+    games: int
+    player_count: int
+    win_rate_2p: float | None
+    first_place_rate_4p: float | None
+    average_placement_4p: float | None
+    mean_terminal_reward: float
+    mean_game_length: float
+    per_seat: dict[str, dict[str, float | int | None]]
+
+
+@dataclass(slots=True)
+class GameOutcome:
+    reward: float
+    result: str
+    placement: float
+    first_place: bool
+    length: int
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate an Orbit Wars policy checkpoint against one or more opponents.")
     parser.add_argument("--config", type=str, default=str(default_train_config_path()), help="Training YAML config path.")
@@ -65,6 +92,20 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="sniper",
         help="Comma-separated opponents to evaluate: sniper, random, self_play_snapshot.",
+    )
+    parser.add_argument(
+        "--player-counts",
+        "--formats",
+        dest="formats",
+        type=str,
+        default="2p",
+        help="Comma-separated game formats to evaluate, such as 2,4 or 2p,4p.",
+    )
+    parser.add_argument(
+        "--learner-seats",
+        type=str,
+        default="0",
+        help="Comma-separated learner seats to evaluate, or 'all' to rotate through every seat in each format.",
     )
     parser.add_argument(
         "--seeds",
@@ -103,6 +144,51 @@ def parse_opponents(value: str) -> list[str]:
     if unknown:
         raise ValueError(f"Unknown opponent(s): {', '.join(unknown)}. Supported opponents: {', '.join(sorted(supported))}")
     return opponents
+
+
+def parse_formats(value: str) -> list[int]:
+    player_counts: list[int] = []
+    for part in value.split(","):
+        token = part.strip().lower()
+        if not token:
+            continue
+        if token.endswith("p"):
+            token = token[:-1]
+        try:
+            player_count = int(token)
+        except ValueError as exc:
+            raise ValueError(f"Invalid format {part!r}; use values like 2,4 or 2p,4p.") from exc
+        if player_count not in {2, 4}:
+            raise ValueError(f"Unsupported player count {player_count}; supported formats are 2p and 4p.")
+        if player_count not in player_counts:
+            player_counts.append(player_count)
+    if not player_counts:
+        raise ValueError("At least one format is required.")
+    return player_counts
+
+
+def format_label(player_count: int) -> str:
+    return f"{player_count}p"
+
+
+def parse_learner_seats(value: str, player_count: int) -> list[int]:
+    value = value.strip().lower()
+    if value == "all":
+        return list(range(player_count))
+    seats = [int(part.strip()) for part in value.split(",") if part.strip()]
+    if not seats:
+        raise ValueError("--learner-seats must be 'all' or contain at least one seat index.")
+    invalid = [seat for seat in seats if seat < 0 or seat >= player_count]
+    if invalid:
+        raise ValueError(
+            f"Invalid learner seat(s) for {format_label(player_count)}: {', '.join(map(str, invalid))}. "
+            f"Valid seats are 0..{player_count - 1}."
+        )
+    deduped: list[int] = []
+    for seat in seats:
+        if seat not in deduped:
+            deduped.append(seat)
+    return deduped
 
 
 def parse_seed_spec(value: str | None, *, start_seed: int, games: int) -> list[int]:
@@ -212,32 +298,66 @@ def reward_to_label(reward: float) -> str:
     return "draw"
 
 
+def placement_from_rewards(rewards: list[float], learner_seat: int) -> tuple[float, bool]:
+    learner_reward = rewards[learner_seat]
+    best_reward = max(rewards) if rewards else 0.0
+    rank = 1.0 + sum(reward > learner_reward for reward in rewards)
+    ties = sum(reward == learner_reward for reward in rewards)
+    placement = rank + (float(ties) - 1.0) * 0.5
+    first_place = learner_reward == best_reward and learner_reward > 0.0
+    return float(placement), bool(first_place)
+
+
 def play_one_game(
     learner: SelfPlayOpponent,
-    opponent: Any,
+    opponents: list[Any],
     *,
     seed: int,
-) -> tuple[float, int]:
+    player_count: int,
+    learner_seat: int,
+) -> GameOutcome:
+    if player_count < 2:
+        raise ValueError("player_count must be at least 2.")
+    if learner_seat < 0 or learner_seat >= player_count:
+        raise ValueError(f"learner_seat must be in 0..{player_count - 1}; got {learner_seat}.")
+    if len(opponents) != player_count - 1:
+        raise ValueError(
+            f"Expected {player_count - 1} opponent slot(s) for {format_label(player_count)}, got {len(opponents)}."
+        )
+
     from kaggle_environments import make
 
     env = make("orbit_wars", configuration={"seed": int(seed), "randomSeed": int(seed)}, debug=False)
-    env.reset(num_agents=2)
-    states = env.step([[], []])
-    player_obs = extract_observation(states[0])
-    opponent_obs = extract_observation(states[1])
-    done = extract_status(states[0]) != "ACTIVE"
+    env.reset(num_agents=player_count)
+    states = env.step([[] for _ in range(player_count)])
+    observations = [extract_observation(state) for state in states]
+    done = extract_status(states[learner_seat]) != "ACTIVE"
     step_count = 0
 
     while not done:
-        player_action = learner.act(player_obs)
-        opponent_action = opponent.act(opponent_obs)
-        states = env.step([player_action, opponent_action])
-        player_obs = extract_observation(states[0])
-        opponent_obs = extract_observation(states[1])
-        done = extract_status(states[0]) != "ACTIVE"
+        joint_actions: list[list[list[float | int]]] = [[] for _ in range(player_count)]
+        joint_actions[learner_seat] = learner.act(observations[learner_seat])
+        opponent_idx = 0
+        for seat in range(player_count):
+            if seat == learner_seat:
+                continue
+            joint_actions[seat] = opponents[opponent_idx].act(observations[seat])
+            opponent_idx += 1
+        states = env.step(joint_actions)
+        observations = [extract_observation(state) for state in states]
+        done = extract_status(states[learner_seat]) != "ACTIVE"
         step_count += 1
 
-    return extract_reward(states[0]), step_count
+    rewards = [extract_reward(state) for state in states]
+    placement, first_place = placement_from_rewards(rewards, learner_seat)
+    reward = rewards[learner_seat]
+    return GameOutcome(
+        reward=reward,
+        result=reward_to_label(reward),
+        placement=placement,
+        first_place=first_place,
+        length=step_count,
+    )
 
 
 def aggregate(results: Iterable[GameResult]) -> AggregateMetrics:
@@ -271,13 +391,89 @@ def aggregate(results: Iterable[GameResult]) -> AggregateMetrics:
     )
 
 
+def aggregate_format(results: Iterable[GameResult], player_count: int) -> FormatMetrics:
+    items = list(results)
+    games = len(items)
+    if games == 0:
+        return FormatMetrics(
+            games=0,
+            player_count=player_count,
+            win_rate_2p=None,
+            first_place_rate_4p=None,
+            average_placement_4p=None,
+            mean_terminal_reward=0.0,
+            mean_game_length=0.0,
+            per_seat={},
+        )
+
+    def _seat_metrics(seat_items: list[GameResult]) -> dict[str, float | int | None]:
+        if not seat_items:
+            return {
+                "games": 0,
+                "win_rate_2p": None,
+                "first_place_rate_4p": None,
+                "average_placement_4p": None,
+                "mean_terminal_reward": 0.0,
+                "mean_game_length": 0.0,
+            }
+        return {
+            "games": len(seat_items),
+            "win_rate_2p": (
+                sum(1 for result in seat_items if result.result == "win") / len(seat_items)
+                if player_count == 2
+                else None
+            ),
+            "first_place_rate_4p": (
+                sum(1 for result in seat_items if result.first_place) / len(seat_items)
+                if player_count == 4
+                else None
+            ),
+            "average_placement_4p": (
+                float(np.mean([result.placement for result in seat_items])) if player_count == 4 else None
+            ),
+            "mean_terminal_reward": float(np.mean([result.reward for result in seat_items])),
+            "mean_game_length": float(np.mean([result.length for result in seat_items])),
+        }
+
+    per_seat = {
+        str(seat): _seat_metrics([result for result in items if result.learner_seat == seat])
+        for seat in sorted({result.learner_seat for result in items})
+    }
+    return FormatMetrics(
+        games=games,
+        player_count=player_count,
+        win_rate_2p=sum(1 for result in items if result.result == "win") / games if player_count == 2 else None,
+        first_place_rate_4p=sum(1 for result in items if result.first_place) / games if player_count == 4 else None,
+        average_placement_4p=float(np.mean([result.placement for result in items])) if player_count == 4 else None,
+        mean_terminal_reward=float(np.mean([result.reward for result in items])),
+        mean_game_length=float(np.mean([result.length for result in items])),
+        per_seat=per_seat,
+    )
+
+
 def write_outputs(output_dir: Path, run_name: str, payload: dict[str, Any], results: list[GameResult]) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     json_path = output_dir / f"{run_name}.json"
     csv_path = output_dir / f"{run_name}.csv"
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["opponent", "game_index", "seed", "result", "reward", "length"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "format",
+                "player_count",
+                "opponent",
+                "game_index",
+                "seed",
+                "learner_seat",
+                "opponent_slots",
+                "result",
+                "reward",
+                "placement",
+                "first_place",
+                "length",
+            ],
+        )
         writer.writeheader()
         for result in results:
             writer.writerow(asdict(result))
@@ -290,6 +486,10 @@ def main() -> None:
     device_name = cfg.device if args.device == "auto" else args.device
     device = resolve_device(device_name)
     opponents = parse_opponents(args.opponents)
+    player_counts = parse_formats(args.formats)
+    learner_seats_by_format = {
+        player_count: parse_learner_seats(args.learner_seats, player_count) for player_count in player_counts
+    }
     seeds = parse_seed_spec(args.seeds, start_seed=args.seed, games=args.games)
     seed_everything(seeds[0])
 
@@ -302,35 +502,86 @@ def main() -> None:
     learner.sync_from(policy, normalizer)
 
     all_results: list[GameResult] = []
-    for opponent_name in opponents:
-        opponent = build_opponent(opponent_name, cfg, policy, normalizer, device, args.deterministic)
-        opponent_results: list[GameResult] = []
-        for game_idx, game_seed in enumerate(seeds):
-            reward, length = play_one_game(learner, opponent, seed=game_seed)
-            result = GameResult(
-                opponent=opponent_name,
-                game_index=game_idx + 1,
-                seed=game_seed,
-                reward=reward,
-                result=reward_to_label(reward),
-                length=length,
-            )
-            opponent_results.append(result)
-            all_results.append(result)
-            print(
-                f"opponent={opponent_name} game={game_idx + 1}/{args.games} seed={game_seed} "
-                f"result={result.result} reward={reward:.1f} length={length}"
-            )
-        metrics = aggregate(opponent_results)
-        print(
-            f"opponent={opponent_name} win_rate={metrics.win_rate:.4f} "
-            f"draw_rate={metrics.draw_rate:.4f} loss_rate={metrics.loss_rate:.4f} "
-            f"mean_reward={metrics.mean_terminal_reward:.4f} mean_length={metrics.mean_game_length:.2f} "
-            f"win_rate_se={metrics.win_rate_se:.4f} ci95=[{metrics.win_rate_ci95_low:.4f},{metrics.win_rate_ci95_high:.4f}]"
-        )
+    for player_count in player_counts:
+        label = format_label(player_count)
+        seats = learner_seats_by_format[player_count]
+        for opponent_name in opponents:
+            format_opponent_results: list[GameResult] = []
+            for seat in seats:
+                for game_idx, game_seed in enumerate(seeds):
+                    opponent_slots = [
+                        build_opponent(opponent_name, cfg, policy, normalizer, device, args.deterministic)
+                        for _ in range(player_count - 1)
+                    ]
+                    outcome = play_one_game(
+                        learner,
+                        opponent_slots,
+                        seed=game_seed,
+                        player_count=player_count,
+                        learner_seat=seat,
+                    )
+                    result = GameResult(
+                        format=label,
+                        player_count=player_count,
+                        opponent=opponent_name,
+                        game_index=game_idx + 1,
+                        seed=game_seed,
+                        learner_seat=seat,
+                        opponent_slots=len(opponent_slots),
+                        reward=outcome.reward,
+                        result=outcome.result,
+                        placement=outcome.placement,
+                        first_place=outcome.first_place,
+                        length=outcome.length,
+                    )
+                    format_opponent_results.append(result)
+                    all_results.append(result)
+                    print(
+                        f"format={label} opponent={opponent_name} seat={seat} "
+                        f"game={game_idx + 1}/{args.games} seed={game_seed} result={result.result} "
+                        f"reward={outcome.reward:.1f} placement={outcome.placement:.1f} "
+                        f"first_place={int(outcome.first_place)} length={outcome.length}"
+                    )
+            format_metrics = aggregate_format(format_opponent_results, player_count)
+            if player_count == 2:
+                print(
+                    f"format={label} opponent={opponent_name} win_rate_2p={format_metrics.win_rate_2p:.4f} "
+                    f"mean_reward={format_metrics.mean_terminal_reward:.4f} "
+                    f"mean_length={format_metrics.mean_game_length:.2f} per_seat={format_metrics.per_seat}"
+                )
+            else:
+                print(
+                    f"format={label} opponent={opponent_name} "
+                    f"first_place_rate_4p={format_metrics.first_place_rate_4p:.4f} "
+                    f"average_placement_4p={format_metrics.average_placement_4p:.4f} "
+                    f"mean_reward={format_metrics.mean_terminal_reward:.4f} "
+                    f"mean_length={format_metrics.mean_game_length:.2f} per_seat={format_metrics.per_seat}"
+                )
 
     overall = aggregate(all_results)
     by_opponent = {name: asdict(aggregate(result for result in all_results if result.opponent == name)) for name in opponents}
+    by_format = {
+        format_label(player_count): asdict(
+            aggregate_format((result for result in all_results if result.player_count == player_count), player_count)
+        )
+        for player_count in player_counts
+    }
+    by_format_opponent = {
+        format_label(player_count): {
+            name: asdict(
+                aggregate_format(
+                    (
+                        result
+                        for result in all_results
+                        if result.player_count == player_count and result.opponent == name
+                    ),
+                    player_count,
+                )
+            )
+            for name in opponents
+        }
+        for player_count in player_counts
+    }
     timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     safe_checkpoint = Path(args.checkpoint).stem if args.checkpoint else "uncheckpointed"
     run_name = args.run_name or f"eval_{safe_checkpoint}_{timestamp}"
@@ -341,9 +592,13 @@ def main() -> None:
         "device": str(device),
         "games_per_opponent": args.games,
         "opponents": opponents,
+        "formats": [format_label(player_count) for player_count in player_counts],
+        "learner_seats": {format_label(key): value for key, value in learner_seats_by_format.items()},
         "seeds": seeds,
         "overall": asdict(overall),
         "by_opponent": by_opponent,
+        "by_format": by_format,
+        "by_format_opponent": by_format_opponent,
         "games": [asdict(result) for result in all_results],
     }
     json_path, csv_path = write_outputs(Path(args.output_dir), run_name, payload, all_results)
@@ -353,6 +608,7 @@ def main() -> None:
         f"mean_length={overall.mean_game_length:.2f} win_rate_se={overall.win_rate_se:.4f} "
         f"ci95=[{overall.win_rate_ci95_low:.4f},{overall.win_rate_ci95_high:.4f}]"
     )
+    print(f"by_format={by_format}")
     print(f"wrote_json={json_path}")
     print(f"wrote_csv={csv_path}")
 
