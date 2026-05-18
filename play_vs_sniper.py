@@ -18,11 +18,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import TrainConfig, default_train_config_path, load_train_config
-from src.features import TurnBatch, candidate_feature_dim, encode_turn, global_feature_dim, self_feature_dim, ship_count_for_bucket
-from src.normalization import ObservationNormalizer
-from src.policy import build_policy as create_policy
-from src.ppo import sample_actions
+from src.checkpoint_compat import validate_checkpoint_feature_compatibility  # noqa: E402
+from src.config import TrainConfig, default_train_config_path, load_train_config  # noqa: E402
+from src.features import (  # noqa: E402
+    TurnBatch,
+    candidate_feature_dim,
+    encode_turn,
+    global_feature_dim,
+    self_feature_dim,
+    ship_count_for_bucket,
+)
+from src.normalization import ObservationNormalizer  # noqa: E402
+from src.policy import build_policy as create_policy  # noqa: E402
+from src.ppo import sample_actions  # noqa: E402
 
 Planet = namedtuple("Planet", ["id", "owner", "x", "y", "radius", "ships", "production"])
 
@@ -57,9 +65,9 @@ def seed_everything(seed: int) -> None:
 def build_policy(cfg: TrainConfig, device: torch.device) -> torch.nn.Module:
     return create_policy(
         architecture=cfg.model.architecture,
-        self_dim=self_feature_dim(),
-        candidate_dim=candidate_feature_dim(),
-        global_dim=global_feature_dim(),
+        self_dim=self_feature_dim(cfg.env),
+        candidate_dim=candidate_feature_dim(cfg.env),
+        global_dim=global_feature_dim(cfg.env),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
@@ -99,11 +107,15 @@ def load_checkpoint_if_available(
     normalizer: ObservationNormalizer | None,
     checkpoint_path: str | None,
     device: torch.device,
+    cfg: TrainConfig,
 ) -> None:
     register_checkpoint_module_aliases()
     if checkpoint_path is None:
         return
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    validate_checkpoint_feature_compatibility(
+        checkpoint, cfg.env, checkpoint_path=checkpoint_path
+    )
     state_dict = checkpoint.get("policy", checkpoint)
     policy.load_state_dict(state_dict)
     normalizer_state = checkpoint.get("normalizer") if isinstance(checkpoint, dict) else None
@@ -242,11 +254,11 @@ def main() -> None:
     seed_everything(args.seed)
     policy = build_policy(cfg, device)
     normalizer = (
-        ObservationNormalizer(clip=cfg.model.obs_norm_clip)
+        ObservationNormalizer(clip=cfg.model.obs_norm_clip, env_cfg=cfg.env)
         if cfg.model.normalize_observations
         else None
     )
-    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device)
+    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device, cfg)
     policy.eval()
 
     html, reward, step_count = run_match(

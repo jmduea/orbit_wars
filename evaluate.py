@@ -20,6 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from src.checkpoint_compat import validate_checkpoint_feature_compatibility  # noqa: E402
 from src.config import TrainConfig, default_train_config_path, load_train_config  # noqa: E402
 from src.env import extract_observation, extract_reward, extract_status  # noqa: E402
 from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim  # noqa: E402
@@ -215,9 +216,9 @@ def parse_seed_spec(value: str | None, *, start_seed: int, games: int) -> list[i
 def build_policy(cfg: TrainConfig, device: torch.device) -> torch.nn.Module:
     return create_policy(
         architecture=cfg.model.architecture,
-        self_dim=self_feature_dim(),
-        candidate_dim=candidate_feature_dim(),
-        global_dim=global_feature_dim(),
+        self_dim=self_feature_dim(cfg.env),
+        candidate_dim=candidate_feature_dim(cfg.env),
+        global_dim=global_feature_dim(cfg.env),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
@@ -259,11 +260,15 @@ def load_checkpoint_if_available(
     normalizer: ObservationNormalizer | None,
     checkpoint_path: str | None,
     device: torch.device,
+    cfg: TrainConfig,
 ) -> None:
     register_checkpoint_module_aliases()
     if checkpoint_path is None:
         return
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    validate_checkpoint_feature_compatibility(
+        checkpoint, cfg.env, checkpoint_path=checkpoint_path
+    )
     state_dict = checkpoint.get("policy", checkpoint) if isinstance(checkpoint, dict) else checkpoint
     policy.load_state_dict(state_dict)
     normalizer_state = checkpoint.get("normalizer") if isinstance(checkpoint, dict) else None
@@ -494,8 +499,12 @@ def main() -> None:
     seed_everything(seeds[0])
 
     policy = build_policy(cfg, device)
-    normalizer = ObservationNormalizer(clip=cfg.model.obs_norm_clip) if cfg.model.normalize_observations else None
-    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device)
+    normalizer = (
+        ObservationNormalizer(clip=cfg.model.obs_norm_clip, env_cfg=cfg.env)
+        if cfg.model.normalize_observations
+        else None
+    )
+    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device, cfg)
     policy.eval()
 
     learner = SelfPlayOpponent(cfg, device=device, deterministic=args.deterministic)

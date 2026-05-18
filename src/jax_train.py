@@ -7,6 +7,10 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from .checkpoint_compat import (
+    feature_metadata,
+    validate_checkpoint_feature_compatibility,
+)
 from .config import TrainConfig
 from .checkpoint_retention import prune_checkpoints
 from .replay import maybe_write_jax_checkpoint_replay
@@ -451,6 +455,9 @@ def load_jax_checkpoint(
         raise ValueError(
             f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
         )
+    validate_checkpoint_feature_compatibility(
+        checkpoint, cfg.env, checkpoint_path=checkpoint_path
+    )
     params = jax.device_put(checkpoint["params"])
     opt_state = checkpoint.get("opt_state")
     if opt_state is None:
@@ -503,6 +510,7 @@ def save_jax_checkpoint(
         "opt_state": jax.device_get(train_state.opt_state),
         "rng_key": jax.device_get(key),
         "config": cfg,
+        "feature_metadata": feature_metadata(cfg.env),
         "total_env_steps": total_env_steps,
         "completed_episodes": completed_episodes,
     }

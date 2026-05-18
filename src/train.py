@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 
+from .checkpoint_compat import (
+    feature_metadata,
+    validate_checkpoint_feature_compatibility,
+)
 from .config import TrainConfig, default_train_config_path, load_train_config
 from .env import OrbitWarsEnv
 from .features import (
@@ -1087,32 +1091,19 @@ def save_checkpoint(
     run_dir.mkdir(parents=True, exist_ok=True)
     last_path = run_dir / "ckpt_last.pt"
     update_path = run_dir / f"ckpt_{update:06d}.pt"
-    torch.save(
-        {
-            "update": update,
-            "policy": policy.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "config": cfg,
-            "normalizer": normalizer.state_dict() if normalizer is not None else None,
-            "self_play": self_play_metadata,
-            "total_env_steps": total_env_steps,
-            "completed_episodes": completed_episodes,
-        },
-        last_path,
-    )
-    torch.save(
-        {
-            "update": update,
-            "policy": policy.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "config": cfg,
-            "normalizer": normalizer.state_dict() if normalizer is not None else None,
-            "self_play": self_play_metadata,
-            "total_env_steps": total_env_steps,
-            "completed_episodes": completed_episodes,
-        },
-        update_path,
-    )
+    checkpoint_payload = {
+        "update": update,
+        "policy": policy.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "config": cfg,
+        "feature_metadata": feature_metadata(cfg.env),
+        "normalizer": normalizer.state_dict() if normalizer is not None else None,
+        "self_play": self_play_metadata,
+        "total_env_steps": total_env_steps,
+        "completed_episodes": completed_episodes,
+    }
+    torch.save(checkpoint_payload, last_path)
+    torch.save(checkpoint_payload, update_path)
     return update_path
 
 
@@ -1214,6 +1205,9 @@ def main() -> None:
             raise ValueError(
                 f"Training checkpoint must be a dictionary: {args.resume_checkpoint}"
             )
+        validate_checkpoint_feature_compatibility(
+            checkpoint, cfg.env, checkpoint_path=args.resume_checkpoint
+        )
         policy.load_state_dict(checkpoint.get("policy", checkpoint))
         if "optimizer" in checkpoint:
             optimizer.load_state_dict(checkpoint["optimizer"])
