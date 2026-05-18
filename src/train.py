@@ -29,6 +29,7 @@ from .ppo import TransitionBatch, ppo_update, sample_actions
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
 from .replay import maybe_write_checkpoint_replay
+from .curriculum import CurriculumController
 
 if TYPE_CHECKING:
     from .jax_env import JaxAction
@@ -1235,6 +1236,9 @@ def main() -> None:
         },
     )
     telemetry.watch_model(policy)
+    curriculum = CurriculumController(cfg.training_format.phases)
+    curriculum.apply(cfg)
+    phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start_time = time.perf_counter()
@@ -1253,6 +1257,7 @@ def main() -> None:
                 "reason": reseed_event.reason,
                 "policy": reseed_event.policy,
             })
+        curriculum.apply(cfg)
         rollout_start_time = time.perf_counter()
         batch, batches, next_seed, stats = collect_rollout(
             envs,
@@ -1321,7 +1326,19 @@ def main() -> None:
             "candidate_friendly_share": stats["candidate_friendly_share"],
             **metrics,
             "opponent_composition": stats.get("opponent_composition", {}),
+            "curriculum_phase_id": curriculum.current_phase_id(),
+            "curriculum_phase_events": list(phase_events),
         }
+        phase_events = []
+        transition = curriculum.update(update, {
+            "win_rate_2p": float(log_record["win_rate_2p"]),
+            "first_place_rate_4p": float(log_record["first_place_rate_4p"]),
+            "survival_time": float(log_record["survival_time"]),
+            "score_share": float(log_record["score_share"]),
+            "kl_stability": float(log_record.get("approx_kl", 0.0)),
+        })
+        if transition is not None:
+            phase_events.append(transition)
         append_jsonl(log_path, log_record)
         telemetry.log(log_record, step=update)
         if (
