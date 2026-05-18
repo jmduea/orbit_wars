@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import TrainConfig
+from .replay import maybe_write_jax_checkpoint_replay
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .jax_device import (
     configure_jax_platform_for_host,
@@ -363,7 +364,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 completed_episodes=completed_episodes,
             )
             telemetry.log_checkpoint(checkpoint_path, update=update)
-            telemetry.log_replay(log_path, update=update)
+            replay_meta_path = maybe_write_jax_checkpoint_replay(
+                cfg,
+                update=update,
+                checkpoint_path=checkpoint_path,
+                log_path=log_path,
+            )
+            if replay_meta_path is not None:
+                telemetry.log_artifact(
+                    replay_meta_path,
+                    name=f"replay-meta-u{update}",
+                    artifact_type="replay_metadata",
+                )
 
     telemetry.finish()
 
@@ -427,7 +439,7 @@ def save_jax_checkpoint(
     key: jax.Array,
     total_env_steps: int,
     completed_episodes: int,
-) -> None:
+) -> Path:
     """Persist the latest and update-numbered JAX checkpoint payloads."""
 
     import pickle
@@ -445,5 +457,7 @@ def save_jax_checkpoint(
     }
     with (run_dir / "jax_ckpt_last.pkl").open("wb") as file:
         pickle.dump(payload, file)
-    with (run_dir / f"jax_ckpt_{update:06d}.pkl").open("wb") as file:
+    update_path = run_dir / f"jax_ckpt_{update:06d}.pkl"
+    with update_path.open("wb") as file:
         pickle.dump(payload, file)
+    return update_path

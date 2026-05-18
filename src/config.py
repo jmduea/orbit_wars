@@ -107,6 +107,18 @@ class OpponentMixConfig:
 
 
 @dataclass(slots=True)
+class ReplayConfig:
+    """Configuration for writing deterministic checkpoint replays."""
+
+    enabled: bool = False
+    every_n_checkpoints: int = 1
+    opponent: str = "random"
+    seed_policy: str = "update"
+    max_steps: int = 500
+    output_dir: str = "replays"
+
+
+@dataclass(slots=True)
 class TrainConfig:
     """Top-level training configuration loaded from YAML files.
 
@@ -138,6 +150,7 @@ class TrainConfig:
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
+    replay: ReplayConfig = field(default_factory=ReplayConfig)
     reseed_every_updates: int = 0
     reseed_on_plateau: bool = False
     plateau_metric: str = "episode_reward_mean"
@@ -166,13 +179,14 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     """Build ``TrainConfig`` from a nested dictionary of overrides."""
 
     cfg = TrainConfig()
-    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb"})
+    _update_dataclass(cfg, data, skip={"env", "model", "ppo", "training_format", "opponent_mix", "wandb", "replay"})
     _update_dataclass(cfg.env, data.get("env", {}))
     _update_dataclass(cfg.model, data.get("model", {}))
     _update_dataclass(cfg.ppo, data.get("ppo", {}))
     _update_dataclass(cfg.training_format, data.get("training_format", {}))
     _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
     _update_dataclass(cfg.wandb, data.get("wandb", {}))
+    _update_dataclass(cfg.replay, data.get("replay", {}))
     cfg.heldout_eval_seed_set = _parse_seed_set(
         data.get("heldout_eval_seed_set", cfg.heldout_eval_seed_set)
     )

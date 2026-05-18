@@ -99,3 +99,27 @@ def test_train_config_loads_jax_mixed_format_mix_and_rollout_groups() -> None:
     assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [2, 4]
     assert cfg.ppo.num_envs_2p == 4
     assert cfg.ppo.num_envs_4p == 4
+
+
+def test_train_config_loads_replay_overrides() -> None:
+    from src.config import train_config_from_dict
+
+    cfg = train_config_from_dict(
+        {
+            "replay": {
+                "enabled": True,
+                "every_n_checkpoints": 2,
+                "opponent": "sniper",
+                "seed_policy": "fixed",
+                "max_steps": 300,
+                "output_dir": "checkpoint_replays",
+            }
+        }
+    )
+
+    assert cfg.replay.enabled is True
+    assert cfg.replay.every_n_checkpoints == 2
+    assert cfg.replay.opponent == "sniper"
+    assert cfg.replay.seed_policy == "fixed"
+    assert cfg.replay.max_steps == 300
+    assert cfg.replay.output_dir == "checkpoint_replays"

@@ -28,6 +28,7 @@ from .policy import build_policy
 from .ppo import TransitionBatch, ppo_update, sample_actions
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
+from .replay import maybe_write_checkpoint_replay
 
 if TYPE_CHECKING:
     from .jax_env import JaxAction
@@ -1377,7 +1378,22 @@ def main() -> None:
                 completed_episodes=completed_episodes,
             )
             telemetry.log_checkpoint(checkpoint_path, update=update)
-            telemetry.log_replay(log_path, update=update)
+            replay_result = maybe_write_checkpoint_replay(
+                cfg,
+                update=update,
+                checkpoint_path=checkpoint_path,
+                policy=policy,
+                normalizer=normalizer,
+                device=device,
+                log_path=log_path,
+            )
+            if replay_result is not None:
+                telemetry.log_replay(replay_result.html_path, update=update)
+                telemetry.log_artifact(
+                    replay_result.metadata_path,
+                    name=f"replay-meta-u{update}",
+                    artifact_type="replay_metadata",
+                )
 
     telemetry.finish()
 
