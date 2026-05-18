@@ -97,6 +97,10 @@ The `configs/` directory contains longer-running experiment presets:
 | `configs/attention_self_play_pool.yaml` | Attention policy trained against the self-play opponent pool. |
 | `configs/attention_candidates_16.yaml` | Attention policy with 15 real target slots plus no-op. |
 | `configs/attention_candidates_24.yaml` | Attention policy with 23 real target slots plus no-op. |
+
+| `configs/jax_entity_transformer_500k.yaml` | JAX entity transformer sweep point (~500k params). |
+| `configs/jax_entity_transformer_700k.yaml` | JAX entity transformer sweep point (~700k params). |
+| `configs/jax_entity_transformer_1m.yaml` | JAX entity transformer sweep point (~1M params). |
 | `configs/jax_training.yaml` | End-to-end JAX environment plus JAX PPO training. |
 | `configs/jax_self_play_shaped_reward_training.yaml` | JAX self-play with conservative reward shaping. |
 
@@ -236,3 +240,20 @@ run enough updates to separate compile time from steady-state execution.
   Use the Kaggle/Torch path for opponents that depend on the Kaggle observation
   API, such as sniper benchmark play.
 - Use a new `run_name` for every experiment you want to preserve separately.
+
+
+## JAX entity-transformer size sweep
+
+To reproduce a model-size sweep near 500k, 700k, and 1M parameters in the JAX
+training stack, run:
+
+```bash
+uv run python -m src.train --config configs/jax_entity_transformer_500k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_700k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_1m.yaml
+```
+
+These configs all use `env_backend: jax` + `rl_backend: jax`, enable self-play,
+use the mixed 2p/4p curriculum (`format_mix` 50/50), and set `ppo.num_envs: 32`
+with `ppo.rollout_steps: 500`. They only vary model width/head count so results
+are directly comparable at the target throughput settings.

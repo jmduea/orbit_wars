@@ -76,6 +76,10 @@ uv run python -m src.train --config configs/attention_shaped_reward_training.yam
 uv run python -m src.train --config configs/attention_self_play_pool.yaml
 uv run python -m src.train --config configs/jax_training.yaml
 uv run python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml
+
+uv run python -m src.train --config configs/jax_entity_transformer_500k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_700k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_1m.yaml
 uv run python evaluate.py --config default_cfg.yaml --games 100 --opponents sniper,random,self_play_snapshot --seeds 0:99 --deterministic
 uv run python eval_vs_sniper.py --config default_cfg.yaml --deterministic
 uv run python play_vs_sniper.py --config default_cfg.yaml --deterministic --output result.html
@@ -170,3 +174,26 @@ Training logs include `candidate_valid_avg`, `candidate_enemy_share`,
 `candidate_neutral_share`, and `candidate_friendly_share` to diagnose whether the
 candidate builder is giving the policy enough real targets from each ownership
 class.
+
+
+## JAX entity-transformer size sweep (≈500k / ≈700k / ≈1M params)
+
+Use these configs to run end-to-end JAX training with progressively larger
+entity-transformer policies:
+
+- `configs/jax_entity_transformer_500k.yaml` (`hidden_size: 192`, `attention_heads: 6`)
+- `configs/jax_entity_transformer_700k.yaml` (`hidden_size: 224`, `attention_heads: 7`)
+- `configs/jax_entity_transformer_1m.yaml` (`hidden_size: 272`, `attention_heads: 8`)
+
+Train each run with:
+
+```bash
+uv run python -m src.train --config configs/jax_entity_transformer_500k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_700k.yaml
+uv run python -m src.train --config configs/jax_entity_transformer_1m.yaml
+```
+
+All three are configured for the mixed 2p/4p self-play curriculum from
+`configs/jax_mixed_2p_4p_training.yaml` (equal 2p/4p mix, 32 total envs,
+rollout length 500) so comparisons isolate model size changes under the target
+throughput profile.
