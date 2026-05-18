@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .config import TrainConfig
+from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .jax_device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
@@ -201,14 +202,37 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         cfg,
         {"backend": "jax", "env_backend": cfg.env_backend, "rl_backend": cfg.rl_backend, "seed": cfg.seed},
     )
+    seed_scheduler = SeedScheduler(
+        base_seed=cfg.seed,
+        cfg=SeedScheduleConfig(
+            reseed_every_updates=cfg.reseed_every_updates,
+            reseed_on_plateau=cfg.reseed_on_plateau,
+            plateau_metric=cfg.plateau_metric,
+            plateau_window=cfg.plateau_window,
+            plateau_delta=cfg.plateau_delta,
+            heldout_eval_seed_set=cfg.heldout_eval_seed_set,
+        ),
+    )
     train_start_time = time.perf_counter()
 
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start = time.perf_counter()
+        reseed_events: list[dict[str, object]] = []
         rollout_start = time.perf_counter()
         transitions_by_group: list[JaxTransitionBatch] = []
         rollout_metrics_by_group: list[dict[str, jax.Array]] = []
         next_groups: list[JaxRolloutGroup] = []
+        should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
+        if should_reseed:
+            reseed_event = seed_scheduler.reseed(update, reseed_reason)
+            key = jax.random.PRNGKey(reseed_event.new_seed)
+            reseed_events.append({
+                "update": reseed_event.update,
+                "old_seed": reseed_event.old_seed,
+                "new_seed": reseed_event.new_seed,
+                "reason": reseed_event.reason,
+                "policy": reseed_event.policy,
+            })
         key, *rollout_keys = jax.random.split(key, len(rollout_groups) + 1)
         for group, rollout_key in zip(rollout_groups, rollout_keys, strict=True):
             (
@@ -285,6 +309,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         )
         total_env_steps += env_steps
         completed_episodes += episodes
+        seed_scheduler.update_metric(float(rollout_metrics_host.get(cfg.plateau_metric, 0.0)))
         record: dict[str, object] = {
             "update": update,
             "total_env_steps": total_env_steps,
@@ -303,6 +328,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "rollout_env_steps_per_sec": env_steps / max(rollout_seconds, 1e-9),
             "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
             "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
+            "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
+            "seed_scheduler_plateau_metric": cfg.plateau_metric,
+            "reseed_events": reseed_events,
             **{name: float(value) for name, value in metrics.items()},
             "opponent_composition": {
                 "latest": float(

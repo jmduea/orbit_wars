@@ -26,6 +26,7 @@ from .opponents import SelfPlayOpponent, SelfPlayOpponentPool, build_opponent
 from .normalization import ObservationNormalizer
 from .policy import build_policy
 from .ppo import TransitionBatch, ppo_update, sample_actions
+from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
 
 if TYPE_CHECKING:
@@ -1134,12 +1135,24 @@ def main() -> None:
     device = resolve_device(cfg.device)
     opponent = build_opponent(cfg.opponent, cfg=cfg, device=device)
     next_seed = cfg.seed
+    seed_scheduler = SeedScheduler(
+        base_seed=cfg.seed,
+        cfg=SeedScheduleConfig(
+            reseed_every_updates=cfg.reseed_every_updates,
+            reseed_on_plateau=cfg.reseed_on_plateau,
+            plateau_metric=cfg.plateau_metric,
+            plateau_window=cfg.plateau_window,
+            plateau_delta=cfg.plateau_delta,
+            heldout_eval_seed_set=cfg.heldout_eval_seed_set,
+        ),
+    )
     env_backend = cfg.env_backend.strip().lower()
     if env_backend == "jax":
         seeds = np.arange(next_seed, next_seed + cfg.ppo.num_envs, dtype=np.int64)
         envs: list[OrbitWarsEnv] | JaxBatchedEnv = make_jax_batched_env(cfg, seeds)
         batches: list[TurnBatch] | JaxBatchedEnv = envs
         next_seed += cfg.ppo.num_envs
+        seed_scheduler.advance(cfg.ppo.num_envs)
     elif env_backend in {"kaggle", "python"}:
         envs = [
             OrbitWarsEnv(cfg, opponent, env_index=idx)
@@ -1224,6 +1237,21 @@ def main() -> None:
     train_start_time = time.perf_counter()
     for update in range(start_update, cfg.ppo.total_updates + 1):
         update_start_time = time.perf_counter()
+        reseed_events: list[dict[str, object]] = []
+        if update > start_update:
+            metric_value = float(stats.get(cfg.plateau_metric, 0.0)) if "stats" in locals() else 0.0
+            seed_scheduler.update_metric(metric_value)
+        should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
+        if should_reseed:
+            reseed_event = seed_scheduler.reseed(update, reseed_reason)
+            next_seed = reseed_event.new_seed
+            reseed_events.append({
+                "update": reseed_event.update,
+                "old_seed": reseed_event.old_seed,
+                "new_seed": reseed_event.new_seed,
+                "reason": reseed_event.reason,
+                "policy": reseed_event.policy,
+            })
         rollout_start_time = time.perf_counter()
         batch, batches, next_seed, stats = collect_rollout(
             envs,
@@ -1280,6 +1308,9 @@ def main() -> None:
             "rollout_env_steps_per_sec": rollout_env_steps_per_sec,
             "samples_per_sec": samples_per_sec,
             "ppo_samples_per_sec": ppo_samples_per_sec,
+            "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
+            "seed_scheduler_plateau_metric": cfg.plateau_metric,
+            "reseed_events": reseed_events,
             "decisions_per_step": stats["decisions_per_step"],
             "moves_emitted_per_step": stats["moves_emitted_per_step"],
             "move_emit_rate": stats["move_emit_rate"],
