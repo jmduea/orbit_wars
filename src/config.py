@@ -99,6 +99,7 @@ class TrainConfig:
     self_play_pool_size: int = 5
     self_play_snapshot_interval: int = 25
     self_play_latest_probability: float = 0.5
+    multi_opponent_mode: str = "mixed"
     alternate_player_sides: bool = True
     env: EnvConfig = field(default_factory=EnvConfig)
     model: ModelConfig = field(default_factory=ModelConfig)

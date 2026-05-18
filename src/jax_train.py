@@ -217,14 +217,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             ) = group.collect_fn(
                 rollout_key, group.env_state, group.turn_batch, train_state
             )
-            next_groups.append(_replace_rollout_group_state(group, env_state, turn_batch))
+            next_groups.append(
+                _replace_rollout_group_state(group, env_state, turn_batch)
+            )
             transitions_by_group.append(transitions)
             rollout_metrics_by_group.append(rollout_metrics)
         rollout_groups = next_groups
         transitions = concatenate_transition_batches(transitions_by_group)
-        rollout_metrics = jax.tree.map(
-            lambda *xs: sum(xs), *rollout_metrics_by_group
-        )
+        rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
         # Block once so timing reflects device work, not just dispatch.
         rollout_samples = float(jax.device_get(rollout_metrics["samples"]))
         rollout_seconds = time.perf_counter() - rollout_start
@@ -249,7 +249,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         episodes = int(jax.device_get(rollout_metrics["episode_done"]))
         total_env_steps += env_steps
         completed_episodes += episodes
-        record: dict[str, float | int] = {
+        record: dict[str, object] = {
             "update": update,
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
@@ -263,6 +263,13 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
             "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
             **{name: float(value) for name, value in metrics.items()},
+            "opponent_composition": {
+                "latest": float(rollout_metrics.get("opponent_current_slots", 0.0)),
+                "random": float(rollout_metrics.get("opponent_random_slots", 0.0)),
+                "historical": float(
+                    rollout_metrics.get("opponent_snapshot_slots", 0.0)
+                ),
+            },
         }
         append_jsonl(log_path, record)
         if update % cfg.log_every == 0:
@@ -285,7 +292,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
 
 
-def append_jsonl(path: Path, record: dict[str, float | int]) -> None:
+def append_jsonl(path: Path, record: dict[str, object]) -> None:
     """Append a JSON metrics record to ``path``, creating parents as needed."""
 
     path.parent.mkdir(parents=True, exist_ok=True)

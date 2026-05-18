@@ -29,6 +29,7 @@ class OrbitWarsEnv:
         self.opponent = opponent
         self.active_opponent = opponent
         self.active_opponents: dict[int, OpponentPolicy] = {}
+        self.active_opponent_metadata: dict[int, dict[str, Any]] = {}
         self.make_fn = make_fn
         self.env_index = env_index
         self.env: Any | None = None
@@ -57,8 +58,14 @@ class OrbitWarsEnv:
         opponent_players = [
             player for player in range(player_count) if player != self.learner_player
         ]
+        sampled = self._sample_opponents(len(opponent_players))
         self.active_opponents = {
-            player: self._sample_opponent() for player in opponent_players
+            player: selection[0]
+            for player, selection in zip(opponent_players, sampled, strict=True)
+        }
+        self.active_opponent_metadata = {
+            player: selection[1]
+            for player, selection in zip(opponent_players, sampled, strict=True)
         }
         self.active_opponent = (
             self.active_opponents[opponent_players[0]]
@@ -151,10 +158,11 @@ class OrbitWarsEnv:
             "learner_player": self.learner_player,
             "opponent_players": opponent_players,
             "player_status": extract_status(player_state),
-            "opponent_status": opponent_statuses.get(opponent_players[0])
-            if opponent_players
-            else None,
+            "opponent_status": (
+                opponent_statuses.get(opponent_players[0]) if opponent_players else None
+            ),
             "opponent_statuses": opponent_statuses,
+            "opponent_composition": self.active_opponent_metadata,
             "reward": reward,
             "terminal_reward": terminal_component,
             "shaping_reward": shaping_component,
@@ -162,9 +170,23 @@ class OrbitWarsEnv:
         }
         return StepResult(batch=batch, reward=reward, done=done, info=info)
 
+    def _sample_opponents(
+        self, count: int
+    ) -> list[tuple[OpponentPolicy, dict[str, Any]]]:
+        sampler = getattr(self.opponent, "sample_opponents", None)
+        if callable(sampler):
+            selections = sampler(count)
+            return [(selection.policy, selection.metadata) for selection in selections]
+        return [
+            (
+                self.opponent,
+                {"snapshot_id": -1, "update": 0, "source": self.cfg.opponent},
+            )
+            for _ in range(count)
+        ]
+
     def _sample_opponent(self) -> OpponentPolicy:
-        sampler = getattr(self.opponent, "sample_opponent", None)
-        return sampler() if callable(sampler) else self.opponent
+        return self._sample_opponents(1)[0][0]
 
 
 def shaped_reward_components(
