@@ -25,6 +25,8 @@ class JaxFeatureHistory(NamedTuple):
     self_features: jax.Array
     candidate_features: jax.Array
     global_features: jax.Array
+    source_ids: jax.Array
+    candidate_ids: jax.Array
 
 
 class JaxTurnBatch(NamedTuple):
@@ -68,7 +70,7 @@ def encode_turn(
     return JaxTurnBatch(
         self_features=_stack_self_history(self_features, history, env_cfg),
         candidate_features=_stack_candidate_history(
-            candidate_features, history, env_cfg
+            candidate_features, planets.id, candidate_ids, history, env_cfg
         ),
         global_features=jnp.repeat(
             _stack_global_history(global_features, history, env_cfg)[None, :],
@@ -104,17 +106,27 @@ def empty_feature_history(env_cfg: EnvConfig) -> JaxFeatureHistory:
             dtype=jnp.float32,
         ),
         global_features=jnp.zeros((steps, BASE_GLOBAL_FEATURE_DIM), dtype=jnp.float32),
+        source_ids=jnp.full((steps, env_cfg.max_planets), -1, dtype=jnp.int32),
+        candidate_ids=jnp.full(
+            (steps, env_cfg.max_planets, env_cfg.candidate_count),
+            -1,
+            dtype=jnp.int32,
+        ),
     )
 
 
 def current_feature_snapshot(game, env_cfg: EnvConfig) -> JaxFeatureHistory:
-    candidates = _candidate_features(game.planets, game.player, env_cfg)[1]
+    candidate_ids, candidates, _candidate_mask, _target_angles = _candidate_features(
+        game.planets, game.player, env_cfg
+    )
     return JaxFeatureHistory(
         self_features=_self_features(game.planets, game.fleets, game.player, env_cfg)[
             None, ...
         ],
         candidate_features=candidates[None, ...],
         global_features=_global_features(game, env_cfg)[None, ...],
+        source_ids=game.planets.id[None, ...],
+        candidate_ids=candidate_ids[None, ...],
     )
 
 
@@ -136,6 +148,12 @@ def append_feature_history(
         global_features=jnp.concatenate(
             [base.global_features, current.global_features], axis=0
         )[-steps:],
+        source_ids=jnp.concatenate([base.source_ids, current.source_ids], axis=0)[
+            -steps:
+        ],
+        candidate_ids=jnp.concatenate(
+            [base.candidate_ids, current.candidate_ids], axis=0
+        )[-steps:],
     )
 
 
@@ -151,15 +169,43 @@ def _stack_self_history(
 
 
 def _stack_candidate_history(
-    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+    current: jax.Array,
+    source_ids: jax.Array,
+    candidate_ids: jax.Array,
+    history: JaxFeatureHistory | None,
+    env_cfg: EnvConfig,
 ) -> jax.Array:
     if feature_history_steps(env_cfg) <= 1:
         return current
     base = empty_feature_history(env_cfg) if history is None else history
-    stacked = jnp.concatenate([base.candidate_features, current[None, ...]], axis=0)
+    history_features = _target_aligned_candidate_history(
+        source_ids, candidate_ids, base
+    )
+    stacked = jnp.concatenate([history_features, current[None, ...]], axis=0)
     return jnp.transpose(stacked, (1, 2, 0, 3)).reshape(
         env_cfg.max_planets, env_cfg.candidate_count, -1
     )
+
+
+def _target_aligned_candidate_history(
+    source_ids: jax.Array,
+    candidate_ids: jax.Array,
+    history: JaxFeatureHistory,
+) -> jax.Array:
+    source_matches = (
+        history.source_ids[:, None, None, :, None]
+        == source_ids[None, :, None, None, None]
+    )
+    target_matches = (
+        history.candidate_ids[:, None, None, :, :]
+        == candidate_ids[None, :, :, None, None]
+    )
+    valid_targets = candidate_ids[None, :, :, None, None] != -1
+    matches = source_matches & target_matches & valid_targets
+    selected = jnp.where(
+        matches[..., None], history.candidate_features[:, None, None, :, :, :], 0.0
+    )
+    return selected.sum(axis=(3, 4))
 
 
 def _stack_global_history(
@@ -239,6 +285,7 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
     pad_width = max(0, c - 1) - order.shape[1]
     if pad_width:
         order = jnp.pad(order, ((0, 0), (0, pad_width)), constant_values=0)
+    ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
 
     tgt_x = jnp.take(planets.x, order, axis=0)
     tgt_y = jnp.take(planets.y, order, axis=0)
@@ -276,20 +323,28 @@ def _candidate_features(planets, player, env_cfg: EnvConfig):
         ],
         axis=-1,
     )
+    history_present = ordered_valid[..., None].astype(jnp.float32)
     real_features = jnp.concatenate(
-        [base_real_features, target_owner_one_hot(tgt_owner, player, env_cfg)], axis=-1
+        [
+            base_real_features,
+            target_owner_one_hot(tgt_owner, player, env_cfg),
+            history_present,
+        ],
+        axis=-1,
     )
+    real_features = jnp.where(ordered_valid[..., None], real_features, 0.0)
     noop_features = jnp.zeros((p, 1, BASE_CANDIDATE_FEATURE_DIM), dtype=jnp.float32)
     features = jnp.concatenate([noop_features, real_features], axis=1)
     noop_ids = jnp.full((p, 1), -1, dtype=jnp.int32)
-    ids = jnp.concatenate([noop_ids, jnp.take(planets.id, order, axis=0)], axis=1)
+    real_ids = jnp.where(ordered_valid, jnp.take(planets.id, order, axis=0), -1)
+    ids = jnp.concatenate([noop_ids, real_ids], axis=1)
     angles = jnp.concatenate([jnp.zeros((p, 1), dtype=jnp.float32), angle], axis=1)
     noop_mask = (
         jnp.ones((p, 1), dtype=bool)
         if c > NO_OP_CANDIDATE_INDEX
         else jnp.zeros((p, 0), dtype=bool)
     )
-    real_mask = tgt_active & (~crosses)
+    real_mask = ordered_valid & (~crosses)
     mask = jnp.concatenate([noop_mask, real_mask], axis=1)[:, :c]
     return ids[:, :c], features[:, :c, :], mask, angles[:, :c]
 
