@@ -11,6 +11,8 @@ command:
   - src.train
   - ${args_no_hyphens}
 parameters:
+  replay:
+    value: disabled
   opponent_mix:
     value: self_play_curriculum
   env.max_planets:
