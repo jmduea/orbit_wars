@@ -51,7 +51,7 @@ ppo:
   update_chunk_rows_min: 2048
   update_chunk_rows_max: null
   rollout_microbatch_envs: null
-  enable_gradient_checkpointing: false
+  enable_gradient_checkpointing: true
 reseed_every_updates: 0
 reseed_on_plateau: false
 plateau_metric: episode_reward_mean
