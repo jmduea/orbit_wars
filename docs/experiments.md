@@ -207,6 +207,136 @@ When comparing shaped vs. unshaped rewards, candidate counts, or self-play
 settings, keep `--games`, `--opponents`, and `--seeds` unchanged. This makes the
 reported win rates and rewards directly comparable across checkpoints.
 
+
+## Hydra multirun sweep recipes
+
+Hydra sweeps are the easiest way to run controlled ablations while keeping one
+canonical base config. The examples below use:
+
+- `-m` (Hydra multirun) to launch one run per value combination.
+- A fixed experiment backbone (for example `experiment=jax_training`) so only
+  one independent variable changes.
+- Explicit `seed`, `--games`, `--opponents`, and `--seeds` settings during
+  evaluation to keep comparisons fair.
+
+### 1) Candidate-count sweep (`8/16/24`)
+
+```bash
+uv run python -m src.train -m \
+  experiment=attention_training \
+  env.candidate_count=8,16,24 \
+  run_name=sweep_candidates
+```
+
+### 2) Shaped vs unshaped reward sweep
+
+```bash
+uv run python -m src.train -m \
+  experiment=attention_training \
+  env.reward_capture_planet=0.0,0.02 \
+  env.reward_ship_delta=0.0,0.01 \
+  env.reward_production_delta=0.0,0.005 \
+  run_name=sweep_reward_shape
+```
+
+Tip: keep terminal objective settings unchanged (`env.terminal_reward_mode` and
+`env.reward_terminal_scale`) so the shaped/unshaped comparison isolates only the
+dense shaping terms.
+
+### 3) Model-size sweep (`500k/700k/1m`)
+
+You can sweep by experiment name (recommended because each file already pins a
+known architecture width/head combination):
+
+```bash
+uv run python -m src.train -m \
+  experiment=jax_entity_transformer_500k,jax_entity_transformer_700k,jax_entity_transformer_1m \
+  run_name=sweep_model_size
+```
+
+### 4) Mixed 2p/4p format settings sweep
+
+For JAX mixed-format training, sweep only one ratio at a time while keeping
+per-format rollout groups fixed:
+
+```bash
+uv run python -m src.train -m \
+  experiment=jax_mixed_2p_4p_training \
+  training_format.format_mix='[{player_count:2,weight:0.75},{player_count:4,weight:0.25}]','[{player_count:2,weight:0.5},{player_count:4,weight:0.5}]','[{player_count:2,weight:0.25},{player_count:4,weight:0.75}]' \
+  run_name=sweep_format_mix
+```
+
+### Keep sweep outputs comparable (naming + directory convention)
+
+Use a stable naming pattern that encodes the sweep family and let Hydra append
+parameter overrides:
+
+- Base `run_name`: `sweep_<factor>` (for example `sweep_candidates`).
+- Output root per study: `save_dir=artifacts/sweeps/<family>`
+- Include date only if running repeated studies, for example
+  `save_dir=artifacts/sweeps/candidates_2026-05-19`.
+
+Recommended multirun invocation pattern:
+
+```bash
+uv run python -m src.train -m \
+  experiment=attention_training \
+  env.candidate_count=8,16,24 \
+  run_name=sweep_candidates \
+  save_dir=artifacts/sweeps/candidates
+```
+
+## Optional Hydra sweeper plugins
+
+The repository works with Hydra's default basic sweeper out of the box. If you
+want a checked-in config stub, use `conf/hydra/sweeper/basic.yaml` and include
+it from your active config defaults.
+
+```yaml
+# conf/hydra/sweeper/basic.yaml
+_target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+max_batch_size: null
+params: {}
+```
+
+Later, you can optionally switch to search plugins such as Optuna or Ax once
+those dependencies are installed in your environment:
+
+- Optuna plugin target: `hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper`
+- Ax plugin target: `hydra_plugins.hydra_ax_sweeper.ax_sweeper.AxSweeper`
+
+Keep the same naming convention (`run_name`, `save_dir`, fixed eval seeds) when
+moving from grid sweeps to adaptive sweeps so historical results remain
+comparable.
+
+## Fair-evaluation checklist for any sweep
+
+For every checkpoint family being compared, keep all of the following fixed:
+
+1. **Training seed:** set explicit `seed=<N>` in every sweep launch.
+2. **Opponent recipe:** same `opponent`, `opponent_mix`, and self-play settings.
+3. **Training budget:** same `ppo.total_updates`, `ppo.rollout_steps`, and
+   effective environment count.
+4. **Evaluation games:** same `--games` value for all checkpoints.
+5. **Evaluation opponents:** identical `--opponents` list and ordering.
+6. **Evaluation seeds:** identical fixed range such as `--seeds 0:99`.
+7. **Evaluation formats:** identical `--formats` and `--learner-seats` policy.
+
+Example fair-eval command template:
+
+```bash
+uv run python evaluate.py \
+  --config configs/attention_training.yaml \
+  --checkpoint <checkpoint_path> \
+  --games 100 \
+  --opponents sniper,random,self_play_snapshot \
+  --formats 2p,4p \
+  --learner-seats all \
+  --seeds 0:99 \
+  --deterministic \
+  --run-name <eval_run_name>
+```
+
 ## Benchmarking environment and JAX throughput
 
 Compare Kaggle/Python and JAX environment stepping with:
