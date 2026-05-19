@@ -7,13 +7,13 @@ opponent_mix:
   temperature: 1.0
   curriculum:
     - start_update: 1
-      end_update: 500
+      end_update: 1000
       weights:
-        latest: 1.0
+        latest: 0.0
         historical: 0.0
         scripted_sniper: 0.0
-        random: 0.0
-    - start_update: 501
+        random: 1.0
+    - start_update: 1001
       end_update: -1
       weights:
         latest: 0.6
