@@ -1,6 +1,6 @@
 defaults:
   - backend: default
-  - model: entity_transformer_700k
+  - model: entity_transformer_1m
   - training_format: mix_2p_4p_8env
   - opponent_mix: latest_only
   - replay: enabled
