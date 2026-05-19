@@ -41,7 +41,7 @@ env:
   terminal_reward_mode: binary_win
   feature_history_steps: 50
 ppo:
-  rollout_steps: 128
+  rollout_steps: 500
   num_envs: 16
   num_envs_2p: 8
   num_envs_4p: 8
