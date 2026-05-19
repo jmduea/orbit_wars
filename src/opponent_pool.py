@@ -42,6 +42,18 @@ class OpponentRegistry:
     def __init__(self, cfg: OpponentRegistryConfig) -> None:
         self.cfg = cfg
 
+    @staticmethod
+    def _weights_vector(weights: dict[str, float]) -> jnp.ndarray:
+        return jnp.asarray(
+            [
+                float(weights.get("latest", 0.0)),
+                float(weights.get("historical", 0.0)),
+                float(weights.get("scripted_sniper", 0.0)),
+                float(weights.get("random", 0.0)),
+            ],
+            dtype=jnp.float32,
+        )
+
     def phase_for_update(self, update: int) -> OpponentMixturePhase | None:
         for raw in self.cfg.curriculum:
             start = int(raw.get("start_update", 0))
@@ -94,6 +106,53 @@ class OpponentRegistry:
         probs = np.exp(raw)
         probs = probs / np.sum(probs)
         return ids, [float(x) for x in probs]
+
+    def ids_and_probs_jax(self, update: jax.Array) -> tuple[jax.Array, jax.Array]:
+        """JAX-compatible opponent mixture selection for traced update values."""
+
+        base_weights = self._weights_vector(self.cfg.weights)
+        selected_weights = base_weights
+        selected_temperature = jnp.asarray(float(self.cfg.temperature), dtype=jnp.float32)
+        matched = jnp.asarray(False)
+
+        for raw in self.cfg.curriculum:
+            start = int(raw.get("start_update", 0))
+            end = int(raw.get("end_update", -1))
+            phase_weights = dict(self.cfg.weights)
+            phase_weights.update(
+                {str(k): float(v) for k, v in dict(raw.get("weights", {})).items()}
+            )
+            phase_weights_vec = self._weights_vector(phase_weights)
+            phase_temperature = jnp.asarray(
+                float(raw.get("temperature", self.cfg.temperature)), dtype=jnp.float32
+            )
+
+            in_start = update >= jnp.asarray(start, dtype=jnp.int32)
+            in_end = jnp.asarray(True) if end < 0 else (update <= jnp.asarray(end, dtype=jnp.int32))
+            use_phase = jnp.logical_and(jnp.logical_and(in_start, in_end), jnp.logical_not(matched))
+
+            selected_weights = jnp.where(use_phase, phase_weights_vec, selected_weights)
+            selected_temperature = jnp.where(
+                use_phase, phase_temperature, selected_temperature
+            )
+            matched = jnp.logical_or(matched, use_phase)
+
+        temperature = jnp.maximum(selected_temperature, jnp.asarray(1e-6, dtype=jnp.float32))
+        logits = jnp.log(jnp.maximum(selected_weights, 1e-12)) / temperature
+        logits = jnp.where(selected_weights > 0.0, logits, jnp.asarray(-1e9, dtype=jnp.float32))
+        probs = jax.nn.softmax(logits)
+        fallback = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float32)
+        probs = jnp.where(jnp.sum(selected_weights) > 0.0, probs, fallback)
+        ids = jnp.asarray(
+            [
+                OPPONENT_LATEST,
+                OPPONENT_HISTORICAL,
+                OPPONENT_SCRIPTED_SNIPER,
+                OPPONENT_RANDOM,
+            ],
+            dtype=jnp.int32,
+        )
+        return ids, probs
 
 
 def sample_opponent_type_ids_jax(
