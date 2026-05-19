@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import TrainConfig, default_train_config_path, load_train_config  # noqa: E402
+from src.config import TrainConfig, load_hydra_train_config  # noqa: E402
 from src.env import OrbitWarsEnv  # noqa: E402
 from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim  # noqa: E402
 from src.normalization import ObservationNormalizer  # noqa: E402
@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line options for environment throughput benchmarks."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=str, default=str(default_train_config_path()))
+    parser.add_argument("--experiment", type=str, default="attention_training")
     parser.add_argument("--backend", choices=["jax", "kaggle", "both"], default="both")
     parser.add_argument("--num-envs", type=int, default=None)
     parser.add_argument("--rollout-steps", type=int, default=None)
@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
 def build_cfg(args: argparse.Namespace, backend: str) -> TrainConfig:
     """Load and override benchmark configuration for one backend."""
 
-    cfg = load_train_config(args.config)
+    cfg = load_hydra_train_config(Path("conf/experiment") / f"{args.experiment}.yaml")
     cfg = deepcopy(cfg)
     cfg.env_backend = backend
     if args.num_envs is not None:
