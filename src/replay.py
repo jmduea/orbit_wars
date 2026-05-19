@@ -1,23 +1,16 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import pickle
 from pathlib import Path
 
-import torch
+import jax
+import jax.numpy as jnp
 
 from .config import TrainConfig
-from .normalization import ObservationNormalizer
-from .opponents import SelfPlayOpponent, build_opponent
-
-
-@dataclass(slots=True)
-class ReplayResult:
-    html_path: Path
-    metadata_path: Path
-    seed: int
-    opponent: str
-    result: str
+from .features import encode_turn, ship_count_for_bucket
+from .jax_policy import build_jax_policy
+from .opponents import build_opponent
 
 
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
@@ -37,16 +30,74 @@ def _reward_to_result(reward: float) -> str:
     return "draw"
 
 
-def maybe_write_checkpoint_replay(
+def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
+    with checkpoint_path.open("rb") as file:
+        checkpoint = pickle.load(file)
+    if not isinstance(checkpoint, dict) or "params" not in checkpoint:
+        raise ValueError(
+            f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
+        )
+
+    params = checkpoint["params"]
+    policy = build_jax_policy(
+        candidate_count=cfg.env.candidate_count,
+        ship_bucket_count=cfg.env.ship_bucket_count,
+        hidden_size=cfg.model.hidden_size,
+        architecture=cfg.model.architecture,
+        attention_heads=cfg.model.attention_heads,
+    )
+
+    def act(observation: object) -> list[list[float | int]]:
+        batch = encode_turn(observation, cfg.env, env_index=0)
+        if batch.self_features.shape[0] == 0:
+            return []
+        outputs = policy.apply(
+            {"params": params},
+            jnp.asarray(batch.self_features),
+            jnp.asarray(batch.candidate_features),
+            jnp.asarray(batch.global_features),
+            jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
+        )
+        target_indices = jax.device_get(jnp.argmax(outputs.target_logits, axis=-1))
+        selected_ship_logits = jnp.take_along_axis(
+            outputs.ship_logits,
+            jnp.asarray(target_indices)[:, None, None].repeat(
+                outputs.ship_logits.shape[-1], axis=-1
+            ),
+            axis=1,
+        ).squeeze(axis=1)
+        ship_buckets = jax.device_get(jnp.argmax(selected_ship_logits, axis=-1))
+
+        moves: list[list[float | int]] = []
+        for row_idx, context in enumerate(batch.contexts):
+            target_idx = int(target_indices[row_idx])
+            bucket_idx = int(ship_buckets[row_idx])
+            if target_idx == 0 or bucket_idx == 0:
+                continue
+            if target_idx >= len(context.candidate_ids):
+                continue
+            if not context.candidate_mask[target_idx]:
+                continue
+            ships = ship_count_for_bucket(
+                context.source_ships, bucket_idx, cfg.env.ship_bucket_count
+            )
+            if ships <= 0:
+                continue
+            moves.append(
+                [context.source_id, float(context.target_angles[target_idx]), ships]
+            )
+        return moves
+
+    return act
+
+
+def maybe_write_jax_checkpoint_replay(
     cfg: TrainConfig,
     *,
     update: int,
     checkpoint_path: Path,
-    policy: torch.nn.Module,
-    normalizer: ObservationNormalizer | None,
-    device: torch.device,
     log_path: Path,
-) -> ReplayResult | None:
+) -> Path | None:
     if not cfg.replay.enabled:
         return None
     every_n = max(int(cfg.replay.every_n_checkpoints), 1)
@@ -62,9 +113,8 @@ def maybe_write_checkpoint_replay(
     seed = _seed_for_update(cfg, update)
     opponent_name = cfg.replay.opponent
 
-    learner = SelfPlayOpponent(cfg, device=device, deterministic=True)
-    learner.sync_from(policy, normalizer)
-    opponent = build_opponent(opponent_name, cfg=cfg, device=device)
+    learner_act = _build_jax_policy_actions(cfg, checkpoint_path)
+    opponent = build_opponent(opponent_name)
 
     env = make("orbit_wars", configuration={"seed": seed, "randomSeed": seed}, debug=False)
     env.reset(num_agents=2)
@@ -73,7 +123,7 @@ def maybe_write_checkpoint_replay(
     while step_count < max(int(cfg.replay.max_steps), 1):
         learner_obs = states[0].observation if states[0] is not None else {}
         opp_obs = states[1].observation if states[1] is not None else {}
-        joint_actions = [learner.act(learner_obs), opponent.act(opp_obs)]
+        joint_actions = [learner_act(learner_obs), opponent.act(opp_obs)]
         states = env.step(joint_actions)
         step_count += 1
         status = states[0].status if states and states[0] is not None else "DONE"
@@ -97,49 +147,6 @@ def maybe_write_checkpoint_replay(
                 "result": result,
                 "reward": reward,
                 "html_path": str(html_path),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    return ReplayResult(
-        html_path=html_path,
-        metadata_path=metadata_path,
-        seed=seed,
-        opponent=opponent_name,
-        result=result,
-    )
-
-
-def maybe_write_jax_checkpoint_replay(
-    cfg: TrainConfig,
-    *,
-    update: int,
-    checkpoint_path: Path,
-    log_path: Path,
-) -> Path | None:
-    if not cfg.replay.enabled:
-        return None
-    every_n = max(int(cfg.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.checkpoint_every), 1), 1)
-    if checkpoint_index % every_n != 0 and update != cfg.ppo.total_updates:
-        return None
-    run_dir = checkpoint_path.parent
-    replay_dir = run_dir / cfg.replay.output_dir
-    replay_dir.mkdir(parents=True, exist_ok=True)
-    metadata_path = replay_dir / f"replay_u{update:06d}.json"
-    metadata_path.write_text(
-        json.dumps(
-            {
-                "checkpoint_update": update,
-                "checkpoint_path": str(checkpoint_path),
-                "log_path": str(log_path),
-                "seed": _seed_for_update(cfg, update),
-                "opponent": cfg.replay.opponent,
-                "result": "unavailable",
-                "reason": "JAX checkpoint replay currently requires a Torch policy export.",
             },
             indent=2,
             sort_keys=True,
