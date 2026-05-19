@@ -22,4 +22,6 @@ package = false
 [dependency-groups]
 dev = [
     "ruff>=0.15.13",
+    "pytest>=8.3.0",
+    "torch",
 ]
