@@ -307,8 +307,33 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         rollout_groups = merged_groups
         transitions = concatenate_transition_batches(transitions_by_group)
         rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
-        # Block once so timing reflects device work, not just dispatch.
-        rollout_samples = float(jax.device_get(rollout_metrics["samples"]))
+        rollout_scalar_keys = (
+            "samples",
+            "env_steps",
+            "episode_done",
+            "episodes_2p",
+            "episodes_4p",
+            "wins_2p",
+            "first_places_4p",
+            "placement_4p_sum",
+            "survival_time_sum",
+            "score_share_sum",
+            "opponent_current_slots",
+            "opponent_random_slots",
+            "opponent_snapshot_slots",
+            cfg.plateau_metric,
+        )
+        rollout_scalar_values = jnp.asarray(
+            [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
+            dtype=jnp.float32,
+        )
+        # Intentional sync boundary: transfer only compact rollout scalars once so
+        # rollout timing reflects completed device work without materializing trees.
+        rollout_scalars_host = jax.device_get(rollout_scalar_values)
+        rollout_scalars = dict(
+            zip(rollout_scalar_keys, rollout_scalars_host.tolist(), strict=True)
+        )
+        rollout_samples = float(rollout_scalars["samples"])
         rollout_seconds = time.perf_counter() - rollout_start
 
         ppo_start = time.perf_counter()
@@ -324,45 +349,47 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         metrics = jax.tree.map(
             lambda x: x / float(max(cfg.ppo.epochs, 1)), metrics_accum
         )
-        metrics = jax.device_get(metrics)
+        metric_names = tuple(metrics.keys())
+        metric_values = jnp.asarray([metrics[name] for name in metric_names])
+        # Intentional sync boundary: perform a single compact host transfer for
+        # PPO scalars and keep logging values identical.
+        metric_values_host = jax.device_get(metric_values)
+        metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
         ppo_seconds = time.perf_counter() - ppo_start
         update_seconds = time.perf_counter() - update_start
-        rollout_metrics_host = jax.device_get(rollout_metrics)
-        env_steps = int(rollout_metrics_host["env_steps"])
-        episodes = int(rollout_metrics_host["episode_done"])
-        episodes_2p = float(rollout_metrics_host.get("episodes_2p", 0.0))
-        episodes_4p = float(rollout_metrics_host.get("episodes_4p", 0.0))
-        episode_count = float(rollout_metrics_host.get("episode_done", 0.0))
+        env_steps = int(rollout_scalars["env_steps"])
+        episodes = int(rollout_scalars["episode_done"])
+        episodes_2p = float(rollout_scalars["episodes_2p"])
+        episodes_4p = float(rollout_scalars["episodes_4p"])
+        episode_count = float(rollout_scalars["episode_done"])
         win_rate_2p = (
-            float(rollout_metrics_host.get("wins_2p", 0.0)) / episodes_2p
+            float(rollout_scalars["wins_2p"]) / episodes_2p
             if episodes_2p
             else 0.0
         )
         first_place_rate_4p = (
-            float(rollout_metrics_host.get("first_places_4p", 0.0)) / episodes_4p
+            float(rollout_scalars["first_places_4p"]) / episodes_4p
             if episodes_4p
             else 0.0
         )
         average_placement_4p = (
-            float(rollout_metrics_host.get("placement_4p_sum", 0.0)) / episodes_4p
+            float(rollout_scalars["placement_4p_sum"]) / episodes_4p
             if episodes_4p
             else 0.0
         )
         survival_time = (
-            float(rollout_metrics_host.get("survival_time_sum", 0.0)) / episode_count
+            float(rollout_scalars["survival_time_sum"]) / episode_count
             if episode_count
             else 0.0
         )
         score_share = (
-            float(rollout_metrics_host.get("score_share_sum", 0.0)) / episode_count
+            float(rollout_scalars["score_share_sum"]) / episode_count
             if episode_count
             else 0.0
         )
         total_env_steps += env_steps
         completed_episodes += episodes
-        seed_scheduler.update_metric(
-            float(rollout_metrics_host.get(cfg.plateau_metric, 0.0))
-        )
+        seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
         record: dict[str, object] = {
             "update": update,
             "total_env_steps": total_env_steps,
@@ -384,15 +411,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
             "seed_scheduler_plateau_metric": cfg.plateau_metric,
             "reseed_events": reseed_events,
-            **{name: float(value) for name, value in metrics.items()},
+            **{name: float(value) for name, value in metrics_host.items()},
             "opponent_composition": {
-                "latest": float(
-                    rollout_metrics_host.get("opponent_current_slots", 0.0)
-                ),
-                "random": float(rollout_metrics_host.get("opponent_random_slots", 0.0)),
-                "historical": float(
-                    rollout_metrics_host.get("opponent_snapshot_slots", 0.0)
-                ),
+                "latest": float(rollout_scalars["opponent_current_slots"]),
+                "random": float(rollout_scalars["opponent_random_slots"]),
+                "historical": float(rollout_scalars["opponent_snapshot_slots"]),
             },
             "curriculum_phase_id": curriculum.current_phase_id(),
             "curriculum_phase_events": list(phase_events),
