@@ -42,6 +42,6 @@ parameters:
   ppo.vf_coef:
     values: [0.5, 1.0]
   model.hidden_size:
-    values: [128, 192, 224, 272]
+    values: [128, 192, 256]
   model.attention_heads:
-    values: [4, 6, 7, 8]
+    values: [2, 4, 8, 16]
