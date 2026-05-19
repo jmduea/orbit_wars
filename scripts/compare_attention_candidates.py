@@ -5,12 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+from hydra import compose, initialize_config_dir
 
-DEFAULT_CONFIGS = (
-    "configs/attention_training.yaml",
-    "configs/attention_candidates_16.yaml",
-    "configs/attention_candidates_24.yaml",
+DEFAULT_EXPERIMENTS = (
+    "attention_training",
+    "attention_candidates_16",
+    "attention_candidates_24",
 )
 DEFAULT_COLUMNS = (
     "config",
@@ -33,11 +33,11 @@ DEFAULT_COLUMNS = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare attention candidate-count runs. Use the generated configs to train "
+            "Compare attention candidate-count runs. Compose Hydra experiments to train "
             "8/16/24-candidate runs with the same seed, then summarize their JSONL logs."
         )
     )
-    parser.add_argument("--configs", nargs="+", default=list(DEFAULT_CONFIGS), help="Config files to compare.")
+    parser.add_argument("--experiments", nargs="+", default=list(DEFAULT_EXPERIMENTS), help="Experiment names to compare.")
     parser.add_argument("--log-dir", default="artifacts/rl_template/logs", help="Directory containing run_name.jsonl logs.")
     parser.add_argument(
         "--print-commands",
@@ -47,10 +47,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_config(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"Config must be a YAML mapping: {path}")
+def load_config(experiment: str) -> dict[str, Any]:
+    conf_dir = Path("conf").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
+        cfg = compose(config_name="config", overrides=[f"+experiment={experiment}"])
+    data = dict(cfg)
+    data.pop("experiment", None)
     return data
 
 
@@ -65,13 +67,13 @@ def latest_jsonl_record(path: Path) -> dict[str, Any] | None:
     return json.loads(last_line) if last_line else None
 
 
-def row_for_config(config_path: Path, log_dir: Path) -> dict[str, Any]:
-    cfg = load_config(config_path)
+def row_for_config(experiment: str, log_dir: Path) -> dict[str, Any]:
+    cfg = load_config(experiment)
     env_cfg = cfg.get("env", {}) if isinstance(cfg.get("env", {}), dict) else {}
     candidate_count = int(env_cfg.get("candidate_count", 8))
-    run_name = str(cfg.get("run_name", config_path.stem))
+    run_name = str(cfg.get("run_name", experiment))
     row: dict[str, Any] = {
-        "config": str(config_path),
+        "config": experiment,
         "seed": cfg.get("seed", ""),
         "candidate_count": candidate_count,
         "real_target_slots": max(0, candidate_count - 1),
@@ -104,12 +106,12 @@ def print_table(rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     args = parse_args()
-    config_paths = [Path(path) for path in args.configs]
+    experiments = list(args.experiments)
     if args.print_commands:
-        for path in config_paths:
-            print(f"uv run python -m src.train experiment={path.stem}")
+        for experiment in experiments:
+            print(f"uv run python -m src.train experiment={experiment}")
         print()
-    rows = [row_for_config(path, Path(args.log_dir)) for path in config_paths]
+    rows = [row_for_config(experiment, Path(args.log_dir)) for experiment in experiments]
     print_table(rows)
 
 

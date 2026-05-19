@@ -102,3 +102,7 @@ uv run python -m src.train experiment=attention_training
 uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/jax_ckpt_000050.pkl
 ```
 
+## Canonical experiment authoring policy
+
+- Canonical experiment editing and sweeps happen only in `conf/` (`conf/config.yaml`, `conf/experiment/*.yaml`, and config groups).
+- `configs/` has been removed; use Hydra experiment selection from `conf/experiment/` for all authoring and execution.
