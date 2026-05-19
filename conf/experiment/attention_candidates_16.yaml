@@ -1,0 +1,7 @@
+defaults:
+  - attention_training
+
+env:
+  candidate_count: 16
+run_name: orbit_wars_ppo_attention_candidates_16
+save_dir: artifacts/attention_candidates_16

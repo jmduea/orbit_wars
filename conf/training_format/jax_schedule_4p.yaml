@@ -1,0 +1,16 @@
+training_format:
+  format_schedule:
+    - player_count: 2
+      start_update: 0
+      weight: 1.0
+    - player_count: 4
+      start_update: 1000
+      weight: 1.0
+  format_mix: []
+  rollout_groups:
+    - name: two_player
+      player_count: 2
+      num_envs: 4
+    - name: four_player
+      player_count: 4
+      num_envs: 4

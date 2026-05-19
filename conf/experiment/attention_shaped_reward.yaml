@@ -1,0 +1,10 @@
+defaults:
+  - attention_training
+
+env:
+  reward_capture_planet: 0.1
+  reward_ship_delta: 0.001
+  reward_production_delta: 0.02
+self_play_enabled: true
+run_name: orbit_wars_ppo_attention_shaped_reward
+save_dir: artifacts/attention_shaped_reward_training

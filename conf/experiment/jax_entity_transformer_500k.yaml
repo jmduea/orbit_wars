@@ -1,0 +1,6 @@
+defaults:
+  - jax_mixed_2p_4p_training
+  - override /model: entity_transformer_500k
+
+run_name: orbit_wars_ppo_jax_entity_transformer_500k
+save_dir: artifacts/jax_entity_transformer_500k

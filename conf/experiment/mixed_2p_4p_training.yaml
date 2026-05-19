@@ -1,0 +1,9 @@
+defaults:
+  - full_training
+  - /training_format: mix_2p_4p_4env
+
+run_name: orbit_wars_ppo_mixed_2p_4p
+save_dir: artifacts/mixed_2p_4p_training
+ppo:
+  num_envs_2p: 4
+  num_envs_4p: 4

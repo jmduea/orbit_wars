@@ -1,4 +1,63 @@
 defaults:
-  - preset: torch_kaggle
+  - backend: kaggle_torch
+  - model: mlp
+  - training_format: empty
+  - opponent_mix: latest_only
+  - replay: disabled
+  - checkpoint_retention: default
+  - telemetry: default
 
-# Override via CLI: preset=attention, preset=jax, etc.
+seed: 42
+run_name: orbit_wars_template_ppo
+device: auto
+save_dir: artifacts/rl_template
+checkpoint_every: 10
+log_every: 1
+opponent: random
+self_play_update_interval: 10
+self_play_deterministic: false
+self_play_enabled: false
+self_play_pool_size: 5
+self_play_snapshot_interval: 25
+self_play_latest_probability: 0.5
+multi_opponent_mode: mixed
+alternate_player_sides: true
+env:
+  board_size: 100.0
+  episode_steps: 500
+  candidate_count: 8
+  ship_bucket_count: 8
+  max_planets: 48
+  max_fleets: 256
+  player_count: 2
+  ship_speed: 6.0
+  max_ships: 400.0
+  max_production: 5.0
+  reward_capture_planet: 0.0
+  reward_ship_delta: 0.0
+  reward_production_delta: 0.0
+  reward_terminal_scale: 1.0
+  terminal_reward_mode: binary_win
+  feature_history_steps: 1
+ppo:
+  rollout_steps: 32
+  num_envs: 4
+  num_envs_2p: null
+  num_envs_4p: null
+  rollout_groups: []
+  phases: []
+  total_updates: 200
+  epochs: 4
+  minibatch_size: 512
+  gamma: 0.99
+  clip_coef: 0.2
+  ent_coef: 0.01
+  vf_coef: 0.5
+  lr: 0.0003
+  max_grad_norm: 0.5
+reseed_every_updates: 0
+reseed_on_plateau: false
+plateau_metric: episode_reward_mean
+plateau_window: 10
+plateau_delta: 0.0
+heldout_eval_seed_set: []

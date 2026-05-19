@@ -1,0 +1,6 @@
+defaults:
+  - full_training
+  - override /model: attention
+
+run_name: orbit_wars_ppo_attention_training
+save_dir: artifacts/attention_training
