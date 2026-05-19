@@ -15,7 +15,7 @@ from .checkpoint_compat import (
     feature_metadata,
     validate_checkpoint_feature_compatibility,
 )
-from .config import TrainConfig, default_train_config_path, load_train_config
+from .config import TrainConfig, default_train_config_path, load_hydra_train_config
 from .env import OrbitWarsEnv
 from .features import (
     NO_OP_CANDIDATE_INDEX,
@@ -1128,7 +1128,7 @@ def main() -> None:
     """Run training from the command-line configuration."""
 
     args = parse_args()
-    cfg = load_train_config(args.config)
+    cfg = load_hydra_train_config(args.config)
     if (
         cfg.env_backend.strip().lower() == "jax"
         and cfg.rl_backend.strip().lower() == "jax"

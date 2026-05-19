@@ -1,181 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import warnings
 from pathlib import Path
 from typing import Any
 
-import yaml
+from hydra import compose, initialize_config_dir
+from omegaconf import OmegaConf
 
-
-@dataclass(slots=True)
-class EnvConfig:
-    """Environment and feature-shape configuration shared by all backends."""
-
-    board_size: float = 100.0
-    episode_steps: int = 500
-    candidate_count: int = 8
-    ship_bucket_count: int = 8
-    max_planets: int = 48
-    max_fleets: int = 256
-    player_count: int = 2
-    ship_speed: float = 6.0
-    max_ships: float = 400.0
-    max_production: float = 5.0
-    reward_capture_planet: float = 0.0
-    reward_ship_delta: float = 0.0
-    reward_production_delta: float = 0.0
-    reward_terminal_scale: float = 1.0
-    terminal_reward_mode: str = "binary_win"
-    feature_history_steps: int = 1
-
-
-@dataclass(slots=True)
-class ModelConfig:
-    """Policy architecture and observation-normalization configuration."""
-
-    architecture: str = "mlp"
-    hidden_size: int = 128
-    attention_heads: int = 4
-    normalize_observations: bool = True
-    obs_norm_clip: float = 10.0
-
-
-@dataclass(slots=True)
-class PPOConfig:
-    """PPO rollout, optimization, and loss hyperparameters."""
-
-    rollout_steps: int = 32
-    num_envs: int = 4
-    num_envs_2p: int | None = None
-    num_envs_4p: int | None = None
-    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
-    phases: list[dict[str, Any]] = field(default_factory=list)
-    total_updates: int = 200
-    epochs: int = 4
-    minibatch_size: int = 512
-    gamma: float = 0.99
-    clip_coef: float = 0.2
-    ent_coef: float = 0.01
-    vf_coef: float = 0.5
-    lr: float = 3e-4
-    max_grad_norm: float = 0.5
-
-
-@dataclass(slots=True)
-class TrainingFormatConfig:
-    """Curriculum and mixture configuration for multi-format training.
-
-    ``env.player_count`` remains the default environment format. The optional
-    ``format_schedule`` and ``format_mix`` lists describe curriculum phases or
-    sampling mixtures whose entries can override ``player_count`` and carry
-    additional backend-specific metadata, such as update ranges or weights.
-    ``rollout_groups`` can be used by trainers that allocate separate rollout
-    workers to individual formats.
-    """
-
-    format_schedule: list[dict[str, Any]] = field(default_factory=list)
-    format_mix: list[dict[str, Any]] = field(default_factory=list)
-    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
-    phases: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class WandBConfig:
-    """Optional Weights & Biases telemetry settings."""
-
-    enabled: bool = False
-    project: str | None = None
-    entity: str | None = None
-    group: str | None = None
-    tags: list[str] = field(default_factory=list)
-    log_artifacts: bool = False
-    log_model_every: int = 100
-    watch_model: bool = False
-
-
-@dataclass(slots=True)
-class OpponentMixConfig:
-    """Opponent mixture configuration for backend-agnostic registry."""
-
-    weights: dict[str, float] = field(
-        default_factory=lambda: {
-            "latest": 1.0,
-            "historical": 0.0,
-            "scripted_sniper": 0.0,
-            "random": 0.0,
-        }
-    )
-    temperature: float = 1.0
-    curriculum: list[dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class ReplayConfig:
-    """Configuration for writing deterministic checkpoint replays."""
-
-    enabled: bool = False
-    every_n_checkpoints: int = 1
-    opponent: str = "random"
-    seed_policy: str = "update"
-    max_steps: int = 500
-    output_dir: str = "replays"
-
-
-@dataclass(slots=True)
-class CheckpointRetentionConfig:
-    """Policy for pruning historical checkpoints after each save."""
-
-    keep_last_n: int = 5
-    keep_every_n_updates: int = 0
-    keep_best_k_by_metric: int = 0
-    best_metric_name: str = "episode_reward_mean"
-    best_metric_mode: str = "max"
-    min_update_for_pruning: int = 0
-    dry_run_pruning: bool = False
-
-
-@dataclass(slots=True)
-class TrainConfig:
-    """Top-level training configuration loaded from YAML files.
-
-    ``env_backend`` selects either the Kaggle/Python environment or the JAX
-    environment. ``rl_backend`` selects the Torch PPO loop or the end-to-end JAX
-    PPO loop.
-    """
-
-    seed: int = 42
-    run_name: str = "orbit_wars_template_ppo"
-    device: str = "auto"
-    save_dir: str = "artifacts/rl_template"
-    checkpoint_every: int = 10
-    log_every: int = 1
-    opponent: str = "random"
-    env_backend: str = "kaggle"
-    rl_backend: str = "torch"
-    self_play_update_interval: int = 10
-    self_play_deterministic: bool = False
-    self_play_enabled: bool = False
-    self_play_pool_size: int = 5
-    self_play_snapshot_interval: int = 25
-    self_play_latest_probability: float = 0.5
-    multi_opponent_mode: str = "mixed"
-    alternate_player_sides: bool = True
-    env: EnvConfig = field(default_factory=EnvConfig)
-    model: ModelConfig = field(default_factory=ModelConfig)
-    ppo: PPOConfig = field(default_factory=PPOConfig)
-    training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
-    opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
-    wandb: WandBConfig = field(default_factory=WandBConfig)
-    replay: ReplayConfig = field(default_factory=ReplayConfig)
-    checkpoint_retention: CheckpointRetentionConfig = field(
-        default_factory=CheckpointRetentionConfig
-    )
-    reseed_every_updates: int = 0
-    reseed_on_plateau: bool = False
-    plateau_metric: str = "episode_reward_mean"
-    plateau_window: int = 10
-    plateau_delta: float = 0.0
-    heldout_eval_seed_set: list[int] = field(default_factory=list)
+from .conf_schema import (
+    CheckpointRetentionConfig,
+    EnvConfig,
+    ModelConfig,
+    OpponentMixConfig,
+    PPOConfig,
+    ReplayConfig,
+    TrainConfig,
+    TrainingFormatConfig,
+    WandBConfig,
+    register_config_schemas,
+)
 
 
 def default_train_config_path() -> Path:
@@ -184,45 +27,41 @@ def default_train_config_path() -> Path:
     return Path(__file__).resolve().parents[1] / "default_cfg.yaml"
 
 
-def load_train_config(path: str | Path) -> TrainConfig:
-    """Load a YAML training configuration into a typed ``TrainConfig``."""
+def load_hydra_train_config(path: str | Path) -> TrainConfig:
+    """Load training config through Hydra + structured schema validation."""
 
-    config_path = Path(path)
-    data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"YAML config must be a mapping: {config_path}")
-    return train_config_from_dict(data)
+    config_path = Path(path).resolve()
+    register_config_schemas()
+    with initialize_config_dir(version_base=None, config_dir=str(config_path.parent)):
+        composed = compose(config_name=config_path.stem)
+    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), composed)
+    cfg: TrainConfig = OmegaConf.to_object(merged)
+    cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    return cfg
+
+
+def load_train_config(path: str | Path) -> TrainConfig:
+    """Temporary compatibility adapter; use ``load_hydra_train_config`` directly."""
+
+    warnings.warn(
+        "load_train_config() is deprecated; use Hydra-based load_hydra_train_config().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return load_hydra_train_config(path)
 
 
 def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
-    """Build ``TrainConfig`` from a nested dictionary of overrides."""
+    """Temporary compatibility adapter for dictionary-based config loading."""
 
-    cfg = TrainConfig()
-    _update_dataclass(
-        cfg,
-        data,
-        skip={
-            "env",
-            "model",
-            "ppo",
-            "training_format",
-            "opponent_mix",
-            "wandb",
-            "replay",
-            "checkpoint_retention",
-        },
+    warnings.warn(
+        "train_config_from_dict() is deprecated; switch entry points to Hydra compose.",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    _update_dataclass(cfg.env, data.get("env", {}))
-    _update_dataclass(cfg.model, data.get("model", {}))
-    _update_dataclass(cfg.ppo, data.get("ppo", {}))
-    _update_dataclass(cfg.training_format, data.get("training_format", {}))
-    _update_dataclass(cfg.opponent_mix, data.get("opponent_mix", {}))
-    _update_dataclass(cfg.wandb, data.get("wandb", {}))
-    _update_dataclass(cfg.replay, data.get("replay", {}))
-    _update_dataclass(cfg.checkpoint_retention, data.get("checkpoint_retention", {}))
-    cfg.heldout_eval_seed_set = _parse_seed_set(
-        data.get("heldout_eval_seed_set", cfg.heldout_eval_seed_set)
-    )
+    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), data)
+    cfg: TrainConfig = OmegaConf.to_object(merged)
+    cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
     return cfg
 
 
@@ -247,32 +86,3 @@ def _parse_seed_set(raw: object) -> list[int]:
     if isinstance(raw, list | tuple | set):
         return [int(v) for v in raw]
     return []
-
-
-def _update_dataclass(
-    instance: Any, values: dict[str, Any], skip: set[str] | None = None
-) -> None:
-    if not isinstance(values, dict):
-        return
-    skip = skip or set()
-    for key, value in values.items():
-        if key in skip or not hasattr(instance, key):
-            continue
-        default = getattr(instance, key)
-        setattr(instance, key, _coerce_value(value, default))
-
-
-def _coerce_value(value: Any, default: Any) -> Any:
-    if isinstance(default, bool):
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"1", "true", "yes", "on"}:
-                return True
-            if lowered in {"0", "false", "no", "off"}:
-                return False
-        return bool(value)
-    if isinstance(default, int) and not isinstance(default, bool):
-        return int(value)
-    if isinstance(default, float):
-        return float(value)
-    return value

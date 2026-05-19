@@ -12,6 +12,7 @@ dependencies = [
     "kaggle-environments",
     "numpy",
     "pyyaml",
+    "hydra-core",
     "torch",
 ]
 
