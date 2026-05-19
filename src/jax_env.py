@@ -710,7 +710,22 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
             "env.terminal_reward_mode must be one of binary_win, ranked, "
             f"score_share, or survival_plus_rank; got {mode!r}."
         )
+    reward = _apply_early_terminal_reward_shaping_jax(reward, game.step, cfg)
     return done, reward, rank, placement, is_first, score_share, survival_time
+
+
+def _apply_early_terminal_reward_shaping_jax(
+    reward: jax.Array, step_index: jax.Array, cfg: EnvConfig
+) -> jax.Array:
+    if not getattr(cfg, "early_terminal_reward_shaping_enabled", True):
+        return reward
+    horizon = jnp.asarray(
+        max(int(getattr(cfg, "early_terminal_reward_shaping_horizon", 500)), 1),
+        dtype=jnp.float32,
+    )
+    step_number = jnp.maximum(step_index.astype(jnp.float32) + 1.0, 1.0)
+    bonus = jnp.maximum(horizon - step_number, 0.0) / horizon
+    return reward * (1.0 + bonus)
 
 
 def _ship_advantage(game: JaxGameState, player: jax.Array):

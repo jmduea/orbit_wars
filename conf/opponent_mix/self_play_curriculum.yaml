@@ -9,7 +9,8 @@ opponent_mix:
     latest: 0.7
     historical: 0.1
     scripted_sniper: 0.1
-    random: 0.1
+    random: 0.05
+    noop: 0.05
   temperature: 1.0
   curriculum:
     - start_update: 1
@@ -18,12 +19,14 @@ opponent_mix:
         latest: 0.0
         historical: 0.0
         scripted_sniper: 0.0
-        random: 1.0
+        random: 0.9
+        noop: 0.1
     - start_update: 1001
       end_update: -1
       weights:
         latest: 0.6
         historical: 0.2
         scripted_sniper: 0.1
-        random: 0.1
+        random: 0.05
+        noop: 0.05
       temperature: 0.8

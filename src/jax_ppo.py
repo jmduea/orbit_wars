@@ -22,6 +22,7 @@ from .jax_policy import action_log_prob_and_entropy, sample_actions
 from .opponent_pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
+    OPPONENT_NOOP,
     OPPONENT_SCRIPTED_SNIPER,
     OpponentRegistry,
     OpponentRegistryConfig,
@@ -252,6 +253,15 @@ def build_sniper_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> Jax
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
+def build_noop_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> JaxAction:
+    """Build a pass/no-op action that launches no fleets."""
+
+    env_count = batch.self_features.shape[0]
+    planet_count = batch.self_features.shape[1]
+    zeros = jnp.zeros((env_count * planet_count,), dtype=jnp.int32)
+    return build_action_from_batch(batch, zeros, zeros, cfg)
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     batch: JaxTurnBatch,
@@ -438,18 +448,21 @@ def collect_rollout_jax(
                         cfg,
                     )
                     scripted_action = build_sniper_action_from_batch(player_batch, cfg)
+                    noop_action = build_noop_action_from_batch(player_batch, cfg)
                     use_latest = slot_type == OPPONENT_LATEST
                     use_historical = slot_type == OPPONENT_HISTORICAL
                     use_scripted = slot_type == OPPONENT_SCRIPTED_SNIPER
+                    use_noop = slot_type == OPPONENT_NOOP
                     action = _select_env_action(
                         use_latest, current_action, random_action
                     )
                     action = _select_env_action(
                         use_historical, historical_action, action
                     )
-                    opponent_action = _select_env_action(
+                    action = _select_env_action(
                         use_scripted, scripted_action, action
                     )
+                    opponent_action = _select_env_action(use_noop, noop_action, action)
                 elif cfg.opponent == "random":
                     opponent_action = build_random_action_from_batch(
                         player_key, player_batch, cfg

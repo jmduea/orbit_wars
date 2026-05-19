@@ -44,6 +44,10 @@ env:
   reward_ship_delta: 0.0
   reward_production_delta: 0.0
   reward_terminal_scale: 1.0
+  # Enable terminal reward shaping based on how early (before horizon) the match ends.
+  early_terminal_reward_shaping_enabled: true
+  # Horizon used for early terminal shaping bonus/penalty scaling.
+  early_terminal_reward_shaping_horizon: 500
   terminal_reward_mode: binary_win
   feature_history_steps: 1
 model:
@@ -86,6 +90,7 @@ opponent_mix:
     historical: 0.0
     scripted_sniper: 0.0
     random: 0.0
+    noop: 0.0
   # Softmax temperature for mixture sampling.
   temperature: 1.0
   # Optional curriculum blocks to change opponent mix over time.
