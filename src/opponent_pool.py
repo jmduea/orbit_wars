@@ -5,6 +5,7 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
 OPPONENT_LATEST = 0
@@ -52,12 +53,16 @@ class OpponentRegistry:
             return OpponentMixturePhase(
                 start_update=start,
                 end_update=end,
-                weights={str(k): float(v) for k, v in dict(raw.get("weights", {})).items()},
+                weights={
+                    str(k): float(v) for k, v in dict(raw.get("weights", {})).items()
+                },
                 temperature=float(raw.get("temperature", self.cfg.temperature)),
             )
         return None
 
-    def _weights_and_temperature(self, update: int | None) -> tuple[dict[str, float], float]:
+    def _weights_and_temperature(
+        self, update: int | None
+    ) -> tuple[dict[str, float], float]:
         if update is not None:
             phase = self.phase_for_update(update)
             if phase is not None:
@@ -80,11 +85,14 @@ class OpponentRegistry:
             if weight <= 0.0:
                 continue
             ids.append(opponent_id)
-            logits.append(jnp.log(jnp.asarray(weight, dtype=jnp.float32) + 1e-12))
+            logits.append(float(np.log(float(weight) + 1e-12)))
         if not ids:
             return [OPPONENT_LATEST], [1.0]
         temp = max(float(temperature), 1e-6)
-        probs = jax.nn.softmax(jnp.asarray(logits) / temp)
+        raw = np.asarray(logits, dtype=np.float32) / temp
+        raw = raw - np.max(raw)
+        probs = np.exp(raw)
+        probs = probs / np.sum(probs)
         return ids, [float(x) for x in probs]
 
 

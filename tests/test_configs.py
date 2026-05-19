@@ -38,7 +38,9 @@ def test_jax_training_config_selects_jax_backends() -> None:
     assert jax_cfg["opponent"] in {"self", "random"}
 
 
-def test_jax_self_play_shaped_reward_config_combines_jax_self_play_and_shaping() -> None:
+def test_jax_self_play_shaped_reward_config_combines_jax_self_play_and_shaping() -> (
+    None
+):
     shaped = load_yaml("configs/jax_self_play_shaped_reward_training.yaml")
     unshaped = load_yaml("configs/jax_training.yaml")
 
@@ -47,7 +49,15 @@ def test_jax_self_play_shaped_reward_config_combines_jax_self_play_and_shaping()
     assert shaped["opponent"] == "self"
     assert shaped["self_play_enabled"] is True
     assert shaped["model"]["architecture"] == "attention"
-    assert shaped["ppo"] == unshaped["ppo"]
+    assert shaped["ppo"]["num_envs"] == 32
+    assert shaped["ppo"]["num_envs_2p"] == 16
+    assert shaped["ppo"]["num_envs_4p"] == 16
+    assert shaped["ppo"]["rollout_steps"] == 500
+    assert shaped["ppo"]["total_updates"] == unshaped["ppo"]["total_updates"]
+    assert shaped["ppo"]["ent_coef"] == unshaped["ppo"]["ent_coef"]
+    assert [
+        group["num_envs"] for group in shaped["training_format"]["rollout_groups"]
+    ] == [16, 16]
     assert shaped["env"]["reward_capture_planet"] == 0.1
     assert shaped["env"]["reward_ship_delta"] == 0.001
     assert shaped["env"]["reward_production_delta"] == 0.02
@@ -60,10 +70,16 @@ def test_train_config_loads_training_format_schedule_and_allocations() -> None:
     cfg = load_train_config("configs/jax_training.yaml")
 
     assert cfg.env.player_count == 2
-    assert [entry["player_count"] for entry in cfg.training_format.format_schedule] == [2, 4]
+    assert [entry["player_count"] for entry in cfg.training_format.format_schedule] == [
+        2,
+        4,
+    ]
     assert cfg.ppo.num_envs_2p == 4
     assert cfg.ppo.num_envs_4p == 4
-    assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [2, 4]
+    assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [
+        2,
+        4,
+    ]
 
 
 def test_jax_mixed_training_config_declares_2p_4p_mix() -> None:
@@ -72,10 +88,18 @@ def test_jax_mixed_training_config_declares_2p_4p_mix() -> None:
     assert mixed["env_backend"] == "jax"
     assert mixed["rl_backend"] == "jax"
     assert mixed["env"]["player_count"] == 2
-    assert [entry["player_count"] for entry in mixed["training_format"]["format_mix"]] == [2, 4]
-    assert [entry["weight"] for entry in mixed["training_format"]["format_mix"]] == [0.5, 0.5]
-    assert mixed["ppo"]["num_envs_2p"] == 4
-    assert mixed["ppo"]["num_envs_4p"] == 4
+    assert [
+        entry["player_count"] for entry in mixed["training_format"]["format_mix"]
+    ] == [2, 4]
+    assert [entry["weight"] for entry in mixed["training_format"]["format_mix"]] == [
+        0.5,
+        0.5,
+    ]
+    assert mixed["ppo"]["num_envs_2p"] == 16
+    assert mixed["ppo"]["num_envs_4p"] == 16
+    assert [
+        group["num_envs"] for group in mixed["training_format"]["rollout_groups"]
+    ] == [16, 16]
 
 
 def test_torch_kaggle_mixed_training_config_declares_2p_4p_mix() -> None:
@@ -83,9 +107,14 @@ def test_torch_kaggle_mixed_training_config_declares_2p_4p_mix() -> None:
 
     assert mixed["env_backend"] == "kaggle"
     assert mixed["rl_backend"] == "torch"
-    assert [entry["player_count"] for entry in mixed["training_format"]["format_mix"]] == [2, 4]
+    assert [
+        entry["player_count"] for entry in mixed["training_format"]["format_mix"]
+    ] == [2, 4]
     assert mixed["ppo"]["num_envs_2p"] == 4
     assert mixed["ppo"]["num_envs_4p"] == 4
+    assert [
+        group["num_envs"] for group in mixed["training_format"]["rollout_groups"]
+    ] == [4, 4]
 
 
 def test_train_config_loads_jax_mixed_format_mix_and_rollout_groups() -> None:
@@ -96,9 +125,12 @@ def test_train_config_loads_jax_mixed_format_mix_and_rollout_groups() -> None:
     assert cfg.env.player_count == 2
     assert [entry["player_count"] for entry in cfg.training_format.format_mix] == [2, 4]
     assert [entry["weight"] for entry in cfg.training_format.format_mix] == [0.5, 0.5]
-    assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [2, 4]
-    assert cfg.ppo.num_envs_2p == 4
-    assert cfg.ppo.num_envs_4p == 4
+    assert [group["player_count"] for group in cfg.training_format.rollout_groups] == [
+        2,
+        4,
+    ]
+    assert cfg.ppo.num_envs_2p == 16
+    assert cfg.ppo.num_envs_4p == 16
 
 
 def test_train_config_loads_replay_overrides() -> None:

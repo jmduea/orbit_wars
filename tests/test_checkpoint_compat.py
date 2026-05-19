@@ -18,22 +18,28 @@ def test_validate_checkpoint_feature_metadata_rejects_dim_mismatch() -> None:
             "feature_history_steps": 1,
             "self_feature_dim": 30,
             "candidate_feature_dim": 24,
-            "global_feature_dim": 41,
+            "global_feature_dim": 45,
         },
         "policy": {},
     }
 
-    with pytest.raises(ValueError, match="retrained with the current feature config or migrated") as exc_info:
-        validate_checkpoint_feature_compatibility(checkpoint, cfg, checkpoint_path="old.pt")
+    with pytest.raises(
+        ValueError, match="retrained with the current feature config or migrated"
+    ) as exc_info:
+        validate_checkpoint_feature_compatibility(
+            checkpoint, cfg, checkpoint_path="old.pt"
+        )
 
     message = str(exc_info.value)
     assert "old.pt" in message
     assert "self_feature_dim: checkpoint=30, current=60" in message
     assert "candidate_feature_dim: checkpoint=24, current=48" in message
-    assert "global_feature_dim: checkpoint=41, current=82" in message
+    assert "global_feature_dim: checkpoint=45, current=90" in message
 
 
-def test_validate_legacy_checkpoint_without_metadata_allows_matching_weight_dims() -> None:
+def test_validate_legacy_checkpoint_without_metadata_allows_matching_weight_dims() -> (
+    None
+):
     cfg = TrainConfig()
     cfg.env.feature_history_steps = 2
     policy = build_policy(

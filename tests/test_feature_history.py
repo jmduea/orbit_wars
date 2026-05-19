@@ -43,10 +43,16 @@ def test_python_feature_history_stacks_chronological_rows():
     np.testing.assert_allclose(
         previous_slice, first.self_features[0, BASE_SELF_FEATURE_DIM:]
     )
-    np.testing.assert_allclose(
-        current_slice,
-        encode_turn(_state(1, 30), EnvConfig(candidate_count=2)).self_features[0],
-    )
+    no_history_current = encode_turn(
+        _state(1, 30), EnvConfig(candidate_count=2)
+    ).self_features[0]
+    np.testing.assert_allclose(current_slice[:24], no_history_current[:24])
+    # The stacked current slice also exposes temporal planning signals derived
+    # from the retained prior source row.
+    np.testing.assert_allclose(current_slice[24], (30 - 10) / cfg.max_ships)
+    assert current_slice[25] == 1.0
+    assert current_slice[26] == 1.0
+    np.testing.assert_allclose(current_slice[27:], no_history_current[27:])
 
 
 def _three_planet_state(step: int, target_positions: dict[int, float]) -> GameState:

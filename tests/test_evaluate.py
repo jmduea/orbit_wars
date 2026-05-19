@@ -30,10 +30,19 @@ class FakeKaggleEnv:
         self.actions.append(action)
         assert self.reset_num_agents is not None
         status = "ACTIVE" if self.step_index == 0 else "DONE"
-        rewards = [0.0] * self.reset_num_agents if self.step_index == 0 else [0.0, 1.0, -1.0, -1.0]
+        rewards = (
+            [0.0] * self.reset_num_agents
+            if self.step_index == 0
+            else [0.0, 1.0, -1.0, -1.0]
+        )
         states = [
             {
-                "observation": {"player": player, "step": self.step_index, "planets": [], "fleets": []},
+                "observation": {
+                    "player": player,
+                    "step": self.step_index,
+                    "planets": [],
+                    "fleets": [],
+                },
                 "status": status,
                 "reward": rewards[player],
             }
@@ -54,7 +63,9 @@ def test_parse_formats_accepts_player_counts_and_format_labels() -> None:
     assert evaluate.parse_formats("2p,4p,2") == [2, 4]
 
 
-def test_four_player_evaluation_resets_four_agents_and_uses_three_opponent_slots(monkeypatch: Any) -> None:
+def test_four_player_evaluation_resets_four_agents_and_uses_three_opponent_slots(
+    monkeypatch: Any,
+) -> None:
     env = FakeKaggleEnv()
     install_fake_kaggle(monkeypatch, env)
     learner = RecordingAgent([[99, 0.5, 10]])
@@ -87,7 +98,9 @@ def test_four_player_evaluation_rejects_missing_opponent_slots() -> None:
     opponents = [RecordingAgent(), RecordingAgent()]
 
     try:
-        evaluate.play_one_game(learner, opponents, seed=1, player_count=4, learner_seat=0)
+        evaluate.play_one_game(
+            learner, opponents, seed=1, player_count=4, learner_seat=0
+        )
     except ValueError as exc:
         assert "Expected 3 opponent slot(s)" in str(exc)
     else:
@@ -97,7 +110,9 @@ def test_four_player_evaluation_rejects_missing_opponent_slots() -> None:
 def test_aggregate_format_reports_four_player_metrics_per_seat() -> None:
     results = [
         evaluate.GameResult("4p", 4, "random", 1, 1, 0, 3, 1.0, "win", 1.0, True, 10),
-        evaluate.GameResult("4p", 4, "random", 1, 1, 1, 3, -1.0, "loss", 3.0, False, 12),
+        evaluate.GameResult(
+            "4p", 4, "random", 1, 1, 1, 3, -1.0, "loss", 3.0, False, 12
+        ),
     ]
 
     metrics = evaluate.aggregate_format(results, 4)
@@ -108,7 +123,9 @@ def test_aggregate_format_reports_four_player_metrics_per_seat() -> None:
     assert metrics.per_seat["1"]["average_placement_4p"] == 3.0
 
 
-def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(monkeypatch: Any) -> None:
+def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(
+    monkeypatch: Any,
+) -> None:
     env = FakeKaggleEnv()
     install_fake_kaggle(monkeypatch, env)
     learner = RecordingAgent([[7, 1.25, 3]])
@@ -127,4 +144,4 @@ def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(monk
     assert env.actions[1] == [[[7, 1.25, 3]], [[8, 0.75, 2]]]
     assert learner.observations[0]["player"] == 0
     assert opponent.observations[0]["player"] == 1
-    assert outcome.placement == 1.0
+    assert outcome.placement == 2.0
