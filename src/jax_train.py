@@ -312,6 +312,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "env_steps",
             "episode_done",
             "avg_reward",
+            "episode_reward_sum",
             "episodes_2p",
             "episodes_4p",
             "wins_2p",
@@ -399,6 +400,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             else 0.0
         )
         average_reward = float(rollout_scalars["avg_reward"])
+        average_episode_reward = (
+            float(rollout_scalars["episode_reward_sum"]) / episode_count if episode_count else 0.0
+        )
         overall_win_rate = (
             (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
             / episode_count
@@ -439,6 +443,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "average_placement_4p": average_placement_4p,
             "overall_win_rate": overall_win_rate,
             "average_reward": average_reward,
+            "average_episode_reward": average_episode_reward,
             "noop_percent": noop_percent,
             "friendly_target_percent": friendly_target_percent,
             "enemy_target_percent": enemy_target_percent,
