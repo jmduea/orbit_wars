@@ -33,10 +33,18 @@ class TelemetryLogger:
             group=self._cfg.wandb.group,
             tags=tags,
             name=self._cfg.run_name,
-            config=asdict(self._cfg),
+            config={},
             reinit=True,
             job_type=str(run_metadata.get("job_type", "train")),
         )
+        if self._run is not None:
+            resolved_cfg = self._flatten(asdict(self._cfg))
+            existing_keys = set(self._run.config.keys())
+            missing_keys = {
+                key: value for key, value in resolved_cfg.items() if key not in existing_keys
+            }
+            if missing_keys:
+                self._run.config.update(missing_keys, allow_val_change=True)
         if run_metadata:
             self.log(run_metadata, step=0)
 
