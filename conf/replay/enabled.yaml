@@ -1,5 +1,5 @@
 enabled: true
-every_n_checkpoints: 10
+every_n_checkpoints: 5
 opponent: random
 seed_policy: update
 max_steps: 500
