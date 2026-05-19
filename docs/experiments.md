@@ -81,19 +81,11 @@ Behavior details:
 - Resuming from update `N` continues at `N+1`.
 - Keep architecture- and backend-compatible configs when resuming.
 
-## 4) Backend-specific notes (Torch vs JAX)
-
-### Torch backend
-
-- Typical setup: `env_backend=kaggle`, `rl_backend=torch`
-- Checkpoints: `ckpt_last.pt`, `ckpt_*.pt`
-- Use Torch-oriented experiment presets (for example `attention_training`, `full_training`).
-
-### JAX backend
+## 4) Backend notes (JAX-only)
 
 - Setup: `env_backend=jax`, `rl_backend=jax`
 - Checkpoints: `jax_ckpt_last.pkl`, `jax_ckpt_*.pkl`
-- Use JAX presets (for example `jax_training`, `jax_mixed_2p_4p_training`, `jax_entity_transformer_*`).
+- Use JAX-compatible experiment presets (for example `jax_training`, `jax_mixed_2p_4p_training`, `jax_entity_transformer_*`, `attention_training`, `full_training`).
 - Do not change shape-defining settings between save and resume/eval unless intentionally starting a fresh run.
 
 ## 5) Migration: old `--config` commands → Hydra commands
