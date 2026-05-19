@@ -1,5 +1,5 @@
 defaults:
-  - backend: jax_jax
+  - backend: default
   - model: mlp
   - training_format: empty
   - opponent_mix: latest_only
