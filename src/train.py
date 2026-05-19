@@ -68,7 +68,8 @@ def _hydra_entry(cfg_raw: DictConfig) -> None:
         payload = OmegaConf.to_container(OmegaConf.structured(cfg), resolve=True)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
-    _, resume_checkpoint = _extract_legacy_cli_args(sys.argv[1:])
+    _, legacy_resume_checkpoint = _extract_legacy_cli_args(sys.argv[1:])
+    resume_checkpoint = cfg.resume_checkpoint or legacy_resume_checkpoint
     run_jax_training(cfg, resume_checkpoint)
 
 
