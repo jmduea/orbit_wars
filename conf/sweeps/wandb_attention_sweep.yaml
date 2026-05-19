@@ -1,7 +1,7 @@
 program: -m
 method: bayes
 metric:
-  name: eval/win_rate
+  name: overall_win_rate
   goal: maximize
 command:
   - uv
