@@ -11,7 +11,7 @@ seed: 42
 run_name: orbit_wars_template_ppo
 device: auto
 save_dir: artifacts/rl_template
-checkpoint_every: 10
+checkpoint_every: 50
 log_every: 1
 opponent: random
 self_play_update_interval: 10
