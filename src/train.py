@@ -36,6 +36,7 @@ from .checkpoint_retention import prune_checkpoints
 from .ppo import TransitionBatch, ppo_update, sample_actions
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
+from .run_paths import resolve_run_paths
 from .replay import maybe_write_checkpoint_replay
 from .curriculum import CurriculumController
 
@@ -1136,8 +1137,7 @@ def merge_batches(batches: list[TurnBatch]) -> TurnBatch:
 
 
 def save_checkpoint(
-    save_dir: Path,
-    run_name: str,
+    run_dir: Path,
     update: int,
     policy: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -1149,7 +1149,6 @@ def save_checkpoint(
 ) -> Path:
     """Write latest and numbered Torch PPO checkpoints for a training run."""
 
-    run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     last_path = run_dir / "ckpt_last.pt"
     update_path = run_dir / f"ckpt_{update:06d}.pt"
@@ -1255,8 +1254,7 @@ def _hydra_entry(cfg_raw: DictConfig) -> None:
     elif isinstance(opponent, SelfPlayOpponentPool):
         opponent.sync_from(policy, normalizer, update=0)
     optimizer = torch.optim.Adam(policy.parameters(), lr=cfg.ppo.lr)
-    save_dir = Path(cfg.save_dir)
-    log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}.jsonl"
+    cfg, run_dir, log_path, _save_dir = resolve_run_paths(cfg)
     total_env_steps = 0
     completed_episodes = 0
     start_update = 1
@@ -1459,8 +1457,7 @@ def _hydra_entry(cfg_raw: DictConfig) -> None:
                 else None
             )
             checkpoint_path = save_checkpoint(
-                save_dir,
-                cfg.run_name,
+                run_dir,
                 update,
                 policy,
                 optimizer,
@@ -1472,7 +1469,7 @@ def _hydra_entry(cfg_raw: DictConfig) -> None:
             )
             retention = cfg.checkpoint_retention
             pruning = prune_checkpoints(
-                save_dir / cfg.run_name,
+                run_dir,
                 log_path=log_path,
                 keep_last_n=retention.keep_last_n,
                 keep_every_n_updates=retention.keep_every_n_updates,

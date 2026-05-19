@@ -17,6 +17,7 @@ from .replay import maybe_write_jax_checkpoint_replay
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
 from .curriculum import CurriculumController
+from .run_paths import resolve_run_paths
 from .jax_device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
@@ -225,8 +226,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     update_fn = jax.jit(
         lambda ts, transitions: ppo_update_jax(ts, policy, transitions, cfg)
     )
-    save_dir = Path(cfg.save_dir)
-    log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}_jax.jsonl"
+    cfg, run_dir, log_path, _save_dir = resolve_run_paths(cfg)
+    log_path = log_path.with_name(f"{cfg.run_name}_jax.jsonl")
     telemetry = build_telemetry(
         cfg,
         {
@@ -417,8 +418,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
         if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
             checkpoint_path = save_jax_checkpoint(
-                save_dir,
-                cfg.run_name,
+                run_dir,
                 update,
                 train_state,
                 cfg,
@@ -428,7 +428,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             retention = cfg.checkpoint_retention
             pruning = prune_checkpoints(
-                save_dir / cfg.run_name,
+                run_dir,
                 log_path=log_path,
                 keep_last_n=retention.keep_last_n,
                 keep_every_n_updates=retention.keep_every_n_updates,
@@ -514,8 +514,7 @@ def load_jax_checkpoint(
 
 
 def save_jax_checkpoint(
-    save_dir: Path,
-    run_name: str,
+    run_dir: Path,
     update: int,
     train_state: object,
     cfg: TrainConfig,
@@ -528,7 +527,6 @@ def save_jax_checkpoint(
 
     import pickle
 
-    run_dir = save_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "update": update,
