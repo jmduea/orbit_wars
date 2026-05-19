@@ -1,7 +1,7 @@
 wandb:
-  enabled: false
-  project: null
-  entity: null
+  enabled: true
+  project: orbit_wars
+  entity: jmduea-jdueadev
   group: null
   tags: []
   log_artifacts: false
