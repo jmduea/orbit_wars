@@ -37,6 +37,7 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), composed)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    _validate_train_config(cfg)
     return cfg
 
 
@@ -46,6 +47,7 @@ def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    _validate_train_config(cfg)
     return cfg
 
 
@@ -71,7 +73,25 @@ def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), data)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    _validate_train_config(cfg)
     return cfg
+
+
+def _validate_train_config(cfg: TrainConfig) -> None:
+    ppo = cfg.ppo
+    if int(ppo.update_chunk_rows_min) <= 0:
+        raise ValueError("ppo.update_chunk_rows_min must be a positive integer.")
+    if ppo.update_chunk_rows_max is not None and int(ppo.update_chunk_rows_max) <= 0:
+        raise ValueError("ppo.update_chunk_rows_max must be a positive integer when set.")
+    if (
+        ppo.update_chunk_rows_max is not None
+        and int(ppo.update_chunk_rows_max) < int(ppo.update_chunk_rows_min)
+    ):
+        raise ValueError(
+            "ppo.update_chunk_rows_max must be >= ppo.update_chunk_rows_min when both are set."
+        )
+    if ppo.rollout_microbatch_envs is not None and int(ppo.rollout_microbatch_envs) <= 0:
+        raise ValueError("ppo.rollout_microbatch_envs must be a positive integer when set.")
 
 
 def _parse_seed_set(raw: object) -> list[int]:

@@ -28,9 +28,6 @@ from .opponent_pool import (
     sample_opponent_type_ids_jax,
 )
 
-_MIN_JAX_UPDATE_CHUNK_ROWS = 8192
-
-
 def validate_policy_param_shapes(params: dict, env_cfg: object) -> None:
     """Validate encoder input dimensions in Flax params against env features.
 
@@ -726,8 +723,8 @@ def ppo_update_jax(
     materialize attention intermediates for the entire rollout at once. Instead,
     flatten once, pad to static memory chunks, and scan sequential optimizer
     steps over those chunks. The chunk size honors large configured minibatches
-    but does not go below ``_MIN_JAX_UPDATE_CHUNK_ROWS`` so long rollouts do not
-    devolve into thousands of tiny GPU launches.
+    and the ``ppo.update_chunk_rows_min``/``ppo.update_chunk_rows_max`` limits so
+    rollouts can trade memory pressure for throughput.
     """
 
     mask = batch.decision_mask.reshape(-1).astype(jnp.float32)
@@ -748,9 +745,14 @@ def ppo_update_jax(
     )
 
     total_rows = mask.shape[0]
-    minibatch_size = min(
-        max(int(cfg.ppo.minibatch_size), _MIN_JAX_UPDATE_CHUNK_ROWS), total_rows
+    min_chunk_rows = int(cfg.ppo.update_chunk_rows_min)
+    max_chunk_rows = (
+        int(cfg.ppo.update_chunk_rows_max)
+        if cfg.ppo.update_chunk_rows_max is not None
+        else total_rows
     )
+    chunk_target = max(int(cfg.ppo.minibatch_size), min_chunk_rows)
+    minibatch_size = min(max(chunk_target, 1), max_chunk_rows, total_rows)
     minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
     minibatches = {
         "mask": _reshape_minibatches(mask, minibatch_count, minibatch_size, 0.0),

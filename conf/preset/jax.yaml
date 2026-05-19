@@ -69,3 +69,7 @@ ppo:
   vf_coef: 0.5
   lr: 0.0001
   max_grad_norm: 0.5
+  update_chunk_rows_min: 8192
+  update_chunk_rows_max: null
+  rollout_microbatch_envs: null
+  enable_gradient_checkpointing: false

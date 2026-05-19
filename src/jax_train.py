@@ -211,6 +211,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         hidden_size=cfg.model.hidden_size,
         architecture=cfg.model.architecture,
         attention_heads=cfg.model.attention_heads,
+        enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
     )
     train_state = init_train_state(policy_key, policy, cfg)
     key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
