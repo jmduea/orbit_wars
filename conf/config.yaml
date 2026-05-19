@@ -6,6 +6,7 @@ defaults:
   - replay: enabled
   - checkpoint_retention: default
   - telemetry: default
+  - _self_
 
 seed: 42
 run_name: orbit_wars_template_ppo

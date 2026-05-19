@@ -1,8 +1,7 @@
-opponent_mix:
-  weights:
-    latest: 1.0
-    historical: 0.0
-    scripted_sniper: 0.0
-    random: 0.0
-  temperature: 1.0
-  curriculum: []
+weights:
+  latest: 1.0
+  historical: 0.0
+  scripted_sniper: 0.0
+  random: 0.0
+temperature: 1.0
+curriculum: []

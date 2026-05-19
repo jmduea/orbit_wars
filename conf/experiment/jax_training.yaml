@@ -1,6 +1,6 @@
 defaults:
   - attention_training
-  - override /backend: jax_jax
+  - override /backend: default
   - /training_format: jax_schedule_4p
 
 env:
