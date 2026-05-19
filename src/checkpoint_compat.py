@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Mapping
 
-import torch
+import numpy as np
 
 from .config import EnvConfig
 from .features import (
@@ -71,6 +71,29 @@ def infer_feature_metadata_from_state_dict(
 
     if state_dict is None:
         return None
+
+    def _shape_2d_second_dim(value: object) -> int | None:
+        ndim = getattr(value, "ndim", None)
+        shape = getattr(value, "shape", None)
+        if ndim is not None and shape is not None:
+            try:
+                if int(ndim) == 2 and len(shape) >= 2:
+                    return int(shape[1])
+            except (TypeError, ValueError):
+                return None
+
+        try:
+            array = np.asarray(value)
+        except Exception:
+            return None
+
+        if array.ndim != 2:
+            return None
+        try:
+            return int(array.shape[1])
+        except (TypeError, ValueError):
+            return None
+
     key_map = {
         "self_feature_dim": "self_encoder.0.weight",
         "candidate_feature_dim": "candidate_encoder.0.weight",
@@ -78,9 +101,9 @@ def infer_feature_metadata_from_state_dict(
     }
     inferred: dict[str, int] = {}
     for metadata_key, weight_key in key_map.items():
-        weight = state_dict.get(weight_key)
-        if isinstance(weight, torch.Tensor) and weight.ndim == 2:
-            inferred[metadata_key] = int(weight.shape[1])
+        dim = _shape_2d_second_dim(state_dict.get(weight_key))
+        if dim is not None:
+            inferred[metadata_key] = dim
     return inferred or None
 
 
