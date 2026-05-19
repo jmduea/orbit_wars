@@ -319,6 +319,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "placement_4p_sum",
             "survival_time_sum",
             "score_share_sum",
+            "decision_count",
+            "noop_count",
+            "friendly_target_count",
+            "enemy_target_count",
+            "neutral_target_count",
             "overall_win_rate",
             "noop_percent",
             "friendly_target_percent",
@@ -394,7 +399,33 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             else 0.0
         )
         average_reward = float(rollout_scalars["avg_reward"])
-        overall_win_rate = float(rollout_scalars["overall_win_rate"])
+        overall_win_rate = (
+            (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
+            / episode_count
+            if episode_count
+            else 0.0
+        )
+        decision_count = float(rollout_scalars["decision_count"])
+        noop_percent = (
+            (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
+            if decision_count
+            else 0.0
+        )
+        friendly_target_percent = (
+            (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
+            if decision_count
+            else 0.0
+        )
+        enemy_target_percent = (
+            (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
+            if decision_count
+            else 0.0
+        )
+        neutral_target_percent = (
+            (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
+            if decision_count
+            else 0.0
+        )
         total_env_steps += env_steps
         completed_episodes += episodes
         seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
@@ -408,14 +439,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "average_placement_4p": average_placement_4p,
             "overall_win_rate": overall_win_rate,
             "average_reward": average_reward,
-            "noop_percent": float(rollout_scalars["noop_percent"]),
-            "friendly_target_percent": float(
-                rollout_scalars["friendly_target_percent"]
-            ),
-            "enemy_target_percent": float(rollout_scalars["enemy_target_percent"]),
-            "neutral_target_percent": float(
-                rollout_scalars["neutral_target_percent"]
-            ),
+            "noop_percent": noop_percent,
+            "friendly_target_percent": friendly_target_percent,
+            "enemy_target_percent": enemy_target_percent,
+            "neutral_target_percent": neutral_target_percent,
             "survival_time": survival_time,
             "score_share": score_share,
             "update_seconds": update_seconds,
