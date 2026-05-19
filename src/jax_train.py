@@ -35,6 +35,7 @@ from .jax_ppo import (  # noqa: E402
     concatenate_transition_batches,
     init_train_state,
     ppo_update_jax,
+    validate_policy_param_shapes,
 )
 
 
@@ -217,6 +218,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         train_state, key, start_update, total_env_steps, completed_episodes = (
             load_jax_checkpoint(resume_checkpoint, train_state, cfg)
         )
+        validate_policy_param_shapes(train_state.params, cfg.env)
         print(
             f"Resuming JAX training from {resume_checkpoint} at update {start_update}"
         )
