@@ -50,6 +50,24 @@ uv run python evaluate.py \
 Repeat the command for later `ckpt_*.pt` files while keeping `--games`,
 `--opponents`, and `--seeds` unchanged.
 
+
+## Default config template workflow
+
+`default_cfg.yaml` is canonical and generated from `TrainConfig` dataclass defaults
+(including nested dataclasses). Regenerate and validate it with:
+
+```bash
+make cfg-default
+make cfg-default-check
+# or:
+uv run python scripts/generate_default_cfg.py
+uv run python scripts/generate_default_cfg.py --check
+```
+
+The `--check` mode is used by tests to fail when `default_cfg.yaml` is out of
+sync with `src/config.py` defaults. A small curated comment companion is kept in
+`default_cfg.commented.yaml`.
+
 ## Dependency management
 
 This repository uses [`uv`](https://docs.astral.sh/uv/) for Python dependency management.

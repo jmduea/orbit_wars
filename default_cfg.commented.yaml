@@ -1,0 +1,22 @@
+# Curated, human-annotated companion to default_cfg.yaml.
+# The canonical machine-validated template is default_cfg.yaml and is generated
+# from TrainConfig defaults via scripts/generate_default_cfg.py.
+
+seed: 42
+run_name: orbit_wars_template_ppo
+device: auto
+save_dir: artifacts/rl_template
+checkpoint_every: 10
+log_every: 1
+opponent: random
+env_backend: kaggle  # kaggle | jax
+rl_backend: torch  # torch | jax
+self_play_update_interval: 10
+self_play_deterministic: false
+self_play_enabled: false
+self_play_pool_size: 5
+self_play_snapshot_interval: 25
+self_play_latest_probability: 0.5
+multi_opponent_mode: mixed
+alternate_player_sides: true
+# See default_cfg.yaml for the full canonical nested defaults.
