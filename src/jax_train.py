@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Callable
@@ -24,6 +25,7 @@ from .jax_device import (
 )
 
 configure_jax_platform_for_host()
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
 
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402

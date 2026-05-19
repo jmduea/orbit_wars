@@ -60,7 +60,7 @@ def _validate_backends(cfg: object) -> None:
         )
 
 
-@hydra_main(version_base=None, config_path="../conf", config_name="config")
+@hydra_main(version_base="1.3", config_path="../conf", config_name="config")
 def _hydra_entry(cfg_raw: DictConfig) -> None:
     cfg = train_config_from_omegaconf(cfg_raw)
     _validate_backends(cfg)
