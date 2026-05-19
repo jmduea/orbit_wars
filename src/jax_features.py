@@ -342,14 +342,36 @@ def _candidate_features(
     valid_target = planets.active[None, :] & (
         planets.id[None, :] != planets.id[:, None]
     )
-    # JAX-friendly approximation of the Python encoder's sorted candidate list:
-    # closest active non-self planets fill slots 1..N while slot 0 remains no-op.
+    angle_all = jnp.arctan2(dy, dx)
+    crosses_all = shot_crosses_sun_xy(
+        src_x, src_y, planets.radius[:, None], angle_all, planets.x[None, :], planets.y[None, :]
+    )
+    unblocked_valid = valid_target & (~crosses_all)
+    blocked_valid = valid_target & crosses_all
+
     sort_distance = jnp.where(valid_target, dist, jnp.inf)
+    sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
     sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
-    order = jnp.lexsort((sort_id, sort_distance), axis=1)[:, : max(0, c - 1)]
+    order = jnp.lexsort((sort_id, sort_distance, sort_blocked), axis=1)[:, : max(0, c - 1)]
     pad_width = max(0, c - 1) - order.shape[1]
     if pad_width:
         order = jnp.pad(order, ((0, 0), (0, pad_width)), constant_values=0)
+    ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
+
+    selected_unblocked = jnp.take_along_axis(unblocked_valid, order, axis=1)
+    selected_blocked = ordered_valid & (~selected_unblocked)
+    has_any_unblocked = unblocked_valid.any(axis=1)
+    selected_count = selected_unblocked.shape[1]
+    all_selected_blocked = selected_count > 0
+    if selected_count > 0:
+        all_selected_blocked = (selected_blocked.sum(axis=1) == ordered_valid.sum(axis=1)) & (ordered_valid.sum(axis=1) > 0)
+    fallback_needed = has_any_unblocked & all_selected_blocked
+    first_unblocked = jnp.argmin(jnp.where(unblocked_valid, dist, jnp.inf), axis=1)
+    fallback_col = jnp.maximum(ordered_valid.sum(axis=1).astype(jnp.int32) - 1, 0)
+    row_idx = jnp.arange(p, dtype=jnp.int32)
+    order = order.at[row_idx, fallback_col].set(
+        jnp.where(fallback_needed, first_unblocked, order[row_idx, fallback_col])
+    )
     ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
 
     tgt_x = jnp.take(planets.x, order, axis=0)
@@ -365,8 +387,7 @@ def _candidate_features(
     crosses = shot_crosses_sun_xy(
         src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
     )
-    base_real_features = jnp.stack(
-        [
+    base_real_features = jnp.stack([
             tgt_active.astype(jnp.float32),
             (tgt_owner == -1).astype(jnp.float32),
             (tgt_owner == player).astype(jnp.float32),
@@ -385,9 +406,7 @@ def _candidate_features(
                 / env_cfg.max_ships,
                 tgt_x.shape,
             ),
-        ],
-        axis=-1,
-    )
+        ],axis=-1)
     current_owner = target_owner_one_hot(tgt_owner, player, env_cfg)
     target_ids = jnp.take(planets.id, order, axis=0)
     previous_candidate, previous_present = _previous_candidate_features(
@@ -406,8 +425,7 @@ def _candidate_features(
         (jnp.abs(current_owner - previous_candidate[..., 14:18]).sum(axis=-1) > 0.5)
         & (previous_present > 0.5)
     ).astype(jnp.float32)
-    temporal_features = jnp.stack(
-        [
+    temporal_features = jnp.stack([
             jnp.sqrt(real_dx * real_dx + real_dy * real_dy)
             / jnp.maximum(env_cfg.ship_speed, 1e-6)
             / env_cfg.episode_steps,
@@ -415,19 +433,14 @@ def _candidate_features(
             incoming_enemy / env_cfg.max_ships,
             ship_delta,
             owner_changed,
-        ],
-        axis=-1,
-    )
+        ],axis=-1)
     history_present = ordered_valid[..., None].astype(jnp.float32)
-    real_features = jnp.concatenate(
-        [
+    real_features = jnp.concatenate([
             base_real_features,
             current_owner,
             temporal_features,
             history_present,
-        ],
-        axis=-1,
-    )
+        ],axis=-1)
     real_features = jnp.where(ordered_valid[..., None], real_features, 0.0)
     noop_features = jnp.zeros((p, 1, BASE_CANDIDATE_FEATURE_DIM), dtype=jnp.float32)
     features = jnp.concatenate([noop_features, real_features], axis=1)
