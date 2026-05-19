@@ -311,6 +311,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "samples",
             "env_steps",
             "episode_done",
+            "avg_reward",
             "episodes_2p",
             "episodes_4p",
             "wins_2p",
@@ -318,6 +319,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "placement_4p_sum",
             "survival_time_sum",
             "score_share_sum",
+            "overall_win_rate",
+            "noop_percent",
+            "friendly_target_percent",
+            "enemy_target_percent",
+            "neutral_target_percent",
             "opponent_current_slots",
             "opponent_random_slots",
             "opponent_snapshot_slots",
@@ -387,6 +393,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             if episode_count
             else 0.0
         )
+        average_reward = float(rollout_scalars["avg_reward"])
+        overall_win_rate = float(rollout_scalars["overall_win_rate"])
         total_env_steps += env_steps
         completed_episodes += episodes
         seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
@@ -398,6 +406,16 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "win_rate_2p": win_rate_2p,
             "first_place_rate_4p": first_place_rate_4p,
             "average_placement_4p": average_placement_4p,
+            "overall_win_rate": overall_win_rate,
+            "average_reward": average_reward,
+            "noop_percent": float(rollout_scalars["noop_percent"]),
+            "friendly_target_percent": float(
+                rollout_scalars["friendly_target_percent"]
+            ),
+            "enemy_target_percent": float(rollout_scalars["enemy_target_percent"]),
+            "neutral_target_percent": float(
+                rollout_scalars["neutral_target_percent"]
+            ),
             "survival_time": survival_time,
             "score_share": score_share,
             "update_seconds": update_seconds,

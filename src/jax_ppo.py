@@ -618,6 +618,7 @@ def collect_rollout_jax(
         0.0,
     )
     done_float = data["done"].astype(jnp.float32)
+    reward_mean = data["reward"].mean()
     episode_done = done_float.sum()
     episodes_2p = jnp.where(cfg.env.player_count == 2, episode_done, 0.0)
     episodes_4p = jnp.where(cfg.env.player_count == 4, episode_done, 0.0)
@@ -627,6 +628,19 @@ def collect_rollout_jax(
     )
     survival_time_sum = (data["terminal_survival_time"] * done_float).sum()
     score_share_sum = (data["terminal_score_share"] * done_float).sum()
+    selected_target = data["target_index"]
+    decision_count = row_mask.sum()
+    noop_count = ((selected_target == 0).astype(jnp.float32) * row_mask).sum()
+    selected_candidate_features = jnp.take_along_axis(
+        data["candidate_features"],
+        selected_target[..., None, None].repeat(
+            data["candidate_features"].shape[-1], axis=-1
+        ),
+        axis=2,
+    ).squeeze(axis=2)
+    neutral_target_count = (selected_candidate_features[..., 0] * row_mask).sum()
+    friendly_target_count = (selected_candidate_features[..., 1] * row_mask).sum()
+    enemy_target_count = (selected_candidate_features[..., 2] * row_mask).sum()
     metrics = {
         "env_steps": jnp.array(
             cfg.ppo.rollout_steps * turn_batch.self_features.shape[0], dtype=jnp.float32
@@ -641,6 +655,7 @@ def collect_rollout_jax(
         ),
         "only_noop_fraction": only_noop_fraction,
         "episode_done": episode_done,
+        "avg_reward": reward_mean,
         "episodes_2p": episodes_2p,
         "episodes_4p": episodes_4p,
         "wins_2p": jnp.where(cfg.env.player_count == 2, first_place_sum, 0.0),
@@ -660,6 +675,21 @@ def collect_rollout_jax(
         ),
         "score_share": jnp.where(
             episode_done > 0.0, score_share_sum / episode_done, 0.0
+        ),
+        "noop_percent": jnp.where(
+            decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0
+        ),
+        "friendly_target_percent": jnp.where(
+            decision_count > 0.0, (friendly_target_count / decision_count) * 100.0, 0.0
+        ),
+        "enemy_target_percent": jnp.where(
+            decision_count > 0.0, (enemy_target_count / decision_count) * 100.0, 0.0
+        ),
+        "neutral_target_percent": jnp.where(
+            decision_count > 0.0, (neutral_target_count / decision_count) * 100.0, 0.0
+        ),
+        "overall_win_rate": jnp.where(
+            episode_done > 0.0, first_place_sum / episode_done, 0.0
         ),
         "opponent_current_slots": opponent_slots * current_share,
         "opponent_random_slots": opponent_slots * random_share,
