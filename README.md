@@ -61,9 +61,8 @@ uv run python -m src.train \
 
 ## Backend notes (Torch vs JAX)
 
-- Torch path: typically `env_backend=kaggle`, `rl_backend=torch`, checkpoints `ckpt_*.pt` / `ckpt_last.pt`.
 - JAX path: `env_backend=jax`, `rl_backend=jax`, checkpoints `jax_ckpt_*.pkl` / `jax_ckpt_last.pkl`.
-- Keep backend-specific experiment presets when resuming checkpoints (Torch checkpoint with Torch preset, JAX checkpoint with JAX preset).
+- Keep JAX-compatible presets when resuming checkpoints.
 
 ## Multirun basics
 

@@ -43,19 +43,19 @@ def test_attention_shaped_reward_config_uses_conservative_shaping_values() -> No
     assert shaped["env"]["reward_terminal_scale"] == 1.0
 
 
-def test_default_config_preserves_torch_kaggle_training_path() -> None:
+def test_default_config_uses_jax_training_path() -> None:
     default = load_yaml("default_cfg.yaml")
 
-    assert default["env_backend"] == "kaggle"
-    assert default["rl_backend"] == "torch"
+    assert default["env_backend"] == "jax"
+    assert default["rl_backend"] == "jax"
 
 
 def test_critical_legacy_defaults_remain_stable() -> None:
     cfg = compose_train_config()
 
     assert cfg["seed"] == 42
-    assert cfg["env_backend"] == "kaggle"
-    assert cfg["rl_backend"] == "torch"
+    assert cfg["env_backend"] == "jax"
+    assert cfg["rl_backend"] == "jax"
     assert cfg["opponent"] == "random"
     assert cfg["env"]["candidate_count"] == 8
     assert cfg["env"]["ship_bucket_count"] == 8
@@ -131,11 +131,11 @@ def test_jax_mixed_training_config_declares_2p_4p_mix() -> None:
     ] == [16, 16]
 
 
-def test_torch_kaggle_mixed_training_config_declares_2p_4p_mix() -> None:
-    mixed = load_yaml("configs/mixed_2p_4p_training.yaml")
+def test_jax_mixed_training_legacy_yaml_declares_2p_4p_mix() -> None:
+    mixed = load_yaml("configs/jax_mixed_2p_4p_training.yaml")
 
-    assert mixed["env_backend"] == "kaggle"
-    assert mixed["rl_backend"] == "torch"
+    assert mixed["env_backend"] == "jax"
+    assert mixed["rl_backend"] == "jax"
     assert [
         entry["player_count"] for entry in mixed["training_format"]["format_mix"]
     ] == [2, 4]
@@ -148,10 +148,9 @@ def test_torch_kaggle_mixed_training_config_declares_2p_4p_mix() -> None:
 
 def test_legacy_yaml_equivalence_for_key_presets() -> None:
     preset_to_yaml = {
-        "torch_kaggle": "default_cfg.yaml",
         "attention": "configs/attention_training.yaml",
         "jax": "configs/jax_training.yaml",
-        "mixed_2p_4p": "configs/mixed_2p_4p_training.yaml",
+        "jax_mixed_2p_4p": "configs/jax_mixed_2p_4p_training.yaml",
     }
     for preset, yaml_path in preset_to_yaml.items():
         composed = compose_train_config(f"preset={preset}")

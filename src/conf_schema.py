@@ -124,8 +124,8 @@ class TrainConfig:
     checkpoint_every: int = 10
     log_every: int = 1
     opponent: str = "random"
-    env_backend: str = "kaggle"
-    rl_backend: str = "torch"
+    env_backend: str = "jax"
+    rl_backend: str = "jax"
     self_play_update_interval: int = 10
     self_play_deterministic: bool = False
     self_play_enabled: bool = False

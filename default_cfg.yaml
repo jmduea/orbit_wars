@@ -5,8 +5,8 @@ save_dir: artifacts/rl_template
 checkpoint_every: 10
 log_every: 1
 opponent: random
-env_backend: kaggle
-rl_backend: torch
+env_backend: jax
+rl_backend: jax
 self_play_update_interval: 10
 self_play_deterministic: false
 self_play_enabled: false
