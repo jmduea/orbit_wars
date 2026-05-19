@@ -47,6 +47,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
         hidden_size=cfg.model.hidden_size,
         architecture=cfg.model.architecture,
         attention_heads=cfg.model.attention_heads,
+        enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
     )
 
     def act(observation: object) -> list[list[float | int]]:

@@ -91,6 +91,28 @@ uv run python -m src.train -m \
 
 Hydra writes multirun job outputs under `multirun/<date>/<time>/<job_id>/` (including `.hydra/` metadata per job), while training artifacts/checkpoints still go to the configured artifact paths.
 
+## Memory-first tuning order (reduce OOM risk)
+
+When you hit GPU/TPU OOM, tune these in order so you reduce activation memory before changing task difficulty:
+
+1. **Enable gradient checkpointing first**  
+   `ppo.enable_gradient_checkpointing=true` trades compute for lower peak memory during policy forward/backward.
+2. **Lower rollout microbatch envs (if using rollout collectors that honor it)**  
+   `ppo.rollout_microbatch_envs=<N>` keeps per-step rollout memory bounded by splitting env batches.
+3. **Lower PPO update chunk rows**  
+   Set `ppo.update_chunk_rows_min` smaller (for example `4096` or `2048`) so update-time policy apply uses smaller chunks.
+4. **Cap PPO update chunk rows**  
+   Set `ppo.update_chunk_rows_max` (for example `8192`) to prevent oversized chunks when `ppo.minibatch_size` is large.
+5. **Only then reduce global workload**  
+   Decrease `ppo.num_envs`, `ppo.rollout_steps`, or model size.
+
+Safety checks enforced at startup:
+
+- `ppo.update_chunk_rows_min > 0`
+- `ppo.update_chunk_rows_max > 0` when set
+- `ppo.update_chunk_rows_max >= ppo.update_chunk_rows_min` when both set
+- `ppo.rollout_microbatch_envs > 0` when set
+
 ## Hydra experiment selection (forward-safe)
 
 Use Hydra overrides directly in all scripts and automation:
@@ -98,4 +120,3 @@ Use Hydra overrides directly in all scripts and automation:
 - `uv run python -m src.train` (defaults from base config)
 - `uv run python -m src.train experiment=attention_training`
 - `uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/jax_ckpt_000050.pkl`
-

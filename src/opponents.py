@@ -84,6 +84,7 @@ class SelfPlayOpponent:
             ship_bucket_count=cfg.env.ship_bucket_count,
             hidden_size=cfg.model.hidden_size,
             attention_heads=cfg.model.attention_heads,
+            enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
         )
         self.params: dict[str, Any] | None = None
         self.normalizer: ObservationNormalizer | None = None

@@ -78,6 +78,7 @@ class JaxAttentionPlanetPolicy(nn.Module):
     ship_bucket_count: int
     hidden_size: int = 128
     attention_heads: int = 4
+    enable_gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         """Validate attention hyperparameters before parameter initialization."""
@@ -109,7 +110,12 @@ class JaxAttentionPlanetPolicy(nn.Module):
         )
 
         self_attention_mask = safe_mask[:, None, None, :]
-        attended_candidates = nn.MultiHeadDotProductAttention(
+        attention_module = (
+            nn.remat(nn.MultiHeadDotProductAttention)
+            if self.enable_gradient_checkpointing
+            else nn.MultiHeadDotProductAttention
+        )
+        attended_candidates = attention_module(
             num_heads=self.attention_heads,
             qkv_features=self.hidden_size,
             out_features=self.hidden_size,
@@ -141,7 +147,7 @@ class JaxAttentionPlanetPolicy(nn.Module):
             safe_mask[:, None, None, :],
             (candidate_hidden.shape[0], self.attention_heads, 1, self.candidate_count),
         )
-        attended_context = nn.MultiHeadDotProductAttention(
+        attended_context = attention_module(
             num_heads=self.attention_heads,
             qkv_features=self.hidden_size,
             out_features=self.hidden_size,
@@ -225,6 +231,7 @@ def build_jax_policy(
     hidden_size: int = 128,
     architecture: str = "mlp",
     attention_heads: int = 4,
+    enable_gradient_checkpointing: bool = False,
 ) -> nn.Module:
     """Construct a JAX policy module for the requested architecture.
 
@@ -245,6 +252,7 @@ def build_jax_policy(
             ship_bucket_count=ship_bucket_count,
             hidden_size=hidden_size,
             attention_heads=attention_heads,
+            enable_gradient_checkpointing=enable_gradient_checkpointing,
         )
     raise ValueError(
         f"Unsupported JAX model architecture '{architecture}'. Expected 'mlp', "

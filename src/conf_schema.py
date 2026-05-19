@@ -52,6 +52,10 @@ class PPOConfig:
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512
+    update_chunk_rows_min: int = 8192
+    update_chunk_rows_max: int | None = None
+    rollout_microbatch_envs: int | None = None
+    enable_gradient_checkpointing: bool = False
     gamma: float = 0.99
     clip_coef: float = 0.2
     ent_coef: float = 0.01
