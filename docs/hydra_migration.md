@@ -48,3 +48,7 @@ Fixes:
 - Use one of the documented experiment names.
 - If migrating from a removed legacy YAML filename, map it to the equivalent `experiment=<name>` preset under `conf/experiment/`.
 
+## Canonical experiment authoring policy
+
+- Canonical experiment editing and sweeps happen only in `conf/` (`conf/config.yaml`, `conf/experiment/*.yaml`, and config groups).
+- `configs/` has been removed; use Hydra experiment selection from `conf/experiment/` for all authoring and execution.

@@ -1,8 +1,8 @@
 # Config migration table
 
-The legacy flat YAML files in `configs/` map to Hydra experiment selection in `conf/experiment/`.
+Legacy flat YAML files in `configs/` were removed. Use Hydra experiment selection in `conf/experiment/`.
 
-| Old file path | New Hydra command |
+| Removed legacy config | Hydra command replacement |
 |---|---|
 | `configs/full_training.yaml` | `python -m src.train experiment=full_training` |
 | `configs/attention_training.yaml` | `python -m src.train experiment=attention_training` |
