@@ -11,8 +11,6 @@ command:
   - src.train
   - ${args_no_hyphens}
 parameters:
-  backend:
-    value: jax
   replay:
     value: disabled
   opponent_mix:
