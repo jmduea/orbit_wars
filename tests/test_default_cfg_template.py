@@ -36,3 +36,28 @@ def test_default_cfg_yaml_contains_full_train_config_schema() -> None:
     loaded = yaml.safe_load(open("default_cfg.yaml", encoding="utf-8"))
     expected = _expected_schema(TrainConfig())
     _assert_schema_keys(loaded, expected)
+
+
+def test_train_entrypoint_print_resolved_config_mode_outputs_json_without_training() -> None:
+    import json
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.train",
+            "print_resolved_config=true",
+            "preset=jax",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    resolved = json.loads(result.stdout)
+    assert resolved["print_resolved_config"] is True
+    assert resolved["env_backend"] == "jax"
+    assert resolved["rl_backend"] == "jax"
+    assert resolved["model"]["architecture"] == "attention"

@@ -150,6 +150,7 @@ class TrainConfig:
     plateau_window: int = 10
     plateau_delta: float = 0.0
     heldout_eval_seed_set: list[int] = field(default_factory=list)
+    print_resolved_config: bool = False
 
 
 def register_config_schemas() -> None:

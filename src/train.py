@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import torch
 from hydra import main as hydra_main
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from .checkpoint_compat import (
     feature_metadata,
@@ -1190,6 +1190,9 @@ def _hydra_entry(cfg_raw: DictConfig) -> None:
     """Run training from a Hydra-composed configuration."""
 
     cfg: TrainConfig = train_config_from_omegaconf(cfg_raw)
+    if cfg.print_resolved_config:
+        print(json.dumps(OmegaConf.to_container(cfg_raw, resolve=True), indent=2, sort_keys=True))
+        return
     _, resume_checkpoint = _extract_legacy_cli_args(sys.argv[1:])
     if (
         cfg.env_backend.strip().lower() == "jax"
