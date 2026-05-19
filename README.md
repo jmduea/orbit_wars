@@ -7,6 +7,7 @@ uv run python -m src.train experiment=attention_training
 ```
 
 For complete experiment operations (sweeps, resumes, logs/checkpoints, evaluation), see [`docs/experiments.md`](docs/experiments.md). For Hydra migration guidance, see [`docs/hydra_migration.md`](docs/hydra_migration.md).
+For a goal-oriented knob map (capacity vs budget vs curriculum vs environment difficulty) plus sweep templates, see the **Experiment Tuning Playbook** section in [`docs/experiments.md#7-experiment-tuning-playbook-what-to-change-for-each-goal`](docs/experiments.md#7-experiment-tuning-playbook-what-to-change-for-each-goal).
 
 ## Environment setup (Codex/CI-safe)
 
