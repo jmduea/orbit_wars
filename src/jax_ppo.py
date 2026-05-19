@@ -676,6 +676,11 @@ def collect_rollout_jax(
         "placement_4p_sum": placement_4p_sum,
         "survival_time_sum": survival_time_sum,
         "score_share_sum": score_share_sum,
+        "decision_count": decision_count,
+        "noop_count": noop_count,
+        "friendly_target_count": friendly_target_count,
+        "enemy_target_count": enemy_target_count,
+        "neutral_target_count": neutral_target_count,
         "win_rate_2p": jnp.where(episodes_2p > 0.0, first_place_sum / episodes_2p, 0.0),
         "first_place_rate_4p": jnp.where(
             episodes_4p > 0.0, first_place_sum / episodes_4p, 0.0
@@ -689,18 +694,10 @@ def collect_rollout_jax(
         "score_share": jnp.where(
             episode_done > 0.0, score_share_sum / episode_done, 0.0
         ),
-        "noop_percent": jnp.where(
-            decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0
-        ),
-        "friendly_target_percent": jnp.where(
-            decision_count > 0.0, (friendly_target_count / decision_count) * 100.0, 0.0
-        ),
-        "enemy_target_percent": jnp.where(
-            decision_count > 0.0, (enemy_target_count / decision_count) * 100.0, 0.0
-        ),
-        "neutral_target_percent": jnp.where(
-            decision_count > 0.0, (neutral_target_count / decision_count) * 100.0, 0.0
-        ),
+        "noop_percent": jnp.where(decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0),
+        "friendly_target_percent": jnp.where(decision_count > 0.0, (friendly_target_count / decision_count) * 100.0, 0.0),
+        "enemy_target_percent": jnp.where(decision_count > 0.0, (enemy_target_count / decision_count) * 100.0, 0.0),
+        "neutral_target_percent": jnp.where(decision_count > 0.0, (neutral_target_count / decision_count) * 100.0, 0.0),
         "overall_win_rate": jnp.where(
             episode_done > 0.0, first_place_sum / episode_done, 0.0
         ),
