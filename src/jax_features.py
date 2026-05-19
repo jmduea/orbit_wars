@@ -27,6 +27,8 @@ class JaxFeatureHistory(NamedTuple):
     global_features: jax.Array
     source_ids: jax.Array
     candidate_ids: jax.Array
+    cursor: jax.Array
+    length: jax.Array
 
 
 class JaxTurnBatch(NamedTuple):
@@ -112,6 +114,8 @@ def empty_feature_history(env_cfg: EnvConfig) -> JaxFeatureHistory:
             -1,
             dtype=jnp.int32,
         ),
+        cursor=jnp.asarray(0, dtype=jnp.int32),
+        length=jnp.asarray(0, dtype=jnp.int32),
     )
 
 
@@ -127,6 +131,8 @@ def current_feature_snapshot(game, env_cfg: EnvConfig) -> JaxFeatureHistory:
         global_features=_global_features(game, env_cfg)[None, ...],
         source_ids=game.planets.id[None, ...],
         candidate_ids=candidate_ids[None, ...],
+        cursor=jnp.asarray(0, dtype=jnp.int32),
+        length=jnp.asarray(1, dtype=jnp.int32),
     )
 
 
@@ -138,24 +144,42 @@ def append_feature_history(
         return empty_feature_history(env_cfg)
     base = empty_feature_history(env_cfg) if history is None else history
     current = current_feature_snapshot(game, env_cfg)
+    idx = base.cursor
+    next_cursor = (idx + 1) % steps
+    next_length = jnp.minimum(base.length + 1, steps)
     return JaxFeatureHistory(
-        self_features=jnp.concatenate(
-            [base.self_features, current.self_features], axis=0
-        )[-steps:],
-        candidate_features=jnp.concatenate(
-            [base.candidate_features, current.candidate_features], axis=0
-        )[-steps:],
-        global_features=jnp.concatenate(
-            [base.global_features, current.global_features], axis=0
-        )[-steps:],
-        source_ids=jnp.concatenate([base.source_ids, current.source_ids], axis=0)[
-            -steps:
-        ],
-        candidate_ids=jnp.concatenate(
-            [base.candidate_ids, current.candidate_ids], axis=0
-        )[-steps:],
+        self_features=base.self_features.at[idx].set(current.self_features[0]),
+        candidate_features=base.candidate_features.at[idx].set(current.candidate_features[0]),
+        global_features=base.global_features.at[idx].set(current.global_features[0]),
+        source_ids=base.source_ids.at[idx].set(current.source_ids[0]),
+        candidate_ids=base.candidate_ids.at[idx].set(current.candidate_ids[0]),
+        cursor=next_cursor,
+        length=next_length,
     )
 
+
+
+
+def _ordered_history_indices(history: JaxFeatureHistory, steps: int) -> jax.Array:
+    start = (history.cursor - history.length) % steps
+    return (start + jnp.arange(steps, dtype=jnp.int32)) % steps
+
+
+def _ordered_history(history: JaxFeatureHistory, env_cfg: EnvConfig) -> JaxFeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    if steps == 0:
+        return history
+    indices = _ordered_history_indices(history, steps)
+    valid = jnp.arange(steps, dtype=jnp.int32) >= (steps - history.length)
+    return JaxFeatureHistory(
+        self_features=history.self_features[indices] * valid[:, None, None],
+        candidate_features=history.candidate_features[indices] * valid[:, None, None, None],
+        global_features=history.global_features[indices] * valid[:, None],
+        source_ids=jnp.where(valid[:, None], history.source_ids[indices], -1),
+        candidate_ids=jnp.where(valid[:, None, None], history.candidate_ids[indices], -1),
+        cursor=history.cursor,
+        length=history.length,
+    )
 
 def _stack_self_history(
     current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
@@ -163,8 +187,9 @@ def _stack_self_history(
     if feature_history_steps(env_cfg) <= 1:
         return current
     base = empty_feature_history(env_cfg) if history is None else history
+    ordered = _ordered_history(base, env_cfg)
     return jnp.transpose(
-        jnp.concatenate([base.self_features, current[None, ...]], axis=0), (1, 0, 2)
+        jnp.concatenate([ordered.self_features, current[None, ...]], axis=0), (1, 0, 2)
     ).reshape(env_cfg.max_planets, -1)
 
 
@@ -178,8 +203,9 @@ def _stack_candidate_history(
     if feature_history_steps(env_cfg) <= 1:
         return current
     base = empty_feature_history(env_cfg) if history is None else history
+    ordered = _ordered_history(base, env_cfg)
     history_features = _target_aligned_candidate_history(
-        source_ids, candidate_ids, base
+        source_ids, candidate_ids, ordered
     )
     stacked = jnp.concatenate([history_features, current[None, ...]], axis=0)
     return jnp.transpose(stacked, (1, 2, 0, 3)).reshape(
@@ -214,7 +240,8 @@ def _stack_global_history(
     if feature_history_steps(env_cfg) <= 1:
         return current
     base = empty_feature_history(env_cfg) if history is None else history
-    return jnp.concatenate([base.global_features, current[None, ...]], axis=0).reshape(
+    ordered = _ordered_history(base, env_cfg)
+    return jnp.concatenate([ordered.global_features, current[None, ...]], axis=0).reshape(
         -1
     )
 
