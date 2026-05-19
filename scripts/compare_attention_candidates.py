@@ -107,7 +107,7 @@ def main() -> None:
     config_paths = [Path(path) for path in args.configs]
     if args.print_commands:
         for path in config_paths:
-            print(f"uv run python -m src.train --config {path}")
+            print(f"uv run python -m src.train experiment={path.stem}")
         print()
     rows = [row_for_config(path, Path(args.log_dir)) for path in config_paths]
     print_table(rows)

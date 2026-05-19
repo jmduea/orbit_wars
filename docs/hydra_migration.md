@@ -2,27 +2,11 @@
 
 This document describes the exact migration from legacy `--config` CLI usage to Hydra-native CLI usage.
 
-## Old → new command mapping
+## Hydra-native command usage
 
-| Old command | New command |
-| --- | --- |
-| `python -m src.train --config default_cfg.yaml` | `python -m src.train` |
-| `python -m src.train --config configs/full_training.yaml` | `python -m src.train experiment=full_training` |
-| `python -m src.train --config configs/attention_training.yaml` | `python -m src.train experiment=attention_training` |
-| `python -m src.train --config configs/shaped_reward_training.yaml` | `python -m src.train experiment=shaped_reward_training` |
-| `python -m src.train --config configs/attention_shaped_reward_training.yaml` | `python -m src.train experiment=attention_shaped_reward` |
-| `python -m src.train --config configs/attention_self_play_pool.yaml` | `python -m src.train experiment=attention_self_play_pool` |
-| `python -m src.train --config configs/attention_candidates_16.yaml` | `python -m src.train experiment=attention_candidates_16` |
-| `python -m src.train --config configs/attention_candidates_24.yaml` | `python -m src.train experiment=attention_candidates_24` |
-| `python -m src.train --config configs/mixed_2p_4p_training.yaml` | `python -m src.train experiment=mixed_2p_4p_training` |
-| `python -m src.train --config configs/jax_training.yaml` | `python -m src.train experiment=jax_training` |
-| `python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml` | `python -m src.train experiment=jax_self_play_shaped_reward` |
-| `python -m src.train --config configs/jax_mixed_2p_4p_training.yaml` | `python -m src.train experiment=jax_mixed_2p_4p_training` |
-| `python -m src.train --config configs/jax_entity_transformer_500k.yaml` | `python -m src.train experiment=jax_entity_transformer_500k` |
-| `python -m src.train --config configs/jax_entity_transformer_700k.yaml` | `python -m src.train experiment=jax_entity_transformer_700k` |
-| `python -m src.train --config configs/jax_entity_transformer_1m.yaml` | `python -m src.train experiment=jax_entity_transformer_1m` |
+Use Hydra overrides directly in scripts/automation. Example:
 
-> Tip: prepend `uv run` in this repo environment, e.g. `uv run python -m src.train experiment=attention_training`.
+`uv run python -m src.train experiment=attention_training`
 
 ## Compatibility timeline
 
@@ -62,5 +46,5 @@ Symptoms:
 Fixes:
 - Confirm the experiment exists under `conf/experiment/`.
 - Use one of the documented experiment names.
-- If migrating from a removed legacy YAML filename, map it through the table above.
+- If migrating from a removed legacy YAML filename, map it to the equivalent `experiment=<name>` preset under `conf/experiment/`.
 

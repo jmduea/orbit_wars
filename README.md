@@ -6,7 +6,7 @@ Orbit Wars now uses **Hydra-first training commands**. The canonical entrypoint 
 uv run python -m src.train experiment=attention_training
 ```
 
-For complete experiment operations (sweeps, resumes, logs/checkpoints, evaluation), see [`docs/experiments.md`](docs/experiments.md). For old `--config` migration details, see [`docs/hydra_migration.md`](docs/hydra_migration.md).
+For complete experiment operations (sweeps, resumes, logs/checkpoints, evaluation), see [`docs/experiments.md`](docs/experiments.md). For Hydra migration guidance, see [`docs/hydra_migration.md`](docs/hydra_migration.md).
 
 ## Hydra basics for this repo
 
@@ -78,22 +78,11 @@ uv run python -m src.train -m \
 
 Hydra writes multirun job outputs under `multirun/<date>/<time>/<job_id>/` (including `.hydra/` metadata per job), while training artifacts/checkpoints still go to the configured artifact paths.
 
-## Exact migration from old `--config` commands
+## Hydra experiment selection (forward-safe)
 
-| Old command | New Hydra command |
-| --- | --- |
-| `uv run python -m src.train --config default_cfg.yaml` | `uv run python -m src.train` |
-| `uv run python -m src.train --config configs/full_training.yaml` | `uv run python -m src.train experiment=full_training` |
-| `uv run python -m src.train --config configs/attention_training.yaml` | `uv run python -m src.train experiment=attention_training` |
-| `uv run python -m src.train --config configs/attention_shaped_reward_training.yaml` | `uv run python -m src.train experiment=attention_shaped_reward` |
-| `uv run python -m src.train --config configs/attention_self_play_pool.yaml` | `uv run python -m src.train experiment=attention_self_play_pool` |
-| `uv run python -m src.train --config configs/attention_candidates_16.yaml` | `uv run python -m src.train experiment=attention_candidates_16` |
-| `uv run python -m src.train --config configs/attention_candidates_24.yaml` | `uv run python -m src.train experiment=attention_candidates_24` |
-| `uv run python -m src.train --config configs/mixed_2p_4p_training.yaml` | `uv run python -m src.train experiment=mixed_2p_4p_training` |
-| `uv run python -m src.train --config configs/jax_training.yaml` | `uv run python -m src.train experiment=jax_training` |
-| `uv run python -m src.train --config configs/jax_self_play_shaped_reward_training.yaml` | `uv run python -m src.train experiment=jax_self_play_shaped_reward` |
-| `uv run python -m src.train --config configs/jax_mixed_2p_4p_training.yaml` | `uv run python -m src.train experiment=jax_mixed_2p_4p_training` |
-| `uv run python -m src.train --config configs/jax_entity_transformer_500k.yaml` | `uv run python -m src.train experiment=jax_entity_transformer_500k` |
-| `uv run python -m src.train --config configs/jax_entity_transformer_700k.yaml` | `uv run python -m src.train experiment=jax_entity_transformer_700k` |
-| `uv run python -m src.train --config configs/jax_entity_transformer_1m.yaml` | `uv run python -m src.train experiment=jax_entity_transformer_1m` |
+Use Hydra overrides directly in all scripts and automation:
+
+- `uv run python -m src.train` (defaults from base config)
+- `uv run python -m src.train experiment=attention_training`
+- `uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/jax_ckpt_000050.pkl`
 

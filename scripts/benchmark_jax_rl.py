@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.config import default_train_config_path, load_train_config  # noqa: E402
+from src.config import load_hydra_train_config  # noqa: E402
 from src.jax_device import ensure_cuda_jax_if_nvidia_present  # noqa: E402
 
 
@@ -22,7 +22,7 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line options for end-to-end JAX RL benchmarking."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=str, default=str(default_train_config_path()))
+    parser.add_argument("--experiment", type=str, default="attention_training")
     parser.add_argument("--num-envs", type=int, default=None)
     parser.add_argument("--rollout-steps", type=int, default=None)
     parser.add_argument("--updates", type=int, default=5)
@@ -48,7 +48,7 @@ def main() -> None:
     from src.jax_policy import build_jax_policy
     from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
 
-    cfg = deepcopy(load_train_config(args.config))
+    cfg = deepcopy(load_hydra_train_config(Path("conf/experiment") / f"{args.experiment}.yaml"))
     if args.num_envs is not None:
         cfg.ppo.num_envs = args.num_envs
     if args.rollout_steps is not None:

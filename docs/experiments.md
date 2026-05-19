@@ -103,16 +103,10 @@ For the complete migration matrix, timeline, and troubleshooting, see [`docs/hyd
 Quick examples:
 
 ```bash
-# old
-uv run python -m src.train --config configs/attention_training.yaml
-# new
 uv run python -m src.train experiment=attention_training
 ```
 
 ```bash
-# old
-uv run python -m src.train --config configs/jax_training.yaml --resume-checkpoint /path/to/jax_ckpt_000050.pkl
-# new
 uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/jax_ckpt_000050.pkl
 ```
 
