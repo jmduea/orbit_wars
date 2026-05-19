@@ -649,8 +649,8 @@ def collect_rollout_jax(
         selected_target[..., None, None].repeat(
             data["candidate_features"].shape[-1], axis=-1
         ),
-        axis=2,
-    ).squeeze(axis=2)
+        axis=3,
+    ).squeeze(axis=3)
     neutral_target_count = (selected_candidate_features[..., 0] * row_mask).sum()
     friendly_target_count = (selected_candidate_features[..., 1] * row_mask).sum()
     enemy_target_count = (selected_candidate_features[..., 2] * row_mask).sum()
