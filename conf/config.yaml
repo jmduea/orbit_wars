@@ -1,6 +1,6 @@
 defaults:
   - backend: default
-  - model: mlp
+  - model: entity_transformer_700k
   - training_format: empty
   - opponent_mix: latest_only
   - replay: disabled
