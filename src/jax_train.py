@@ -122,11 +122,19 @@ def _init_rollout_group(
         group_cfg.env,
         group_cfg.alternate_player_sides,
     )
-    collect_fn = jax.jit(
-        lambda rollout_key, state, batch, ts, update_idx: collect_rollout_jax(
+
+    def collect_fn(
+        rollout_key,
+        state,
+        batch,
+        ts,
+        update_idx=jnp.asarray(0, dtype=jnp.int32),
+    ):
+        return collect_rollout_jax(
             rollout_key, state, batch, ts, policy, group_cfg, update=update_idx
         )
-    )
+
+    collect_fn = jax.jit(collect_fn)
     return JaxRolloutGroup(
         name=name,
         cfg=group_cfg,
@@ -169,15 +177,16 @@ def _replace_rollout_group_state(
     )
 
 
-
-
-def _active_group_indices(groups: list[JaxRolloutGroup], format_weights: dict[int, float]) -> list[int]:
+def _active_group_indices(
+    groups: list[JaxRolloutGroup], format_weights: dict[int, float]
+) -> list[int]:
     active: list[int] = []
     for idx, group in enumerate(groups):
         player_count = int(group.cfg.env.player_count)
         if float(format_weights.get(player_count, 0.0)) > 0.0:
             active.append(idx)
     return active or list(range(len(groups)))
+
 
 def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
     """Run an end-to-end JAX training loop for the JAX environment backend.
@@ -218,7 +227,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     log_path = Path("artifacts/rl_template/logs") / f"{cfg.run_name}_jax.jsonl"
     telemetry = build_telemetry(
         cfg,
-        {"backend": "jax", "env_backend": cfg.env_backend, "rl_backend": cfg.rl_backend, "seed": cfg.seed},
+        {
+            "backend": "jax",
+            "env_backend": cfg.env_backend,
+            "rl_backend": cfg.rl_backend,
+            "seed": cfg.seed,
+        },
     )
     seed_scheduler = SeedScheduler(
         base_seed=cfg.seed,
@@ -247,15 +261,19 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         if should_reseed:
             reseed_event = seed_scheduler.reseed(update, reseed_reason)
             key = jax.random.PRNGKey(reseed_event.new_seed)
-            reseed_events.append({
-                "update": reseed_event.update,
-                "old_seed": reseed_event.old_seed,
-                "new_seed": reseed_event.new_seed,
-                "reason": reseed_event.reason,
-                "policy": reseed_event.policy,
-            })
+            reseed_events.append(
+                {
+                    "update": reseed_event.update,
+                    "old_seed": reseed_event.old_seed,
+                    "new_seed": reseed_event.new_seed,
+                    "reason": reseed_event.reason,
+                    "policy": reseed_event.policy,
+                }
+            )
         curriculum.apply(cfg)
-        active_indices = _active_group_indices(rollout_groups, curriculum.current_format_weights())
+        active_indices = _active_group_indices(
+            rollout_groups, curriculum.current_format_weights()
+        )
         key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
         for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
             group = rollout_groups[group_idx]
@@ -336,7 +354,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         )
         total_env_steps += env_steps
         completed_episodes += episodes
-        seed_scheduler.update_metric(float(rollout_metrics_host.get(cfg.plateau_metric, 0.0)))
+        seed_scheduler.update_metric(
+            float(rollout_metrics_host.get(cfg.plateau_metric, 0.0))
+        )
         record: dict[str, object] = {
             "update": update,
             "total_env_steps": total_env_steps,
@@ -372,13 +392,16 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "curriculum_phase_events": list(phase_events),
         }
         phase_events = []
-        transition = curriculum.update(update, {
-            "win_rate_2p": win_rate_2p,
-            "first_place_rate_4p": first_place_rate_4p,
-            "survival_time": survival_time,
-            "score_share": score_share,
-            "kl_stability": float(record.get("approx_kl", 0.0)),
-        })
+        transition = curriculum.update(
+            update,
+            {
+                "win_rate_2p": win_rate_2p,
+                "first_place_rate_4p": first_place_rate_4p,
+                "survival_time": survival_time,
+                "score_share": score_share,
+                "kl_stability": float(record.get("approx_kl", 0.0)),
+            },
+        )
         if transition is not None:
             phase_events.append(transition)
         append_jsonl(log_path, record)
@@ -433,6 +456,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
 
     telemetry.finish()
+
 
 def append_jsonl(path: Path, record: dict[str, object]) -> None:
     """Append a JSON metrics record to ``path``, creating parents as needed."""

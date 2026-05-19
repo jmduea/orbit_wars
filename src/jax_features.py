@@ -391,7 +391,7 @@ def _candidate_features(
         ],
         axis=-1,
     )
-    history_present = previous_present[..., None]
+    history_present = ordered_valid[..., None].astype(jnp.float32)
     real_features = jnp.concatenate(
         [
             base_real_features,

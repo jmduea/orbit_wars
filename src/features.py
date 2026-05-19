@@ -52,7 +52,7 @@ class TurnBatch:
 
 BASE_SELF_FEATURE_DIM = 30
 BASE_CANDIDATE_FEATURE_DIM = 24
-BASE_GLOBAL_FEATURE_DIM = 41
+BASE_GLOBAL_FEATURE_DIM = 45
 
 
 def feature_history_steps(env_cfg: EnvConfig | None = None) -> int:
@@ -430,7 +430,6 @@ def build_candidate_features(
             if previous is not None
             else None
         )
-        history_present = 1.0 if previous_candidate is not None else 0.0
         previous_target_ships = (
             float(previous_candidate[9]) * env_cfg.max_ships
             if previous_candidate is not None
@@ -472,7 +471,7 @@ def build_candidate_features(
                 incoming_enemy / env_cfg.max_ships,
                 (float(tgt.ships) - previous_target_ships) / env_cfg.max_ships,
                 owner_changed,
-                history_present,
+                1.0,
             ],
             dtype=np.float32,
         )
