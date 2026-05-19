@@ -408,9 +408,7 @@ def collect_rollout_jax(
                     curriculum=list(cfg.opponent_mix.curriculum),
                 )
             )
-            ids_py, probs_py = registry.ids_and_probs(update)
-            ids = jnp.asarray(ids_py, dtype=jnp.int32)
-            probs = jnp.asarray(probs_py, dtype=jnp.float32)
+            ids, probs = registry.ids_and_probs_jax(jnp.asarray(update, dtype=jnp.int32))
             opponent_type_ids = sample_opponent_type_ids_jax(
                 jax.random.fold_in(opp_key, 9973),
                 state.learner_player.shape[0],
