@@ -45,10 +45,6 @@ class PPOConfig:
 
     rollout_steps: int = 32
     num_envs: int = 4
-    num_envs_2p: int | None = None
-    num_envs_4p: int | None = None
-    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
-    phases: list[dict[str, Any]] = field(default_factory=list)
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512

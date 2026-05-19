@@ -34,6 +34,7 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
     register_config_schemas()
     with initialize_config_dir(version_base="1.3", config_dir=str(config_path.parent)):
         composed = compose(config_name=config_path.stem)
+    _validate_no_legacy_format_conflicts(composed)
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), composed)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
@@ -44,6 +45,7 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
 def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
     """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
 
+    _validate_no_legacy_format_conflicts(cfg_raw)
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
@@ -92,6 +94,34 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         )
     if ppo.rollout_microbatch_envs is not None and int(ppo.rollout_microbatch_envs) <= 0:
         raise ValueError("ppo.rollout_microbatch_envs must be a positive integer when set.")
+
+
+def _validate_no_legacy_format_conflicts(cfg_raw: Any) -> None:
+    """Reject ambiguous configs that define rollout/grouping fields in both old/new locations."""
+
+    raw = OmegaConf.to_container(cfg_raw, resolve=False) if cfg_raw is not None else {}
+    if not isinstance(raw, dict):
+        return
+    training_format = raw.get("training_format")
+    ppo = raw.get("ppo")
+    if not isinstance(training_format, dict) or not isinstance(ppo, dict):
+        return
+
+    if "rollout_groups" in training_format and "rollout_groups" in ppo:
+        raise ValueError(
+            "Conflicting rollout group definitions: use only training_format.rollout_groups; "
+            "ppo.rollout_groups is deprecated and no longer supported."
+        )
+    if "phases" in training_format and "phases" in ppo:
+        raise ValueError(
+            "Conflicting phase definitions: use only training_format.phases; "
+            "ppo.phases is deprecated and no longer supported."
+        )
+    if "num_envs_2p" in ppo or "num_envs_4p" in ppo:
+        raise ValueError(
+            "ppo.num_envs_2p/ppo.num_envs_4p are deprecated; configure per-format env counts "
+            "via training_format.rollout_groups[*].num_envs only."
+        )
 
 
 def _parse_seed_set(raw: object) -> list[int]:
