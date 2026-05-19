@@ -633,6 +633,7 @@ def collect_rollout_jax(
     done_float = data["done"].astype(jnp.float32)
     reward_mean = data["reward"].mean()
     episode_done = done_float.sum()
+    episode_reward_sum = (data["reward"] * done_float).sum()
     episodes_2p = jnp.where(cfg.env.player_count == 2, episode_done, 0.0)
     episodes_4p = jnp.where(cfg.env.player_count == 4, episode_done, 0.0)
     first_place_sum = (data["terminal_is_first"] * done_float).sum()
@@ -669,6 +670,8 @@ def collect_rollout_jax(
         "only_noop_fraction": only_noop_fraction,
         "episode_done": episode_done,
         "avg_reward": reward_mean,
+        "episode_reward_sum": episode_reward_sum,
+        "avg_episode_reward": jnp.where(episode_done > 0.0, episode_reward_sum / episode_done, 0.0),
         "episodes_2p": episodes_2p,
         "episodes_4p": episodes_4p,
         "wins_2p": jnp.where(cfg.env.player_count == 2, first_place_sum, 0.0),
