@@ -40,13 +40,13 @@ env:
   terminal_reward_mode: binary_win
   feature_history_steps: 10
 ppo:
-  rollout_steps: 32
+  rollout_steps: 128
   num_envs: 16
   num_envs_2p: 8
   num_envs_4p: 8
   rollout_groups: []
   phases: []
-  total_updates: 200
+  total_updates: 5000
   epochs: 4
   minibatch_size: 512
   gamma: 0.99
