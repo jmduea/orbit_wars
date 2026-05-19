@@ -10,5 +10,6 @@ opponent_mix:
     historical: 0.0
     scripted_sniper: 0.0
     random: 0.0
+    noop: 0.0
   temperature: 1.0
   curriculum: []

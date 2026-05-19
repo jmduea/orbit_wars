@@ -147,7 +147,11 @@ class OrbitWarsEnv:
             next_player_state, self.cfg.env
         )
         terminal_component = (
-            terminal_diagnostics["terminal_reward_unscaled"]
+            apply_early_terminal_reward_shaping(
+                terminal_diagnostics["terminal_reward_unscaled"],
+                next_player_state.step,
+                self.cfg.env,
+            )
             * self.cfg.env.reward_terminal_scale
             if done
             else 0.0
@@ -422,3 +426,16 @@ def terminal_reward_from_scores(
         "terminal_survival_time": 0.0,
         "terminal_ranked_reward": float(ranked_reward),
     }
+
+
+def apply_early_terminal_reward_shaping(
+    terminal_reward_value: float, step_index: int, env_cfg: EnvConfig
+) -> float:
+    if not getattr(env_cfg, "early_terminal_reward_shaping_enabled", True):
+        return float(terminal_reward_value)
+    horizon = max(int(getattr(env_cfg, "early_terminal_reward_shaping_horizon", 500)), 1)
+    step_number = max(int(step_index) + 1, 1)
+    if step_number >= horizon:
+        return float(terminal_reward_value)
+    bonus_scale = (horizon - step_number) / float(horizon)
+    return float(terminal_reward_value) * (1.0 + bonus_scale)

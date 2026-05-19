@@ -24,6 +24,8 @@ class EnvConfig:
     reward_ship_delta: float = 0.0
     reward_production_delta: float = 0.0
     reward_terminal_scale: float = 1.0
+    early_terminal_reward_shaping_enabled: bool = True
+    early_terminal_reward_shaping_horizon: int = 500
     terminal_reward_mode: str = "binary_win"
     feature_history_steps: int = 1
 
@@ -88,6 +90,7 @@ class OpponentMixConfig:
             "historical": 0.0,
             "scripted_sniper": 0.0,
             "random": 0.0,
+            "noop": 0.0,
         }
     )
     temperature: float = 1.0

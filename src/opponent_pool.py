@@ -12,6 +12,7 @@ OPPONENT_LATEST = 0
 OPPONENT_HISTORICAL = 1
 OPPONENT_SCRIPTED_SNIPER = 2
 OPPONENT_RANDOM = 3
+OPPONENT_NOOP = 4
 
 
 @dataclass(slots=True)
@@ -30,6 +31,7 @@ class OpponentRegistryConfig:
             "historical": 0.0,
             "scripted_sniper": 0.0,
             "random": 0.0,
+            "noop": 0.0,
         }
     )
     temperature: float = 1.0
@@ -50,6 +52,7 @@ class OpponentRegistry:
                 float(weights.get("historical", 0.0)),
                 float(weights.get("scripted_sniper", 0.0)),
                 float(weights.get("random", 0.0)),
+                float(weights.get("noop", 0.0)),
             ],
             dtype=jnp.float32,
         )
@@ -90,6 +93,7 @@ class OpponentRegistry:
             (OPPONENT_HISTORICAL, weights.get("historical", 0.0)),
             (OPPONENT_SCRIPTED_SNIPER, weights.get("scripted_sniper", 0.0)),
             (OPPONENT_RANDOM, weights.get("random", 0.0)),
+            (OPPONENT_NOOP, weights.get("noop", 0.0)),
         ]
         logits = []
         ids = []
@@ -142,6 +146,7 @@ class OpponentRegistry:
         logits = jnp.where(selected_weights > 0.0, logits, jnp.asarray(-1e9, dtype=jnp.float32))
         probs = jax.nn.softmax(logits)
         fallback = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float32)
+        fallback = jnp.pad(fallback, (0, 1))
         probs = jnp.where(jnp.sum(selected_weights) > 0.0, probs, fallback)
         ids = jnp.asarray(
             [
@@ -149,6 +154,7 @@ class OpponentRegistry:
                 OPPONENT_HISTORICAL,
                 OPPONENT_SCRIPTED_SNIPER,
                 OPPONENT_RANDOM,
+                OPPONENT_NOOP,
             ],
             dtype=jnp.int32,
         )

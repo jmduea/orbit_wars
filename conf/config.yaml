@@ -34,6 +34,8 @@ env:
   reward_ship_delta: 0.0
   reward_production_delta: 0.01
   reward_terminal_scale: 1.0
+  early_terminal_reward_shaping_enabled: true
+  early_terminal_reward_shaping_horizon: 500
   terminal_reward_mode: binary_win
   feature_history_steps: 50
 ppo:
