@@ -1,2 +1,3 @@
+# @package _global_
 env_backend: jax
 rl_backend: jax

@@ -1,7 +1,6 @@
-replay:
-  enabled: true
-  every_n_checkpoints: 1
-  opponent: random
-  seed_policy: update
-  max_steps: 500
-  output_dir: replays
+enabled: true
+every_n_checkpoints: 1
+opponent: random
+seed_policy: update
+max_steps: 500
+output_dir: replays

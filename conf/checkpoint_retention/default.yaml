@@ -1,8 +1,7 @@
-checkpoint_retention:
-  keep_last_n: 5
-  keep_every_n_updates: 0
-  keep_best_k_by_metric: 0
-  best_metric_name: episode_reward_mean
-  best_metric_mode: max
-  min_update_for_pruning: 0
-  dry_run_pruning: false
+keep_last_n: 5
+keep_every_n_updates: 0
+keep_best_k_by_metric: 0
+best_metric_name: episode_reward_mean
+best_metric_mode: max
+min_update_for_pruning: 0
+dry_run_pruning: false

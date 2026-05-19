@@ -1,23 +1,22 @@
-opponent_mix:
-  weights:
-    latest: 0.7
-    historical: 0.1
-    scripted_sniper: 0.1
-    random: 0.1
-  temperature: 1.0
-  curriculum:
-    - start_update: 1
-      end_update: 1000
-      weights:
-        latest: 0.0
-        historical: 0.0
-        scripted_sniper: 0.0
-        random: 1.0
-    - start_update: 1001
-      end_update: -1
-      weights:
-        latest: 0.6
-        historical: 0.2
-        scripted_sniper: 0.1
-        random: 0.1
-      temperature: 0.8
+weights:
+  latest: 0.7
+  historical: 0.1
+  scripted_sniper: 0.1
+  random: 0.1
+temperature: 1.0
+curriculum:
+  - start_update: 1
+    end_update: 1000
+    weights:
+      latest: 0.0
+      historical: 0.0
+      scripted_sniper: 0.0
+      random: 1.0
+  - start_update: 1001
+    end_update: -1
+    weights:
+      latest: 0.6
+      historical: 0.2
+      scripted_sniper: 0.1
+      random: 0.1
+    temperature: 0.8
