@@ -127,6 +127,12 @@ uv run python -m src.train \
 `jax_ckpt_000050.pkl` with `total_updates: 2000` continues at update 51 and stops
 after update 2000.
 
+For JAX configs, `env.feature_history_steps` controls temporal stacking in the
+flat observation features: each base feature block scales as
+`BASE_*_FEATURE_DIM * feature_history_steps`. Keep this value fixed when
+resuming/evaluating from existing checkpoints, because changing it alters input
+dimensions and makes old checkpoints incompatible with the new model shape.
+
 For JAX self-play with the same conservative reward-shaping values used by the
 attention shaped-reward experiment, launch:
 

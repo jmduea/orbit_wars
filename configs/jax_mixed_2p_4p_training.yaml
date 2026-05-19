@@ -21,6 +21,7 @@ rl_backend: jax
 
 env:
   # Default format. Mixed-format trainers sample overrides from training_format.format_mix.
+  feature_history_steps: 1  # 1 disables temporal stacking; >1 enables stacked history features.
   candidate_count: 8
   ship_bucket_count: 8
   player_count: 2
