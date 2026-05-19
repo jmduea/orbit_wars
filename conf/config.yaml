@@ -38,7 +38,7 @@ env:
   reward_production_delta: 0.0
   reward_terminal_scale: 1.0
   terminal_reward_mode: binary_win
-  feature_history_steps: 1
+  feature_history_steps: 10
 ppo:
   rollout_steps: 32
   num_envs: 4
