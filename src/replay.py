@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import random
 from pathlib import Path
 
 import jax
@@ -114,43 +115,97 @@ def maybe_write_jax_checkpoint_replay(
     replay_dir = run_dir / cfg.replay.output_dir
     replay_dir.mkdir(parents=True, exist_ok=True)
     seed = _seed_for_update(cfg, update)
-    opponent_name = cfg.replay.opponent
-
     learner_act = _build_jax_policy_actions(cfg, checkpoint_path)
-    opponent = build_opponent(opponent_name)
-
-    env = make("orbit_wars", configuration={"seed": seed, "randomSeed": seed}, debug=False)
-    env.reset(num_agents=2)
-    states = env.step([[], []])
-    step_count = 0
-    while step_count < max(int(cfg.replay.max_steps), 1):
-        learner_obs = states[0].observation if states[0] is not None else {}
-        opp_obs = states[1].observation if states[1] is not None else {}
-        joint_actions = [learner_act(learner_obs), opponent.act(opp_obs)]
-        states = env.step(joint_actions)
-        step_count += 1
-        status = states[0].status if states and states[0] is not None else "DONE"
-        if status != "ACTIVE":
-            break
-    reward_value = states[0].reward if states and states[0] is not None else 0.0
-    reward = float(reward_value) if reward_value is not None else 0.0
-    result = _reward_to_result(reward)
-
-    html_path = replay_dir / f"replay_u{update:06d}.html"
-    html_path.write_text(env.render(mode="html"), encoding="utf-8")
-    metadata_path = replay_dir / f"replay_u{update:06d}.json"
-    metadata_path.write_text(
-        json.dumps(
+    earlier_checkpoint = _pick_earlier_checkpoint(run_dir, update)
+    scenarios = [
+        {
+            "name": "2p_random",
+            "num_agents": 2,
+            "opponents": [build_opponent("random")],
+        },
+        {
+            "name": "2p_sniper",
+            "num_agents": 2,
+            "opponents": [build_opponent("sniper")],
+        },
+    ]
+    if earlier_checkpoint is not None:
+        scenarios.append(
             {
-                "checkpoint_update": update,
-                "checkpoint_path": str(checkpoint_path),
-                "log_path": str(log_path),
-                "seed": seed,
-                "opponent": opponent_name,
-                "result": result,
-                "reward": reward,
-                "html_path": str(html_path),
-            },
+                "name": "2p_earlier_ckpt",
+                "num_agents": 2,
+                "opponents": [_build_jax_policy_actions(cfg, earlier_checkpoint)],
+                "extra": {"earlier_checkpoint": str(earlier_checkpoint)},
+            }
+        )
+    opponents_4p: list[object] = [
+        build_opponent("random"),
+        build_opponent("sniper"),
+    ]
+    if earlier_checkpoint is not None:
+        opponents_4p.append(_build_jax_policy_actions(cfg, earlier_checkpoint))
+    else:
+        opponents_4p.append(build_opponent("random"))
+    scenarios.append(
+        {
+            "name": "4p_mixed",
+            "num_agents": 4,
+            "opponents": opponents_4p,
+            "extra": (
+                {"earlier_checkpoint": str(earlier_checkpoint)}
+                if earlier_checkpoint is not None
+                else {"earlier_checkpoint": None, "earlier_checkpoint_fallback": "random"}
+            ),
+        }
+    )
+
+    metadata_path: Path | None = None
+    for index, scenario in enumerate(scenarios):
+        env_seed = seed + index
+        env = make(
+            "orbit_wars", configuration={"seed": env_seed, "randomSeed": env_seed}, debug=False
+        )
+        env.reset(num_agents=int(scenario["num_agents"]))
+        states = env.step([[] for _ in range(int(scenario["num_agents"]))])
+        step_count = 0
+        while step_count < max(int(cfg.replay.max_steps), 1):
+            learner_obs = states[0].observation if states[0] is not None else {}
+            joint_actions: list[list[list[float | int]]] = [learner_act(learner_obs)]
+            for opp_idx, opponent in enumerate(scenario["opponents"], start=1):
+                opp_obs = states[opp_idx].observation if states[opp_idx] is not None else {}
+                if callable(opponent):
+                    joint_actions.append(opponent(opp_obs))
+                else:
+                    joint_actions.append(opponent.act(opp_obs))
+            states = env.step(joint_actions)
+            step_count += 1
+            status = states[0].status if states and states[0] is not None else "DONE"
+            if status != "ACTIVE":
+                break
+
+        reward_value = states[0].reward if states and states[0] is not None else 0.0
+        reward = float(reward_value) if reward_value is not None else 0.0
+        result = _reward_to_result(reward)
+
+        replay_name = str(scenario["name"])
+        html_path = replay_dir / f"replay_u{update:06d}_{replay_name}.html"
+        html_path.write_text(env.render(mode="html"), encoding="utf-8")
+        metadata_path = replay_dir / f"replay_u{update:06d}_{replay_name}.json"
+        payload = {
+            "checkpoint_update": update,
+            "checkpoint_path": str(checkpoint_path),
+            "log_path": str(log_path),
+            "seed": env_seed,
+            "scenario": replay_name,
+            "num_agents": int(scenario["num_agents"]),
+            "result": result,
+            "reward": reward,
+            "html_path": str(html_path),
+        }
+        payload.update(scenario.get("extra", {}))
+        metadata_path.write_text(
+        json.dumps(
+            payload,
             indent=2,
             sort_keys=True,
         )
@@ -158,3 +213,20 @@ def maybe_write_jax_checkpoint_replay(
         encoding="utf-8",
     )
     return metadata_path
+
+
+def _pick_earlier_checkpoint(run_dir: Path, update: int) -> Path | None:
+    candidates: list[Path] = []
+    for path in run_dir.glob("jax_ckpt_*.pkl"):
+        stem = path.stem
+        if not stem.startswith("jax_ckpt_"):
+            continue
+        try:
+            ckpt_update = int(stem.removeprefix("jax_ckpt_"))
+        except ValueError:
+            continue
+        if ckpt_update < update:
+            candidates.append(path)
+    if not candidates:
+        return None
+    return random.choice(candidates)
