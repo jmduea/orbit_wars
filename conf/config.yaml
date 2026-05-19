@@ -1,0 +1,4 @@
+defaults:
+  - preset: torch_kaggle
+
+# Override via CLI: preset=attention, preset=jax, etc.

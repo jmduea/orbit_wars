@@ -1,0 +1,65 @@
+seed: 42
+run_name: orbit_wars_ppo_mixed_2p_4p
+device: auto
+save_dir: artifacts/mixed_2p_4p_training
+checkpoint_every: 50
+log_every: 1
+opponent: self
+self_play_update_interval: 50
+self_play_deterministic: false
+self_play_enabled: false
+self_play_pool_size: 5
+self_play_snapshot_interval: 50
+self_play_latest_probability: 0.5
+multi_opponent_mode: mixed
+alternate_player_sides: true
+
+env_backend: kaggle
+rl_backend: torch
+
+env:
+  # Default format. Mixed-format trainers sample overrides from training_format.format_mix.
+  candidate_count: 8
+  ship_bucket_count: 8
+  player_count: 2
+  reward_capture_planet: 0.0
+  reward_ship_delta: 0.0
+  reward_production_delta: 0.0
+  reward_terminal_scale: 1.0
+
+training_format:
+  format_schedule: []
+  format_mix:
+    - player_count: 2
+      weight: 0.5
+    - player_count: 4
+      weight: 0.5
+  rollout_groups:
+    - name: two_player
+      player_count: 2
+      num_envs: 4
+    - name: four_player
+      player_count: 4
+      num_envs: 4
+
+model:
+  architecture: mlp  # mlp | attention | transformer
+  hidden_size: 128
+  attention_heads: 4
+  normalize_observations: true
+  obs_norm_clip: 10.0
+
+ppo:
+  rollout_steps: 512
+  num_envs: 8
+  num_envs_2p: 4
+  num_envs_4p: 4
+  total_updates: 2000
+  epochs: 4
+  minibatch_size: 512
+  gamma: 0.99
+  clip_coef: 0.2
+  ent_coef: 0.02
+  vf_coef: 0.5
+  lr: 0.0001
+  max_grad_norm: 0.5

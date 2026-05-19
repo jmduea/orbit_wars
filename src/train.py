@@ -1,21 +1,24 @@
 from __future__ import annotations
 
-import argparse
 import json
 import random
+import sys
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
+from hydra import main as hydra_main
+from omegaconf import DictConfig
 
 from .checkpoint_compat import (
     feature_metadata,
     validate_checkpoint_feature_compatibility,
 )
-from .config import TrainConfig, default_train_config_path, load_hydra_train_config
+from .config import TrainConfig, train_config_from_omegaconf
 from .env import OrbitWarsEnv
 from .features import (
     NO_OP_CANDIDATE_INDEX,
@@ -99,18 +102,77 @@ class StepGroup:
     value: float
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for the training entry point."""
+def _extract_legacy_cli_args(argv: list[str]) -> tuple[str | None, str | None]:
+    """Extract one-transition-release legacy flags from the original CLI."""
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default=str(default_train_config_path()))
-    parser.add_argument(
-        "--resume-checkpoint",
-        type=str,
-        default=None,
-        help="Resume training from a Torch .pt or JAX .pkl checkpoint.",
+    legacy_config = None
+    resume_checkpoint = None
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--config" and idx + 1 < len(argv):
+            legacy_config = argv[idx + 1]
+            idx += 2
+            continue
+        if token.startswith("--config="):
+            legacy_config = token.split("=", maxsplit=1)[1]
+            idx += 1
+            continue
+        if token == "--resume-checkpoint" and idx + 1 < len(argv):
+            resume_checkpoint = argv[idx + 1]
+            idx += 2
+            continue
+        if token.startswith("--resume-checkpoint="):
+            resume_checkpoint = token.split("=", maxsplit=1)[1]
+            idx += 1
+            continue
+        idx += 1
+    return legacy_config, resume_checkpoint
+
+
+def _legacy_config_to_preset(path: str) -> str | None:
+    name = Path(path).name
+    return {
+        "default_cfg.yaml": "torch_kaggle",
+        "attention_training.yaml": "attention",
+        "jax_training.yaml": "jax",
+        "shaped_reward_training.yaml": "shaped_reward",
+        "attention_self_play_pool.yaml": "self_play",
+        "attention_candidates_16.yaml": "candidate_sweep",
+        "mixed_2p_4p_training.yaml": "mixed_2p_4p",
+    }.get(name)
+
+
+def _rewrite_legacy_cli_argv() -> str | None:
+    """Map old ``--config configs/foo.yaml`` invocations onto Hydra presets."""
+
+    legacy_config, _ = _extract_legacy_cli_args(sys.argv[1:])
+    if legacy_config is None:
+        return None
+    preset = _legacy_config_to_preset(legacy_config)
+    if preset is None:
+        raise ValueError(f"Unsupported legacy config path: {legacy_config}")
+    warnings.warn(
+        "--config <yaml> is deprecated and will be removed in the next release; "
+        "use Hydra overrides like 'preset=attention'.",
+        DeprecationWarning,
+        stacklevel=2,
     )
-    return parser.parse_args()
+    rewritten = [sys.argv[0]]
+    skip_next = False
+    for token in sys.argv[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--config":
+            skip_next = True
+            continue
+        if token.startswith("--config="):
+            continue
+        rewritten.append(token)
+    rewritten.append(f"preset={preset}")
+    sys.argv = rewritten
+    return preset
 
 
 def resolve_device(name: str) -> torch.device:
@@ -1124,18 +1186,19 @@ def append_jsonl(path: Path, record: dict[str, object]) -> None:
         file.write(json.dumps(record, sort_keys=True) + "\n")
 
 
-def main() -> None:
-    """Run training from the command-line configuration."""
+@hydra_main(version_base=None, config_path="../conf", config_name="config")
+def _hydra_entry(cfg_raw: DictConfig) -> None:
+    """Run training from a Hydra-composed configuration."""
 
-    args = parse_args()
-    cfg = load_hydra_train_config(args.config)
+    cfg: TrainConfig = train_config_from_omegaconf(cfg_raw)
+    _, resume_checkpoint = _extract_legacy_cli_args(sys.argv[1:])
     if (
         cfg.env_backend.strip().lower() == "jax"
         and cfg.rl_backend.strip().lower() == "jax"
     ):
         from .jax_train import run_jax_training
 
-        run_jax_training(cfg, resume_checkpoint=args.resume_checkpoint)
+        run_jax_training(cfg, resume_checkpoint=resume_checkpoint)
         return
     seed_everything(cfg.seed)
     device = resolve_device(cfg.device)
@@ -1197,16 +1260,16 @@ def main() -> None:
     total_env_steps = 0
     completed_episodes = 0
     start_update = 1
-    if args.resume_checkpoint is not None:
+    if resume_checkpoint is not None:
         checkpoint = torch.load(
-            args.resume_checkpoint, map_location=device, weights_only=False
+            resume_checkpoint, map_location=device, weights_only=False
         )
         if not isinstance(checkpoint, dict):
             raise ValueError(
-                f"Training checkpoint must be a dictionary: {args.resume_checkpoint}"
+                f"Training checkpoint must be a dictionary: {resume_checkpoint}"
             )
         validate_checkpoint_feature_compatibility(
-            checkpoint, cfg.env, checkpoint_path=args.resume_checkpoint
+            checkpoint, cfg.env, checkpoint_path=resume_checkpoint
         )
         policy.load_state_dict(checkpoint.get("policy", checkpoint))
         if "optimizer" in checkpoint:
@@ -1228,7 +1291,7 @@ def main() -> None:
         elif isinstance(opponent, SelfPlayOpponentPool):
             opponent.sync_from(policy, normalizer, update=checkpoint_update)
         print(
-            f"Resuming Torch training from {args.resume_checkpoint} "
+            f"Resuming Torch training from {resume_checkpoint} "
             f"at update {start_update}"
         )
     env_count = cfg.ppo.num_envs if isinstance(envs, JaxBatchedEnv) else len(envs)
@@ -1443,6 +1506,11 @@ def main() -> None:
                 )
 
     telemetry.finish()
+
+
+def main() -> None:
+    _rewrite_legacy_cli_argv()
+    _hydra_entry()
 
 
 if __name__ == "__main__":
