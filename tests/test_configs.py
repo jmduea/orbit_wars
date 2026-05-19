@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from hydra import compose, initialize_config_dir
+from hydra.errors import ConfigCompositionException
 from omegaconf import OmegaConf
 
 from src.config import train_config_from_omegaconf
@@ -50,3 +52,10 @@ def test_critical_defaults_remain_stable() -> None:
     assert cfg["seed"] == 42
     assert cfg["env_backend"] == "jax"
     assert cfg["rl_backend"] == "jax"
+
+
+def test_preset_override_is_not_a_supported_public_selector() -> None:
+    conf_dir = Path("conf").resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
+        with pytest.raises(ConfigCompositionException, match="Could not override 'preset'"):
+            compose(config_name="config", overrides=["preset=jax"])

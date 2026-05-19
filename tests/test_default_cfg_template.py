@@ -49,7 +49,7 @@ def test_train_entrypoint_print_resolved_config_mode_outputs_json_without_traini
             "-m",
             "src.train",
             "print_resolved_config=true",
-            "preset=jax",
+            "+experiment=jax_training",
         ],
         check=True,
         capture_output=True,
