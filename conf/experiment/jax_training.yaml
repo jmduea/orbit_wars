@@ -1,0 +1,11 @@
+defaults:
+  - attention_training
+  - override /backend: jax_jax
+  - /training_format: jax_schedule_4p
+
+env:
+  max_planets: 48
+  max_fleets: 256
+ppo:
+  num_envs_2p: 4
+  num_envs_4p: 4

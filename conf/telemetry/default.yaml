@@ -1,0 +1,9 @@
+wandb:
+  enabled: false
+  project: null
+  entity: null
+  group: null
+  tags: []
+  log_artifacts: false
+  log_model_every: 100
+  watch_model: false

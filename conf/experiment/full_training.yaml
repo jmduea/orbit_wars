@@ -1,0 +1,21 @@
+defaults:
+  - /backend: kaggle_torch
+  - /model: mlp
+  - /training_format: empty
+
+run_name: orbit_wars_ppo_full_training
+save_dir: artifacts/full_training
+checkpoint_every: 50
+opponent: self
+self_play_update_interval: 50
+self_play_snapshot_interval: 50
+env:
+  candidate_count: 8
+  ship_bucket_count: 8
+  player_count: 2
+ppo:
+  rollout_steps: 512
+  num_envs: 8
+  total_updates: 2000
+  ent_coef: 0.02
+  lr: 0.0001
