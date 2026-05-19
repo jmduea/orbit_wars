@@ -344,7 +344,7 @@ def collect_rollout_jax(
     env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32)
 
     def scan_step(carry, _):
-        key, state, batch = carry
+        key, state, batch, opp_batch_cache = carry
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
         flat_self, flat_candidate, flat_global, flat_mask, flat_decision = (
             flatten_batch(batch)
@@ -358,10 +358,7 @@ def collect_rollout_jax(
         learner_action = build_action_from_batch(batch, target, bucket, cfg)
 
         if cfg.env.player_count == 2:
-            opp_game = state.game._replace(
-                player=(1 - state.learner_player).astype(jnp.int32)
-            )
-            opp_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(opp_game)
+            opp_batch = opp_batch_cache
             if cfg.opponent == "self":
                 opponent_action = _sample_policy_action(
                     opp_key,
@@ -386,6 +383,24 @@ def collect_rollout_jax(
             )
         elif cfg.env.player_count == 4:
             player_actions = []
+            player_ids = jnp.arange(cfg.env.player_count, dtype=jnp.int32)
+            player_games = jax.vmap(
+                lambda player_id: state.game._replace(
+                    player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
+                )
+            )(player_ids)
+            env_count = state.game.step.shape[0]
+            flat_player_games = jax.tree.map(
+                lambda x: x.reshape((cfg.env.player_count * env_count,) + x.shape[2:]),
+                player_games,
+            )
+            flat_player_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(
+                flat_player_games
+            )
+            player_batches = jax.tree.map(
+                lambda x: x.reshape((cfg.env.player_count, env_count) + x.shape[1:]),
+                flat_player_batch,
+            )
             registry = OpponentRegistry(
                 OpponentRegistryConfig(
                     weights=dict(cfg.opponent_mix.weights),
@@ -404,12 +419,7 @@ def collect_rollout_jax(
                 probs=probs,
             )
             for player_id in range(cfg.env.player_count):
-                player_game = state.game._replace(
-                    player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
-                )
-                player_batch = jax.vmap(lambda game: encode_turn(game, cfg.env))(
-                    player_game
-                )
+                player_batch = jax.tree.map(lambda x: x[player_id], player_batches)
                 player_key = jax.random.fold_in(opp_key, player_id)
                 slot_type = opponent_type_ids[:, player_id]
                 if cfg.opponent == "self":
@@ -496,6 +506,16 @@ def collect_rollout_jax(
         next_state, next_batch = jax.lax.cond(
             jnp.any(result.done), reset_branch, no_reset_branch, operand=None
         )
+        if cfg.env.player_count == 2:
+            next_opp_game = next_state.game._replace(
+                player=(1 - next_state.learner_player).astype(jnp.int32)
+            )
+            next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.env))(
+                next_opp_game
+            )
+        else:
+            next_opp_batch_cache = opp_batch_cache
+
         transition = {
             "self_features": batch.self_features,
             "candidate_features": batch.candidate_features,
@@ -513,10 +533,23 @@ def collect_rollout_jax(
             "terminal_score_share": result.terminal_score_share,
             "terminal_survival_time": result.terminal_survival_time,
         }
-        return (key, next_state, next_batch), transition
+        return (key, next_state, next_batch, next_opp_batch_cache), transition
 
-    (key, env_state, turn_batch), data = jax.lax.scan(
-        scan_step, (key, env_state, turn_batch), None, length=cfg.ppo.rollout_steps
+    if cfg.env.player_count == 2:
+        initial_opp_game = env_state.game._replace(
+            player=(1 - env_state.learner_player).astype(jnp.int32)
+        )
+        initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.env))(
+            initial_opp_game
+        )
+    else:
+        initial_opp_batch_cache = turn_batch
+
+    (key, env_state, turn_batch, _), data = jax.lax.scan(
+        scan_step,
+        (key, env_state, turn_batch, initial_opp_batch_cache),
+        None,
+        length=cfg.ppo.rollout_steps,
     )
     returns_step = discounted_returns(data["reward"], data["done"], cfg.ppo.gamma)
     returns = jnp.broadcast_to(returns_step[..., None], data["value"].shape)
