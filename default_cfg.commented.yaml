@@ -11,8 +11,8 @@ log_every: 1
 opponent: random
 # Environment simulator backend: "kaggle" (python env) or "jax" (accelerated env).
 env_backend: kaggle
-# RL trainer backend: "torch" PPO loop or end-to-end "jax" PPO loop.
-rl_backend: torch
+# RL trainer backend: only "jax" is supported.
+rl_backend: jax
 # Self-play checkpoint refresh cadence (in PPO updates).
 self_play_update_interval: 10
 # If true, self-play opponents act deterministically at inference time.
