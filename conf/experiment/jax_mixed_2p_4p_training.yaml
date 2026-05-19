@@ -7,8 +7,6 @@ self_play_enabled: true
 ppo:
   rollout_steps: 500
   num_envs: 32
-  num_envs_2p: 16
-  num_envs_4p: 16
   total_updates: 5000
 run_name: orbit_wars_ppo_jax_mixed_2p_4p
 save_dir: artifacts/jax_mixed_2p_4p_training

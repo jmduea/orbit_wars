@@ -58,8 +58,6 @@ model:
 ppo:
   rollout_steps: 512
   num_envs: 8
-  num_envs_2p: 4
-  num_envs_4p: 4
   total_updates: 2000
   epochs: 4
   minibatch_size: 512

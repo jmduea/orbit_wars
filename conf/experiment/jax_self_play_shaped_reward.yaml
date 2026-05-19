@@ -6,8 +6,6 @@ self_play_enabled: true
 ppo:
   rollout_steps: 500
   num_envs: 32
-  num_envs_2p: 16
-  num_envs_4p: 16
   minibatch_size: 500
 env:
   reward_capture_planet: 0.1

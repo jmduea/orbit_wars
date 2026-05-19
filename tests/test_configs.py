@@ -59,3 +59,31 @@ def test_preset_override_is_not_a_supported_public_selector() -> None:
     with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
         with pytest.raises(ConfigCompositionException, match="Could not override 'preset'"):
             compose(config_name="config", overrides=["preset=jax"])
+
+
+def test_train_config_rejects_conflicting_rollout_group_locations() -> None:
+    raw = OmegaConf.create(
+        {
+            "training_format": {"rollout_groups": [{"player_count": 2, "num_envs": 4}]},
+            "ppo": {"rollout_groups": [{"player_count": 4, "num_envs": 4}]},
+        }
+    )
+    with pytest.raises(ValueError, match="training_format.rollout_groups"):
+        train_config_from_omegaconf(raw)
+
+
+def test_train_config_rejects_conflicting_phase_locations() -> None:
+    raw = OmegaConf.create(
+        {
+            "training_format": {"phases": [{"start_update": 0, "format_mix": {"2": 1.0}}]},
+            "ppo": {"phases": [{"start_update": 100}]},
+        }
+    )
+    with pytest.raises(ValueError, match="training_format.phases"):
+        train_config_from_omegaconf(raw)
+
+
+def test_train_config_rejects_legacy_num_env_format_knobs() -> None:
+    raw = OmegaConf.create({"ppo": {"num_envs_2p": 4, "num_envs_4p": 4}})
+    with pytest.raises(ValueError, match="training_format.rollout_groups"):
+        train_config_from_omegaconf(raw)

@@ -72,7 +72,7 @@ def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
     configured, it falls back to the legacy single-format collector.
     """
 
-    raw_groups = cfg.training_format.rollout_groups or cfg.ppo.rollout_groups
+    raw_groups = cfg.training_format.rollout_groups
     groups: list[dict[str, int | str]] = []
     for index, group in enumerate(raw_groups):
         player_count = int(group.get("player_count", cfg.env.player_count))
