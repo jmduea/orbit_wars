@@ -471,23 +471,31 @@ def collect_rollout_jax(
                 "JAX PPO rollout supports env.player_count of 2 or 4, "
                 f"got {cfg.env.player_count}."
             )
-        reset_keys = jax.random.split(reset_key, batch.self_features.shape[0])
-        reset_states, reset_batches = batched_reset(reset_keys, cfg.env)
-        reset_episode_counts = state.episode_count + result.done.astype(jnp.int32)
-        reset_states, reset_batches = assign_learner_players(
-            reset_states,
-            env_indices,
-            reset_episode_counts,
-            cfg.env,
-            cfg.alternate_player_sides,
-        )
-
         def maybe_reset(new, old):
             cond = result.done.reshape(result.done.shape + (1,) * (old.ndim - 1))
             return jnp.where(cond, new, old)
 
-        next_state = jax.tree.map(maybe_reset, reset_states, next_state)
-        next_batch = jax.tree.map(maybe_reset, reset_batches, result.batch)
+        def reset_branch(_):
+            reset_keys = jax.random.split(reset_key, batch.self_features.shape[0])
+            reset_states, reset_batches = batched_reset(reset_keys, cfg.env)
+            reset_episode_counts = state.episode_count + result.done.astype(jnp.int32)
+            reset_states, reset_batches = assign_learner_players(
+                reset_states,
+                env_indices,
+                reset_episode_counts,
+                cfg.env,
+                cfg.alternate_player_sides,
+            )
+            merged_state = jax.tree.map(maybe_reset, reset_states, next_state)
+            merged_batch = jax.tree.map(maybe_reset, reset_batches, result.batch)
+            return merged_state, merged_batch
+
+        def no_reset_branch(_):
+            return next_state, result.batch
+
+        next_state, next_batch = jax.lax.cond(
+            jnp.any(result.done), reset_branch, no_reset_branch, operand=None
+        )
         transition = {
             "self_features": batch.self_features,
             "candidate_features": batch.candidate_features,
