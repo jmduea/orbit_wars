@@ -34,12 +34,12 @@ env:
   ship_speed: 6.0
   max_ships: 400.0
   max_production: 5.0
-  reward_capture_planet: 0.0
+  reward_capture_planet: 0.1
   reward_ship_delta: 0.0
-  reward_production_delta: 0.0
+  reward_production_delta: 0.01
   reward_terminal_scale: 1.0
   terminal_reward_mode: binary_win
-  feature_history_steps: 10
+  feature_history_steps: 50
 ppo:
   rollout_steps: 128
   num_envs: 16
