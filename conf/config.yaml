@@ -61,3 +61,4 @@ plateau_metric: episode_reward_mean
 plateau_window: 10
 plateau_delta: 0.0
 heldout_eval_seed_set: []
+print_resolved_config: false
