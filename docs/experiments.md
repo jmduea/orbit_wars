@@ -106,3 +106,55 @@ uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/ja
 
 - Canonical experiment editing and sweeps happen only in `conf/` (`conf/config.yaml`, `conf/experiment/*.yaml`, and config groups).
 - `configs/` has been removed; use Hydra experiment selection from `conf/experiment/` for all authoring and execution.
+
+## 6) Canonical opponent profiles and sweep-safe knobs
+
+Use `opponent_mix=<profile>` to choose a canonical opponent profile. These profiles own the brittle self-play/opponent-mixture combinations.
+
+Canonical profiles:
+- `opponent_mix/latest_only`: No self-play pool; sample only latest policy.
+- `opponent_mix/self_play_curriculum`: Self-play enabled with historical snapshots and curriculum progression.
+
+### Sweep-safe knobs matrix
+
+| Field | Sweep-safe? | Notes |
+|---|---|---|
+| `opponent_mix` (config group choice) | **Yes** | Primary high-level sweep axis for opponent behavior. |
+| `opponent_mix.weights.*` | **Yes** | Safe to sweep for mixture ablations. |
+| `opponent_mix.temperature` | **Yes** | Safe to sweep sampling sharpness. |
+| `ppo.*`, `env.reward_*` | **Yes** | Typical training/reward sweeps. |
+| `self_play_enabled` | **No** | Fixed by opponent profile; avoid overriding directly in sweeps. |
+| `self_play_pool_size` | **No** | Fixed by profile and validated against `self_play_enabled`. |
+| `self_play_snapshot_interval` | **No** | Fixed by profile and validated against `self_play_enabled`. |
+| `opponent_mix.curriculum` | **No** | Profile-owned schedule; edit profile file intentionally instead of CLI sweeps. |
+
+### Copy/paste multirun examples (canonical fields only)
+
+Sweep profile + mixture weights:
+
+```bash
+uv run python -m src.train -m \
+  experiment=jax_training \
+  opponent_mix=latest_only,self_play_curriculum \
+  opponent_mix.weights.latest=0.5,0.7 \
+  opponent_mix.weights.random=0.0,0.2
+```
+
+Sweep profile + temperature:
+
+```bash
+uv run python -m src.train -m \
+  experiment=jax_training \
+  opponent_mix=self_play_curriculum \
+  opponent_mix.temperature=0.8,1.0,1.2
+```
+
+Reward + opponent-mixture sweep:
+
+```bash
+uv run python -m src.train -m \
+  experiment=jax_training \
+  opponent_mix=latest_only,self_play_curriculum \
+  env.reward_capture_planet=0.05,0.1 \
+  opponent_mix.weights.scripted_sniper=0.0,0.1
+```

@@ -17,10 +17,6 @@ log_every: 5
 opponent: random
 self_play_update_interval: 10
 self_play_deterministic: false
-self_play_enabled: true
-self_play_pool_size: 5
-self_play_snapshot_interval: 25
-self_play_latest_probability: 0.5
 multi_opponent_mode: mixed
 alternate_player_sides: true
 env:

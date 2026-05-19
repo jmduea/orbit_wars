@@ -95,6 +95,34 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     if ppo.rollout_microbatch_envs is not None and int(ppo.rollout_microbatch_envs) <= 0:
         raise ValueError("ppo.rollout_microbatch_envs must be a positive integer when set.")
 
+    if not cfg.self_play_enabled:
+        if cfg.self_play_pool_size != 0:
+            raise ValueError(
+                "self_play_pool_size must be 0 when self_play_enabled is false."
+            )
+        if cfg.self_play_snapshot_interval != 0:
+            raise ValueError(
+                "self_play_snapshot_interval must be 0 when self_play_enabled is false."
+            )
+        if cfg.opponent_mix.curriculum:
+            raise ValueError(
+                "opponent_mix.curriculum must be empty when self_play_enabled is false."
+            )
+        historical_weight = float(cfg.opponent_mix.weights.get("historical", 0.0))
+        if historical_weight > 0.0:
+            raise ValueError(
+                "opponent_mix.weights.historical must be 0 when self_play_enabled is false."
+            )
+    else:
+        if cfg.self_play_pool_size <= 0:
+            raise ValueError(
+                "self_play_pool_size must be > 0 when self_play_enabled is true."
+            )
+        if cfg.self_play_snapshot_interval <= 0:
+            raise ValueError(
+                "self_play_snapshot_interval must be > 0 when self_play_enabled is true."
+            )
+
 
 def _validate_no_legacy_format_conflicts(cfg_raw: Any) -> None:
     """Reject ambiguous configs that define rollout/grouping fields in both old/new locations."""

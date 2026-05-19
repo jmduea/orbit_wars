@@ -1,7 +1,14 @@
-weights:
-  latest: 1.0
-  historical: 0.0
-  scripted_sniper: 0.0
-  random: 0.0
-temperature: 1.0
-curriculum: []
+# @package _global_
+self_play_enabled: false
+self_play_pool_size: 0
+self_play_snapshot_interval: 0
+self_play_latest_probability: 1.0
+
+opponent_mix:
+  weights:
+    latest: 1.0
+    historical: 0.0
+    scripted_sniper: 0.0
+    random: 0.0
+  temperature: 1.0
+  curriculum: []
