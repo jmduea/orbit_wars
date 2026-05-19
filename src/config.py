@@ -40,6 +40,15 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
     return cfg
 
 
+def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
+    """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
+
+    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
+    cfg: TrainConfig = OmegaConf.to_object(merged)
+    cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    return cfg
+
+
 def load_train_config(path: str | Path) -> TrainConfig:
     """Temporary compatibility adapter; use ``load_hydra_train_config`` directly."""
 
