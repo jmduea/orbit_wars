@@ -39,6 +39,8 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
         )
 
     params = checkpoint["params"]
+    if isinstance(params, dict) and "params" in params and len(params) == 1:
+        params = params["params"]
     policy = build_jax_policy(
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
