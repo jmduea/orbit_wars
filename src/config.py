@@ -32,7 +32,7 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
 
     config_path = Path(path).resolve()
     register_config_schemas()
-    with initialize_config_dir(version_base=None, config_dir=str(config_path.parent)):
+    with initialize_config_dir(version_base="1.3", config_dir=str(config_path.parent)):
         composed = compose(config_name=config_path.stem)
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), composed)
     cfg: TrainConfig = OmegaConf.to_object(merged)
