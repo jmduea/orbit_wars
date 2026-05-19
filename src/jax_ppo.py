@@ -31,6 +31,61 @@ from .opponent_pool import (
 _MIN_JAX_UPDATE_CHUNK_ROWS = 8192
 
 
+def validate_policy_param_shapes(params: dict, env_cfg: object) -> None:
+    """Validate encoder input dimensions in Flax params against env features.
+
+    Checks the first Dense kernel for the self/candidate/global encoder MLPs.
+    Raises ValueError with expected/actual dimensions and remediation guidance
+    when params are incompatible with the active environment configuration.
+    """
+
+    if not isinstance(params, dict):
+        raise ValueError(
+            "Policy params must be a Flax parameter dict. Received "
+            f"{type(params).__name__}."
+        )
+    root = params.get("params", params)
+    if not isinstance(root, dict):
+        raise ValueError(
+            "Policy params payload is malformed: expected a 'params' mapping."
+        )
+
+    expected_dims = {
+        "self_encoder": int(self_feature_dim(env_cfg)),
+        "candidate_encoder": int(candidate_feature_dim(env_cfg)),
+        "global_encoder": int(global_feature_dim(env_cfg)),
+    }
+
+    mismatches: list[str] = []
+    for encoder_name, expected_dim in expected_dims.items():
+        dense_name = f"{encoder_name}_0"
+        module_payload = root.get(dense_name)
+        if not isinstance(module_payload, dict):
+            mismatches.append(
+                f"{encoder_name}: missing module '{dense_name}' in checkpoint params"
+            )
+            continue
+        kernel = module_payload.get("kernel")
+        if kernel is None or getattr(kernel, "ndim", 0) < 1:
+            mismatches.append(
+                f"{encoder_name}: missing/invalid kernel at '{dense_name}.kernel'"
+            )
+            continue
+        actual_dim = int(kernel.shape[0])
+        if actual_dim != expected_dim:
+            mismatches.append(
+                f"{encoder_name}: expected input dim {expected_dim}, got {actual_dim}"
+            )
+
+    if mismatches:
+        mismatch_text = "; ".join(mismatches)
+        raise ValueError(
+            "Loaded policy params are incompatible with the configured environment "
+            f"feature dimensions ({mismatch_text}). "
+            "Use a checkpoint trained with matching env/model settings or retrain."
+        )
+
+
 class JaxTransitionBatch(NamedTuple):
     """Rollout data consumed by the JAX PPO update.
 
