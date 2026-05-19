@@ -8,6 +8,20 @@ uv run python -m src.train experiment=attention_training
 
 For complete experiment operations (sweeps, resumes, logs/checkpoints, evaluation), see [`docs/experiments.md`](docs/experiments.md). For Hydra migration guidance, see [`docs/hydra_migration.md`](docs/hydra_migration.md).
 
+## Environment setup (Codex/CI-safe)
+
+Before running tests or scripts, sync the declared dependencies (including dev tooling):
+
+```bash
+uv sync --group dev
+```
+
+Then run tests through uv so the same locked environment is used everywhere:
+
+```bash
+uv run --group dev pytest
+```
+
 ## Hydra basics for this repo
 
 - Base config root: `conf/config.yaml`.
