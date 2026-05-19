@@ -610,6 +610,16 @@ def collect_rollout_jax(
             else jnp.array(0.0, dtype=jnp.float32)
         )
     )
+    valid_non_noop_targets = data["candidate_mask"][..., 1:].astype(jnp.float32).sum(axis=-1)
+    row_mask = data["decision_mask"].astype(jnp.float32)
+    valid_non_noop_targets_sum = (valid_non_noop_targets * row_mask).sum()
+    valid_non_noop_target_rows = row_mask.sum()
+    only_noop_rows = ((valid_non_noop_targets <= 0.0).astype(jnp.float32) * row_mask).sum()
+    only_noop_fraction = jnp.where(
+        valid_non_noop_target_rows > 0.0,
+        only_noop_rows / valid_non_noop_target_rows,
+        0.0,
+    )
     done_float = data["done"].astype(jnp.float32)
     episode_done = done_float.sum()
     episodes_2p = jnp.where(cfg.env.player_count == 2, episode_done, 0.0)
@@ -625,6 +635,14 @@ def collect_rollout_jax(
             cfg.ppo.rollout_steps * turn_batch.self_features.shape[0], dtype=jnp.float32
         ),
         "samples": transitions.decision_mask.astype(jnp.float32).sum(),
+        "valid_non_noop_targets_sum": valid_non_noop_targets_sum,
+        "valid_non_noop_target_rows": valid_non_noop_target_rows,
+        "valid_non_noop_targets_per_row": jnp.where(
+            valid_non_noop_target_rows > 0.0,
+            valid_non_noop_targets_sum / valid_non_noop_target_rows,
+            0.0,
+        ),
+        "only_noop_fraction": only_noop_fraction,
         "episode_done": episode_done,
         "episodes_2p": episodes_2p,
         "episodes_4p": episodes_4p,

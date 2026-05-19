@@ -282,13 +282,9 @@ def build_candidates(
 ) -> list[PlanetState]:
     """Build real target planets for candidate slots 1..candidate_count-1.
 
-    Candidate index 0 is reserved for the no-op action by
-    :func:`build_candidate_features`. That leaves ``candidate_count - 1`` real
-    target slots. We seed the list with nearby enemies, neutrals, and friendlies
-    to preserve target diversity, then fill the rest with the closest remaining
-    planets regardless of owner. This avoids the previous hard
-    ``candidate_count // 3`` per-owner cap, which could discard useful nearby
-    targets when one ownership group dominated the board.
+    Candidate index 0 remains reserved for no-op. Real target slots prioritize
+    unobstructed shots first, then blocked shots, with a fallback that ensures we
+    keep at least one unblocked target when any exists globally.
     """
 
     real_slots = real_candidate_slots(env_cfg.candidate_count)
@@ -296,46 +292,27 @@ def build_candidates(
         return []
 
     others = [planet for planet in state.planets if planet.id != src.id]
-    enemies = sorted(
-        (planet for planet in others if planet.owner not in {-1, state.player}),
-        key=lambda planet: (distance(src, planet), planet.id),
-    )
-    neutrals = sorted(
-        (planet for planet in others if planet.owner == -1),
-        key=lambda planet: (distance(src, planet), planet.id),
-    )
-    friendlies = sorted(
-        (planet for planet in others if planet.owner == state.player),
-        key=lambda planet: (distance(src, planet), planet.id),
-    )
+    ordered = sorted(others, key=lambda planet: (distance(src, planet), planet.id))
 
-    # Soft diversity targets: include a useful sample from each owner group, but
-    # do not impose hard caps. The fallback below can still spend every
-    # remaining slot on whichever group contains the closest planets.
-    seed_counts = {
-        "enemy": min(len(enemies), max(1, math.ceil(real_slots * 0.40))),
-        "neutral": min(len(neutrals), max(1, math.ceil(real_slots * 0.30))),
-        "friendly": min(len(friendlies), max(1, math.ceil(real_slots * 0.15))),
-    }
+    unblocked: list[PlanetState] = []
+    blocked: list[PlanetState] = []
+    for tgt in ordered:
+        angle = math.atan2(tgt.y - src.y, tgt.x - src.x)
+        if shot_crosses_sun(src, angle, tgt):
+            blocked.append(tgt)
+        else:
+            unblocked.append(tgt)
 
-    candidates: list[PlanetState] = []
-    for category, planets in (
-        ("enemy", enemies),
-        ("neutral", neutrals),
-        ("friendly", friendlies),
-    ):
-        for planet in planets[: seed_counts[category]]:
-            if len(candidates) >= real_slots:
-                return candidates
-            candidates.append(planet)
+    selected = unblocked[:real_slots]
+    if len(selected) < real_slots:
+        selected.extend(blocked[: real_slots - len(selected)])
 
-    selected_ids = {planet.id for planet in candidates}
-    fallback = sorted(
-        (planet for planet in others if planet.id not in selected_ids),
-        key=lambda planet: (distance(src, planet), planet.id),
-    )
-    candidates.extend(fallback[: real_slots - len(candidates)])
-    return candidates
+    # Fallback pass: if every selected candidate is blocked but there exists any
+    # unblocked target globally, force one unblocked target into the candidate set.
+    if selected and unblocked and all(tgt in blocked for tgt in selected):
+        selected[-1] = unblocked[0]
+
+    return selected
 
 
 def build_self_features(
@@ -417,13 +394,32 @@ def build_candidate_features(
     if env_cfg.candidate_count > NO_OP_CANDIDATE_INDEX:
         candidate_mask[NO_OP_CANDIDATE_INDEX] = True
 
-    for idx, tgt in enumerate(candidates, start=1):
+    if env_cfg.candidate_count <= 1:
+        return features, candidate_mask, ship_counts, candidate_ids, target_angles
+
+    blocked: list[tuple[PlanetState, float]] = []
+    unblocked: list[tuple[PlanetState, float]] = []
+    for tgt in candidates:
+        angle = math.atan2(tgt.y - src.y, tgt.x - src.x)
+        if shot_crosses_sun(src, angle, tgt):
+            blocked.append((tgt, angle))
+        else:
+            unblocked.append((tgt, angle))
+
+    ordered: list[tuple[PlanetState, float]] = []
+    real_slots = env_cfg.candidate_count - 1
+    ordered.extend(unblocked[:real_slots])
+    if len(ordered) < real_slots:
+        ordered.extend(blocked[: real_slots - len(ordered)])
+    if ordered and unblocked and all(shot_crosses_sun(src, angle, tgt) for tgt, angle in ordered):
+        ordered[-1] = unblocked[0]
+
+    for idx, (tgt, angle) in enumerate(ordered, start=1):
         if idx >= env_cfg.candidate_count:
             break
         dx = tgt.x - src.x
         dy = tgt.y - src.y
         dist = distance(src, tgt)
-        angle = math.atan2(dy, dx)
         crosses_sun = shot_crosses_sun(src, angle, tgt)
         previous_candidate = (
             previous.candidate_by_source_target.get((env_index, src.id, tgt.id))
