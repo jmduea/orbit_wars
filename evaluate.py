@@ -21,6 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 from src.checkpoint_compat import validate_checkpoint_feature_compatibility  # noqa: E402
 from src.config import TrainConfig, default_train_config_path, load_train_config  # noqa: E402
 from src.env import extract_observation, extract_reward, extract_status  # noqa: E402
+from src.game_types import GameState, parse_observation  # noqa: E402
 from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim  # noqa: E402
 from src.normalization import ObservationNormalizer  # noqa: E402
 from src.opponents import KaggleRandomOpponent, SelfPlayOpponent, SniperOpponent  # noqa: E402
@@ -41,7 +42,15 @@ class GameResult:
     placement: float
     first_place: bool
     length: int
-
+    non_noop_actions_per_step: float = 0.0
+    fleet_launch_size: float = 0.0
+    planets_owned: float = 0.0
+    planets_lost_during_game: float = 0.0
+    planets_taken_during_game: float = 0.0
+    ships_garrisoned_per_planet: float = 0.0
+    planet_diff: float = 0.0
+    production_diff: float = 0.0
+    launched_fleet_speed: float = 0.0
 
 
 @dataclass(slots=True)
@@ -79,8 +88,80 @@ class GameOutcome:
     placement: float
     first_place: bool
     length: int
+    telemetry: dict[str, float]
 
 
+
+
+def _player_metrics(state: GameState) -> tuple[int, int, int, int]:
+    my_planets = [planet for planet in state.planets if planet.owner == state.player]
+    opp_planets = [planet for planet in state.planets if planet.owner >= 0 and planet.owner != state.player]
+    my_production = sum(planet.production for planet in my_planets)
+    opp_production = sum(planet.production for planet in opp_planets)
+    return len(my_planets), len(opp_planets), my_production, opp_production
+
+
+def _compute_game_telemetry(states_by_step: list[GameState], learner_actions: list[list[list[float | int]]]) -> dict[str, float]:
+    if len(states_by_step) < 2:
+        return {k: 0.0 for k in [
+            "non_noop_actions_per_step","fleet_launch_size","planets_owned","planets_lost_during_game","planets_taken_during_game",
+            "ships_garrisoned_per_planet","planet_diff","production_diff","launched_fleet_speed",
+        ]}
+
+    non_noop = [len(actions) for actions in learner_actions]
+    launch_sizes = [float(action[2]) for actions in learner_actions for action in actions if len(action) >= 3]
+    my_owned_by_step=[]
+    planet_diff_by_step=[]
+    production_diff_by_step=[]
+    garrison_by_step=[]
+    fleets_by_step=[{fleet.id: fleet for fleet in state.fleets if fleet.owner == state.player} for state in states_by_step]
+    speed_samples=[]
+    for prev, curr, prev_fleets, curr_fleets in zip(states_by_step[:-1], states_by_step[1:], fleets_by_step[:-1], fleets_by_step[1:], strict=True):
+        my_planets, opp_planets, my_prod, opp_prod = _player_metrics(curr)
+        my_owned_by_step.append(float(my_planets))
+        planet_diff_by_step.append(float(my_planets - opp_planets))
+        production_diff_by_step.append(float(my_prod - opp_prod))
+        garrison = sum(planet.ships for planet in curr.planets if planet.owner == curr.player)
+        garrison_by_step.append(float(garrison / my_planets) if my_planets > 0 else 0.0)
+        for fleet_id, fleet in curr_fleets.items():
+            prior = prev_fleets.get(fleet_id)
+            if prior is None:
+                continue
+            speed_samples.append(math.hypot(fleet.x - prior.x, fleet.y - prior.y))
+
+    planets_lost = 0
+    planets_taken = 0
+    for prev, curr in zip(states_by_step[:-1], states_by_step[1:], strict=True):
+        prev_owner = {planet.id: planet.owner for planet in prev.planets}
+        curr_owner = {planet.id: planet.owner for planet in curr.planets}
+        for planet_id, owner in prev_owner.items():
+            next_owner = curr_owner.get(planet_id, owner)
+            if owner == prev.player and next_owner != prev.player:
+                planets_lost += 1
+            if owner != prev.player and next_owner == prev.player:
+                planets_taken += 1
+
+    return {
+        "non_noop_actions_per_step": float(np.mean(non_noop)) if non_noop else 0.0,
+        "fleet_launch_size": float(np.mean(launch_sizes)) if launch_sizes else 0.0,
+        "planets_owned": float(np.mean(my_owned_by_step)) if my_owned_by_step else 0.0,
+        "planets_lost_during_game": float(planets_lost),
+        "planets_taken_during_game": float(planets_taken),
+        "ships_garrisoned_per_planet": float(np.mean(garrison_by_step)) if garrison_by_step else 0.0,
+        "planet_diff": float(np.mean(planet_diff_by_step)) if planet_diff_by_step else 0.0,
+        "production_diff": float(np.mean(production_diff_by_step)) if production_diff_by_step else 0.0,
+        "launched_fleet_speed": float(np.mean(speed_samples)) if speed_samples else 0.0,
+    }
+
+
+def split_result_metrics(results: Iterable[GameResult]) -> dict[str, dict[str, float] | None]:
+    keys=["non_noop_actions_per_step","fleet_launch_size","planets_owned","planets_lost_during_game","planets_taken_during_game","ships_garrisoned_per_planet","planet_diff","production_diff","launched_fleet_speed"]
+    items=list(results)
+    out={}
+    for label in ("win","loss"):
+        subset=[r for r in items if r.result==label]
+        out[label]={k: float(np.mean([getattr(r,k) for r in subset])) if subset else 0.0 for k in keys}
+    return out
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate an Orbit Wars policy checkpoint against one or more opponents.")
     parser.add_argument("--config", type=str, default=str(default_train_config_path()), help="Training YAML config path.")
@@ -300,12 +381,15 @@ def play_one_game(
     env.reset(num_agents=player_count)
     states = env.step([[] for _ in range(player_count)])
     observations = [extract_observation(state) for state in states]
+    learner_states_by_step = [parse_observation(observations[learner_seat])]
+    learner_actions_by_step: list[list[list[float | int]]] = []
     done = extract_status(states[learner_seat]) != "ACTIVE"
     step_count = 0
 
     while not done:
         joint_actions: list[list[list[float | int]]] = [[] for _ in range(player_count)]
         joint_actions[learner_seat] = learner.act(observations[learner_seat])
+        learner_actions_by_step.append(joint_actions[learner_seat])
         opponent_idx = 0
         for seat in range(player_count):
             if seat == learner_seat:
@@ -315,6 +399,7 @@ def play_one_game(
         states = env.step(joint_actions)
         observations = [extract_observation(state) for state in states]
         done = extract_status(states[learner_seat]) != "ACTIVE"
+        learner_states_by_step.append(parse_observation(observations[learner_seat]))
         step_count += 1
 
     rewards = [extract_reward(state) for state in states]
@@ -326,6 +411,7 @@ def play_one_game(
         placement=placement,
         first_place=first_place,
         length=step_count,
+        telemetry=_compute_game_telemetry(learner_states_by_step, learner_actions_by_step),
     )
 
 
@@ -441,6 +527,15 @@ def write_outputs(output_dir: Path, run_name: str, payload: dict[str, Any], resu
                 "placement",
                 "first_place",
                 "length",
+                "non_noop_actions_per_step",
+                "fleet_launch_size",
+                "planets_owned",
+                "planets_lost_during_game",
+                "planets_taken_during_game",
+                "ships_garrisoned_per_planet",
+                "planet_diff",
+                "production_diff",
+                "launched_fleet_speed",
             ],
         )
         writer.writeheader()
@@ -507,6 +602,7 @@ def main() -> dict[str, Any] | None:
                         placement=outcome.placement,
                         first_place=outcome.first_place,
                         length=outcome.length,
+                        **outcome.telemetry,
                     )
                     format_opponent_results.append(result)
                     all_results.append(result)
@@ -573,6 +669,7 @@ def main() -> dict[str, Any] | None:
         "by_opponent": by_opponent,
         "by_format": by_format,
         "by_format_opponent": by_format_opponent,
+        "win_loss_split_metrics": split_result_metrics(all_results),
         "games": [asdict(result) for result in all_results],
     }
     json_path, csv_path = write_outputs(Path(args.output_dir), run_name, payload, all_results)

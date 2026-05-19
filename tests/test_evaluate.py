@@ -123,6 +123,16 @@ def test_aggregate_format_reports_four_player_metrics_per_seat() -> None:
     assert metrics.per_seat["1"]["average_placement_4p"] == 3.0
 
 
+def test_split_result_metrics_separates_wins_and_losses() -> None:
+    win = evaluate.GameResult("2p", 2, "random", 1, 1, 0, 1, 1.0, "win", 1.0, True, 10)
+    loss = evaluate.GameResult("2p", 2, "random", 2, 2, 0, 1, -1.0, "loss", 2.0, False, 11)
+    win.non_noop_actions_per_step = 2.0
+    loss.non_noop_actions_per_step = 6.0
+    metrics = evaluate.split_result_metrics([win, loss])
+    assert metrics["win"]["non_noop_actions_per_step"] == 2.0
+    assert metrics["loss"]["non_noop_actions_per_step"] == 6.0
+
+
 def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(
     monkeypatch: Any,
 ) -> None:
