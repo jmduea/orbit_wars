@@ -3,7 +3,7 @@ defaults:
   - model: entity_transformer_700k
   - training_format: mix_2p_4p_8env
   - opponent_mix: latest_only
-  - replay: disabled
+  - replay: enabled
   - checkpoint_retention: default
   - telemetry: default
 
