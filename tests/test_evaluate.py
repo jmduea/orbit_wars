@@ -145,3 +145,49 @@ def test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot(
     assert learner.observations[0]["player"] == 0
     assert opponent.observations[0]["player"] == 1
     assert outcome.placement == 2.0
+
+
+def test_load_checkpoint_if_available_reads_jax_params(tmp_path: Any) -> None:
+    import pickle
+
+    cfg = evaluate.load_train_config(evaluate.default_train_config_path())
+    ckpt_path = tmp_path / "jax_ckpt.pkl"
+    payload = {
+        "params": {"dense": {"kernel": np.zeros((1, 1), dtype=np.float32)}},
+        "feature_metadata": {
+            "self_dim": evaluate.self_feature_dim(cfg.env),
+            "candidate_dim": evaluate.candidate_feature_dim(cfg.env),
+            "global_dim": evaluate.global_feature_dim(cfg.env),
+            "candidate_count": cfg.env.candidate_count,
+            "ship_bucket_count": cfg.env.ship_bucket_count,
+        },
+    }
+    with ckpt_path.open("wb") as f:
+        pickle.dump(payload, f)
+
+    params = evaluate.load_checkpoint_if_available(None, None, str(ckpt_path), "auto", cfg)
+
+    assert isinstance(params, dict)
+    assert "dense" in params
+
+
+def test_self_play_opponent_act_returns_valid_move_or_pass() -> None:
+    from src.opponents import SelfPlayOpponent
+
+    cfg = evaluate.load_train_config(evaluate.default_train_config_path())
+    opponent = SelfPlayOpponent(cfg, deterministic=True)
+    policy = evaluate.build_policy(cfg)
+    import jax
+    import jax.numpy as jnp
+    dummy = (
+        jnp.zeros((1, evaluate.self_feature_dim(cfg.env)), dtype=jnp.float32),
+        jnp.zeros((1, cfg.env.candidate_count, evaluate.candidate_feature_dim(cfg.env)), dtype=jnp.float32),
+        jnp.zeros((1, evaluate.global_feature_dim(cfg.env)), dtype=jnp.float32),
+        jnp.ones((1, cfg.env.candidate_count), dtype=bool),
+    )
+    params = policy.init(jax.random.PRNGKey(0), *dummy)["params"]
+    opponent.sync_from(params, None)
+
+    observation = {"player": 0, "step": 0, "planets": [], "fleets": []}
+    moves = opponent.act(observation)
+    assert isinstance(moves, list)

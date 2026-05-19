@@ -7,13 +7,13 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-import torch
 
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
 from .normalization import ObservationNormalizer
-from .policy import build_policy
-from .ppo import sample_actions
+from .jax_policy import JaxPolicyOutput, build_jax_policy, sample_actions as sample_jax_actions
+import jax
+import jax.numpy as jnp
 
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]
@@ -63,7 +63,7 @@ class KaggleRandomOpponent:
 
 class SelfPlayOpponent:
     def __init__(
-        self, cfg: TrainConfig, device: torch.device, deterministic: bool = True
+        self, cfg: TrainConfig, device: str = "auto", deterministic: bool = True
     ) -> None:
         from .features import (
             candidate_feature_dim,
@@ -73,8 +73,9 @@ class SelfPlayOpponent:
 
         self.cfg = cfg
         self.device = device
+        self.rng = jax.random.PRNGKey(0)
         self.deterministic = deterministic
-        self.policy = build_policy(
+        self.policy = build_jax_policy(
             architecture=cfg.model.architecture,
             self_dim=self_feature_dim(cfg.env),
             candidate_dim=candidate_feature_dim(cfg.env),
@@ -83,17 +84,16 @@ class SelfPlayOpponent:
             ship_bucket_count=cfg.env.ship_bucket_count,
             hidden_size=cfg.model.hidden_size,
             attention_heads=cfg.model.attention_heads,
-        ).to(device)
-        self.policy.eval()
+        )
+        self.params: dict[str, Any] | None = None
         self.normalizer: ObservationNormalizer | None = None
 
     def sync_from(
         self,
-        source_policy: torch.nn.Module,
+        source_params: dict[str, Any],
         normalizer: ObservationNormalizer | None = None,
     ) -> None:
-        self.policy.load_state_dict(source_policy.state_dict())
-        self.policy.eval()
+        self.params = jax.tree.map(lambda x: jnp.asarray(x), source_params)
         self.normalizer = clone_normalizer(normalizer)
 
     def act(self, observation: Any) -> list[list[float | int]]:
@@ -105,16 +105,21 @@ class SelfPlayOpponent:
             if self.normalizer is not None
             else batch
         )
-        with torch.inference_mode():
-            outputs = self.policy(
-                torch.from_numpy(policy_batch.self_features).to(self.device),
-                torch.from_numpy(policy_batch.candidate_features).to(self.device),
-                torch.from_numpy(policy_batch.global_features).to(self.device),
-                torch.from_numpy(policy_batch.candidate_mask).to(self.device).bool(),
-            )
-            sampled = sample_actions(outputs, deterministic=self.deterministic)
-        target_indices = sampled.target_index.detach().cpu().numpy()
-        ship_buckets = sampled.ship_bucket.detach().cpu().numpy()
+        if self.params is None:
+            raise ValueError("SelfPlayOpponent params are not initialized; call sync_from first.")
+        outputs = self.policy.apply(
+            {"params": self.params},
+            jnp.asarray(policy_batch.self_features),
+            jnp.asarray(policy_batch.candidate_features),
+            jnp.asarray(policy_batch.global_features),
+            jnp.asarray(policy_batch.candidate_mask).astype(bool),
+        )
+        self.rng, step_key = jax.random.split(self.rng)
+        target_indices, ship_buckets, _logp, _entropy = sample_jax_actions(
+            step_key, outputs, deterministic=self.deterministic
+        )
+        target_indices = jax.device_get(target_indices)
+        ship_buckets = jax.device_get(ship_buckets)
         moves: list[list[float | int]] = []
         for row_idx, context in enumerate(batch.contexts):
             target_idx = int(target_indices[row_idx])
@@ -158,9 +163,10 @@ class HistoricalSnapshot:
 class SelfPlayOpponentPool:
     """Episode-level opponent sampler with bot baselines plus policy snapshots."""
 
-    def __init__(self, cfg: TrainConfig, device: torch.device) -> None:
+    def __init__(self, cfg: TrainConfig, device: str = "auto") -> None:
         self.cfg = cfg
         self.device = device
+        self.rng = jax.random.PRNGKey(0)
         self.random_bot = KaggleRandomOpponent()
         self.sniper_bot = SniperOpponent()
         self.latest = SelfPlayOpponent(
@@ -176,7 +182,7 @@ class SelfPlayOpponentPool:
 
     def sync_from(
         self,
-        source_policy: torch.nn.Module,
+        source_policy: dict[str, Any],
         normalizer: ObservationNormalizer | None = None,
         update: int = 0,
     ) -> None:
@@ -187,7 +193,7 @@ class SelfPlayOpponentPool:
 
     def add_snapshot(
         self,
-        source_policy: torch.nn.Module,
+        source_policy: dict[str, Any],
         normalizer: ObservationNormalizer | None = None,
         update: int = 0,
     ) -> None:
@@ -293,7 +299,7 @@ def dataclass_to_dict(metadata: SnapshotMetadata) -> dict[str, int | str]:
 def build_opponent(
     name: str,
     cfg: TrainConfig | None = None,
-    device: torch.device | None = None,
+    device: str | None = None,
 ) -> OpponentPolicy:
     if name == "sniper":
         return SniperOpponent()

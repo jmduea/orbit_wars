@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import argparse
 import csv
-import importlib
 import json
 import math
 import random
 import sys
 import time
-import types
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
-import torch
+import pickle
 
 REPO_ROOT = Path(__file__).resolve().parent
 if str(REPO_ROOT) not in sys.path:
@@ -26,7 +24,7 @@ from src.env import extract_observation, extract_reward, extract_status  # noqa:
 from src.features import candidate_feature_dim, global_feature_dim, self_feature_dim  # noqa: E402
 from src.normalization import ObservationNormalizer  # noqa: E402
 from src.opponents import KaggleRandomOpponent, SelfPlayOpponent, SniperOpponent  # noqa: E402
-from src.policy import build_policy as create_policy  # noqa: E402
+from src.jax_policy import build_jax_policy  # noqa: E402
 
 
 @dataclass(slots=True)
@@ -122,18 +120,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_device(name: str) -> torch.device:
+def resolve_device(name: str) -> str:
     if name == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(name)
+        return "auto"
+    return name
 
 
 def seed_everything(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
 
 
 def parse_opponents(value: str) -> list[str]:
@@ -213,75 +208,44 @@ def parse_seed_spec(value: str | None, *, start_seed: int, games: int) -> list[i
     return seeds[:games]
 
 
-def build_policy(cfg: TrainConfig, device: torch.device) -> torch.nn.Module:
-    return create_policy(
+def build_policy(cfg: TrainConfig):
+    return build_jax_policy(
         architecture=cfg.model.architecture,
-        self_dim=self_feature_dim(cfg.env),
-        candidate_dim=candidate_feature_dim(cfg.env),
-        global_dim=global_feature_dim(cfg.env),
         candidate_count=cfg.env.candidate_count,
         ship_bucket_count=cfg.env.ship_bucket_count,
         hidden_size=cfg.model.hidden_size,
         attention_heads=cfg.model.attention_heads,
-    ).to(device)
-
-
-def register_checkpoint_module_aliases() -> None:
-    sys.modules.setdefault("src", types.ModuleType("src"))
-    sys.modules.setdefault("src.rl_template", types.ModuleType("src.rl_template"))
-    module_candidates = {
-        "config": ["src.rl_template.config", "src.config", "config"],
-        "features": ["src.rl_template.features", "src.features", "features"],
-        "policy": ["src.rl_template.policy", "src.policy", "policy"],
-        "ppo": ["src.rl_template.ppo", "src.ppo", "ppo"],
-        "game_types": ["src.rl_template.game_types", "src.game_types", "game_types"],
-        "opponents": ["src.rl_template.opponents", "src.opponents", "opponents"],
-        "env": ["src.rl_template.env", "src.env", "env"],
-        "train": ["src.rl_template.train", "src.train", "train"],
-        "normalization": ["src.rl_template.normalization", "src.normalization", "normalization"],
-    }
-
-    for canonical_name, candidates in module_candidates.items():
-        module = None
-        for candidate in candidates:
-            try:
-                module = importlib.import_module(candidate)
-                break
-            except ModuleNotFoundError:
-                continue
-        if module is None:
-            continue
-        sys.modules[f"src.rl_template.{canonical_name}"] = module
-        sys.modules[f"src.{canonical_name}"] = module
+    )
 
 
 def load_checkpoint_if_available(
-    policy: torch.nn.Module,
+    policy: Any,
     normalizer: ObservationNormalizer | None,
     checkpoint_path: str | None,
-    device: torch.device,
+    device: str,
     cfg: TrainConfig,
-) -> None:
-    register_checkpoint_module_aliases()
+) -> dict[str, Any] | None:
     if checkpoint_path is None:
-        return
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        return None
+    with Path(checkpoint_path).open("rb") as file:
+        checkpoint = pickle.load(file)
     validate_checkpoint_feature_compatibility(
         checkpoint, cfg.env, checkpoint_path=checkpoint_path
     )
-    state_dict = checkpoint.get("policy", checkpoint) if isinstance(checkpoint, dict) else checkpoint
-    policy.load_state_dict(state_dict)
-    normalizer_state = checkpoint.get("normalizer") if isinstance(checkpoint, dict) else None
+    if not isinstance(checkpoint, dict) or "params" not in checkpoint:
+        raise ValueError(f"JAX checkpoint must contain params: {checkpoint_path}")
+    normalizer_state = checkpoint.get("normalizer")
     if normalizer is not None and normalizer_state is not None:
         normalizer.load_state_dict(normalizer_state)
+    return checkpoint["params"]
 
 
 def build_opponent(
     name: str,
     cfg: TrainConfig,
-    policy: torch.nn.Module,
+    policy_params: dict[str, Any],
     normalizer: ObservationNormalizer | None,
-    device: torch.device,
+    device: str,
     deterministic: bool,
 ) -> Any:
     if name == "sniper":
@@ -290,7 +254,7 @@ def build_opponent(
         return KaggleRandomOpponent()
     if name == "self_play_snapshot":
         opponent = SelfPlayOpponent(cfg, device=device, deterministic=deterministic)
-        opponent.sync_from(policy, normalizer)
+        opponent.sync_from(policy_params, normalizer)
         return opponent
     raise ValueError(f"Unknown opponent: {name}")
 
@@ -485,7 +449,7 @@ def write_outputs(output_dir: Path, run_name: str, payload: dict[str, Any], resu
     return json_path, csv_path
 
 
-def main() -> None:
+def main() -> dict[str, Any] | None:
     args = parse_args()
     cfg = load_train_config(args.config)
     device_name = cfg.device if args.device == "auto" else args.device
@@ -498,17 +462,18 @@ def main() -> None:
     seeds = parse_seed_spec(args.seeds, start_seed=args.seed, games=args.games)
     seed_everything(seeds[0])
 
-    policy = build_policy(cfg, device)
+    policy = build_policy(cfg)
     normalizer = (
         ObservationNormalizer(clip=cfg.model.obs_norm_clip, env_cfg=cfg.env)
         if cfg.model.normalize_observations
         else None
     )
-    load_checkpoint_if_available(policy, normalizer, args.checkpoint, device, cfg)
-    policy.eval()
+    policy_params = load_checkpoint_if_available(policy, normalizer, args.checkpoint, device, cfg)
+    if policy_params is None:
+        raise ValueError("--checkpoint is required for JAX evaluation inference.")
 
     learner = SelfPlayOpponent(cfg, device=device, deterministic=args.deterministic)
-    learner.sync_from(policy, normalizer)
+    learner.sync_from(policy_params, normalizer)
 
     all_results: list[GameResult] = []
     for player_count in player_counts:
@@ -519,7 +484,7 @@ def main() -> None:
             for seat in seats:
                 for game_idx, game_seed in enumerate(seeds):
                     opponent_slots = [
-                        build_opponent(opponent_name, cfg, policy, normalizer, device, args.deterministic)
+                        build_opponent(opponent_name, cfg, policy_params, normalizer, device, args.deterministic)
                         for _ in range(player_count - 1)
                     ]
                     outcome = play_one_game(
