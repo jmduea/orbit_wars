@@ -7,13 +7,14 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+import jax
+import jax.numpy as jnp
 
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
+from .jax_policy import build_jax_policy
+from .jax_policy import sample_actions as sample_jax_actions
 from .normalization import ObservationNormalizer
-from .jax_policy import JaxPolicyOutput, build_jax_policy, sample_actions as sample_jax_actions
-import jax
-import jax.numpy as jnp
 
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]
@@ -65,27 +66,12 @@ class SelfPlayOpponent:
     def __init__(
         self, cfg: TrainConfig, device: str = "auto", deterministic: bool = True
     ) -> None:
-        from .features import (
-            candidate_feature_dim,
-            global_feature_dim,
-            self_feature_dim,
-        )
 
         self.cfg = cfg
         self.device = device
         self.rng = jax.random.PRNGKey(0)
         self.deterministic = deterministic
-        self.policy = build_jax_policy(
-            architecture=cfg.model.architecture,
-            self_dim=self_feature_dim(cfg.env),
-            candidate_dim=candidate_feature_dim(cfg.env),
-            global_dim=global_feature_dim(cfg.env),
-            candidate_count=cfg.env.candidate_count,
-            ship_bucket_count=cfg.env.ship_bucket_count,
-            hidden_size=cfg.model.hidden_size,
-            attention_heads=cfg.model.attention_heads,
-            enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
-        )
+        self.policy = build_jax_policy(cfg=self.cfg)
         self.params: dict[str, Any] | None = None
         self.normalizer: ObservationNormalizer | None = None
 

@@ -16,7 +16,7 @@ self_play_latest_probability: 0.5
 multi_opponent_mode: mixed
 alternate_player_sides: true
 env:
-  episode_steps: 500
+  MAX_STEPS: 500
   candidate_count: 8
   ship_bucket_count: 8
   max_planets: 48

@@ -9,15 +9,11 @@ from hydra.core.config_store import ConfigStore
 @dataclass(slots=True)
 class EnvConfig:
     """Environment and feature-shape configuration shared by all backends."""
-    episode_steps: int = 500
     candidate_count: int = 8
     ship_bucket_count: int = 8
-    max_planets: int = 48
     max_fleets: int = 256
     player_count: int = 2
-    ship_speed: float = 6.0
     max_ships: float = 400.0
-    max_production: float = 5.0
     reward_capture_planet: float = 0.0
     reward_ship_delta: float = 0.0
     reward_production_delta: float = 0.0

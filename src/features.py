@@ -13,12 +13,13 @@ from .constants import (
     BASE_GLOBAL_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,
     BOARD_CENTER,
+    BOARD_SIZE,
     MAX_OWNER_FEATURE_PLAYERS,
+    MAX_STEPS,
     NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
-    BOARD_SIZE,
 )
 from .game_types import GameState, PlanetState, parse_observation
 
@@ -353,12 +354,12 @@ def build_self_features(
             src.y / BOARD_SIZE,
             src.radius / 5.0,
             min(src.ships, env_cfg.max_ships) / env_cfg.max_ships,
-            src.production / env_cfg.max_production,
+            src.production / MAX_PRODUCTION,
             1.0 if is_rotating_planet(src) else 0.0,
-            len(my_planets) / env_cfg.max_planets,
-            len(enemy_planets) / env_cfg.max_planets,
-            total_ships(my_planets) / (env_cfg.max_planets * env_cfg.max_ships),
-            total_ships(enemy_planets) / (env_cfg.max_planets * env_cfg.max_ships),
+            len(my_planets) / MAX_PLANETS,
+            len(enemy_planets) / MAX_PLANETS,
+            total_ships(my_planets) / (MAX_PLANETS * env_cfg.max_ships),
+            total_ships(enemy_planets) / (MAX_PLANETS * env_cfg.max_ships),
             *owner_counts.tolist(),
             *owner_ships.tolist(),
             *active_mask.tolist(),
@@ -444,7 +445,7 @@ def build_candidate_features(
             else 0.0
         )
         incoming_friendly, incoming_enemy = incoming_fleet_pressure(tgt, state, env_cfg)
-        turns_to_arrival = dist / max(float(env_cfg.ship_speed), 1e-6)
+        turns_to_arrival = dist / max(float(MAX_FLEET_SPEED), 1e-6)
         features[idx] = np.asarray(
             [
                 1.0,
@@ -457,12 +458,12 @@ def build_candidate_features(
                 dy / BOARD_SIZE,
                 dist / BOARD_SIZE,
                 min(tgt.ships, env_cfg.max_ships) / env_cfg.max_ships,
-                tgt.production / env_cfg.max_production,
+                tgt.production / MAX_PRODUCTION,
                 1.0 if is_rotating_planet(tgt) else 0.0,
                 1.0 if crosses_sun else 0.0,
                 min(src.ships, env_cfg.max_ships) / env_cfg.max_ships,
                 *current_owner.tolist(),
-                turns_to_arrival / env_cfg.episode_steps,
+                turns_to_arrival / MAX_STEPS,
                 incoming_friendly / env_cfg.max_ships,
                 incoming_enemy / env_cfg.max_ships,
                 (float(tgt.ships) - previous_target_ships) / env_cfg.max_ships,
@@ -509,16 +510,15 @@ def build_global_features(
         production_delta = owner_production - prior[25:29]
     return np.asarray(
         [
-            state.step / env_cfg.episode_steps,
-            len(my_planets) / env_cfg.max_planets,
-            len(enemy_planets) / env_cfg.max_planets,
-            len(neutral_planets) / env_cfg.max_planets,
-            total_ships(my_planets) / (env_cfg.max_planets * env_cfg.max_ships),
-            total_ships(enemy_planets) / (env_cfg.max_planets * env_cfg.max_ships),
-            sum(fleet.ships for fleet in my_fleets)
-            / (env_cfg.max_planets * env_cfg.max_ships),
+            state.step / MAX_STEPS,
+            len(my_planets) / MAX_PLANETS,
+            len(enemy_planets) / MAX_PLANETS,
+            len(neutral_planets) / MAX_PLANETS,
+            total_ships(my_planets) / (MAX_PLANETS * env_cfg.max_ships),
+            total_ships(enemy_planets) / (MAX_PLANETS * env_cfg.max_ships),
+            sum(fleet.ships for fleet in my_fleets) / (MAX_PLANETS * env_cfg.max_ships),
             sum(fleet.ships for fleet in enemy_fleets)
-            / (env_cfg.max_planets * env_cfg.max_ships),
+            / (MAX_PLANETS * env_cfg.max_ships),
             *owner_counts.tolist(),
             *owner_ships.tolist(),
             *owner_fleets.tolist(),
@@ -576,7 +576,7 @@ def owner_relative_production(state: GameState, env_cfg: EnvConfig) -> np.ndarra
         if slot is None:
             continue
         production[slot] += float(planet.production)
-    return production / (env_cfg.max_planets * env_cfg.max_production)
+    return production / (MAX_PLANETS * MAX_PRODUCTION)
 
 
 def owner_relative_summary(
@@ -608,13 +608,13 @@ def owner_relative_summary(
             continue
         fleets[slot] += float(fleet.ships)
 
-    denom = env_cfg.max_planets * env_cfg.max_ships
+    denom = MAX_PLANETS * env_cfg.max_ships
     active_mask = np.asarray(
         [idx < player_count for idx in range(MAX_OWNER_FEATURE_PLAYERS)],
         dtype=np.float32,
     )
     return (
-        counts / env_cfg.max_planets,
+        counts / MAX_PLANETS,
         ships / denom,
         fleets / denom,
         active_mask,

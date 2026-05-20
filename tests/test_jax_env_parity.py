@@ -21,15 +21,10 @@ from src.jax_env import (
 
 
 def _cfg(
-    *, player_count=2, max_planets=12, max_fleets=16, episode_steps=500, ship_speed=6.0
+    *, player_count=2, max_planets=12, max_fleets=16, MAX_STEPS=500, ship_speed=6.0
 ):
     return EnvConfig(
-        max_planets=max_planets,
-        max_fleets=max_fleets,
-        candidate_count=4,
-        player_count=player_count,
-        episode_steps=episode_steps,
-        ship_speed=ship_speed,
+        max_fleets=max_fleets, candidate_count=4, player_count=player_count
     )
 
 

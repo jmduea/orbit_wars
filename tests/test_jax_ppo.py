@@ -2,6 +2,7 @@ import jax
 import pytest
 
 from src.config import TrainConfig
+from src.constants import MAX_PLANETS
 from src.jax_env import batched_reset
 from src.jax_policy import build_jax_policy
 from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
@@ -11,7 +12,6 @@ from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
 def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     cfg = TrainConfig()
     cfg.model.architecture = architecture
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -20,13 +20,7 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     cfg.ppo.rollout_steps = 1
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.ppo.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.env)
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(1), policy, cfg)
     _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
         jax.random.PRNGKey(2), env_state, turn_batch, train_state, policy, cfg
@@ -36,7 +30,6 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     assert transitions.self_features.shape[:3] == (
         cfg.ppo.rollout_steps,
         cfg.ppo.num_envs,
-        cfg.env.max_planets,
     )
     assert (
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
@@ -49,16 +42,13 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
     from src.jax_ppo import build_action_from_batch, build_random_action_from_batch
 
     cfg = TrainConfig()
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 4
     cfg.env.candidate_count = 4
     cfg.ppo.num_envs = 2
     _env_state, turn_batch = batched_reset(
         jax.random.split(jax.random.PRNGKey(42), cfg.ppo.num_envs), cfg.env
     )
-    target = jax.numpy.zeros(
-        (cfg.ppo.num_envs * cfg.env.max_planets,), dtype=jax.numpy.int32
-    )
+    target = jax.numpy.zeros((cfg.ppo.num_envs * MAX_PLANETS,), dtype=jax.numpy.int32)
     bucket = jax.numpy.zeros_like(target)
 
     action = build_action_from_batch(turn_batch, target, bucket, cfg)
@@ -83,13 +73,7 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
     cfg.model.attention_heads = 2
     cfg.ppo.rollout_steps = 3
     cfg.ppo.num_envs = 2
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(5), policy, cfg)
 
     save_jax_checkpoint(
@@ -118,7 +102,6 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
 def test_collect_rollout_jax_supports_four_player_multi_player_step():
     cfg = TrainConfig()
     cfg.env.player_count = 4
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -128,13 +111,7 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
     cfg.opponent = "random"
     reset_keys = jax.random.split(jax.random.PRNGKey(10), cfg.ppo.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.env)
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(11), policy, cfg)
 
     _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
@@ -144,12 +121,12 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
     assert transitions.self_features.shape[:3] == (
         cfg.ppo.rollout_steps,
         cfg.ppo.num_envs,
-        cfg.env.max_planets,
+        MAX_PLANETS,
     )
     assert transitions.decision_mask.shape == (
         cfg.ppo.rollout_steps,
         cfg.ppo.num_envs,
-        cfg.env.max_planets,
+        MAX_PLANETS,
     )
     assert (
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
@@ -161,7 +138,6 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
 def test_collect_rollout_jax_two_player_static_shapes():
     cfg = TrainConfig()
     cfg.env.player_count = 2
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -172,13 +148,7 @@ def test_collect_rollout_jax_two_player_static_shapes():
 
     reset_keys = jax.random.split(jax.random.PRNGKey(60), cfg.ppo.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.env)
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(61), policy, cfg)
 
     _key, _env_state, _turn_batch, transitions, metrics = collect_rollout_jax(
@@ -193,7 +163,6 @@ def test_assign_learner_players_uses_env_index_and_episode_count():
 
     cfg = TrainConfig()
     cfg.env.player_count = 4
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.ppo.num_envs = 5
     reset_keys = jax.random.split(jax.random.PRNGKey(20), cfg.ppo.num_envs)
@@ -208,7 +177,7 @@ def test_assign_learner_players_uses_env_index_and_episode_count():
     expected = (env_indices + episode_counts) % cfg.env.player_count
     assert jax.numpy.array_equal(env_state.learner_player, expected)
     assert jax.numpy.array_equal(env_state.episode_count, episode_counts)
-    assert turn_batch.self_features.shape[:2] == (cfg.ppo.num_envs, cfg.env.max_planets)
+    assert turn_batch.self_features.shape[:2] == (cfg.ppo.num_envs, MAX_PLANETS)
 
 
 def test_collect_rollout_jax_rotates_learner_after_reset_done():
@@ -216,8 +185,6 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
 
     cfg = TrainConfig()
     cfg.env.player_count = 4
-    cfg.env.episode_steps = 2
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -232,13 +199,7 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     env_state, turn_batch = assign_learner_players(
         env_state, env_indices, episode_counts, cfg.env, cfg.alternate_player_sides
     )
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(31), policy, cfg)
 
     _key, env_state, _turn_batch, _transitions, rollout_metrics = collect_rollout_jax(
@@ -257,7 +218,6 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
     from src.jax_train import init_rollout_groups
 
     cfg = TrainConfig()
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -269,13 +229,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
         {"name": "two_player", "player_count": 2, "num_envs": 2},
         {"name": "four_player", "player_count": 4, "num_envs": 2},
     ]
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(41), policy, cfg)
     _key, groups = init_rollout_groups(jax.random.PRNGKey(40), cfg, policy)
 
@@ -291,7 +245,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
         assert transitions.self_features.shape[:3] == (
             cfg.ppo.rollout_steps,
             group.cfg.ppo.num_envs,
-            cfg.env.max_planets,
+            MAX_PLANETS,
         )
         assert (
             float(rollout_metrics["env_steps"])
@@ -304,12 +258,12 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
     assert combined.self_features.shape[:3] == (
         cfg.ppo.rollout_steps,
         4,
-        cfg.env.max_planets,
+        MAX_PLANETS,
     )
     assert combined.decision_mask.shape == (
         cfg.ppo.rollout_steps,
         4,
-        cfg.env.max_planets,
+        MAX_PLANETS,
     )
 
 
@@ -318,8 +272,6 @@ def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
 
     cfg = TrainConfig()
     cfg.env.player_count = 4
-    cfg.env.episode_steps = 2
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -338,13 +290,7 @@ def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
         cfg.env,
         cfg.alternate_player_sides,
     )
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(71), policy, cfg)
 
     _key, env_state, _turn_batch, _transitions, _metrics = collect_rollout_jax(
@@ -357,7 +303,6 @@ def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
 def test_ppo_update_jax_accepts_four_player_rollout_transitions():
     cfg = TrainConfig()
     cfg.env.player_count = 4
-    cfg.env.max_planets = 8
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -368,13 +313,7 @@ def test_ppo_update_jax_accepts_four_player_rollout_transitions():
 
     reset_keys = jax.random.split(jax.random.PRNGKey(80), cfg.ppo.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.env)
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(81), policy, cfg)
 
     _key, _env_state, _turn_batch, transitions, _metrics = collect_rollout_jax(

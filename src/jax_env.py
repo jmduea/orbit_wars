@@ -13,14 +13,16 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from src.constants import BOARD_SIZE, MAX_STEPS
+
 from .config import EnvConfig
 from .features import PLANET_LAUNCH_RADIUS_OFFSET, SUN_RADIUS
 from .jax_features import (
     JaxFeatureHistory,
     JaxTurnBatch,
     append_feature_history,
-    encode_turn,
     empty_feature_history,
+    encode_turn,
 )
 
 BOARD_CENTER = (50.0, 50.0)
@@ -543,10 +545,7 @@ def _move_and_resolve(
     hit_any = hits.any(axis=1)
     hit_idx = jnp.argmax(hits, axis=1)
     out = (
-        (new_fx < 0.0)
-        | (new_fx > cfg.board_size)
-        | (new_fy < 0.0)
-        | (new_fy > cfg.board_size)
+        (new_fx < 0.0) | (new_fx > BOARD_SIZE) | (new_fy < 0.0) | (new_fy > BOARD_SIZE)
     )
     sun = (
         point_to_segment_distance_xy(
@@ -658,7 +657,7 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
         lambda owner: ((game.fleets.owner == owner) & game.fleets.active).any()
     )(owners)
     alive = planet_alive | fleet_alive
-    done = (game.step >= cfg.episode_steps - 2) | (alive.astype(jnp.int32).sum() <= 1)
+    done = (game.step >= MAX_STEPS - 2) | (alive.astype(jnp.int32).sum() <= 1)
     scores = jax.vmap(
         lambda owner: (
             jnp.where(
@@ -693,8 +692,8 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
     share_reward = score_share
     survival_time = jnp.minimum(
         game.step.astype(jnp.float32) + 1.0,
-        jnp.asarray(cfg.episode_steps, dtype=jnp.float32),
-    ) / jnp.maximum(jnp.asarray(cfg.episode_steps, dtype=jnp.float32), 1.0)
+        jnp.asarray(MAX_STEPS, dtype=jnp.float32),
+    ) / jnp.maximum(jnp.asarray(MAX_STEPS, dtype=jnp.float32), 1.0)
     survival_rank_reward = 0.5 * ranked_reward + 0.5 * survival_time
     mode = getattr(cfg, "terminal_reward_mode", "binary_win").strip().lower()
     if mode == "binary_win":

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src.constants import MAX_STEPS
 
 from dataclasses import dataclass
 from typing import Any
@@ -370,8 +371,8 @@ def terminal_reward_diagnostics(
         scores, env_cfg, learner_index=state.player
     )
     diagnostics["terminal_survival_time"] = min(
-        float(state.step + 1), float(env_cfg.episode_steps)
-    ) / max(float(env_cfg.episode_steps), 1.0)
+        float(state.step + 1), float(MAX_STEPS)
+    ) / max(float(MAX_STEPS), 1.0)
     if getattr(env_cfg, "terminal_reward_mode", "binary_win").strip().lower() == (
         "survival_plus_rank"
     ):

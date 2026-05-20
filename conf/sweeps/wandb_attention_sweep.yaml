@@ -15,18 +15,16 @@ parameters:
     value: disabled
   opponent_mix:
     value: self_play_curriculum
-  env.max_planets:
-    values: [48, 56, 64]
   env.candidate_count:
-    values: [4, 8, 12, 16]
+    values: [2, 3, 4, 8, 12, 16]
   env.ship_bucket_count:
-    values: [4, 6, 8, 10]
+    values: [4, 5, 6, 8, 10, 12, 16, 24]
   env.max_fleets:
-    values: [256, 512, 1024]
+    value: 1024
   env.reward_capture_planet:
-    values: [0.0, 0.005, 0.01, 0.02]
+    value: 0.0
   env.reward_ship_delta:
-    values: [0.0, 0.01, 0.02]
+    value: 0.0
   env.reward_production_delta:
     values: [0.0, 0.01, 0.02]
   env.early_terminal_reward_shaping_enabled:
@@ -54,4 +52,4 @@ parameters:
   model.hidden_size:
     values: [128, 192, 256]
   model.attention_heads:
-    values: [2, 4, 8, 16]
+    values: [2, 4, 8]
