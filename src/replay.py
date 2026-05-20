@@ -43,12 +43,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
     if isinstance(params, dict) and "params" in params and len(params) == 1:
         params = params["params"]
     policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-        enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
+        cfg=cfg,
     )
 
     def act(observation: object) -> list[list[float | int]]:

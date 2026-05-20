@@ -61,11 +61,7 @@ def main() -> None:
         jax.random.split(reset_key, cfg.ppo.num_envs), cfg.env
     )
     policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
+        cfg=cfg,
     )
     train_state = init_train_state(policy_key, policy, cfg)
     collect_fn = jax.jit(

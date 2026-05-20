@@ -1,11 +1,12 @@
 from __future__ import annotations
-from src import TrainConfig
 
 from typing import NamedTuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+
+from src import TrainConfig
 
 
 # --- Contracts ---
@@ -84,6 +85,15 @@ class TransformerBackboneEncoder(nn.Module):
 
     hidden_size: int = 128
     attention_heads: int = 4
+
+    def setup(self) -> None:
+        """Validate attention hyperparameters before parameter initialization."""
+
+        if self.hidden_size % self.attention_heads != 0:
+            raise ValueError(
+                f"hidden_size ({self.hidden_size}) must be divisible by "
+                f"attention_heads ({self.attention_heads})."
+            )
 
     @nn.compact
     def __call__(
@@ -561,39 +571,62 @@ def masked_mean(values: jax.Array, mask: jax.Array) -> jax.Array:
     return total / count
 
 def build_jax_policy(
-    *,
-    candidate_count: int,
-    ship_bucket_count: int,
-    hidden_size: int = 128,
-    architecture: str = "mlp",
-    attention_heads: int = 4,
-    enable_gradient_checkpointing: bool = False,
+    cfg: TrainConfig,
 ) -> nn.Module:
     """Construct a JAX policy module for the requested architecture.
 
     ``architecture='transformer'`` is accepted as an alias for the attention
     implementation to match the Torch policy builder.
     """
-    
-    normalized_architecture = architecture.strip().lower()
+    hidden = cfg.model.hidden_size
+    buckets = cfg.env.ship_bucket_count
+    attention_heads = cfg.model.attention_heads
+    k_steps = getattr(cfg.model, "max_moves_k", 5)  # TODO: integrate into config schema
+    # TODO: Switch case?
+    # TODO: Refactor JaxPlanetPolicy and JaxAttentionPlanetPolicy to use the ComposablePlanetPolicy framework
+    normalized_architecture = cfg.model.architecture.strip().lower()
     if normalized_architecture == "mlp":
         return JaxPlanetPolicy(
-            candidate_count=candidate_count,
-            ship_bucket_count=ship_bucket_count,
-            hidden_size=hidden_size,
+            candidate_count=cfg.env.candidate_count,
+            ship_bucket_count=cfg.env.ship_bucket_count,
+            hidden_size=cfg.model.hidden_size,
         )
-    if normalized_architecture in {"attention", "transformer"}:
+    elif normalized_architecture in {"attention", "transformer"}:
         return JaxAttentionPlanetPolicy(
-            candidate_count=candidate_count,
-            ship_bucket_count=ship_bucket_count,
-            hidden_size=hidden_size,
-            attention_heads=attention_heads,
-            enable_gradient_checkpointing=enable_gradient_checkpointing,
+            candidate_count=cfg.env.candidate_count,
+            ship_bucket_count=cfg.env.ship_bucket_count,
+            hidden_size=cfg.model.hidden_size,
+            attention_heads=cfg.model.attention_heads,
+            enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
         )
-    raise ValueError(
-        f"Unsupported JAX model architecture '{architecture}'. Expected 'mlp', "
-        "'attention', or 'transformer'."
-    )
+    elif normalized_architecture == "mlp_pointer":
+        return ComposablePlanetPolicy(
+            encoder_module=MLPBackboneEncoder(hidden_size=hidden),
+            decoder_module=AutoregressivePointerDecoder(
+                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
+            ),
+        )
+    elif normalized_architecture == "transformer_pointer":
+        return ComposablePlanetPolicy(
+            encoder_module=TransformerBackboneEncoder(
+                hidden_size=hidden, attention_heads=attention_heads
+            ),
+            decoder_module=AutoregressivePointerDecoder(
+                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
+            ),
+        )
+    elif normalized_architecture == "gnn_pointer":
+        return ComposablePlanetPolicy(
+            encoder_module=GNNBackboneEncoder(hidden_size=hidden),
+            decoder_module=AutoregressivePointerDecoder(
+                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
+            ),
+        )
+    else:
+        raise ValueError(
+            f"Unsupported JAX model architecture '{cfg.model.architecture}'. Expected 'mlp', "
+            "'attention', 'transformer', 'mlp_pointer', 'transformer_pointer', or 'gnn_pointer'."
+        )
 
 
 def sample_actions(

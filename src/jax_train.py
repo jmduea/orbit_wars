@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass
 import json
 import logging
 import time
+from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -12,23 +12,24 @@ from .checkpoint_compat import (
     feature_metadata,
     validate_checkpoint_feature_compatibility,
 )
-from .config import TrainConfig
 from .checkpoint_retention import prune_checkpoints
-from .replay import maybe_write_jax_checkpoint_replay
-from .seed_scheduler import SeedScheduleConfig, SeedScheduler
-from .telemetry import build_telemetry
+from .config import TrainConfig
 from .curriculum import CurriculumController
-from .run_paths import resolve_run_paths
 from .jax_device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
 )
+from .replay import maybe_write_jax_checkpoint_replay
+from .run_paths import resolve_run_paths
+from .seed_scheduler import SeedScheduleConfig, SeedScheduler
+from .telemetry import build_telemetry
 
 configure_jax_platform_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
 
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
+
 from .jax_env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
 from .jax_features import JaxTurnBatch  # noqa: E402
 from .jax_policy import build_jax_policy  # noqa: E402
@@ -205,14 +206,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
 
     key = jax.random.PRNGKey(cfg.seed)
     key, rollout_init_key, policy_key = jax.random.split(key, 3)
-    policy = build_jax_policy(
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        architecture=cfg.model.architecture,
-        attention_heads=cfg.model.attention_heads,
-        enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
-    )
+    policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(policy_key, policy, cfg)
     key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
     total_env_steps = 0

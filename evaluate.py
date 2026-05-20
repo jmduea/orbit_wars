@@ -210,11 +210,7 @@ def parse_seed_spec(value: str | None, *, start_seed: int, games: int) -> list[i
 
 def build_policy(cfg: TrainConfig):
     return build_jax_policy(
-        architecture=cfg.model.architecture,
-        candidate_count=cfg.env.candidate_count,
-        ship_bucket_count=cfg.env.ship_bucket_count,
-        hidden_size=cfg.model.hidden_size,
-        attention_heads=cfg.model.attention_heads,
+        cfg=cfg,
     )
 
 
