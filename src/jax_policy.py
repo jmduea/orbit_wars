@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 
 from src import TrainConfig
+from src.feature_registry import candidate_feature_schema
 
 
 # --- Contracts ---
@@ -158,6 +159,7 @@ class GNNBackboneEncoder(nn.Module):
     hidden_size: int = 128
     k_neighbors: int = 5
     msg_passing_layers: int = 2
+    target_coords_slice: slice = slice(4, 6)
 
     @nn.compact
     def __call__(
@@ -178,8 +180,8 @@ class GNNBackboneEncoder(nn.Module):
             candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
         )
 
-        # 2. Extract true normalized spatial coordinates (Indices 4 and 5)
-        coords = candidate_features[..., 4:6]
+        # 2. Extract current-frame normalized spatial coordinates
+        coords = candidate_features[..., self.target_coords_slice]
 
         # 3. Pairwise Euclidean distance tracking via implicit broadcasting
         diffs = coords[:, :, None, :] - coords[:, None, :, :]
@@ -582,6 +584,7 @@ def build_jax_policy(
     buckets = cfg.env.ship_bucket_count
     attention_heads = cfg.model.attention_heads
     k_steps = getattr(cfg.model, "max_moves_k", 5)  # TODO: integrate into config schema
+    target_coords_slice = candidate_feature_schema(cfg.env).slice("target_coords")
     # TODO: Switch case?
     # TODO: Refactor JaxPlanetPolicy and JaxAttentionPlanetPolicy to use the ComposablePlanetPolicy framework
     normalized_architecture = cfg.model.architecture.strip().lower()
@@ -617,7 +620,9 @@ def build_jax_policy(
         )
     elif normalized_architecture == "gnn_pointer":
         return ComposablePlanetPolicy(
-            encoder_module=GNNBackboneEncoder(hidden_size=hidden),
+            encoder_module=GNNBackboneEncoder(
+                hidden_size=hidden, target_coords_slice=target_coords_slice
+            ),
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
