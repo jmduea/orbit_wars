@@ -8,14 +8,19 @@ from typing import Any
 import numpy as np
 
 from .config import EnvConfig
+from .constants import (
+    BASE_CANDIDATE_FEATURE_DIM,
+    BASE_GLOBAL_FEATURE_DIM,
+    BASE_SELF_FEATURE_DIM,
+    BOARD_CENTER,
+    MAX_OWNER_FEATURE_PLAYERS,
+    NO_OP_CANDIDATE_INDEX,
+    PLANET_LAUNCH_RADIUS_OFFSET,
+    ROTATION_RADIUS_LIMIT,
+    SUN_RADIUS,
+    BOARD_SIZE,
+)
 from .game_types import GameState, PlanetState, parse_observation
-
-BOARD_CENTER = (50.0, 50.0)
-ROTATION_RADIUS_LIMIT = 50.0
-SUN_RADIUS = 10.0
-PLANET_LAUNCH_RADIUS_OFFSET = 0.1
-NO_OP_CANDIDATE_INDEX = 0
-MAX_OWNER_FEATURE_PLAYERS = 4
 
 
 def real_candidate_slots(candidate_count: int) -> int:
@@ -48,11 +53,6 @@ class TurnBatch:
     candidate_mask: np.ndarray
     contexts: list[DecisionContext]
     state: GameState
-
-
-BASE_SELF_FEATURE_DIM = 30
-BASE_CANDIDATE_FEATURE_DIM = 24
-BASE_GLOBAL_FEATURE_DIM = 45
 
 
 def feature_history_steps(env_cfg: EnvConfig | None = None) -> int:
@@ -349,8 +349,8 @@ def build_self_features(
     return np.asarray(
         [
             1.0,
-            src.x / env_cfg.board_size,
-            src.y / env_cfg.board_size,
+            src.x / BOARD_SIZE,
+            src.y / BOARD_SIZE,
             src.radius / 5.0,
             min(src.ships, env_cfg.max_ships) / env_cfg.max_ships,
             src.production / env_cfg.max_production,
@@ -451,11 +451,11 @@ def build_candidate_features(
                 1.0 if tgt.owner == -1 else 0.0,
                 1.0 if tgt.owner == state.player else 0.0,
                 1.0 if tgt.owner not in {-1, state.player} else 0.0,
-                tgt.x / env_cfg.board_size,
-                tgt.y / env_cfg.board_size,
-                dx / env_cfg.board_size,
-                dy / env_cfg.board_size,
-                dist / env_cfg.board_size,
+                tgt.x / BOARD_SIZE,
+                tgt.y / BOARD_SIZE,
+                dx / BOARD_SIZE,
+                dy / BOARD_SIZE,
+                dist / BOARD_SIZE,
                 min(tgt.ships, env_cfg.max_ships) / env_cfg.max_ships,
                 tgt.production / env_cfg.max_production,
                 1.0 if is_rotating_planet(tgt) else 0.0,

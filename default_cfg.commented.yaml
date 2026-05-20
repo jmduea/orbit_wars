@@ -30,7 +30,6 @@ multi_opponent_mode: mixed
 # If true, alternate controlled player side between episodes.
 alternate_player_sides: true
 env:
-  board_size: 100.0
   episode_steps: 500
   candidate_count: 8
   ship_bucket_count: 8

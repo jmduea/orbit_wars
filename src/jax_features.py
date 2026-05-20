@@ -8,17 +8,27 @@ import jax
 import jax.numpy as jnp
 
 from .config import EnvConfig
-from .features import (
+from .constants import (
+    BASE_CANDIDATE_FEATURE_DIM,
+    BASE_GLOBAL_FEATURE_DIM,
+    BASE_SELF_FEATURE_DIM,
     BOARD_CENTER,
     MAX_OWNER_FEATURE_PLAYERS,
     NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
-    BASE_CANDIDATE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_DIM,
-    BASE_SELF_FEATURE_DIM,
+    BOARD_SIZE,
 )
+
+
+class JaxFeatureInterface:
+    """Interface for encoding game states for policy input"""
+
+    def __init__(self, env_cfg: EnvConfig):
+        self.max_planets = int(env_cfg.max_planets)
+        self.candidate_count = int(env_cfg.candidate_count)
+        self.ship_bucket_count = int(env_cfg.ship_bucket_count)
 
 
 class JaxFeatureHistory(NamedTuple):
@@ -278,8 +288,8 @@ def _self_features(
     base_features = jnp.stack(
         [
             planets.active.astype(jnp.float32),
-            planets.x / env_cfg.board_size,
-            planets.y / env_cfg.board_size,
+            planets.x / BOARD_SIZE,
+            planets.y / BOARD_SIZE,
             planets.radius / 5.0,
             jnp.minimum(planets.ships, env_cfg.max_ships) / env_cfg.max_ships,
             planets.production / env_cfg.max_production,
@@ -387,16 +397,17 @@ def _candidate_features(
     crosses = shot_crosses_sun_xy(
         src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
     )
-    base_real_features = jnp.stack([
+    base_real_features = jnp.stack(
+        [
             tgt_active.astype(jnp.float32),
             (tgt_owner == -1).astype(jnp.float32),
             (tgt_owner == player).astype(jnp.float32),
             ((tgt_owner != -1) & (tgt_owner != player)).astype(jnp.float32),
-            tgt_x / env_cfg.board_size,
-            tgt_y / env_cfg.board_size,
-            real_dx / env_cfg.board_size,
-            real_dy / env_cfg.board_size,
-            jnp.sqrt(real_dx * real_dx + real_dy * real_dy) / env_cfg.board_size,
+            tgt_x / BOARD_SIZE,
+            tgt_y / BOARD_SIZE,
+            real_dx / BOARD_SIZE,
+            real_dy / BOARD_SIZE,
+            jnp.sqrt(real_dx * real_dx + real_dy * real_dy) / BOARD_SIZE,
             jnp.minimum(tgt_ships, env_cfg.max_ships) / env_cfg.max_ships,
             tgt_prod / env_cfg.max_production,
             is_rotating_xy(tgt_x, tgt_y, tgt_radius).astype(jnp.float32),
@@ -406,7 +417,9 @@ def _candidate_features(
                 / env_cfg.max_ships,
                 tgt_x.shape,
             ),
-        ],axis=-1)
+        ],
+        axis=-1,
+    )
     current_owner = target_owner_one_hot(tgt_owner, player, env_cfg)
     target_ids = jnp.take(planets.id, order, axis=0)
     previous_candidate, previous_present = _previous_candidate_features(

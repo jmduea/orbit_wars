@@ -9,8 +9,6 @@ from hydra.core.config_store import ConfigStore
 @dataclass(slots=True)
 class EnvConfig:
     """Environment and feature-shape configuration shared by all backends."""
-
-    board_size: float = 100.0
     episode_steps: int = 500
     candidate_count: int = 8
     ship_bucket_count: int = 8

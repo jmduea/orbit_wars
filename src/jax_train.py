@@ -205,7 +205,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     ensure_cuda_jax_if_nvidia_present()
 
     key = jax.random.PRNGKey(cfg.seed)
-    key, rollout_init_key, policy_key = jax.random.split(key, 3)
+    _, rollout_init_key, policy_key = jax.random.split(key, 3)
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(policy_key, policy, cfg)
     key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
