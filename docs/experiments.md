@@ -212,7 +212,7 @@ Use this section as the authoritative “which knob for which goal” map. Each 
 **Primary keys to edit**
 - `env.player_count`: major difficulty and multi-agent interaction shift.
 - `env.max_planets`, `env.max_fleets`, `env.candidate_count`: state/action complexity knobs.
-- `env.episode_steps`: horizon/difficulty knob.
+- `env.MAX_STEPS`: horizon/difficulty knob.
 - `env.max_ships`, `env.max_production`, `env.ship_speed`: game dynamics difficulty knobs.
 - `training_format=<group_name>` and/or `training_format.schedule`: use curated player-count schedules for curriculum-like environment shifts.
 

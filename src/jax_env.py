@@ -13,7 +13,13 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from src.constants import BOARD_SIZE, MAX_STEPS
+from src.constants import (
+    BOARD_SIZE,
+    MAX_FLEET_SPEED,
+    MAX_PLANETS,
+    MAX_STEPS,
+    TOTAL_COMETS,
+)
 
 from .config import EnvConfig
 from .features import PLANET_LAUNCH_RADIUS_OFFSET, SUN_RADIUS
@@ -133,7 +139,7 @@ class JaxStepResult(NamedTuple):
 def max_fleets(cfg: EnvConfig) -> int:
     """Return the configured fixed fleet-buffer length for JAX state arrays."""
 
-    return int(getattr(cfg, "max_fleets", max(256, cfg.max_planets * 4)))
+    return int(getattr(cfg, "max_fleets", max(256, cfg.max_fleets * 4)))
 
 
 def empty_action(cfg: EnvConfig) -> JaxAction:
@@ -151,11 +157,12 @@ def empty_action(cfg: EnvConfig) -> JaxAction:
 def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
     """Create a deterministic initial board from a JAX PRNG key."""
 
-    planet_count = int(cfg.max_planets)
+    initial_planet_count = MAX_PLANETS - TOTAL_COMETS
     fleet_count = max_fleets(cfg)
-    group_count = max(1, planet_count // 4)
+    group_count = max(1, initial_planet_count // 4)
     active_count = group_count * 4
-    idx = jnp.arange(planet_count, dtype=jnp.int32)
+
+    idx = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
     group = idx // 4
     quadrant = idx % 4
     active = idx < active_count
@@ -205,7 +212,7 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
     ships = jnp.where(active, jnp.take(ships_group, safe_group), 0.0)
     radius = jnp.where(active, jnp.take(radius_group, safe_group), 0.0)
 
-    owner = jnp.full((planet_count,), -1, dtype=jnp.int32)
+    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
     home_group = jax.random.randint(key_home, (), minval=0, maxval=group_count)
     home = (group == home_group) & active
     if int(getattr(cfg, "player_count", 2)) == 4:
@@ -450,7 +457,7 @@ def _launch_fleets(
     player: int,
     cfg: EnvConfig,
 ):
-    source_idx = jnp.clip(action.source_id, 0, cfg.max_planets - 1)
+    source_idx = jnp.clip(action.source_id, 0, MAX_PLANETS - 1)
     source_owner = jnp.take(planets.owner, source_idx)
     source_active = jnp.take(planets.active, source_idx)
     source_ships = jnp.take(planets.ships, source_idx)
@@ -463,7 +470,7 @@ def _launch_fleets(
     )
 
     launched_by_planet = jax.nn.one_hot(
-        source_idx, cfg.max_planets, dtype=jnp.float32
+        source_idx, MAX_PLANETS, dtype=jnp.float32
     ).T @ jnp.where(valid, action.ships, 0.0)
     planets = planets._replace(
         ships=jnp.where(
@@ -525,7 +532,7 @@ def _move_and_resolve(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
 
-    speed = fleet_speed(fleets.ships, cfg.ship_speed)
+    speed = fleet_speed(fleets.ships, MAX_FLEET_SPEED)
     old_fx, old_fy = fleets.x, fleets.y
     new_fx = fleets.x + jnp.cos(fleets.angle) * speed
     new_fy = fleets.y + jnp.sin(fleets.angle) * speed
@@ -611,7 +618,7 @@ def _resolve_combat(
     hit_idx: jax.Array,
     cfg: EnvConfig,
 ) -> JaxPlanetState:
-    hit_weights = jax.nn.one_hot(hit_idx, cfg.max_planets, dtype=jnp.float32) * hit_any[
+    hit_weights = jax.nn.one_hot(hit_idx, MAX_PLANETS, dtype=jnp.float32) * hit_any[
         :, None
     ].astype(jnp.float32)
     owners = jnp.arange(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)

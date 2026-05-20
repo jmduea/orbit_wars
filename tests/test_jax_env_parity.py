@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import EnvConfig
+from src.constants import MAX_PLANETS
 from src.jax_env import (
     BOARD_CENTER,
     JaxAction,
@@ -20,9 +21,7 @@ from src.jax_env import (
 )
 
 
-def _cfg(
-    *, player_count=2, max_planets=12, max_fleets=16, MAX_STEPS=500, ship_speed=6.0
-):
+def _cfg(*, player_count=2, max_fleets=16):
     return EnvConfig(
         max_fleets=max_fleets, candidate_count=4, player_count=player_count
     )
@@ -30,9 +29,9 @@ def _cfg(
 
 def _planet_state(rows, cfg):
     rows = [list(row) for row in rows]
-    pad = cfg.max_planets - len(rows)
+    pad = MAX_PLANETS - len(rows)
     assert pad >= 0
-    ids = [int(r[0]) for r in rows] + list(range(len(rows), cfg.max_planets))
+    ids = [int(r[0]) for r in rows] + list(range(len(rows), MAX_PLANETS))
     owner = [int(r[1]) for r in rows] + [-1] * pad
     x = [float(r[2]) for r in rows] + [0.0] * pad
     y = [float(r[3]) for r in rows] + [0.0] * pad
@@ -143,9 +142,9 @@ def _planet_rows(state, count):
 
 
 def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
-    cfg = _cfg(max_planets=24)
+    cfg = _cfg()
     state, _ = reset(jax.random.PRNGKey(11), cfg)
-    planets = _planet_rows(state, cfg.max_planets)
+    planets = _planet_rows(state, MAX_PLANETS)
 
     assert len(planets) % 4 == 0
     for i in range(0, len(planets), 4):
@@ -157,7 +156,7 @@ def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
 
 
 def test_four_player_reset_home_planets_are_rotationally_symmetric():
-    cfg = _cfg(player_count=4, max_planets=24)
+    cfg = _cfg(player_count=4)
     state, _ = reset(jax.random.PRNGKey(42), cfg)
     p = state.game.planets
     owned = np.flatnonzero(np.asarray(p.owner) != -1)
@@ -175,13 +174,13 @@ def test_four_player_reset_home_planets_are_rotationally_symmetric():
 
 
 def test_fleet_does_not_tunnel_through_rotating_planet():
-    cfg = _cfg(ship_speed=2.0)
+    cfg = _cfg()
     state = _state(
-        [[0, -1, 50.0, 52.0, 1.0, 10, 0]],
-        [[0, 0, 49.0, 50.0, 0.0, 1, 1000]],
+        [[0, -1, 70.0, 50.0, 2.0, 10, 0]],
+        [[0, 0, 68.0, 50.0, math.pi / 2, 1, 1000]],
         cfg=cfg,
         step_index=0,
-        angular_velocity=math.pi,
+        angular_velocity=math.pi / 2,
     )
 
     next_state, _ = _advance(state, cfg)
@@ -293,6 +292,7 @@ def test_combat_capture_reinforce_insufficient_tie_and_multi_fleet_cases():
 
 def test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fleets():
     cfg = _cfg()
+    cfg.early_terminal_reward_shaping_enabled = False
     cases = [
         ([[0, 0, 80, 80, 3, 50, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 0, 1.0),
         ([[0, 0, 80, 80, 3, 50, 1]], [], 0, 0, 1.0),
@@ -346,6 +346,7 @@ def test_elimination_does_not_end_game_while_player_has_fleet():
 
 def test_four_player_terminal_reward_uses_all_players():
     cfg = _cfg(player_count=4)
+    cfg.early_terminal_reward_shaping_enabled = False
     loser_state, loser_result = _advance(
         _state([[0, 2, 80, 80, 3, 40, 1]], cfg=cfg, learner_player=0), cfg
     )
@@ -393,7 +394,7 @@ def test_four_player_step_processes_all_player_action_lists_before_production():
     )
     assert int(np.asarray(next_state.game.fleets.active).sum()) == 4
     assert set(np.asarray(next_state.game.fleets.owner[:4]).tolist()) == {0, 1, 2, 3}
-    assert result.batch.self_features.shape[0] == cfg.max_planets
+    assert result.batch.self_features.shape[0] == MAX_PLANETS
 
 
 def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player():
@@ -427,7 +428,7 @@ def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player(
 
 
 def test_four_player_step_allows_simultaneous_four_way_combat_from_actions():
-    cfg = _cfg(player_count=4, max_planets=8, max_fleets=24)
+    cfg = _cfg(player_count=4, max_fleets=24)
     state = _state(
         [
             [0, 0, 76.0, 80.0, 1.0, 60, 0],

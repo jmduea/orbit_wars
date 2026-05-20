@@ -8,15 +8,8 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from .conf_schema import (
-    CheckpointRetentionConfig,
     EnvConfig,
-    ModelConfig,
-    OpponentMixConfig,
-    PPOConfig,
-    ReplayConfig,
     TrainConfig,
-    TrainingFormatConfig,
-    WandBConfig,
     register_config_schemas,
 )
 

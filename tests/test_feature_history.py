@@ -2,6 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import EnvConfig
+from src.constants import MAX_PLANETS
 from src.features import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,
@@ -123,17 +124,28 @@ def test_python_candidate_history_zeros_missing_prior_targets():
 def _jax_three_planet_game(
     cfg: EnvConfig, step: int, target_positions: dict[int, float]
 ):
-    active = jnp.array([True, True, True, False], dtype=bool)
+    active = jnp.zeros((MAX_PLANETS,), dtype=bool)
+    active = active.at[:3].set(True)
+    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
+    owner = owner.at[:3].set(jnp.array([0, 1, 1], dtype=jnp.int32))
+    x = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
+    x = x.at[:3].set(
+        jnp.array(
+            [10.0, target_positions[1], target_positions[2]], dtype=jnp.float32
+        )
+    )
+    y = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
+    y = y.at[:3].set(jnp.array([10.0, 10.0, 10.0], dtype=jnp.float32))
+    ships = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
+    ships = ships.at[:3].set(jnp.array([50.0, 20.0, 30.0], dtype=jnp.float32))
     planets = JaxPlanetState(
-        id=jnp.arange(cfg.max_planets, dtype=jnp.int32),
-        owner=jnp.array([0, 1, 1, -1], dtype=jnp.int32),
-        x=jnp.array(
-            [10.0, target_positions[1], target_positions[2], 0.0], dtype=jnp.float32
-        ),
-        y=jnp.array([10.0, 10.0, 10.0, 0.0], dtype=jnp.float32),
-        radius=jnp.ones((cfg.max_planets,), dtype=jnp.float32) * 2.0,
-        ships=jnp.array([50.0, 20.0, 30.0, 0.0], dtype=jnp.float32),
-        production=jnp.ones((cfg.max_planets,), dtype=jnp.float32),
+        id=jnp.arange(MAX_PLANETS, dtype=jnp.int32),
+        owner=owner,
+        x=x,
+        y=y,
+        radius=jnp.ones((MAX_PLANETS,), dtype=jnp.float32) * 2.0,
+        ships=ships,
+        production=jnp.ones((MAX_PLANETS,), dtype=jnp.float32),
         active=active,
     )
     fleet_count = max_fleets(cfg)
@@ -159,9 +171,7 @@ def _jax_three_planet_game(
 
 
 def test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder():
-    cfg = EnvConfig(
-        max_planets=4, max_fleets=4, candidate_count=3, feature_history_steps=2
-    )
+    cfg = EnvConfig(max_fleets=4, candidate_count=3, feature_history_steps=2)
     empty_history = empty_feature_history(cfg)
     first_game = _jax_three_planet_game(cfg, 0, {1: 20.0, 2: 30.0})
     first = encode_jax_turn(first_game, cfg, empty_history)
@@ -187,9 +197,7 @@ def test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder():
 
 
 def test_jax_candidate_history_zeros_missing_prior_targets():
-    cfg = EnvConfig(
-        max_planets=4, max_fleets=4, candidate_count=2, feature_history_steps=2
-    )
+    cfg = EnvConfig(max_fleets=4, candidate_count=2, feature_history_steps=2)
     empty_history = empty_feature_history(cfg)
     first_game = _jax_three_planet_game(cfg, 0, {1: 20.0, 2: 30.0})
     first = encode_jax_turn(first_game, cfg, empty_history)

@@ -3,6 +3,7 @@ import math
 # -- Game Constants --
 MAX_STEPS = 500
 MAX_PLANETS = 60  # (40 planets (5-10 symmetric groups of 4) + 5 groups of 4 comet spawns throughout the match)
+TOTAL_COMETS = 20
 ACT_TIMEOUT_SEC = 1.0
 SUN_RADIUS = 10.0
 

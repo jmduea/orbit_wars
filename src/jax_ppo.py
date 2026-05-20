@@ -1,22 +1,31 @@
 from __future__ import annotations
 
-import flax
 from typing import NamedTuple
 
+import flax
+import flax.struct
 import jax
 import jax.numpy as jnp
 import optax
+
+from src.conf_schema import EnvConfig
+from src.constants import MAX_FLEET_SPEED, MAX_PLANETS, MAX_PRODUCTION
+from src.feature_registry import (
+    candidate_feature_schema,
+    global_feature_schema,
+    self_feature_schema,
+)
 
 from .config import TrainConfig
 from .features import candidate_feature_dim, global_feature_dim, self_feature_dim
 from .jax_env import (
     JaxAction,
     JaxEnvState,
-    fleet_speed,
     assign_learner_players,
     batched_reset,
     batched_step,
     batched_step_multi_player,
+    fleet_speed,
 )
 from .jax_features import JaxTurnBatch, encode_turn
 from .jax_policy import action_log_prob_and_entropy, sample_actions
@@ -30,7 +39,8 @@ from .opponent_pool import (
     sample_opponent_type_ids_jax,
 )
 
-def validate_policy_param_shapes(params: dict, env_cfg: object) -> None:
+
+def validate_policy_param_shapes(params: dict, env_cfg: EnvConfig) -> None:
     """Validate encoder input dimensions in Flax params against env features.
 
     Checks the first Dense kernel for the self/candidate/global encoder MLPs.
@@ -621,6 +631,34 @@ def collect_rollout_jax(
             else jnp.array(0.0, dtype=jnp.float32)
         )
     )
+    metrics = _rollout_diagnostics(
+        data=data,
+        transitions=transitions,
+        turn_batch=turn_batch,
+        cfg=cfg,
+        opponent_slots=opponent_slots,
+        snapshot_share=snapshot_share,
+        current_share=current_share,
+        random_share=random_share,
+    )
+    return key, env_state, turn_batch, transitions, metrics
+
+
+def _rollout_diagnostics(
+    *,
+    data: dict[str, jax.Array],
+    transitions: JaxTransitionBatch,
+    turn_batch: JaxTurnBatch,
+    cfg: TrainConfig,
+    opponent_slots: jax.Array,
+    snapshot_share: jax.Array,
+    current_share: jax.Array,
+    random_share: jax.Array,
+) -> dict[str, jax.Array]:
+    self_schema = self_feature_schema(cfg.env)
+    candidate_schema = candidate_feature_schema(cfg.env)
+    global_schema = global_feature_schema(cfg.env)
+
     valid_non_noop_targets = data["candidate_mask"][..., 1:].astype(jnp.float32).sum(axis=-1)
     row_mask = data["decision_mask"].astype(jnp.float32)
     valid_non_noop_targets_sum = (valid_non_noop_targets * row_mask).sum()
@@ -647,12 +685,17 @@ def collect_rollout_jax(
     decision_count = row_mask.sum()
     noop_count = ((selected_target == 0).astype(jnp.float32) * row_mask).sum()
     non_noop_count = (((selected_target != 0).astype(jnp.float32)) * row_mask).sum()
-    source_ships = data["self_features"][..., 4] * cfg.env.max_ships
+    source_ships = (
+        data["self_features"][..., self_schema.slice("source_ships")].squeeze(-1)
+        * cfg.env.max_ships
+    )
     launched_ships = ship_count_for_bucket_jax(source_ships, data["ship_bucket"], cfg.env.ship_bucket_count)
     launched_ship_mask = ((selected_target != 0).astype(jnp.float32) * row_mask)
     launched_ship_count = launched_ship_mask.sum()
     launched_ship_total = (launched_ships * launched_ship_mask).sum()
-    launched_ship_speed_total = (launched_ship_mask * fleet_speed(launched_ships, cfg.env.ship_speed)).sum()
+    launched_ship_speed_total = (
+        launched_ship_mask * fleet_speed(launched_ships, MAX_FLEET_SPEED)
+    ).sum()
 
     terminal_row_mask = row_mask * done_float[..., None]
     win_row_mask = terminal_row_mask * data["terminal_is_first"][..., None]
@@ -660,11 +703,21 @@ def collect_rollout_jax(
     win_episode_rows = win_row_mask.sum()
     loss_episode_rows = loss_row_mask.sum()
 
-    my_planets = data["global_features"][..., 1] * cfg.env.max_planets
-    my_garrison_ships = data["global_features"][..., 4] * (cfg.env.max_planets * cfg.env.max_ships)
-    planet_delta = data["global_features"][..., 37] * cfg.env.max_planets
-    production_diff = data["global_features"][..., 25] * cfg.env.max_production
-    planet_diff = data["global_features"][..., 37] * cfg.env.max_planets
+    planet_fractions_slice = global_schema.slice("planet_fractions")
+    ship_fractions_slice = global_schema.slice("ship_fractions")
+    planet_delta_slots_slice = global_schema.slice("planet_delta_slots")
+    owner_production_slice = global_schema.slice("owner_relative_production")
+
+    planet_fractions = data["global_features"][..., planet_fractions_slice]
+    ship_fractions = data["global_features"][..., ship_fractions_slice]
+    planet_delta_slots = data["global_features"][..., planet_delta_slots_slice]
+    owner_production = data["global_features"][..., owner_production_slice]
+
+    my_planets = planet_fractions[..., 0] * MAX_PLANETS
+    my_garrison_ships = ship_fractions[..., 0] * (MAX_PLANETS * cfg.env.max_ships)
+    planet_delta = planet_delta_slots[..., 0] * MAX_PLANETS
+    production_diff = owner_production[..., 0] * MAX_PRODUCTION
+    planet_diff = planet_delta
     planets_taken_step = jnp.maximum(planet_delta, 0.0)
     planets_lost_step = jnp.maximum(-planet_delta, 0.0)
     selected_candidate_features = jnp.take_along_axis(
@@ -674,9 +727,14 @@ def collect_rollout_jax(
         ),
         axis=3,
     ).squeeze(axis=3)
-    neutral_target_count = (selected_candidate_features[..., 0] * row_mask).sum()
-    friendly_target_count = (selected_candidate_features[..., 1] * row_mask).sum()
-    enemy_target_count = (selected_candidate_features[..., 2] * row_mask).sum()
+
+    target_ownership_slice = candidate_schema.slice("target_ownership_flags")
+    target_ownership = selected_candidate_features[..., target_ownership_slice]
+
+    neutral_target_count = (target_ownership[..., 0] * row_mask).sum()
+    friendly_target_count = (target_ownership[..., 1] * row_mask).sum()
+    enemy_target_count = (target_ownership[..., 2] * row_mask).sum()
+
     metrics = {
         "env_steps": jnp.array(
             cfg.ppo.rollout_steps * turn_batch.self_features.shape[0], dtype=jnp.float32
@@ -693,7 +751,9 @@ def collect_rollout_jax(
         "episode_done": episode_done,
         "avg_reward": reward_mean,
         "episode_reward_sum": episode_reward_sum,
-        "avg_episode_reward": jnp.where(episode_done > 0.0, episode_reward_sum / episode_done, 0.0),
+        "avg_episode_reward": jnp.where(
+            episode_done > 0.0, episode_reward_sum / episode_done, 0.0
+        ),
         "episodes_2p": episodes_2p,
         "episodes_4p": episodes_4p,
         "wins_2p": jnp.where(cfg.env.player_count == 2, first_place_sum, 0.0),
@@ -719,37 +779,120 @@ def collect_rollout_jax(
         "score_share": jnp.where(
             episode_done > 0.0, score_share_sum / episode_done, 0.0
         ),
-        "noop_percent": jnp.where(decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0),
-        "friendly_target_percent": jnp.where(decision_count > 0.0, (friendly_target_count / decision_count) * 100.0, 0.0),
-        "enemy_target_percent": jnp.where(decision_count > 0.0, (enemy_target_count / decision_count) * 100.0, 0.0),
-        "neutral_target_percent": jnp.where(decision_count > 0.0, (neutral_target_count / decision_count) * 100.0, 0.0),
+        "noop_percent": jnp.where(
+            decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0
+        ),
+        "friendly_target_percent": jnp.where(
+            decision_count > 0.0, (friendly_target_count / decision_count) * 100.0, 0.0
+        ),
+        "enemy_target_percent": jnp.where(
+            decision_count > 0.0, (enemy_target_count / decision_count) * 100.0, 0.0
+        ),
+        "neutral_target_percent": jnp.where(
+            decision_count > 0.0, (neutral_target_count / decision_count) * 100.0, 0.0
+        ),
         "overall_win_rate": jnp.where(
             episode_done > 0.0, first_place_sum / episode_done, 0.0
         ),
         "opponent_current_slots": opponent_slots * current_share,
         "opponent_random_slots": opponent_slots * random_share,
         "opponent_snapshot_slots": opponent_slots * snapshot_share,
-        "won_non_noop_actions_per_step": jnp.where(win_episode_rows > 0.0, (non_noop_count * done_float.sum()) / jnp.maximum(win_episode_rows * done_float.sum(), 1.0), 0.0),
-        "lost_non_noop_actions_per_step": jnp.where(loss_episode_rows > 0.0, (non_noop_count * done_float.sum()) / jnp.maximum(loss_episode_rows * done_float.sum(), 1.0), 0.0),
-        "won_avg_fleet_launch_size": jnp.where(win_episode_rows > 0.0, launched_ship_total / jnp.maximum(launched_ship_count, 1.0), 0.0),
-        "lost_avg_fleet_launch_size": jnp.where(loss_episode_rows > 0.0, launched_ship_total / jnp.maximum(launched_ship_count, 1.0), 0.0),
-        "won_avg_planets_owned": jnp.where(win_episode_rows > 0.0, (my_planets * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_planets_owned": jnp.where(loss_episode_rows > 0.0, (my_planets * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_planets_lost": jnp.where(win_episode_rows > 0.0, (planets_lost_step * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_planets_lost": jnp.where(loss_episode_rows > 0.0, (planets_lost_step * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_planets_taken": jnp.where(win_episode_rows > 0.0, (planets_taken_step * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_planets_taken": jnp.where(loss_episode_rows > 0.0, (planets_taken_step * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_garrisoned_ships_per_planet": jnp.where(win_episode_rows > 0.0, ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_garrisoned_ships_per_planet": jnp.where(loss_episode_rows > 0.0, ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_planet_diff": jnp.where(win_episode_rows > 0.0, (planet_diff * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_planet_diff": jnp.where(loss_episode_rows > 0.0, (planet_diff * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_production_diff": jnp.where(win_episode_rows > 0.0, (production_diff * win_row_mask).sum() / win_episode_rows, 0.0),
-        "lost_avg_production_diff": jnp.where(loss_episode_rows > 0.0, (production_diff * loss_row_mask).sum() / loss_episode_rows, 0.0),
-        "won_avg_launch_fleet_speed": jnp.where(win_episode_rows > 0.0, launched_ship_speed_total / jnp.maximum(launched_ship_count, 1.0), 0.0),
-        "lost_avg_launch_fleet_speed": jnp.where(loss_episode_rows > 0.0, launched_ship_speed_total / jnp.maximum(launched_ship_count, 1.0), 0.0),
+        "won_non_noop_actions_per_step": jnp.where(
+            win_episode_rows > 0.0,
+            (non_noop_count * done_float.sum())
+            / jnp.maximum(win_episode_rows * done_float.sum(), 1.0),
+            0.0,
+        ),
+        "lost_non_noop_actions_per_step": jnp.where(
+            loss_episode_rows > 0.0,
+            (non_noop_count * done_float.sum())
+            / jnp.maximum(loss_episode_rows * done_float.sum(), 1.0),
+            0.0,
+        ),
+        "won_avg_fleet_launch_size": jnp.where(
+            win_episode_rows > 0.0,
+            launched_ship_total / jnp.maximum(launched_ship_count, 1.0),
+            0.0,
+        ),
+        "lost_avg_fleet_launch_size": jnp.where(
+            loss_episode_rows > 0.0,
+            launched_ship_total / jnp.maximum(launched_ship_count, 1.0),
+            0.0,
+        ),
+        "won_avg_planets_owned": jnp.where(
+            win_episode_rows > 0.0,
+            (my_planets * win_row_mask).sum() / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_planets_owned": jnp.where(
+            loss_episode_rows > 0.0,
+            (my_planets * loss_row_mask).sum() / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_planets_lost": jnp.where(
+            win_episode_rows > 0.0,
+            (planets_lost_step * win_row_mask).sum() / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_planets_lost": jnp.where(
+            loss_episode_rows > 0.0,
+            (planets_lost_step * loss_row_mask).sum() / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_planets_taken": jnp.where(
+            win_episode_rows > 0.0,
+            (planets_taken_step * win_row_mask).sum() / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_planets_taken": jnp.where(
+            loss_episode_rows > 0.0,
+            (planets_taken_step * loss_row_mask).sum() / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_garrisoned_ships_per_planet": jnp.where(
+            win_episode_rows > 0.0,
+            ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * win_row_mask).sum()
+            / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_garrisoned_ships_per_planet": jnp.where(
+            loss_episode_rows > 0.0,
+            ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * loss_row_mask).sum()
+            / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_planet_diff": jnp.where(
+            win_episode_rows > 0.0,
+            (planet_diff * win_row_mask).sum() / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_planet_diff": jnp.where(
+            loss_episode_rows > 0.0,
+            (planet_diff * loss_row_mask).sum() / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_production_diff": jnp.where(
+            win_episode_rows > 0.0,
+            (production_diff * win_row_mask).sum() / win_episode_rows,
+            0.0,
+        ),
+        "lost_avg_production_diff": jnp.where(
+            loss_episode_rows > 0.0,
+            (production_diff * loss_row_mask).sum() / loss_episode_rows,
+            0.0,
+        ),
+        "won_avg_launch_fleet_speed": jnp.where(
+            win_episode_rows > 0.0,
+            launched_ship_speed_total / jnp.maximum(launched_ship_count, 1.0),
+            0.0,
+        ),
+        "lost_avg_launch_fleet_speed": jnp.where(
+            loss_episode_rows > 0.0,
+            launched_ship_speed_total / jnp.maximum(launched_ship_count, 1.0),
+            0.0,
+        ),
     }
-    return key, env_state, turn_batch, transitions, metrics
-
+    return metrics
 
 def concatenate_transition_batches(
     batches: tuple[JaxTransitionBatch, ...] | list[JaxTransitionBatch],

@@ -1,18 +1,18 @@
 import numpy as np
 
 from src.config import EnvConfig
+from src.constants import MAX_PLANETS
 from src.features import (
-    candidate_feature_dim,
     build_candidate_features,
     build_candidates,
     build_global_features,
     build_self_features,
+    candidate_feature_dim,
     global_feature_dim,
     real_candidate_slots,
     self_feature_dim,
 )
 from src.game_types import GameState, PlanetState
-from src.train import candidate_diagnostics
 
 
 def planet(pid: int, owner: int, x: float, y: float) -> PlanetState:
@@ -46,37 +46,8 @@ def test_build_candidates_uses_real_slots_and_does_not_cap_enemies_at_one_third(
     assert sum(candidate.owner == -1 for candidate in candidates) == 1
     assert sum(candidate.owner == 0 for candidate in candidates) == 1
 
-
-def test_candidate_diagnostics_excludes_no_op_and_reports_owner_shares() -> None:
-    src = planet(0, 0, 10.0, 10.0)
-    candidates = [
-        planet(1, 1, 12.0, 10.0),
-        planet(2, -1, 14.0, 10.0),
-        planet(3, 0, 16.0, 10.0),
-    ]
-    state = GameState(step=0, player=0, planets=[src, *candidates], fleets=[])
-    cfg = EnvConfig(candidate_count=4)
-    features, mask, *_ = build_candidate_features(src, candidates, state, cfg)
-    batch = type(
-        "Batch",
-        (),
-        {
-            "candidate_features": features.reshape(1, cfg.candidate_count, -1),
-            "candidate_mask": mask.reshape(1, cfg.candidate_count),
-        },
-    )()
-
-    stats = candidate_diagnostics(batch)  # type: ignore[arg-type]
-
-    assert stats["candidate_valid_total"] == 3.0
-    assert stats["candidate_source_rows"] == 1.0
-    np.testing.assert_allclose(stats["candidate_enemy_total"], 1.0)
-    np.testing.assert_allclose(stats["candidate_neutral_total"], 1.0)
-    np.testing.assert_allclose(stats["candidate_friendly_total"], 1.0)
-
-
 def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
-    cfg = EnvConfig(max_planets=8, max_fleets=8, candidate_count=4, player_count=4)
+    cfg = EnvConfig(max_fleets=8, candidate_count=4, player_count=4)
     src = PlanetState(id=0, owner=2, x=10.0, y=10.0, radius=1.0, ships=20, production=1)
     targets = [
         PlanetState(id=1, owner=3, x=12.0, y=10.0, radius=1.0, ships=30, production=1),
@@ -100,10 +71,10 @@ def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
     assert self_features.shape == (self_feature_dim(),)
     assert candidate_features.shape == (cfg.candidate_count, candidate_feature_dim())
     assert global_features.shape == (global_feature_dim(),)
-    np.testing.assert_allclose(self_features[11:15], np.full(4, 1.0 / cfg.max_planets))
+    np.testing.assert_allclose(self_features[11:15], np.full(4, 1.0 / MAX_PLANETS))
     np.testing.assert_allclose(
         self_features[15:19],
-        np.array([20, 30, 40, 50]) / (cfg.max_planets * cfg.max_ships),
+        np.array([20, 30, 40, 50]) / (MAX_PLANETS * cfg.max_ships),
     )
     np.testing.assert_allclose(self_features[19:23], np.ones(4))
     np.testing.assert_allclose(self_features[23], 1.0)
@@ -116,10 +87,10 @@ def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
     np.testing.assert_allclose(
         candidate_features[3, 14:18], np.array([0.0, 0.0, 0.0, 1.0])
     )
-    np.testing.assert_allclose(global_features[8:12], np.full(4, 1.0 / cfg.max_planets))
+    np.testing.assert_allclose(global_features[8:12], np.full(4, 1.0 / MAX_PLANETS))
     np.testing.assert_allclose(
         global_features[16:20],
-        np.array([5, 6, 7, 8]) / (cfg.max_planets * cfg.max_ships),
+        np.array([5, 6, 7, 8]) / (MAX_PLANETS * cfg.max_ships),
     )
     np.testing.assert_allclose(global_features[20:24], np.ones(4))
     np.testing.assert_allclose(global_features[24], 1.0)
