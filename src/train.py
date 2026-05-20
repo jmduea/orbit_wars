@@ -37,33 +37,9 @@ def _extract_legacy_cli_args(argv: list[str]) -> tuple[str | None, str | None]:
     return legacy_config, resume_checkpoint
 
 
-def _legacy_config_to_preset(path: str) -> str | None:
-    name = Path(path).name
-    return {
-        "default_cfg.yaml": "jax_training",
-        "attention_training.yaml": "attention_training",
-        "jax_training.yaml": "jax_training",
-        "shaped_reward_training.yaml": "shaped_reward_training",
-        "attention_self_play_pool.yaml": "attention_self_play_pool",
-        "attention_candidates_16.yaml": "attention_candidates_16",
-        "mixed_2p_4p_training.yaml": "jax_mixed_2p_4p_training",
-    }.get(name)
-
-
-def _validate_backends(cfg: object) -> None:
-    env_backend = getattr(cfg, "env_backend", None)
-    rl_backend = getattr(cfg, "rl_backend", None)
-    if env_backend != "jax" or rl_backend != "jax":
-        raise ValueError(
-            "Unsupported backend configuration: only env_backend=jax and rl_backend=jax are supported. "
-            "Please migrate legacy backend values (for example rl_backend=torch) to the JAX-only backend pair."
-        )
-
-
 @hydra_main(version_base="1.3", config_path="../conf", config_name="config")
 def _hydra_entry(cfg_raw: DictConfig) -> None:
     cfg = train_config_from_omegaconf(cfg_raw)
-    _validate_backends(cfg)
     if cfg.print_resolved_config:
         payload = OmegaConf.to_container(OmegaConf.structured(cfg), resolve=True)
         print(json.dumps(payload, indent=2, sort_keys=True))
