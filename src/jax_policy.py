@@ -8,11 +8,39 @@ import jax.numpy as jnp
 
 
 class JaxPolicyOutput(NamedTuple):
-    """Policy logits and value estimates produced by JAX policy modules."""
+    """Unified policy output structure.
+
+    Fields
+    ------
+    target_logits: jax.Array
+        Shape: (batch, sequence_k, candidates)
+    ship_logits: jax.Array
+        Shape: (batch, sequence_k, candidates, ship_buckets)
+    value: jax.Array
+        Shape: (batch,)
+    """
 
     target_logits: jax.Array
     ship_logits: jax.Array
     value: jax.Array
+
+
+class EncoderOutput(NamedTuple):
+    """Structural bridge between any encoder and any decoder.
+
+    Fields
+    ------
+    attended_candidates: jax.Array
+        Detailed per-planet representations
+    context_query: jax.Array
+        Aggregated global game state query
+    value_input: jax.Array
+        Combined state summary for critic head
+    """
+
+    attended_candidates: jax.Array
+    context_query: jax.Array
+    value_input: jax.Array
 
 
 class JaxPlanetPolicy(nn.Module):
