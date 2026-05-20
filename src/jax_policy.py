@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src import TrainConfig
 
 from typing import NamedTuple
 
@@ -7,6 +8,7 @@ import jax
 import jax.numpy as jnp
 
 
+# --- Contracts ---
 class JaxPolicyOutput(NamedTuple):
     """Unified policy output structure.
 
@@ -42,7 +44,313 @@ class EncoderOutput(NamedTuple):
     context_query: jax.Array
     value_input: jax.Array
 
+# --- Encoders ---
+class MLPBackboneEncoder(nn.Module):
+    """Lightweight, fast MLP feature extractor."""
 
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        self_features: jax.Array,
+        candidate_features: jax.Array,
+        global_features: jax.Array,
+        candidate_mask: jax.Array,
+    ) -> EncoderOutput:
+        self_hidden = mlp(
+            self_features, self.hidden_size, self.hidden_size, "self_encoder"
+        )
+        global_hidden = mlp(
+            global_features, self.hidden_size, self.hidden_size, "global_encoder"
+        )
+        candidate_hidden = mlp(
+            candidate_features, self.hidden_size, self.hidden_size, "candidate_encoder"
+        )
+
+        pooled_candidates = masked_mean(candidate_hidden, candidate_mask)
+        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
+        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
+
+        return EncoderOutput(
+            attended_candidates=candidate_hidden,
+            context_query=context_query,
+            value_input=value_input,
+        )
+
+
+class TransformerBackboneEncoder(nn.Module):
+    """Attention-based graph feature extractor."""
+
+    hidden_size: int = 128
+    attention_heads: int = 4
+
+    @nn.compact
+    def __call__(
+        self,
+        self_features: jax.Array,
+        candidate_features: jax.Array,
+        global_features: jax.Array,
+        candidate_mask: jax.Array,
+    ) -> EncoderOutput:
+        batch_size = self_features.shape[0]
+        safe_mask = safe_attention_mask(candidate_mask)
+
+        self_hidden = mlp(self_features, self.hidden_size, self.hidden_size, "self_enc")
+        global_hidden = mlp(
+            global_features, self.hidden_size, self.hidden_size, "global_enc"
+        )
+        candidate_hidden = mlp(
+            candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
+        )
+
+        # Self Attention over Planet graph
+        attended_candidates = nn.MultiHeadDotProductAttention(
+            num_heads=self.attention_heads,
+            qkv_features=self.hidden_size,
+            out_features=self.hidden_size,
+            name="mp_attn",
+        )(
+            candidate_hidden,
+            candidate_hidden,
+            mask=jnp.broadcast_to(
+                safe_mask[:, None, None, :],
+                (
+                    batch_size,
+                    self.attention_heads,
+                    candidate_hidden.shape[1],
+                    candidate_hidden.shape[1],
+                ),
+            ),
+        )
+        attended_candidates = nn.LayerNorm(name="cand_norm")(
+            candidate_hidden + attended_candidates
+        )
+
+        pooled_candidates = masked_mean(attended_candidates, candidate_mask)
+        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
+        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
+
+        return EncoderOutput(
+            attended_candidates=attended_candidates,
+            context_query=context_query,
+            value_input=value_input,
+        )
+
+
+class GNNBackboneEncoder(nn.Module):
+    """Graph Neural Network feature extractor using K-Nearest Neighbor message passing.
+
+    This encoder treats the Orbit Wars map as a geometric network graph, allowing
+    planets to exchange state information with their closest neighbors.
+    """
+
+    hidden_size: int = 128
+    k_neighbors: int = 5
+    msg_passing_layers: int = 2
+
+    @nn.compact
+    def __call__(
+        self,
+        self_features: jax.Array,
+        candidate_features: jax.Array,
+        global_features: jax.Array,
+        candidate_mask: jax.Array,
+    ) -> EncoderOutput:
+        num_planets = candidate_features.shape[1]
+
+        # 1. Encode base entity representations
+        self_hidden = mlp(self_features, self.hidden_size, self.hidden_size, "self_enc")
+        global_hidden = mlp(
+            global_features, self.hidden_size, self.hidden_size, "global_enc"
+        )
+        candidate_hidden = mlp(
+            candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
+        )
+
+        # 2. Extract true normalized spatial coordinates (Indices 4 and 5)
+        coords = candidate_features[..., 4:6]
+
+        # 3. Pairwise Euclidean distance tracking via implicit broadcasting
+        diffs = coords[:, :, None, :] - coords[:, None, :, :]
+        dist_matrix = jnp.sum(diffs**2, axis=-1)
+
+        # 4. Extract neighbor connections and mask out dead padded elements
+        _, topk_indices = jax.lax.top_k(-dist_matrix, k=self.k_neighbors)
+        adj_matrix = jnp.sum(jax.nn.one_hot(topk_indices, num_planets), axis=-2).astype(
+            bool
+        )
+
+        final_adj_mask = adj_matrix & (
+            candidate_mask[:, :, None] & candidate_mask[:, None, :]
+        )
+
+        # 5. Message Passing Execution Loop
+        current_node_states = candidate_hidden
+        for layer_idx in range(self.msg_passing_layers):
+            msg_proj = nn.Dense(self.hidden_size, name=f"msg_proj_{layer_idx}")(
+                current_node_states
+            )
+            masked_messages = jnp.where(
+                final_adj_mask[..., None], msg_proj[:, None, :, :], 0.0
+            )
+            aggregated_messages = jnp.sum(masked_messages, axis=2)
+
+            combined_node_input = jnp.concatenate(
+                [current_node_states, aggregated_messages], axis=-1
+            )
+            current_node_states = mlp(
+                combined_node_input,
+                self.hidden_size,
+                self.hidden_size,
+                f"gnn_layer_{layer_idx}",
+            )
+            current_node_states = nn.LayerNorm(name=f"gnn_norm_{layer_idx}")(
+                candidate_hidden + current_node_states
+            )
+
+        # 6. Contract Assembly
+        pooled_candidates = masked_mean(current_node_states, candidate_mask)
+        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
+        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
+
+        return EncoderOutput(
+            attended_candidates=current_node_states,
+            context_query=context_query,
+            value_input=value_input,
+        )
+
+
+# --- Decoders ---
+
+
+class AutoregressivePointerDecoder(nn.Module):
+    """K-Step sequential pointer network decoding strategy.
+
+    Sequentially steps through up to K decisions per game turn, using a GRU cell
+    to track execution state history across successive pointer actions.
+    """
+
+    ship_bucket_count: int
+    max_moves_k: int
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        encoder_out: EncoderOutput,
+        candidate_mask: jax.Array,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,  # FIXED: Added to signature contract
+    ) -> tuple[jax.Array, jax.Array]:
+        batch_size = encoder_out.context_query.shape[0]
+
+        decoder_cell = nn.GRUCell(features=self.hidden_size, name="dec_gru")
+        query_dense = nn.Dense(self.hidden_size, name="ptr_q")
+        key_dense = nn.Dense(self.hidden_size, name="ptr_k")
+
+        init_decoder_state = nn.Dense(self.hidden_size, name="init_dec_state")(
+            encoder_out.context_query
+        )
+
+        start_token = self.param(
+            "start_token", nn.initializers.zeros, (self.hidden_size,)
+        )
+        current_input_emb = jnp.broadcast_to(
+            start_token[None, :], (batch_size, self.hidden_size)
+        )
+
+        all_target_logits, all_ship_logits = [], []
+        current_state = init_decoder_state
+        current_rng = rng
+
+        for step_idx in range(self.max_moves_k):
+            current_state, _ = decoder_cell(current_input_emb, current_state)
+
+            q = query_dense(current_state)[:, None, :]
+            k = key_dense(encoder_out.attended_candidates)
+
+            step_target_logits = jnp.einsum("b1h,bch->bc", q, k).squeeze(1) / jnp.sqrt(
+                self.hidden_size
+            )
+            step_target_logits = jnp.where(
+                candidate_mask, step_target_logits, jnp.finfo(jnp.float32).min
+            )
+            all_target_logits.append(step_target_logits)
+
+            expanded_state = jnp.broadcast_to(
+                current_state[:, None, :], encoder_out.attended_candidates.shape
+            )
+            ship_input = jnp.concatenate(
+                [expanded_state, encoder_out.attended_candidates], axis=-1
+            )
+            step_ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out_step")(
+                nn.relu(nn.Dense(self.hidden_size, name="ship_dense_step")(ship_input))
+            )
+            all_ship_logits.append(step_ship_logits)
+
+            # FIXED: Branching safely handles explicit deterministic exploitation modes
+            if target_sequence is not None:
+                chosen_target = target_sequence[:, step_idx]
+            elif deterministic or current_rng is None:
+                chosen_target = jnp.argmax(step_target_logits, axis=-1)
+            else:
+                step_rng, current_rng = jax.random.split(current_rng)
+                chosen_target = jax.random.categorical(
+                    step_rng, step_target_logits, axis=-1
+                )
+
+            current_input_emb = jnp.take_along_axis(
+                encoder_out.attended_candidates, chosen_target[:, None, None], axis=1
+            ).squeeze(1)
+
+        return jnp.stack(all_target_logits, axis=1), jnp.stack(all_ship_logits, axis=1)
+
+
+# --- Composable Policy Wrapper ---
+class ComposablePlanetPolicy(nn.Module):
+    """The master framework container that unifies injected backbones and decoders."""
+
+    encoder_module: nn.Module
+    decoder_module: nn.Module
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        self_features: jax.Array,
+        candidate_features: jax.Array,
+        global_features: jax.Array,
+        candidate_mask: jax.Array,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> JaxPolicyOutput:
+
+        # Route raw arrays through selected encoder backbone to produce structured intermediate representations
+        encoder_out = self.encoder_module(
+            self_features, candidate_features, global_features, candidate_mask
+        )
+
+        # Route encoder outputs through selected decoder head to produce final action logits
+        target_logits, ship_logits = self.decoder_module(
+            encoder_out,
+            candidate_mask,
+            target_sequence=target_sequence,
+            rng=rng,
+            deterministic=deterministic,
+        )
+
+        # Compute state utility value via static centralized Critic Head
+        value_hidden = nn.relu(
+            nn.Dense(self.hidden_size, name="value_dense")(encoder_out.value_input)
+        )
+        value = nn.Dense(1, name="value_out")(value_hidden).squeeze(-1)
+
+        return JaxPolicyOutput(
+            target_logits=target_logits, ship_logits=ship_logits, value=value
+        )
 class JaxPlanetPolicy(nn.Module):
     """MLP policy/value network for fixed-shape JAX Orbit Wars decisions.
 
@@ -226,6 +534,7 @@ class JaxAttentionPlanetPolicy(nn.Module):
             target_logits=target_logits, ship_logits=ship_logits, value=value
         )
 
+# --- Helper Functions ---
 
 def mlp(x: jax.Array, hidden_size: int, output_size: int, name: str) -> jax.Array:
     """Apply a named two-layer ReLU MLP block."""
@@ -251,7 +560,6 @@ def masked_mean(values: jax.Array, mask: jax.Array) -> jax.Array:
     count = jnp.maximum(weights.sum(axis=1), 1.0)
     return total / count
 
-
 def build_jax_policy(
     *,
     candidate_count: int,
@@ -266,7 +574,7 @@ def build_jax_policy(
     ``architecture='transformer'`` is accepted as an alias for the attention
     implementation to match the Torch policy builder.
     """
-
+    
     normalized_architecture = architecture.strip().lower()
     if normalized_architecture == "mlp":
         return JaxPlanetPolicy(
