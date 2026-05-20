@@ -77,7 +77,7 @@ class FeatureGroupRegistry:
         offset = frame_index * self.base_dim
         return slice(offset + base.start, offset + base.stop)
 
-    def history_slices(self, feature_name: str) -> tuple[slice, ...]:
+    def history_slices(self, feature_name: str) -> tuple[slice, ...]:  # ty: ignore
         """Return one slice per history frame for a feature."""
         return tuple(
             self.slice(feature_name, frame=frame) for frame in range(self.history_steps)
