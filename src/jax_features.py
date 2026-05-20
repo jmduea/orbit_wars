@@ -7,6 +7,8 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from src.feature_registry import CANDIDATE_FEATURE_SCHEMA, GLOBAL_FEATURE_SCHEMA
+
 from .config import EnvConfig
 from .constants import (
     BASE_CANDIDATE_FEATURE_DIM,
@@ -14,15 +16,15 @@ from .constants import (
     BASE_SELF_FEATURE_DIM,
     BOARD_CENTER,
     BOARD_SIZE,
+    MAX_FLEET_SPEED,
     MAX_OWNER_FEATURE_PLAYERS,
+    MAX_PLANETS,
+    MAX_PRODUCTION,
     MAX_STEPS,
     NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
-    MAX_PLANETS,
-    MAX_PRODUCTION,
-    MAX_FLEET_SPEED,
 )
 
 
@@ -428,14 +430,18 @@ def _candidate_features(
     incoming_friendly, incoming_enemy = _incoming_fleet_pressure(
         tgt_x, tgt_y, tgt_radius, fleets, player
     )
+    target_ships_slice = CANDIDATE_FEATURE_SCHEMA.base_slice("target_ships")
     previous_target_ships = jnp.where(
         previous_present > 0.5,
-        previous_candidate[..., 9] * env_cfg.max_ships,
+        previous_candidate[..., target_ships_slice].squeeze(-1) * env_cfg.max_ships,
         tgt_ships,
     )
     ship_delta = (tgt_ships - previous_target_ships) / env_cfg.max_ships
+
+    owner_slots_slice = CANDIDATE_FEATURE_SCHEMA.base_slice("relative_owner_slots")
+    previous_owner_slots = previous_candidate[..., owner_slots_slice]
     owner_changed = (
-        (jnp.abs(current_owner - previous_candidate[..., 14:18]).sum(axis=-1) > 0.5)
+        (jnp.abs(current_owner - previous_owner_slots).sum(axis=-1) > 0.5)
         & (previous_present > 0.5)
     ).astype(jnp.float32)
     temporal_features = jnp.stack(
@@ -506,6 +512,19 @@ def _global_features(
         ],
         dtype=jnp.float32,
     )
+    owner_ship_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_ship_totals"
+    )
+    owner_planet_counts_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_planet_counts"
+    )
+    owner_fleet_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_fleet_totals"
+    )
+    owner_production_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_production"
+    )
+
     return jnp.concatenate(
         [
             base_features,
@@ -515,10 +534,14 @@ def _global_features(
             active_mask,
             jnp.asarray([player_count_feature], dtype=jnp.float32),
             owner_production,
-            (owner_ships - previous_global[12:16]) * previous_global_present,
-            (owner_counts - previous_global[8:12]) * previous_global_present,
-            (owner_fleets - previous_global[16:20]) * previous_global_present,
-            (owner_production - previous_global[25:29]) * previous_global_present,
+            (owner_ships - previous_global[owner_ship_totals_slice])
+            * previous_global_present,
+            (owner_counts - previous_global[owner_planet_counts_slice])
+            * previous_global_present,
+            (owner_fleets - previous_global[owner_fleet_totals_slice])
+            * previous_global_present,
+            (owner_production - previous_global[owner_production_slice])
+            * previous_global_present,
         ]
     )
 
