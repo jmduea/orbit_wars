@@ -19,9 +19,18 @@ dependencies = [
 [tool.uv]
 package = false
 
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.15.13",
     "pytest>=8.3.0",
     "torch",
 ]
+
+[build-system]
+requires = ["uv_build >= 0.11.7, <0.12.0"]
+build-backend = "uv_build"

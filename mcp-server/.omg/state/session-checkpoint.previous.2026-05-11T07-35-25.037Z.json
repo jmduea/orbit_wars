@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-05-11T07:35:25.034Z",
+  "summary": "Imported 1 file(s) from OMC",
+  "key_decisions": [],
+  "active_modes": [],
+  "recent_memory": [],
+  "modified_files": [
+    "state/session-checkpoint.json"
+  ],
+  "context_bytes_estimate": 0,
+  "estimated_tokens": 0,
+  "source_tool": "copilot",
+  "source_origin": "bridged-from-omc",
+  "source_session_id": "omc-2026-05-11T01:00:00.000Z",
+  "imported_at": "2026-05-11T07:35:25.034Z",
+  "imported_summary": "Imported 1 file(s) from OMC",
+  "workspace_root": "/var/folders/g1/t7m8p6jx4txd8nn234rwckvw0000gn/T/omg-loop-3-JxDatQ"
+}

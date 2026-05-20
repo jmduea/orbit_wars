@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-05-11T07:30:55.706Z",
+  "summary": "Imported 4 file(s) from OMC — PRD: Smoke (1/2 stories done)",
+  "key_decisions": [],
+  "active_modes": [],
+  "recent_memory": [],
+  "modified_files": [
+    "prd.json",
+    "state/ralph-state.json",
+    "state/ultrawork-state.json",
+    "state/session-checkpoint.json"
+  ],
+  "context_bytes_estimate": 0,
+  "estimated_tokens": 0,
+  "source_tool": "copilot",
+  "source_origin": "bridged-from-omc",
+  "source_session_id": "omc-2026-05-11T01:00:00.000Z",
+  "imported_at": "2026-05-11T07:30:55.706Z",
+  "imported_summary": "Imported 4 file(s) from OMC — PRD: Smoke (1/2 stories done)",
+  "workspace_root": "/tmp/omg-bridge-smoke-1778484655"
+}

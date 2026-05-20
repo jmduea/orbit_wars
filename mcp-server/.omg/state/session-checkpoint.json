@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-05-11T07:35:25.037Z",
+  "summary": "Imported 3 file(s) from OMC",
+  "key_decisions": [],
+  "active_modes": [
+    {
+      "mode": "ralph",
+      "state": {
+        "active": true,
+        "phase": "p"
+      }
+    },
+    {
+      "mode": "ultrawork",
+      "state": {
+        "active": true,
+        "phase": "q"
+      }
+    }
+  ],
+  "recent_memory": [],
+  "modified_files": [
+    "state/ralph-state.json",
+    "state/ultrawork-state.json",
+    "state/session-checkpoint.json"
+  ],
+  "context_bytes_estimate": 0,
+  "estimated_tokens": 0,
+  "source_tool": "copilot",
+  "source_origin": "bridged-from-omc",
+  "source_session_id": "omc-2026-05-11T07:35:25.036Z",
+  "imported_at": "2026-05-11T07:35:25.037Z",
+  "imported_summary": "Imported 3 file(s) from OMC",
+  "workspace_root": "/var/folders/g1/t7m8p6jx4txd8nn234rwckvw0000gn/T/omg-comp-2-fPEw50"
+}

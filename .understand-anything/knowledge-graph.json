@@ -1,0 +1,3997 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "orbit-wars",
+    "languages": [
+      "makefile",
+      "markdown",
+      "python",
+      "toml",
+      "yaml"
+    ],
+    "frameworks": [
+      "Hydra",
+      "JAX",
+      "Flax",
+      "Optax",
+      "PyTorch",
+      "pytest",
+      "Weights & Biases"
+    ],
+    "description": "Hydra-first reinforcement-learning implementation of Orbit Wars with Torch and JAX training paths, experiment presets, evaluation scripts, and tests.",
+    "analyzedAt": "2026-05-20T21:20:40.629Z",
+    "gitCommitHash": "7bebc94338f6ec0c1500cb522755ea95c32e4953"
+  },
+  "nodes": [
+    {
+      "id": "config:Makefile",
+      "type": "config",
+      "name": "Makefile",
+      "filePath": "Makefile",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "makefile",
+        "config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "makefile config file with 13 lines."
+    },
+    {
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "README.md",
+      "summary": "Project overview describing Hydra-first training commands, environment setup, experiment operations, and backend notes.",
+      "tags": [
+        "markdown",
+        "docs"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "markdown docs file with 128 lines."
+    },
+    {
+      "id": "config:conf/checkpoint_retention/default.yaml",
+      "type": "config",
+      "name": "default.yaml",
+      "filePath": "conf/checkpoint_retention/default.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 7 lines."
+    },
+    {
+      "id": "config:conf/config.yaml",
+      "type": "config",
+      "name": "config.yaml",
+      "filePath": "conf/config.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 59 lines."
+    },
+    {
+      "id": "config:conf/experiment/attention_candidates_16.yaml",
+      "type": "config",
+      "name": "attention_candidates_16.yaml",
+      "filePath": "conf/experiment/attention_candidates_16.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 7 lines."
+    },
+    {
+      "id": "config:conf/experiment/attention_candidates_24.yaml",
+      "type": "config",
+      "name": "attention_candidates_24.yaml",
+      "filePath": "conf/experiment/attention_candidates_24.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 7 lines."
+    },
+    {
+      "id": "config:conf/experiment/attention_self_play_pool.yaml",
+      "type": "config",
+      "name": "attention_self_play_pool.yaml",
+      "filePath": "conf/experiment/attention_self_play_pool.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/experiment/attention_shaped_reward.yaml",
+      "type": "config",
+      "name": "attention_shaped_reward.yaml",
+      "filePath": "conf/experiment/attention_shaped_reward.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 10 lines."
+    },
+    {
+      "id": "config:conf/experiment/attention_training.yaml",
+      "type": "config",
+      "name": "attention_training.yaml",
+      "filePath": "conf/experiment/attention_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/experiment/full_training.yaml",
+      "type": "config",
+      "name": "full_training.yaml",
+      "filePath": "conf/experiment/full_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 21 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_entity_transformer_1m.yaml",
+      "type": "config",
+      "name": "jax_entity_transformer_1m.yaml",
+      "filePath": "conf/experiment/jax_entity_transformer_1m.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_entity_transformer_500k.yaml",
+      "type": "config",
+      "name": "jax_entity_transformer_500k.yaml",
+      "filePath": "conf/experiment/jax_entity_transformer_500k.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_entity_transformer_700k.yaml",
+      "type": "config",
+      "name": "jax_entity_transformer_700k.yaml",
+      "filePath": "conf/experiment/jax_entity_transformer_700k.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_mixed_2p_4p_training.yaml",
+      "type": "config",
+      "name": "jax_mixed_2p_4p_training.yaml",
+      "filePath": "conf/experiment/jax_mixed_2p_4p_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 11 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_self_play_shaped_reward.yaml",
+      "type": "config",
+      "name": "jax_self_play_shaped_reward.yaml",
+      "filePath": "conf/experiment/jax_self_play_shaped_reward.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 14 lines."
+    },
+    {
+      "id": "config:conf/experiment/jax_training.yaml",
+      "type": "config",
+      "name": "jax_training.yaml",
+      "filePath": "conf/experiment/jax_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 9 lines."
+    },
+    {
+      "id": "config:conf/experiment/mixed_2p_4p_training.yaml",
+      "type": "config",
+      "name": "mixed_2p_4p_training.yaml",
+      "filePath": "conf/experiment/mixed_2p_4p_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 7 lines."
+    },
+    {
+      "id": "config:conf/experiment/shaped_reward_training.yaml",
+      "type": "config",
+      "name": "shaped_reward_training.yaml",
+      "filePath": "conf/experiment/shaped_reward_training.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 9 lines."
+    },
+    {
+      "id": "config:conf/model/attention.yaml",
+      "type": "config",
+      "name": "attention.yaml",
+      "filePath": "conf/model/attention.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 5 lines."
+    },
+    {
+      "id": "config:conf/model/entity_transformer_1m.yaml",
+      "type": "config",
+      "name": "entity_transformer_1m.yaml",
+      "filePath": "conf/model/entity_transformer_1m.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 5 lines."
+    },
+    {
+      "id": "config:conf/model/entity_transformer_500k.yaml",
+      "type": "config",
+      "name": "entity_transformer_500k.yaml",
+      "filePath": "conf/model/entity_transformer_500k.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 5 lines."
+    },
+    {
+      "id": "config:conf/model/entity_transformer_700k.yaml",
+      "type": "config",
+      "name": "entity_transformer_700k.yaml",
+      "filePath": "conf/model/entity_transformer_700k.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 5 lines."
+    },
+    {
+      "id": "config:conf/model/mlp.yaml",
+      "type": "config",
+      "name": "mlp.yaml",
+      "filePath": "conf/model/mlp.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 5 lines."
+    },
+    {
+      "id": "config:conf/opponent_mix/latest_only.yaml",
+      "type": "config",
+      "name": "latest_only.yaml",
+      "filePath": "conf/opponent_mix/latest_only.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 15 lines."
+    },
+    {
+      "id": "config:conf/opponent_mix/self_play_curriculum.yaml",
+      "type": "config",
+      "name": "self_play_curriculum.yaml",
+      "filePath": "conf/opponent_mix/self_play_curriculum.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 32 lines."
+    },
+    {
+      "id": "config:conf/preset/attention.yaml",
+      "type": "config",
+      "name": "attention.yaml",
+      "filePath": "conf/preset/attention.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 49 lines."
+    },
+    {
+      "id": "config:conf/preset/candidate_sweep.yaml",
+      "type": "config",
+      "name": "candidate_sweep.yaml",
+      "filePath": "conf/preset/candidate_sweep.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 49 lines."
+    },
+    {
+      "id": "config:conf/preset/jax.yaml",
+      "type": "config",
+      "name": "jax.yaml",
+      "filePath": "conf/preset/jax.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 73 lines."
+    },
+    {
+      "id": "config:conf/preset/self_play.yaml",
+      "type": "config",
+      "name": "self_play.yaml",
+      "filePath": "conf/preset/self_play.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 49 lines."
+    },
+    {
+      "id": "config:conf/preset/shaped_reward.yaml",
+      "type": "config",
+      "name": "shaped_reward.yaml",
+      "filePath": "conf/preset/shaped_reward.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 50 lines."
+    },
+    {
+      "id": "config:conf/replay/disabled.yaml",
+      "type": "config",
+      "name": "disabled.yaml",
+      "filePath": "conf/replay/disabled.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/replay/enabled.yaml",
+      "type": "config",
+      "name": "enabled.yaml",
+      "filePath": "conf/replay/enabled.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 6 lines."
+    },
+    {
+      "id": "config:conf/sweeps/wandb_attention_sweep.yaml",
+      "type": "config",
+      "name": "wandb_attention_sweep.yaml",
+      "filePath": "conf/sweeps/wandb_attention_sweep.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 55 lines."
+    },
+    {
+      "id": "config:conf/sweeps/wandb_throughput_sweep.yaml",
+      "type": "config",
+      "name": "wandb_throughput_sweep.yaml",
+      "filePath": "conf/sweeps/wandb_throughput_sweep.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 41 lines."
+    },
+    {
+      "id": "config:conf/telemetry/default.yaml",
+      "type": "config",
+      "name": "default.yaml",
+      "filePath": "conf/telemetry/default.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 10 lines."
+    },
+    {
+      "id": "config:conf/training_format/empty.yaml",
+      "type": "config",
+      "name": "empty.yaml",
+      "filePath": "conf/training_format/empty.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 4 lines."
+    },
+    {
+      "id": "config:conf/training_format/jax_schedule_4p.yaml",
+      "type": "config",
+      "name": "jax_schedule_4p.yaml",
+      "filePath": "conf/training_format/jax_schedule_4p.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "jax",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 15 lines."
+    },
+    {
+      "id": "config:conf/training_format/mix_2p_4p_16env.yaml",
+      "type": "config",
+      "name": "mix_2p_4p_16env.yaml",
+      "filePath": "conf/training_format/mix_2p_4p_16env.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 13 lines."
+    },
+    {
+      "id": "config:conf/training_format/mix_2p_4p_4env.yaml",
+      "type": "config",
+      "name": "mix_2p_4p_4env.yaml",
+      "filePath": "conf/training_format/mix_2p_4p_4env.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 13 lines."
+    },
+    {
+      "id": "config:conf/training_format/mix_2p_4p_8env.yaml",
+      "type": "config",
+      "name": "mix_2p_4p_8env.yaml",
+      "filePath": "conf/training_format/mix_2p_4p_8env.yaml",
+      "summary": "Hydra configuration file that composes training, environment, model, telemetry, replay, or experiment settings.",
+      "tags": [
+        "yaml",
+        "config",
+        "hydra-config",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "yaml config file with 13 lines."
+    },
+    {
+      "id": "config:default_cfg.commented.yaml",
+      "type": "config",
+      "name": "default_cfg.commented.yaml",
+      "filePath": "default_cfg.commented.yaml",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "yaml",
+        "config"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "yaml config file with 136 lines."
+    },
+    {
+      "id": "config:default_cfg.yaml",
+      "type": "config",
+      "name": "default_cfg.yaml",
+      "filePath": "default_cfg.yaml",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "yaml",
+        "config"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "yaml config file with 99 lines."
+    },
+    {
+      "id": "document:docs/config_migration.md",
+      "type": "document",
+      "name": "config_migration.md",
+      "filePath": "docs/config_migration.md",
+      "summary": "Documentation for experiment operations, configuration migration, or Hydra usage.",
+      "tags": [
+        "markdown",
+        "docs",
+        "documentation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "markdown docs file with 26 lines."
+    },
+    {
+      "id": "document:docs/experiments.md",
+      "type": "document",
+      "name": "experiments.md",
+      "filePath": "docs/experiments.md",
+      "summary": "Documentation for experiment operations, configuration migration, or Hydra usage.",
+      "tags": [
+        "markdown",
+        "docs",
+        "documentation"
+      ],
+      "complexity": "complex",
+      "languageNotes": "markdown docs file with 295 lines."
+    },
+    {
+      "id": "document:docs/hydra_migration.md",
+      "type": "document",
+      "name": "hydra_migration.md",
+      "filePath": "docs/hydra_migration.md",
+      "summary": "Documentation for experiment operations, configuration migration, or Hydra usage.",
+      "tags": [
+        "markdown",
+        "docs",
+        "documentation"
+      ],
+      "complexity": "simple",
+      "languageNotes": "markdown docs file with 54 lines."
+    },
+    {
+      "id": "file:eval_vs_sniper.py",
+      "type": "file",
+      "name": "eval_vs_sniper.py",
+      "filePath": "eval_vs_sniper.py",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 11 lines."
+    },
+    {
+      "id": "file:evaluate.py",
+      "type": "file",
+      "name": "evaluate.py",
+      "filePath": "evaluate.py",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 587 lines."
+    },
+    {
+      "id": "file:play_vs_sniper.py",
+      "type": "file",
+      "name": "play_vs_sniper.py",
+      "filePath": "play_vs_sniper.py",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 107 lines."
+    },
+    {
+      "id": "config:pyproject.toml",
+      "type": "config",
+      "name": "pyproject.toml",
+      "filePath": "pyproject.toml",
+      "summary": "Python project metadata and dependency declaration for the Orbit Wars reinforcement-learning package.",
+      "tags": [
+        "toml",
+        "config"
+      ],
+      "complexity": "simple",
+      "languageNotes": "toml config file with 36 lines."
+    },
+    {
+      "id": "document:rl_improvements.md",
+      "type": "document",
+      "name": "rl_improvements.md",
+      "filePath": "rl_improvements.md",
+      "summary": "Project file participating in the Orbit Wars training and evaluation workflow.",
+      "tags": [
+        "markdown",
+        "docs"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "markdown docs file with 141 lines."
+    },
+    {
+      "id": "file:scripts/benchmark_env.py",
+      "type": "file",
+      "name": "benchmark_env.py",
+      "filePath": "scripts/benchmark_env.py",
+      "summary": "Utility script for benchmarking, default configuration generation, or comparing attention candidates.",
+      "tags": [
+        "python",
+        "script",
+        "tooling"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python script file with 185 lines."
+    },
+    {
+      "id": "file:scripts/benchmark_jax_rl.py",
+      "type": "file",
+      "name": "benchmark_jax_rl.py",
+      "filePath": "scripts/benchmark_jax_rl.py",
+      "summary": "Utility script for benchmarking, default configuration generation, or comparing attention candidates.",
+      "tags": [
+        "python",
+        "script",
+        "tooling",
+        "jax"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python script file with 116 lines."
+    },
+    {
+      "id": "file:scripts/compare_attention_candidates.py",
+      "type": "file",
+      "name": "compare_attention_candidates.py",
+      "filePath": "scripts/compare_attention_candidates.py",
+      "summary": "Utility script for benchmarking, default configuration generation, or comparing attention candidates.",
+      "tags": [
+        "python",
+        "script",
+        "tooling"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python script file with 119 lines."
+    },
+    {
+      "id": "file:scripts/generate_default_cfg.py",
+      "type": "file",
+      "name": "generate_default_cfg.py",
+      "filePath": "scripts/generate_default_cfg.py",
+      "summary": "Utility script for benchmarking, default configuration generation, or comparing attention candidates.",
+      "tags": [
+        "python",
+        "script",
+        "tooling"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python script file with 77 lines."
+    },
+    {
+      "id": "file:src/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "src/__init__.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 13 lines."
+    },
+    {
+      "id": "file:src/checkpoint_compat.py",
+      "type": "file",
+      "name": "checkpoint_compat.py",
+      "filePath": "src/checkpoint_compat.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 154 lines."
+    },
+    {
+      "id": "file:src/checkpoint_retention.py",
+      "type": "file",
+      "name": "checkpoint_retention.py",
+      "filePath": "src/checkpoint_retention.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 124 lines."
+    },
+    {
+      "id": "file:src/conf_schema.py",
+      "type": "file",
+      "name": "conf_schema.py",
+      "filePath": "src/conf_schema.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 158 lines."
+    },
+    {
+      "id": "file:src/config.py",
+      "type": "file",
+      "name": "config.py",
+      "filePath": "src/config.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 168 lines."
+    },
+    {
+      "id": "file:src/constants.py",
+      "type": "file",
+      "name": "constants.py",
+      "filePath": "src/constants.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 40 lines."
+    },
+    {
+      "id": "file:src/curriculum.py",
+      "type": "file",
+      "name": "curriculum.py",
+      "filePath": "src/curriculum.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 108 lines."
+    },
+    {
+      "id": "file:src/env.py",
+      "type": "file",
+      "name": "env.py",
+      "filePath": "src/env.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 442 lines."
+    },
+    {
+      "id": "file:src/feature_registry.py",
+      "type": "file",
+      "name": "feature_registry.py",
+      "filePath": "src/feature_registry.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 223 lines."
+    },
+    {
+      "id": "file:src/features.py",
+      "type": "file",
+      "name": "features.py",
+      "filePath": "src/features.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 693 lines."
+    },
+    {
+      "id": "file:src/game_types.py",
+      "type": "file",
+      "name": "game_types.py",
+      "filePath": "src/game_types.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 73 lines."
+    },
+    {
+      "id": "file:src/jax_device.py",
+      "type": "file",
+      "name": "jax_device.py",
+      "filePath": "src/jax_device.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 91 lines."
+    },
+    {
+      "id": "file:src/jax_env.py",
+      "type": "file",
+      "name": "jax_env.py",
+      "filePath": "src/jax_env.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 808 lines."
+    },
+    {
+      "id": "file:src/jax_features.py",
+      "type": "file",
+      "name": "jax_features.py",
+      "filePath": "src/jax_features.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 743 lines."
+    },
+    {
+      "id": "file:src/jax_policy.py",
+      "type": "file",
+      "name": "jax_policy.py",
+      "filePath": "src/jax_policy.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 693 lines."
+    },
+    {
+      "id": "file:src/jax_ppo.py",
+      "type": "file",
+      "name": "jax_ppo.py",
+      "filePath": "src/jax_ppo.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax",
+        "tested"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 1092 lines."
+    },
+    {
+      "id": "file:src/jax_train.py",
+      "type": "file",
+      "name": "jax_train.py",
+      "filePath": "src/jax_train.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "jax",
+        "training"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 652 lines."
+    },
+    {
+      "id": "file:src/normalization.py",
+      "type": "file",
+      "name": "normalization.py",
+      "filePath": "src/normalization.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "tested"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 114 lines."
+    },
+    {
+      "id": "file:src/opponent_pool.py",
+      "type": "file",
+      "name": "opponent_pool.py",
+      "filePath": "src/opponent_pool.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 181 lines."
+    },
+    {
+      "id": "file:src/opponents.py",
+      "type": "file",
+      "name": "opponents.py",
+      "filePath": "src/opponents.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 309 lines."
+    },
+    {
+      "id": "file:src/replay.py",
+      "type": "file",
+      "name": "replay.py",
+      "filePath": "src/replay.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 227 lines."
+    },
+    {
+      "id": "file:src/run_paths.py",
+      "type": "file",
+      "name": "run_paths.py",
+      "filePath": "src/run_paths.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 60 lines."
+    },
+    {
+      "id": "file:src/seed_scheduler.py",
+      "type": "file",
+      "name": "seed_scheduler.py",
+      "filePath": "src/seed_scheduler.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 116 lines."
+    },
+    {
+      "id": "file:src/telemetry.py",
+      "type": "file",
+      "name": "telemetry.py",
+      "filePath": "src/telemetry.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 99 lines."
+    },
+    {
+      "id": "file:src/train.py",
+      "type": "file",
+      "name": "train.py",
+      "filePath": "src/train.py",
+      "summary": "Source module implementing Orbit Wars environment, features, policies, training, opponents, telemetry, or configuration support.",
+      "tags": [
+        "python",
+        "code",
+        "training"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 53 lines."
+    },
+    {
+      "id": "file:tests/conftest.py",
+      "type": "file",
+      "name": "conftest.py",
+      "filePath": "tests/conftest.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 6 lines."
+    },
+    {
+      "id": "file:tests/test_configs.py",
+      "type": "file",
+      "name": "test_configs.py",
+      "filePath": "tests/test_configs.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 89 lines."
+    },
+    {
+      "id": "file:tests/test_default_cfg_template.py",
+      "type": "file",
+      "name": "test_default_cfg_template.py",
+      "filePath": "tests/test_default_cfg_template.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 63 lines."
+    },
+    {
+      "id": "file:tests/test_env.py",
+      "type": "file",
+      "name": "test_env.py",
+      "filePath": "tests/test_env.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 112 lines."
+    },
+    {
+      "id": "file:tests/test_evaluate.py",
+      "type": "file",
+      "name": "test_evaluate.py",
+      "filePath": "tests/test_evaluate.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 193 lines."
+    },
+    {
+      "id": "file:tests/test_feature_history.py",
+      "type": "file",
+      "name": "test_feature_history.py",
+      "filePath": "tests/test_feature_history.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 205 lines."
+    },
+    {
+      "id": "file:tests/test_feature_registry.py",
+      "type": "file",
+      "name": "test_feature_registry.py",
+      "filePath": "tests/test_feature_registry.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 59 lines."
+    },
+    {
+      "id": "file:tests/test_features.py",
+      "type": "file",
+      "name": "test_features.py",
+      "filePath": "tests/test_features.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 125 lines."
+    },
+    {
+      "id": "file:tests/test_jax_env.py",
+      "type": "file",
+      "name": "test_jax_env.py",
+      "filePath": "tests/test_jax_env.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests",
+        "jax"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 257 lines."
+    },
+    {
+      "id": "file:tests/test_jax_env_parity.py",
+      "type": "file",
+      "name": "test_jax_env_parity.py",
+      "filePath": "tests/test_jax_env_parity.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests",
+        "jax"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 458 lines."
+    },
+    {
+      "id": "file:tests/test_jax_policy.py",
+      "type": "file",
+      "name": "test_jax_policy.py",
+      "filePath": "tests/test_jax_policy.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests",
+        "jax"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "python code file with 171 lines."
+    },
+    {
+      "id": "file:tests/test_jax_ppo.py",
+      "type": "file",
+      "name": "test_jax_ppo.py",
+      "filePath": "tests/test_jax_ppo.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests",
+        "jax"
+      ],
+      "complexity": "complex",
+      "languageNotes": "python code file with 325 lines."
+    },
+    {
+      "id": "file:tests/test_normalization.py",
+      "type": "file",
+      "name": "test_normalization.py",
+      "filePath": "tests/test_normalization.py",
+      "summary": "Pytest coverage for Orbit Wars environment, feature extraction, configuration, policy, normalization, or PPO behavior.",
+      "tags": [
+        "python",
+        "code",
+        "tests"
+      ],
+      "complexity": "simple",
+      "languageNotes": "python code file with 45 lines."
+    },
+    {
+      "id": "module:runtime-source",
+      "type": "module",
+      "name": "Runtime Source",
+      "summary": "Runtime Source grouping for related Orbit Wars files.",
+      "tags": [
+        "module"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "module:tests",
+      "type": "module",
+      "name": "Test Suite",
+      "summary": "Test Suite grouping for related Orbit Wars files.",
+      "tags": [
+        "module"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "module:hydra-config",
+      "type": "module",
+      "name": "Hydra Configuration",
+      "summary": "Hydra Configuration grouping for related Orbit Wars files.",
+      "tags": [
+        "module"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "module:documentation",
+      "type": "module",
+      "name": "Documentation",
+      "summary": "Documentation grouping for related Orbit Wars files.",
+      "tags": [
+        "module"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "module:tools",
+      "type": "module",
+      "name": "Scripts and Tools",
+      "summary": "Scripts and Tools grouping for related Orbit Wars files.",
+      "tags": [
+        "module"
+      ],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:eval_vs_sniper.py",
+      "target": "file:evaluate.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/checkpoint_compat.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/normalization.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:play_vs_sniper.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:play_vs_sniper.py",
+      "target": "file:src/checkpoint_compat.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:play_vs_sniper.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:play_vs_sniper.py",
+      "target": "file:src/normalization.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:play_vs_sniper.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/normalization.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_env.py",
+      "target": "file:src/train.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/jax_device.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/benchmark_jax_rl.py",
+      "target": "file:src/jax_ppo.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/generate_default_cfg.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:scripts/generate_default_cfg.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/__init__.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/checkpoint_compat.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/checkpoint_compat.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/checkpoint_compat.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/config.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/config.py",
+      "target": "file:src/conf_schema.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/game_types.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/feature_registry.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/feature_registry.py",
+      "target": "file:src/conf_schema.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/feature_registry.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:src/feature_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:src/game_types.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:src/jax_features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_features.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_features.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_features.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_features.py",
+      "target": "file:src/feature_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_policy.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_policy.py",
+      "target": "file:src/feature_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/conf_schema.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/feature_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/jax_features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:src/opponent_pool.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/checkpoint_compat.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/checkpoint_retention.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/curriculum.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/jax_device.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/jax_features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/jax_ppo.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/replay.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/run_paths.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/seed_scheduler.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_train.py",
+      "target": "file:src/telemetry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/normalization.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/normalization.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/opponents.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/opponents.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/opponents.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/opponents.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/opponents.py",
+      "target": "file:src/normalization.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/replay.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/replay.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/replay.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/replay.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/replay.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/run_paths.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/run_paths.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/telemetry.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/telemetry.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/train.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/train.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/train.py",
+      "target": "file:src/jax_train.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_configs.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_configs.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_default_cfg_template.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_default_cfg_template.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_env.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_env.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_env.py",
+      "target": "file:src/env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_evaluate.py",
+      "target": "file:evaluate.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_evaluate.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_evaluate.py",
+      "target": "file:src/opponents.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/game_types.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_history.py",
+      "target": "file:src/jax_features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_registry.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_registry.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_feature_registry.py",
+      "target": "file:src/feature_registry.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "file:src/game_types.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_features.py",
+      "target": "file:src/train.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env.py",
+      "target": "file:src/jax_features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env_parity.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env_parity.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env_parity.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_env_parity.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_policy.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_policy.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/config.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/constants.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/jax_env.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/jax_policy.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/jax_ppo.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_jax_ppo.py",
+      "target": "file:src/jax_train.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_normalization.py",
+      "target": "file:src/__init__.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_normalization.py",
+      "target": "file:src/features.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_normalization.py",
+      "target": "file:src/game_types.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:tests/test_normalization.py",
+      "target": "file:src/normalization.py",
+      "type": "imports",
+      "weight": 0.7,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/config.py",
+      "target": "file:tests/test_configs.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:tests/test_env.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:tests/test_env.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/feature_registry.py",
+      "target": "file:tests/test_feature_registry.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/features.py",
+      "target": "file:tests/test_features.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_features.py",
+      "target": "file:tests/test_features.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:tests/test_jax_env.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:tests/test_jax_env.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/env.py",
+      "target": "file:tests/test_jax_env_parity.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_env.py",
+      "target": "file:tests/test_jax_env_parity.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_policy.py",
+      "target": "file:tests/test_jax_policy.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/jax_ppo.py",
+      "target": "file:tests/test_jax_ppo.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "file:src/normalization.py",
+      "target": "file:tests/test_normalization.py",
+      "type": "tested_by",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:README.md",
+      "target": "file:src/train.py",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:README.md",
+      "target": "config:conf/config.yaml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/config_migration.md",
+      "target": "file:src/train.py",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/config_migration.md",
+      "target": "config:conf/config.yaml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/experiments.md",
+      "target": "file:src/train.py",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/experiments.md",
+      "target": "config:conf/config.yaml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/hydra_migration.md",
+      "target": "file:src/train.py",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:docs/hydra_migration.md",
+      "target": "config:conf/config.yaml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:rl_improvements.md",
+      "target": "file:src/train.py",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "document:rl_improvements.md",
+      "target": "config:conf/config.yaml",
+      "type": "documents",
+      "weight": 0.5,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/checkpoint_retention/default.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/checkpoint_retention/default.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/config.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/config.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_candidates_16.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_candidates_16.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_candidates_24.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_candidates_24.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_self_play_pool.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_self_play_pool.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_shaped_reward.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_shaped_reward.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/attention_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/full_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/full_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_1m.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_1m.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_500k.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_500k.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_700k.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_entity_transformer_700k.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_mixed_2p_4p_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_mixed_2p_4p_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_self_play_shaped_reward.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_self_play_shaped_reward.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/jax_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/mixed_2p_4p_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/mixed_2p_4p_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/shaped_reward_training.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/experiment/shaped_reward_training.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/attention.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/attention.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_1m.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_1m.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_500k.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_500k.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_700k.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/entity_transformer_700k.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/mlp.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/model/mlp.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/opponent_mix/latest_only.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/opponent_mix/latest_only.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/opponent_mix/self_play_curriculum.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/opponent_mix/self_play_curriculum.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/attention.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/attention.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/candidate_sweep.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/candidate_sweep.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/jax.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/jax.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/self_play.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/self_play.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/shaped_reward.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/preset/shaped_reward.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/replay/disabled.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/replay/disabled.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/replay/enabled.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/replay/enabled.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/sweeps/wandb_attention_sweep.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/sweeps/wandb_attention_sweep.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/sweeps/wandb_throughput_sweep.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/sweeps/wandb_throughput_sweep.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/telemetry/default.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/telemetry/default.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/empty.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/empty.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/jax_schedule_4p.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/jax_schedule_4p.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_16env.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_16env.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_4env.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_4env.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_8env.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:conf/training_format/mix_2p_4p_8env.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:default_cfg.commented.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:default_cfg.commented.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:default_cfg.yaml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:default_cfg.yaml",
+      "target": "file:src/config.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/__init__.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/checkpoint_compat.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/checkpoint_retention.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/conf_schema.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/config.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/constants.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/curriculum.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/env.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/feature_registry.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/features.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/game_types.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_device.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_env.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_features.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_policy.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_ppo.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/jax_train.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/normalization.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/opponent_pool.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/opponents.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/replay.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/run_paths.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/seed_scheduler.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/telemetry.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:runtime-source",
+      "target": "file:src/train.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/conftest.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_configs.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_default_cfg_template.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_env.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_evaluate.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_feature_history.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_feature_registry.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_features.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_jax_env.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_jax_env_parity.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_jax_policy.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_jax_ppo.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tests",
+      "target": "file:tests/test_normalization.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/checkpoint_retention/default.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/config.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/attention_candidates_16.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/attention_candidates_24.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/attention_self_play_pool.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/attention_shaped_reward.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/attention_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/full_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_entity_transformer_1m.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_entity_transformer_500k.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_entity_transformer_700k.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_mixed_2p_4p_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_self_play_shaped_reward.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/jax_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/mixed_2p_4p_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/experiment/shaped_reward_training.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/model/attention.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/model/entity_transformer_1m.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/model/entity_transformer_500k.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/model/entity_transformer_700k.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/model/mlp.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/opponent_mix/latest_only.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/opponent_mix/self_play_curriculum.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/preset/attention.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/preset/candidate_sweep.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/preset/jax.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/preset/self_play.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/preset/shaped_reward.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/replay/disabled.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/replay/enabled.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/sweeps/wandb_attention_sweep.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/sweeps/wandb_throughput_sweep.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/telemetry/default.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/training_format/empty.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/training_format/jax_schedule_4p.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/training_format/mix_2p_4p_16env.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/training_format/mix_2p_4p_4env.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:hydra-config",
+      "target": "config:conf/training_format/mix_2p_4p_8env.yaml",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:documentation",
+      "target": "document:README.md",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:documentation",
+      "target": "document:docs/config_migration.md",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:documentation",
+      "target": "document:docs/experiments.md",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:documentation",
+      "target": "document:docs/hydra_migration.md",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:eval_vs_sniper.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:evaluate.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:play_vs_sniper.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:scripts/benchmark_env.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:scripts/benchmark_jax_rl.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:scripts/compare_attention_candidates.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "module:tools",
+      "target": "file:scripts/generate_default_cfg.py",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:evaluate.py",
+      "target": "file:tests/test_evaluate.py",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5,
+      "description": "Path-based pairing (deterministic)"
+    },
+    {
+      "source": "config:pyproject.toml",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:pyproject.toml",
+      "target": "file:src/jax_train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    },
+    {
+      "source": "config:Makefile",
+      "target": "file:src/train.py",
+      "type": "configures",
+      "weight": 0.6,
+      "direction": "forward"
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:entrypoints-and-operations",
+      "name": "Entrypoints and Operations",
+      "description": "Command-line training, evaluation, gameplay, and operational scripts.",
+      "nodeIds": [
+        "file:eval_vs_sniper.py",
+        "file:evaluate.py",
+        "file:play_vs_sniper.py",
+        "file:scripts/benchmark_env.py",
+        "file:scripts/benchmark_jax_rl.py",
+        "file:scripts/compare_attention_candidates.py",
+        "file:scripts/generate_default_cfg.py",
+        "file:src/jax_train.py",
+        "file:src/train.py"
+      ]
+    },
+    {
+      "id": "layer:environment-and-features",
+      "name": "Environment and Features",
+      "description": "Game simulation, observation features, feature registries, and JAX parity logic.",
+      "nodeIds": [
+        "file:src/constants.py",
+        "file:src/env.py",
+        "file:src/feature_registry.py",
+        "file:src/features.py",
+        "file:src/game_types.py",
+        "file:src/jax_env.py",
+        "file:src/jax_features.py"
+      ]
+    },
+    {
+      "id": "layer:learning-and-policy",
+      "name": "Learning and Policy",
+      "description": "Policy networks, PPO implementations, normalization, curriculum, opponent selection, and checkpoint support.",
+      "nodeIds": [
+        "file:src/checkpoint_compat.py",
+        "file:src/checkpoint_retention.py",
+        "file:src/curriculum.py",
+        "file:src/jax_device.py",
+        "file:src/jax_policy.py",
+        "file:src/jax_ppo.py",
+        "file:src/normalization.py",
+        "file:src/opponent_pool.py",
+        "file:src/opponents.py",
+        "file:src/seed_scheduler.py"
+      ]
+    },
+    {
+      "id": "layer:configuration-and-experiments",
+      "name": "Configuration and Experiments",
+      "description": "Hydra schema, config helpers, default templates, presets, sweeps, telemetry, replay, and experiment YAML files.",
+      "nodeIds": [
+        "config:conf/checkpoint_retention/default.yaml",
+        "config:conf/config.yaml",
+        "config:conf/experiment/attention_candidates_16.yaml",
+        "config:conf/experiment/attention_candidates_24.yaml",
+        "config:conf/experiment/attention_self_play_pool.yaml",
+        "config:conf/experiment/attention_shaped_reward.yaml",
+        "config:conf/experiment/attention_training.yaml",
+        "config:conf/experiment/full_training.yaml",
+        "config:conf/experiment/jax_entity_transformer_1m.yaml",
+        "config:conf/experiment/jax_entity_transformer_500k.yaml",
+        "config:conf/experiment/jax_entity_transformer_700k.yaml",
+        "config:conf/experiment/jax_mixed_2p_4p_training.yaml",
+        "config:conf/experiment/jax_self_play_shaped_reward.yaml",
+        "config:conf/experiment/jax_training.yaml",
+        "config:conf/experiment/mixed_2p_4p_training.yaml",
+        "config:conf/experiment/shaped_reward_training.yaml",
+        "config:conf/model/attention.yaml",
+        "config:conf/model/entity_transformer_1m.yaml",
+        "config:conf/model/entity_transformer_500k.yaml",
+        "config:conf/model/entity_transformer_700k.yaml",
+        "config:conf/model/mlp.yaml",
+        "config:conf/opponent_mix/latest_only.yaml",
+        "config:conf/opponent_mix/self_play_curriculum.yaml",
+        "config:conf/preset/attention.yaml",
+        "config:conf/preset/candidate_sweep.yaml",
+        "config:conf/preset/jax.yaml",
+        "config:conf/preset/self_play.yaml",
+        "config:conf/preset/shaped_reward.yaml",
+        "config:conf/replay/disabled.yaml",
+        "config:conf/replay/enabled.yaml",
+        "config:conf/sweeps/wandb_attention_sweep.yaml",
+        "config:conf/sweeps/wandb_throughput_sweep.yaml",
+        "config:conf/telemetry/default.yaml",
+        "config:conf/training_format/empty.yaml",
+        "config:conf/training_format/jax_schedule_4p.yaml",
+        "config:conf/training_format/mix_2p_4p_16env.yaml",
+        "config:conf/training_format/mix_2p_4p_4env.yaml",
+        "config:conf/training_format/mix_2p_4p_8env.yaml",
+        "config:default_cfg.commented.yaml",
+        "config:default_cfg.yaml",
+        "config:pyproject.toml",
+        "file:src/conf_schema.py",
+        "file:src/config.py",
+        "file:src/replay.py",
+        "file:src/run_paths.py",
+        "file:src/telemetry.py"
+      ]
+    },
+    {
+      "id": "layer:documentation",
+      "name": "Documentation",
+      "description": "README and supporting project documentation.",
+      "nodeIds": [
+        "document:README.md",
+        "document:docs/config_migration.md",
+        "document:docs/experiments.md",
+        "document:docs/hydra_migration.md",
+        "document:rl_improvements.md"
+      ]
+    },
+    {
+      "id": "layer:test-suite",
+      "name": "Test Suite",
+      "description": "Automated pytest coverage for environment, config, feature, policy, PPO, and evaluation behavior.",
+      "nodeIds": [
+        "file:tests/conftest.py",
+        "file:tests/test_configs.py",
+        "file:tests/test_default_cfg_template.py",
+        "file:tests/test_env.py",
+        "file:tests/test_evaluate.py",
+        "file:tests/test_feature_history.py",
+        "file:tests/test_feature_registry.py",
+        "file:tests/test_features.py",
+        "file:tests/test_jax_env.py",
+        "file:tests/test_jax_env_parity.py",
+        "file:tests/test_jax_policy.py",
+        "file:tests/test_jax_ppo.py",
+        "file:tests/test_normalization.py"
+      ]
+    },
+    {
+      "id": "layer:project-support",
+      "name": "Project Support",
+      "description": "Miscellaneous support files that do not fit the primary architecture layers.",
+      "nodeIds": [
+        "config:Makefile",
+        "file:src/__init__.py"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Project Overview",
+      "description": "Start with the README and project metadata to understand the Hydra-first training workflow and dependency surface.",
+      "nodeIds": [
+        "document:README.md",
+        "config:pyproject.toml"
+      ],
+      "languageLesson": "The project uses Python packaging metadata and Hydra configuration to keep experiment commands reproducible."
+    },
+    {
+      "order": 2,
+      "title": "Training Entrypoints",
+      "description": "Follow the command-line training modules that launch Torch and JAX reinforcement-learning runs.",
+      "nodeIds": [
+        "file:src/train.py",
+        "file:src/jax_train.py"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Environment Model",
+      "description": "Inspect the core game state, environment stepping, and observation feature construction used by the agents.",
+      "nodeIds": [
+        "file:src/env.py",
+        "file:src/jax_env.py",
+        "file:src/features.py",
+        "file:src/jax_features.py"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Policy and Optimization",
+      "description": "Review policy networks, PPO loops, normalization, curriculum, and opponent pool mechanics.",
+      "nodeIds": [
+        "file:src/jax_policy.py",
+        "file:src/jax_ppo.py",
+        "file:src/normalization.py",
+        "file:src/curriculum.py",
+        "file:src/opponent_pool.py"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Experiment Configuration",
+      "description": "Connect Hydra config roots, schemas, presets, and default templates to the training workflow.",
+      "nodeIds": [
+        "config:conf/config.yaml",
+        "file:src/config.py",
+        "file:src/conf_schema.py",
+        "config:default_cfg.yaml"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "Validation Coverage",
+      "description": "Use the test suite to see which environment, feature, policy, PPO, normalization, and config behaviors are guarded.",
+      "nodeIds": [
+        "file:tests/conftest.py",
+        "file:tests/test_configs.py",
+        "file:tests/test_default_cfg_template.py",
+        "file:tests/test_env.py",
+        "file:tests/test_evaluate.py",
+        "file:tests/test_feature_history.py",
+        "file:tests/test_feature_registry.py",
+        "file:tests/test_features.py"
+      ]
+    }
+  ]
+}

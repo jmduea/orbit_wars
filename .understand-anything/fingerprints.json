@@ -1,0 +1,6665 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "7bebc94338f6ec0c1500cb522755ea95c32e4953",
+  "generatedAt": "2026-05-20T21:21:39.168Z",
+  "files": {
+    "eval_vs_sniper.py": {
+      "filePath": "eval_vs_sniper.py",
+      "contentHash": "805dff90e5f031287f1d75c2b628271ce34bba9bf7e0df16ab8aa1399103d2a2",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "evaluate",
+          "specifiers": [
+            "main"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "evaluate.py": {
+      "filePath": "evaluate.py",
+      "contentHash": "11e17c9ecd3281ac0f6c6694eb0c0b1af314e959cf6c567d30ad984cc63b2157",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 37
+        },
+        {
+          "name": "resolve_device",
+          "params": [
+            "name"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "seed_everything",
+          "params": [
+            "seed"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "parse_opponents",
+          "params": [
+            "value"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "parse_formats",
+          "params": [
+            "value"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "format_label",
+          "params": [
+            "player_count"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "parse_learner_seats",
+          "params": [
+            "value",
+            "player_count"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "parse_seed_spec",
+          "params": [
+            "value",
+            "start_seed",
+            "games"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "build_policy",
+          "params": [
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "load_checkpoint_if_available",
+          "params": [
+            "policy",
+            "normalizer",
+            "checkpoint_path",
+            "device",
+            "cfg"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "build_opponent",
+          "params": [
+            "name",
+            "cfg",
+            "policy_params",
+            "normalizer",
+            "device",
+            "deterministic"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "reward_to_label",
+          "params": [
+            "reward"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "placement_from_rewards",
+          "params": [
+            "rewards",
+            "learner_seat"
+          ],
+          "returnType": "tuple[float, bool]",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "play_one_game",
+          "params": [
+            "learner",
+            "opponents",
+            "seed",
+            "player_count",
+            "learner_seat"
+          ],
+          "returnType": "GameOutcome",
+          "exported": true,
+          "lineCount": 50
+        },
+        {
+          "name": "aggregate",
+          "params": [
+            "results"
+          ],
+          "returnType": "AggregateMetrics",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "aggregate_format",
+          "params": [
+            "results",
+            "player_count"
+          ],
+          "returnType": "FormatMetrics",
+          "exported": true,
+          "lineCount": 58
+        },
+        {
+          "name": "write_outputs",
+          "params": [
+            "output_dir",
+            "run_name",
+            "payload",
+            "results"
+          ],
+          "returnType": "tuple[Path, Path]",
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 136
+        }
+      ],
+      "classes": [
+        {
+          "name": "GameResult",
+          "methods": [],
+          "properties": [
+            "format",
+            "player_count",
+            "opponent",
+            "game_index",
+            "seed",
+            "learner_seat",
+            "opponent_slots",
+            "reward",
+            "result",
+            "placement",
+            "first_place",
+            "length"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "AggregateMetrics",
+          "methods": [],
+          "properties": [
+            "games",
+            "wins",
+            "draws",
+            "losses",
+            "win_rate",
+            "draw_rate",
+            "loss_rate",
+            "mean_terminal_reward",
+            "mean_game_length",
+            "win_rate_se",
+            "win_rate_ci95_low",
+            "win_rate_ci95_high"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "FormatMetrics",
+          "methods": [],
+          "properties": [
+            "games",
+            "player_count",
+            "win_rate_2p",
+            "first_place_rate_4p",
+            "average_placement_4p",
+            "mean_terminal_reward",
+            "mean_game_length",
+            "per_seat"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "GameOutcome",
+          "methods": [],
+          "properties": [
+            "reward",
+            "result",
+            "placement",
+            "first_place",
+            "length"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "csv",
+          "specifiers": [
+            "csv"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict",
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Iterable"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "pickle",
+          "specifiers": [
+            "pickle"
+          ]
+        },
+        {
+          "source": "src.checkpoint_compat",
+          "specifiers": [
+            "validate_checkpoint_feature_compatibility"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig",
+            "default_train_config_path",
+            "load_train_config"
+          ]
+        },
+        {
+          "source": "src.env",
+          "specifiers": [
+            "extract_observation",
+            "extract_reward",
+            "extract_status"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "candidate_feature_dim",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.normalization",
+          "specifiers": [
+            "ObservationNormalizer"
+          ]
+        },
+        {
+          "source": "src.opponents",
+          "specifiers": [
+            "KaggleRandomOpponent",
+            "SelfPlayOpponent",
+            "SniperOpponent"
+          ]
+        },
+        {
+          "source": "src.jax_policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        }
+      ],
+      "exports": [
+        "GameResult",
+        "AggregateMetrics",
+        "FormatMetrics",
+        "GameOutcome",
+        "parse_args",
+        "resolve_device",
+        "seed_everything",
+        "parse_opponents",
+        "parse_formats",
+        "format_label",
+        "parse_learner_seats",
+        "parse_seed_spec",
+        "build_policy",
+        "load_checkpoint_if_available",
+        "build_opponent",
+        "reward_to_label",
+        "placement_from_rewards",
+        "play_one_game",
+        "aggregate",
+        "aggregate_format",
+        "write_outputs",
+        "main"
+      ],
+      "totalLines": 588,
+      "hasStructuralAnalysis": true
+    },
+    "play_vs_sniper.py": {
+      "filePath": "play_vs_sniper.py",
+      "contentHash": "6aeaf46a9bd8988022ac8bd96ac64157fac3dcf4dd414336fbe3fc53a79b012c",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "seed_everything",
+          "params": [
+            "seed"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "load_checkpoint_params",
+          "params": [
+            "normalizer",
+            "checkpoint_path",
+            "cfg"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "extract_observation",
+          "params": [
+            "state"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "extract_status",
+          "params": [
+            "state"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "extract_reward",
+          "params": [
+            "state"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "run_match",
+          "params": [
+            "learner",
+            "seed"
+          ],
+          "returnType": "tuple[str, float, int]",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "pickle",
+          "specifiers": [
+            "pickle"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.checkpoint_compat",
+          "specifiers": [
+            "validate_checkpoint_feature_compatibility"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig",
+            "default_train_config_path",
+            "load_train_config"
+          ]
+        },
+        {
+          "source": "src.normalization",
+          "specifiers": [
+            "ObservationNormalizer"
+          ]
+        },
+        {
+          "source": "src.opponents",
+          "specifiers": [
+            "SelfPlayOpponent",
+            "SniperOpponent"
+          ]
+        }
+      ],
+      "exports": [
+        "parse_args",
+        "seed_everything",
+        "load_checkpoint_params",
+        "extract_observation",
+        "extract_status",
+        "extract_reward",
+        "run_match",
+        "main"
+      ],
+      "totalLines": 108,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/benchmark_env.py": {
+      "filePath": "scripts/benchmark_env.py",
+      "contentHash": "01d01a53d77a146c202119dbc3a47aff26403c40fe67349af650c6f7042ca81a",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "build_cfg",
+          "params": [
+            "args",
+            "backend"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "make_policy",
+          "params": [
+            "cfg",
+            "device"
+          ],
+          "returnType": "torch.nn.Module",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "make_rollout_state",
+          "params": [
+            "cfg",
+            "policy",
+            "device"
+          ],
+          "returnType": "tuple[Any, Any, int, list[float]]",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "run_backend",
+          "params": [
+            "args",
+            "backend"
+          ],
+          "returnType": "dict[str, float | int | str]",
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "copy",
+          "specifiers": [
+            "deepcopy"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "torch",
+          "specifiers": [
+            "torch"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig",
+            "load_hydra_train_config"
+          ]
+        },
+        {
+          "source": "src.env",
+          "specifiers": [
+            "OrbitWarsEnv"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "candidate_feature_dim",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.normalization",
+          "specifiers": [
+            "ObservationNormalizer"
+          ]
+        },
+        {
+          "source": "src.opponents",
+          "specifiers": [
+            "SelfPlayOpponent",
+            "SelfPlayOpponentPool",
+            "build_opponent"
+          ]
+        },
+        {
+          "source": "src.policy",
+          "specifiers": [
+            "build_policy"
+          ]
+        },
+        {
+          "source": "src.train",
+          "specifiers": [
+            "JaxBatchedEnv",
+            "collect_rollout",
+            "make_jax_batched_env",
+            "resolve_device",
+            "seed_everything"
+          ]
+        }
+      ],
+      "exports": [
+        "parse_args",
+        "build_cfg",
+        "make_policy",
+        "make_rollout_state",
+        "run_backend",
+        "main"
+      ],
+      "totalLines": 186,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/benchmark_jax_rl.py": {
+      "filePath": "scripts/benchmark_jax_rl.py",
+      "contentHash": "d9bb5e0930b6490095454d1ad334d5386edaf0cbe29abf4525eb2b293e082344",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 74
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "copy",
+          "specifiers": [
+            "deepcopy"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "load_hydra_train_config"
+          ]
+        },
+        {
+          "source": "src.jax_device",
+          "specifiers": [
+            "ensure_cuda_jax_if_nvidia_present"
+          ]
+        }
+      ],
+      "exports": [
+        "parse_args",
+        "main"
+      ],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/compare_attention_candidates.py": {
+      "filePath": "scripts/compare_attention_candidates.py",
+      "contentHash": "cdc0c8231286dafc5aa32c7fb6f17277e7caaac454929e273aa7813d4aa1a7cb",
+      "functions": [
+        {
+          "name": "parse_args",
+          "params": [],
+          "returnType": "argparse.Namespace",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "load_config",
+          "params": [
+            "experiment"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "latest_jsonl_record",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict[str, Any] | None",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "row_for_config",
+          "params": [
+            "experiment",
+            "log_dir"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "format_cell",
+          "params": [
+            "value"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "print_table",
+          "params": [
+            "rows"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "hydra",
+          "specifiers": [
+            "compose",
+            "initialize_config_dir"
+          ]
+        }
+      ],
+      "exports": [
+        "parse_args",
+        "load_config",
+        "latest_jsonl_record",
+        "row_for_config",
+        "format_cell",
+        "print_table",
+        "main"
+      ],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/generate_default_cfg.py": {
+      "filePath": "scripts/generate_default_cfg.py",
+      "contentHash": "c2b4e681946bd2aec6ffe5fc0f1e05010a630c0fdf92aabbfeae605731ae5ad7",
+      "functions": [
+        {
+          "name": "_to_ordered_plain",
+          "params": [
+            "value"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "render_default_cfg",
+          "params": [],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 35
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "fields",
+            "is_dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig",
+            "default_train_config_path"
+          ]
+        }
+      ],
+      "exports": [
+        "_to_ordered_plain",
+        "render_default_cfg",
+        "main"
+      ],
+      "totalLines": 78,
+      "hasStructuralAnalysis": true
+    },
+    "src/__init__.py": {
+      "filePath": "src/__init__.py",
+      "contentHash": "d5b0882e0b83e9b7166d7aa2ef18cf09fa7f25650809f011060a6da15c951933",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig",
+            "default_train_config_path",
+            "load_hydra_train_config",
+            "load_train_config"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "src/checkpoint_compat.py": {
+      "filePath": "src/checkpoint_compat.py",
+      "contentHash": "9a10ecdf54bb99dc89a81933ae31c20486216a3a2caabcb8947695de288125ed",
+      "functions": [
+        {
+          "name": "feature_metadata",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "dict[str, int]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "checkpoint_state_dict",
+          "params": [
+            "checkpoint"
+          ],
+          "returnType": "Mapping[str, object] | None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "checkpoint_feature_metadata",
+          "params": [
+            "checkpoint"
+          ],
+          "returnType": "dict[str, int] | None",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "infer_feature_metadata_from_state_dict",
+          "params": [
+            "state_dict"
+          ],
+          "returnType": "dict[str, int] | None",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "validate_checkpoint_feature_compatibility",
+          "params": [
+            "checkpoint",
+            "env_cfg",
+            "checkpoint_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 45
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Mapping"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "candidate_feature_dim",
+            "feature_history_steps",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        }
+      ],
+      "exports": [
+        "feature_metadata",
+        "checkpoint_state_dict",
+        "checkpoint_feature_metadata",
+        "infer_feature_metadata_from_state_dict",
+        "validate_checkpoint_feature_compatibility"
+      ],
+      "totalLines": 155,
+      "hasStructuralAnalysis": true
+    },
+    "src/checkpoint_retention.py": {
+      "filePath": "src/checkpoint_retention.py",
+      "contentHash": "a33f79064a55f2b0e95dbc30c15106824714a19c2448d2cb63256eba38f642c5",
+      "functions": [
+        {
+          "name": "_parse_update",
+          "params": [
+            "path"
+          ],
+          "returnType": "int | None",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_collect_metric_by_update",
+          "params": [
+            "log_path",
+            "metric_name"
+          ],
+          "returnType": "dict[int, float]",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "prune_checkpoints",
+          "params": [
+            "run_dir",
+            "log_path",
+            "keep_last_n",
+            "keep_every_n_updates",
+            "keep_best_k_by_metric",
+            "best_metric_name",
+            "best_metric_mode",
+            "min_update_for_pruning",
+            "dry_run_pruning"
+          ],
+          "returnType": "RetentionDecision",
+          "exported": true,
+          "lineCount": 71
+        }
+      ],
+      "classes": [
+        {
+          "name": "RetentionDecision",
+          "methods": [],
+          "properties": [
+            "deleted",
+            "kept",
+            "reclaimed_bytes",
+            "dry_run"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Literal"
+          ]
+        }
+      ],
+      "exports": [
+        "RetentionDecision",
+        "_parse_update",
+        "_collect_metric_by_update",
+        "prune_checkpoints"
+      ],
+      "totalLines": 125,
+      "hasStructuralAnalysis": true
+    },
+    "src/conf_schema.py": {
+      "filePath": "src/conf_schema.py",
+      "contentHash": "89b9f7d66b81c755318a3101332c15b76429fe7829c3250b0f5491ecd35262e6",
+      "functions": [
+        {
+          "name": "register_config_schemas",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [
+        {
+          "name": "EnvConfig",
+          "methods": [],
+          "properties": [
+            "candidate_count",
+            "ship_bucket_count",
+            "max_fleets",
+            "player_count",
+            "max_ships",
+            "reward_capture_planet",
+            "reward_ship_delta",
+            "reward_production_delta",
+            "reward_terminal_scale",
+            "early_terminal_reward_shaping_enabled",
+            "early_terminal_reward_shaping_horizon",
+            "terminal_reward_mode",
+            "feature_history_steps"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "ModelConfig",
+          "methods": [],
+          "properties": [
+            "architecture",
+            "hidden_size",
+            "attention_heads",
+            "normalize_observations",
+            "obs_norm_clip"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "PPOConfig",
+          "methods": [],
+          "properties": [
+            "rollout_steps",
+            "num_envs",
+            "total_updates",
+            "epochs",
+            "minibatch_size",
+            "update_chunk_rows_min",
+            "update_chunk_rows_max",
+            "rollout_microbatch_envs",
+            "enable_gradient_checkpointing",
+            "gamma",
+            "clip_coef",
+            "ent_coef",
+            "vf_coef",
+            "lr",
+            "max_grad_norm"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "TrainingFormatConfig",
+          "methods": [],
+          "properties": [
+            "format_schedule",
+            "format_mix",
+            "rollout_groups",
+            "phases"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "WandBConfig",
+          "methods": [],
+          "properties": [
+            "enabled",
+            "project",
+            "entity",
+            "group",
+            "tags",
+            "log_artifacts",
+            "log_model_every",
+            "watch_model"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "OpponentMixConfig",
+          "methods": [],
+          "properties": [
+            "weights",
+            "temperature",
+            "curriculum"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "ReplayConfig",
+          "methods": [],
+          "properties": [
+            "enabled",
+            "every_n_checkpoints",
+            "opponent",
+            "seed_policy",
+            "max_steps",
+            "output_dir"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "CheckpointRetentionConfig",
+          "methods": [],
+          "properties": [
+            "keep_last_n",
+            "keep_every_n_updates",
+            "keep_best_k_by_metric",
+            "best_metric_name",
+            "best_metric_mode",
+            "min_update_for_pruning",
+            "dry_run_pruning"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "TrainConfig",
+          "methods": [],
+          "properties": [
+            "seed",
+            "run_name",
+            "device",
+            "save_dir",
+            "checkpoint_every",
+            "log_every",
+            "opponent",
+            "env_backend",
+            "rl_backend",
+            "self_play_update_interval",
+            "self_play_deterministic",
+            "self_play_enabled",
+            "self_play_pool_size",
+            "self_play_snapshot_interval",
+            "self_play_latest_probability",
+            "multi_opponent_mode",
+            "alternate_player_sides",
+            "env",
+            "model",
+            "ppo",
+            "training_format",
+            "opponent_mix",
+            "wandb",
+            "replay",
+            "checkpoint_retention",
+            "reseed_every_updates",
+            "reseed_on_plateau",
+            "plateau_metric",
+            "plateau_window",
+            "plateau_delta",
+            "heldout_eval_seed_set",
+            "print_resolved_config",
+            "resume_checkpoint"
+          ],
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "hydra.core.config_store",
+          "specifiers": [
+            "ConfigStore"
+          ]
+        }
+      ],
+      "exports": [
+        "EnvConfig",
+        "ModelConfig",
+        "PPOConfig",
+        "TrainingFormatConfig",
+        "WandBConfig",
+        "OpponentMixConfig",
+        "ReplayConfig",
+        "CheckpointRetentionConfig",
+        "TrainConfig",
+        "register_config_schemas"
+      ],
+      "totalLines": 159,
+      "hasStructuralAnalysis": true
+    },
+    "src/config.py": {
+      "filePath": "src/config.py",
+      "contentHash": "8ff3751e95b6e79d41300bb1a53d60a946f5e67438934e63489426d3df092792",
+      "functions": [
+        {
+          "name": "default_train_config_path",
+          "params": [],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "load_hydra_train_config",
+          "params": [
+            "path"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "train_config_from_omegaconf",
+          "params": [
+            "cfg_raw"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "load_train_config",
+          "params": [
+            "path"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "train_config_from_dict",
+          "params": [
+            "data"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "_validate_train_config",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "_validate_no_legacy_format_conflicts",
+          "params": [
+            "cfg_raw"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "_parse_seed_set",
+          "params": [
+            "raw"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "warnings",
+          "specifiers": [
+            "warnings"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "hydra",
+          "specifiers": [
+            "compose",
+            "initialize_config_dir"
+          ]
+        },
+        {
+          "source": "omegaconf",
+          "specifiers": [
+            "OmegaConf"
+          ]
+        },
+        {
+          "source": ".conf_schema",
+          "specifiers": [
+            "EnvConfig",
+            "TrainConfig",
+            "register_config_schemas"
+          ]
+        }
+      ],
+      "exports": [
+        "default_train_config_path",
+        "load_hydra_train_config",
+        "train_config_from_omegaconf",
+        "load_train_config",
+        "train_config_from_dict",
+        "_validate_train_config",
+        "_validate_no_legacy_format_conflicts",
+        "_parse_seed_set"
+      ],
+      "totalLines": 169,
+      "hasStructuralAnalysis": true
+    },
+    "src/constants.py": {
+      "filePath": "src/constants.py",
+      "contentHash": "b89e0cf066116dea3628878157816a95595d962ecc92460c396d5046d892cdec",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    "src/curriculum.py": {
+      "filePath": "src/curriculum.py",
+      "contentHash": "3a1a335617ea33a52585ec39c1446155accb8c443c8c896348be1ec4c93a85e6",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CurriculumPhase",
+          "methods": [],
+          "properties": [
+            "id",
+            "promote_if",
+            "demote_if",
+            "min_dwell_updates",
+            "cooldown_updates",
+            "opponent_mix_weights",
+            "format_weights",
+            "reward_shaping"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "CurriculumController",
+          "methods": [
+            "__init__",
+            "phase",
+            "current_phase_id",
+            "apply",
+            "current_format_weights",
+            "update",
+            "_all_ge",
+            "_any_lt",
+            "_parse_phase"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 81
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "CurriculumPhase",
+        "CurriculumController"
+      ],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "src/env.py": {
+      "filePath": "src/env.py",
+      "contentHash": "430d590eda0962907be23eeeb26541add5dad8a966c282c25a2d4665e681db6f",
+      "functions": [
+        {
+          "name": "shaped_reward_components",
+          "params": [
+            "previous_state",
+            "current_state",
+            "env_cfg"
+          ],
+          "returnType": "dict[str, float]",
+          "exported": true,
+          "lineCount": 44
+        },
+        {
+          "name": "planets_by_id",
+          "params": [
+            "planets"
+          ],
+          "returnType": "dict[int, PlanetState]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "ship_advantage",
+          "params": [
+            "state",
+            "player"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "controlled_production",
+          "params": [
+            "planets",
+            "player"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "default_make_fn",
+          "params": [],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "extract_observation",
+          "params": [
+            "state"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "extract_status",
+          "params": [
+            "state"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "extract_reward",
+          "params": [
+            "state"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "terminal_reward",
+          "params": [
+            "player_state",
+            "opponent_states",
+            "env_cfg"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "terminal_reward_diagnostics",
+          "params": [
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "dict[str, float]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "terminal_reward_from_scores",
+          "params": [
+            "scores",
+            "env_cfg",
+            "learner_index"
+          ],
+          "returnType": "dict[str, float]",
+          "exported": true,
+          "lineCount": 44
+        },
+        {
+          "name": "apply_early_terminal_reward_shaping",
+          "params": [
+            "terminal_reward_value",
+            "step_index",
+            "env_cfg"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [
+        {
+          "name": "StepResult",
+          "methods": [],
+          "properties": [
+            "batch",
+            "reward",
+            "done",
+            "info"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "OrbitWarsEnv",
+          "methods": [
+            "__init__",
+            "reset",
+            "step",
+            "_sample_opponents",
+            "_sample_opponent"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 216
+        }
+      ],
+      "imports": [
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "MAX_STEPS"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "EnvConfig",
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "FeatureHistoryBuffer",
+            "TurnBatch",
+            "build_feature_snapshot",
+            "encode_turn"
+          ]
+        },
+        {
+          "source": ".game_types",
+          "specifiers": [
+            "GameState",
+            "PlanetState",
+            "parse_observation"
+          ]
+        },
+        {
+          "source": ".opponents",
+          "specifiers": [
+            "OpponentPolicy"
+          ]
+        }
+      ],
+      "exports": [
+        "StepResult",
+        "OrbitWarsEnv",
+        "shaped_reward_components",
+        "planets_by_id",
+        "ship_advantage",
+        "controlled_production",
+        "default_make_fn",
+        "extract_observation",
+        "extract_status",
+        "extract_reward",
+        "terminal_reward",
+        "terminal_reward_diagnostics",
+        "terminal_reward_from_scores",
+        "apply_early_terminal_reward_shaping"
+      ],
+      "totalLines": 443,
+      "hasStructuralAnalysis": true
+    },
+    "src/feature_registry.py": {
+      "filePath": "src/feature_registry.py",
+      "contentHash": "f77792a570fd335e3874b0cc64f487d60d3c8882a696c96efb08a641d6ef533e",
+      "functions": [
+        {
+          "name": "_validate_schema_dim",
+          "params": [
+            "name",
+            "schema",
+            "expected_dim"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "feature_history_steps",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "self_feature_schema",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "FeatureGroupRegistry",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "self_feature_dim",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "candidate_feature_schema",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "FeatureGroupRegistry",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "candidate_feature_dim",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "global_feature_schema",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "FeatureGroupRegistry",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "global_feature_dim",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "classes": [
+        {
+          "name": "FeatureItem",
+          "methods": [],
+          "properties": [
+            "name",
+            "size",
+            "active"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "FeatureGroupRegistry",
+          "methods": [
+            "__init__",
+            "_build_slices",
+            "base_dim",
+            "total_dim",
+            "base_slice",
+            "frame_slice",
+            "slice",
+            "history_slices",
+            "with_history",
+            "_normalize_frame"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 77
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Sequence"
+          ]
+        },
+        {
+          "source": "src.conf_schema",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "BASE_CANDIDATE_FEATURE_DIM",
+            "BASE_GLOBAL_FEATURE_DIM",
+            "BASE_SELF_FEATURE_DIM"
+          ]
+        }
+      ],
+      "exports": [
+        "FeatureItem",
+        "FeatureGroupRegistry",
+        "_validate_schema_dim",
+        "feature_history_steps",
+        "self_feature_schema",
+        "self_feature_dim",
+        "candidate_feature_schema",
+        "candidate_feature_dim",
+        "global_feature_schema",
+        "global_feature_dim"
+      ],
+      "totalLines": 224,
+      "hasStructuralAnalysis": true
+    },
+    "src/features.py": {
+      "filePath": "src/features.py",
+      "contentHash": "79b601ce8def612abe71993bb68f5b968b8877c1a14eedf29d3fa793af626739",
+      "functions": [
+        {
+          "name": "real_candidate_slots",
+          "params": [
+            "candidate_count"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "encode_turn",
+          "params": [
+            "observation",
+            "env_cfg",
+            "env_index",
+            "feature_history"
+          ],
+          "returnType": "TurnBatch",
+          "exported": true,
+          "lineCount": 89
+        },
+        {
+          "name": "_stack_self_history",
+          "params": [
+            "source_id",
+            "current",
+            "history",
+            "steps"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "_stack_candidate_history",
+          "params": [
+            "env_index",
+            "source_id",
+            "candidate_ids",
+            "current",
+            "history",
+            "steps"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "_stack_global_history",
+          "params": [
+            "current",
+            "history",
+            "steps"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "build_feature_snapshot",
+          "params": [
+            "batch"
+          ],
+          "returnType": "FeatureSnapshot",
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "build_candidates",
+          "params": [
+            "src",
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "list[PlanetState]",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "build_self_features",
+          "params": [
+            "src",
+            "state",
+            "env_cfg",
+            "feature_history"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "build_candidate_features",
+          "params": [
+            "src",
+            "candidates",
+            "state",
+            "env_cfg",
+            "feature_history",
+            "env_index"
+          ],
+          "returnType": "tuple[np.ndarray, np.ndarray, list[int], list[int], list[float]]",
+          "exported": true,
+          "lineCount": 103
+        },
+        {
+          "name": "build_global_features",
+          "params": [
+            "state",
+            "env_cfg",
+            "feature_history"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "_latest_snapshot",
+          "params": [
+            "history"
+          ],
+          "returnType": "FeatureSnapshot | None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "incoming_fleet_pressure",
+          "params": [
+            "planet",
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "tuple[float, float]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "fleet_aims_at_planet",
+          "params": [
+            "fleet",
+            "planet"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "owner_relative_production",
+          "params": [
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "owner_relative_summary",
+          "params": [
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "target_owner_one_hot",
+          "params": [
+            "owner",
+            "state",
+            "env_cfg"
+          ],
+          "returnType": "np.ndarray",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "clipped_player_count",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "relative_owner_slot",
+          "params": [
+            "owner",
+            "player",
+            "player_count"
+          ],
+          "returnType": "int | None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ship_bucket_fraction",
+          "params": [
+            "bucket",
+            "bucket_count"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ship_count_for_bucket",
+          "params": [
+            "available_ships",
+            "bucket",
+            "bucket_count"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "distance",
+          "params": [
+            "a",
+            "b"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "total_ships",
+          "params": [
+            "planets"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "is_rotating_planet",
+          "params": [
+            "planet"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "shot_crosses_sun",
+          "params": [
+            "src",
+            "angle",
+            "tgt"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "point_to_segment_distance",
+          "params": [
+            "point",
+            "start",
+            "end"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "DecisionContext",
+          "methods": [],
+          "properties": [
+            "env_index",
+            "source_id",
+            "candidate_ids",
+            "candidate_mask",
+            "ship_counts",
+            "source_ships",
+            "target_angles"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "TurnBatch",
+          "methods": [],
+          "properties": [
+            "self_features",
+            "candidate_features",
+            "global_features",
+            "candidate_mask",
+            "contexts",
+            "state"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "FeatureSnapshot",
+          "methods": [],
+          "properties": [
+            "self_by_source",
+            "candidate_by_source_target",
+            "global_features"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "FeatureHistoryBuffer",
+          "methods": [
+            "append",
+            "clear"
+          ],
+          "properties": [
+            "max_steps",
+            "snapshots"
+          ],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "imports": [
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.feature_registry",
+          "specifiers": [
+            "candidate_feature_dim",
+            "feature_history_steps",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": ".constants",
+          "specifiers": [
+            "BASE_CANDIDATE_FEATURE_DIM",
+            "BASE_GLOBAL_FEATURE_DIM",
+            "BASE_SELF_FEATURE_DIM",
+            "BOARD_CENTER",
+            "BOARD_SIZE",
+            "MAX_FLEET_SPEED",
+            "MAX_OWNER_FEATURE_PLAYERS",
+            "MAX_PLANETS",
+            "MAX_PRODUCTION",
+            "MAX_STEPS",
+            "NO_OP_CANDIDATE_INDEX",
+            "PLANET_LAUNCH_RADIUS_OFFSET",
+            "ROTATION_RADIUS_LIMIT",
+            "SUN_RADIUS"
+          ]
+        },
+        {
+          "source": ".game_types",
+          "specifiers": [
+            "GameState",
+            "PlanetState",
+            "parse_observation"
+          ]
+        }
+      ],
+      "exports": [
+        "real_candidate_slots",
+        "DecisionContext",
+        "TurnBatch",
+        "FeatureSnapshot",
+        "FeatureHistoryBuffer",
+        "encode_turn",
+        "_stack_self_history",
+        "_stack_candidate_history",
+        "_stack_global_history",
+        "build_feature_snapshot",
+        "build_candidates",
+        "build_self_features",
+        "build_candidate_features",
+        "build_global_features",
+        "_latest_snapshot",
+        "incoming_fleet_pressure",
+        "fleet_aims_at_planet",
+        "owner_relative_production",
+        "owner_relative_summary",
+        "target_owner_one_hot",
+        "clipped_player_count",
+        "relative_owner_slot",
+        "ship_bucket_fraction",
+        "ship_count_for_bucket",
+        "distance",
+        "total_ships",
+        "is_rotating_planet",
+        "shot_crosses_sun",
+        "point_to_segment_distance"
+      ],
+      "totalLines": 694,
+      "hasStructuralAnalysis": true
+    },
+    "src/game_types.py": {
+      "filePath": "src/game_types.py",
+      "contentHash": "3445726006a342f50b5187226dec995a3e1afa8c9a2845167364273eeff7b28c",
+      "functions": [
+        {
+          "name": "parse_observation",
+          "params": [
+            "observation"
+          ],
+          "returnType": "GameState",
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "classes": [
+        {
+          "name": "PlanetState",
+          "methods": [],
+          "properties": [
+            "id",
+            "owner",
+            "x",
+            "y",
+            "radius",
+            "ships",
+            "production"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "FleetState",
+          "methods": [],
+          "properties": [
+            "id",
+            "owner",
+            "x",
+            "y",
+            "angle",
+            "from_planet_id",
+            "ships"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "GameState",
+          "methods": [],
+          "properties": [
+            "step",
+            "player",
+            "planets",
+            "fleets"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "PlanetState",
+        "FleetState",
+        "GameState",
+        "parse_observation"
+      ],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_device.py": {
+      "filePath": "src/jax_device.py",
+      "contentHash": "46957df4caa495eddc4193f9a3400c5ad81706f126f3d41969e272f6acd06387",
+      "functions": [
+        {
+          "name": "nvidia_gpu_present",
+          "params": [],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "configure_jax_runtime_for_host",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "configure_jax_platform_for_host",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "ensure_cuda_jax_if_nvidia_present",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 29
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "shutil",
+          "specifiers": [
+            "shutil"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        }
+      ],
+      "exports": [
+        "nvidia_gpu_present",
+        "configure_jax_runtime_for_host",
+        "configure_jax_platform_for_host",
+        "ensure_cuda_jax_if_nvidia_present"
+      ],
+      "totalLines": 92,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_env.py": {
+      "filePath": "src/jax_env.py",
+      "contentHash": "3531683aa7af3c940b85c4f252fda3d940e1cc08024d3d3a083b0fd51b55e69b",
+      "functions": [
+        {
+          "name": "max_fleets",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "empty_action",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "reset",
+          "params": [
+            "key",
+            "cfg"
+          ],
+          "returnType": "tuple[JaxEnvState, JaxTurnBatch]",
+          "exported": true,
+          "lineCount": 98
+        },
+        {
+          "name": "learner_player_for_episode",
+          "params": [
+            "env_index",
+            "episode_count",
+            "cfg",
+            "alternate_player_sides"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "assign_learner_players",
+          "params": [
+            "env_state",
+            "env_index",
+            "episode_count",
+            "cfg",
+            "alternate_player_sides"
+          ],
+          "returnType": "tuple[JaxEnvState, JaxTurnBatch]",
+          "exported": true,
+          "lineCount": 34
+        },
+        {
+          "name": "_finish_step",
+          "params": [
+            "previous_game",
+            "state",
+            "planets",
+            "fleets",
+            "next_fleet_id",
+            "cfg"
+          ],
+          "returnType": "tuple[JaxEnvState, JaxStepResult]",
+          "exported": true,
+          "lineCount": 65
+        },
+        {
+          "name": "step",
+          "params": [
+            "state",
+            "learner_action",
+            "opponent_action",
+            "cfg"
+          ],
+          "returnType": "tuple[JaxEnvState, JaxStepResult]",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "step_multi_player",
+          "params": [
+            "state",
+            "player_actions",
+            "cfg"
+          ],
+          "returnType": "tuple[JaxEnvState, JaxStepResult]",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "_launch_fleets",
+          "params": [
+            "planets",
+            "fleets",
+            "next_fleet_id",
+            "action",
+            "player",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 48
+        },
+        {
+          "name": "_concat_fleets",
+          "params": [
+            "a",
+            "b"
+          ],
+          "returnType": "JaxFleetState",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_compact_fleets",
+          "params": [
+            "fleets",
+            "cfg"
+          ],
+          "returnType": "JaxFleetState",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_move_and_resolve",
+          "params": [
+            "previous_game",
+            "planets",
+            "fleets",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 56
+        },
+        {
+          "name": "fleet_speed",
+          "params": [
+            "ships",
+            "ship_speed"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "swept_pair_hit",
+          "params": [
+            "ax",
+            "ay",
+            "bx",
+            "by",
+            "p0x",
+            "p0y",
+            "p1x",
+            "p1y",
+            "radius"
+          ],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "point_to_segment_distance_xy",
+          "params": [
+            "px",
+            "py",
+            "vx",
+            "vy",
+            "wx",
+            "wy"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_resolve_combat",
+          "params": [
+            "planets",
+            "fleets",
+            "hit_any",
+            "hit_idx",
+            "cfg"
+          ],
+          "returnType": "JaxPlanetState",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "_terminal",
+          "params": [
+            "game",
+            "learner_player",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 63
+        },
+        {
+          "name": "_apply_early_terminal_reward_shaping_jax",
+          "params": [
+            "reward",
+            "step_index",
+            "cfg"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_ship_advantage",
+          "params": [
+            "game",
+            "player"
+          ],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "_shaping",
+          "params": [
+            "previous",
+            "current",
+            "player",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "jit_reset",
+          "params": [
+            "key",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "jit_step",
+          "params": [
+            "state",
+            "learner_action",
+            "opponent_action",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [
+        {
+          "name": "JaxPlanetState",
+          "methods": [],
+          "properties": [
+            "id",
+            "owner",
+            "x",
+            "y",
+            "radius",
+            "ships",
+            "production",
+            "active"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "JaxFleetState",
+          "methods": [],
+          "properties": [
+            "id",
+            "owner",
+            "x",
+            "y",
+            "angle",
+            "from_planet_id",
+            "ships",
+            "active"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "JaxGameState",
+          "methods": [],
+          "properties": [
+            "step",
+            "player",
+            "angular_velocity",
+            "next_fleet_id",
+            "planets",
+            "initial_planets",
+            "fleets"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "JaxEnvState",
+          "methods": [],
+          "properties": [
+            "game",
+            "learner_player",
+            "episode_count",
+            "feature_history"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "JaxAction",
+          "methods": [],
+          "properties": [
+            "source_id",
+            "angle",
+            "ships",
+            "valid"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "JaxStepResult",
+          "methods": [],
+          "properties": [
+            "batch",
+            "reward",
+            "done",
+            "terminal_reward",
+            "shaping_reward",
+            "reward_capture_planet",
+            "reward_ship_delta",
+            "reward_production_delta",
+            "terminal_rank",
+            "terminal_placement",
+            "terminal_is_first",
+            "terminal_score_share",
+            "terminal_survival_time"
+          ],
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "NamedTuple"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "BOARD_SIZE",
+            "MAX_FLEET_SPEED",
+            "MAX_PLANETS",
+            "MAX_STEPS",
+            "TOTAL_COMETS"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "PLANET_LAUNCH_RADIUS_OFFSET",
+            "SUN_RADIUS"
+          ]
+        },
+        {
+          "source": ".jax_features",
+          "specifiers": [
+            "JaxFeatureHistory",
+            "JaxTurnBatch",
+            "append_feature_history",
+            "empty_feature_history",
+            "encode_turn"
+          ]
+        }
+      ],
+      "exports": [
+        "JaxPlanetState",
+        "JaxFleetState",
+        "JaxGameState",
+        "JaxEnvState",
+        "JaxAction",
+        "JaxStepResult",
+        "max_fleets",
+        "empty_action",
+        "reset",
+        "learner_player_for_episode",
+        "assign_learner_players",
+        "_finish_step",
+        "step",
+        "step_multi_player",
+        "_launch_fleets",
+        "_concat_fleets",
+        "_compact_fleets",
+        "_move_and_resolve",
+        "fleet_speed",
+        "swept_pair_hit",
+        "point_to_segment_distance_xy",
+        "_resolve_combat",
+        "_terminal",
+        "_apply_early_terminal_reward_shaping_jax",
+        "_ship_advantage",
+        "_shaping",
+        "jit_reset",
+        "jit_step"
+      ],
+      "totalLines": 809,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_features.py": {
+      "filePath": "src/jax_features.py",
+      "contentHash": "44df7b49bf2c08b1ee1cccad103f447174fbc47818a7a409e5894be0f28c785f",
+      "functions": [
+        {
+          "name": "encode_turn",
+          "params": [
+            "game",
+            "env_cfg",
+            "history"
+          ],
+          "returnType": "JaxTurnBatch",
+          "exported": true,
+          "lineCount": 35
+        },
+        {
+          "name": "feature_history_steps",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "empty_feature_history",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "JaxFeatureHistory",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "current_feature_snapshot",
+          "params": [
+            "game",
+            "env_cfg"
+          ],
+          "returnType": "JaxFeatureHistory",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "append_feature_history",
+          "params": [
+            "history",
+            "game",
+            "env_cfg"
+          ],
+          "returnType": "JaxFeatureHistory",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "_ordered_history_indices",
+          "params": [
+            "history",
+            "steps"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_ordered_history",
+          "params": [
+            "history",
+            "env_cfg"
+          ],
+          "returnType": "JaxFeatureHistory",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_stack_self_history",
+          "params": [
+            "current",
+            "history",
+            "env_cfg"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_stack_candidate_history",
+          "params": [
+            "current",
+            "source_ids",
+            "candidate_ids",
+            "history",
+            "env_cfg"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "_target_aligned_candidate_history",
+          "params": [
+            "source_ids",
+            "candidate_ids",
+            "history"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "_stack_global_history",
+          "params": [
+            "current",
+            "history",
+            "env_cfg"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_self_features",
+          "params": [
+            "planets",
+            "fleets",
+            "player",
+            "env_cfg",
+            "history"
+          ],
+          "exported": true,
+          "lineCount": 73
+        },
+        {
+          "name": "_candidate_features",
+          "params": [
+            "planets",
+            "fleets",
+            "player",
+            "env_cfg",
+            "history"
+          ],
+          "exported": true,
+          "lineCount": 141
+        },
+        {
+          "name": "_global_features",
+          "params": [
+            "game",
+            "env_cfg",
+            "history"
+          ],
+          "exported": true,
+          "lineCount": 64
+        },
+        {
+          "name": "_previous_self_features",
+          "params": [
+            "source_ids",
+            "history",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "_previous_candidate_features",
+          "params": [
+            "source_ids",
+            "target_ids",
+            "history",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "_previous_global_features",
+          "params": [
+            "history",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_outgoing_friendly_fleet_ships",
+          "params": [
+            "source_ids",
+            "fleets",
+            "player"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_incoming_fleet_pressure",
+          "params": [
+            "x",
+            "y",
+            "radius",
+            "fleets",
+            "player"
+          ],
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "owner_relative_production",
+          "params": [
+            "planets",
+            "player",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "owner_relative_summary",
+          "params": [
+            "planets",
+            "fleets",
+            "player",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "target_owner_one_hot",
+          "params": [
+            "owner",
+            "player",
+            "env_cfg"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "clipped_player_count",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "relative_owner_slots",
+          "params": [
+            "owner",
+            "player",
+            "player_count"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "is_rotating_xy",
+          "params": [
+            "x",
+            "y",
+            "radius"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "shot_crosses_sun_xy",
+          "params": [
+            "src_x",
+            "src_y",
+            "src_radius",
+            "angle",
+            "tgt_x",
+            "tgt_y"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "point_to_segment_distance_xy",
+          "params": [
+            "px",
+            "py",
+            "vx",
+            "vy",
+            "wx",
+            "wy"
+          ],
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [
+        {
+          "name": "JaxFeatureInterface",
+          "methods": [
+            "__init__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "JaxFeatureHistory",
+          "methods": [],
+          "properties": [
+            "self_features",
+            "candidate_features",
+            "global_features",
+            "source_ids",
+            "candidate_ids",
+            "cursor",
+            "length"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "JaxTurnBatch",
+          "methods": [],
+          "properties": [
+            "self_features",
+            "candidate_features",
+            "global_features",
+            "candidate_mask",
+            "decision_mask",
+            "source_ids",
+            "source_ships",
+            "candidate_ids",
+            "target_angles"
+          ],
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "NamedTuple"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "src.feature_registry",
+          "specifiers": [
+            "CANDIDATE_FEATURE_SCHEMA",
+            "GLOBAL_FEATURE_SCHEMA"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": ".constants",
+          "specifiers": [
+            "BASE_CANDIDATE_FEATURE_DIM",
+            "BASE_GLOBAL_FEATURE_DIM",
+            "BASE_SELF_FEATURE_DIM",
+            "BOARD_CENTER",
+            "BOARD_SIZE",
+            "MAX_FLEET_SPEED",
+            "MAX_OWNER_FEATURE_PLAYERS",
+            "MAX_PLANETS",
+            "MAX_PRODUCTION",
+            "MAX_STEPS",
+            "NO_OP_CANDIDATE_INDEX",
+            "PLANET_LAUNCH_RADIUS_OFFSET",
+            "ROTATION_RADIUS_LIMIT",
+            "SUN_RADIUS"
+          ]
+        }
+      ],
+      "exports": [
+        "JaxFeatureInterface",
+        "JaxFeatureHistory",
+        "JaxTurnBatch",
+        "encode_turn",
+        "feature_history_steps",
+        "empty_feature_history",
+        "current_feature_snapshot",
+        "append_feature_history",
+        "_ordered_history_indices",
+        "_ordered_history",
+        "_stack_self_history",
+        "_stack_candidate_history",
+        "_target_aligned_candidate_history",
+        "_stack_global_history",
+        "_self_features",
+        "_candidate_features",
+        "_global_features",
+        "_previous_self_features",
+        "_previous_candidate_features",
+        "_previous_global_features",
+        "_outgoing_friendly_fleet_ships",
+        "_incoming_fleet_pressure",
+        "owner_relative_production",
+        "owner_relative_summary",
+        "target_owner_one_hot",
+        "clipped_player_count",
+        "relative_owner_slots",
+        "is_rotating_xy",
+        "shot_crosses_sun_xy",
+        "point_to_segment_distance_xy"
+      ],
+      "totalLines": 744,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_policy.py": {
+      "filePath": "src/jax_policy.py",
+      "contentHash": "76a279581977145b1503b98b138cccfa92c89e234705577f5a9f890c883d65b7",
+      "functions": [
+        {
+          "name": "mlp",
+          "params": [
+            "x",
+            "hidden_size",
+            "output_size",
+            "name"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "safe_attention_mask",
+          "params": [
+            "candidate_mask"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "masked_mean",
+          "params": [
+            "values",
+            "mask"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "build_jax_policy",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "nn.Module",
+          "exported": true,
+          "lineCount": 60
+        },
+        {
+          "name": "sample_actions",
+          "params": [
+            "key",
+            "output",
+            "deterministic"
+          ],
+          "returnType": "tuple[jax.Array, jax.Array, jax.Array, jax.Array]",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "action_log_prob_and_entropy",
+          "params": [
+            "output",
+            "target_index",
+            "ship_bucket"
+          ],
+          "returnType": "tuple[jax.Array, jax.Array]",
+          "exported": true,
+          "lineCount": 25
+        }
+      ],
+      "classes": [
+        {
+          "name": "JaxPolicyOutput",
+          "methods": [],
+          "properties": [
+            "target_logits",
+            "ship_logits",
+            "value"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "EncoderOutput",
+          "methods": [],
+          "properties": [
+            "attended_candidates",
+            "context_query",
+            "value_input"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "MLPBackboneEncoder",
+          "methods": [
+            "__call__"
+          ],
+          "properties": [
+            "hidden_size"
+          ],
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "TransformerBackboneEncoder",
+          "methods": [
+            "setup",
+            "__call__"
+          ],
+          "properties": [
+            "hidden_size",
+            "attention_heads"
+          ],
+          "exported": true,
+          "lineCount": 66
+        },
+        {
+          "name": "GNNBackboneEncoder",
+          "methods": [
+            "__call__"
+          ],
+          "properties": [
+            "hidden_size",
+            "k_neighbors",
+            "msg_passing_layers",
+            "target_coords_slice"
+          ],
+          "exported": true,
+          "lineCount": 82
+        },
+        {
+          "name": "AutoregressivePointerDecoder",
+          "methods": [
+            "__call__"
+          ],
+          "properties": [
+            "ship_bucket_count",
+            "max_moves_k",
+            "hidden_size"
+          ],
+          "exported": true,
+          "lineCount": 82
+        },
+        {
+          "name": "ComposablePlanetPolicy",
+          "methods": [
+            "__call__"
+          ],
+          "properties": [
+            "encoder_module",
+            "decoder_module",
+            "hidden_size"
+          ],
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "JaxPlanetPolicy",
+          "methods": [
+            "__call__"
+          ],
+          "properties": [
+            "candidate_count",
+            "ship_bucket_count",
+            "hidden_size"
+          ],
+          "exported": true,
+          "lineCount": 54
+        },
+        {
+          "name": "JaxAttentionPlanetPolicy",
+          "methods": [
+            "setup",
+            "__call__"
+          ],
+          "properties": [
+            "candidate_count",
+            "ship_bucket_count",
+            "hidden_size",
+            "attention_heads",
+            "enable_gradient_checkpointing"
+          ],
+          "exported": true,
+          "lineCount": 126
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "NamedTuple"
+          ]
+        },
+        {
+          "source": "flax.linen",
+          "specifiers": [
+            "nn"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "src",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": "src.feature_registry",
+          "specifiers": [
+            "candidate_feature_schema"
+          ]
+        }
+      ],
+      "exports": [
+        "JaxPolicyOutput",
+        "EncoderOutput",
+        "MLPBackboneEncoder",
+        "TransformerBackboneEncoder",
+        "GNNBackboneEncoder",
+        "AutoregressivePointerDecoder",
+        "ComposablePlanetPolicy",
+        "JaxPlanetPolicy",
+        "JaxAttentionPlanetPolicy",
+        "mlp",
+        "safe_attention_mask",
+        "masked_mean",
+        "build_jax_policy",
+        "sample_actions",
+        "action_log_prob_and_entropy"
+      ],
+      "totalLines": 694,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_ppo.py": {
+      "filePath": "src/jax_ppo.py",
+      "contentHash": "703c1601e00d53ca2d0d257641ca022dbc19cb53327ffc41aad81c7aa9ee79c9",
+      "functions": [
+        {
+          "name": "validate_policy_param_shapes",
+          "params": [
+            "params",
+            "env_cfg"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "init_train_state",
+          "params": [
+            "key",
+            "policy",
+            "cfg"
+          ],
+          "returnType": "JaxTrainState",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "flatten_batch",
+          "params": [
+            "batch"
+          ],
+          "returnType": "tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "ship_count_for_bucket_jax",
+          "params": [
+            "available_ships",
+            "bucket",
+            "bucket_count"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "build_action_from_batch",
+          "params": [
+            "batch",
+            "target_index",
+            "ship_bucket",
+            "cfg"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 45
+        },
+        {
+          "name": "build_random_action_from_batch",
+          "params": [
+            "key",
+            "batch",
+            "cfg"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "build_sniper_action_from_batch",
+          "params": [
+            "batch",
+            "cfg"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "build_noop_action_from_batch",
+          "params": [
+            "batch",
+            "cfg"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_sample_policy_action_with_params",
+          "params": [
+            "key",
+            "batch",
+            "params",
+            "policy",
+            "cfg",
+            "deterministic"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "_sample_policy_action",
+          "params": [
+            "key",
+            "batch",
+            "train_state",
+            "policy",
+            "cfg",
+            "deterministic"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "_select_env_action",
+          "params": [
+            "condition",
+            "true_action",
+            "false_action"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "_stack_player_actions",
+          "params": [
+            "player_actions"
+          ],
+          "returnType": "JaxAction",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "collect_rollout_jax",
+          "params": [
+            "key",
+            "env_state",
+            "turn_batch",
+            "train_state",
+            "policy",
+            "cfg",
+            "opponent_params_by_player",
+            "update"
+          ],
+          "returnType": "tuple[\n    jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]\n]",
+          "exported": true,
+          "lineCount": 303
+        },
+        {
+          "name": "_rollout_diagnostics",
+          "params": [
+            "data",
+            "transitions",
+            "turn_batch",
+            "cfg",
+            "opponent_slots",
+            "snapshot_share",
+            "current_share",
+            "random_share"
+          ],
+          "returnType": "dict[str, jax.Array]",
+          "exported": true,
+          "lineCount": 249
+        },
+        {
+          "name": "concatenate_transition_batches",
+          "params": [
+            "batches"
+          ],
+          "returnType": "JaxTransitionBatch",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "discounted_returns",
+          "params": [
+            "rewards",
+            "done",
+            "gamma"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "ppo_update_jax",
+          "params": [
+            "train_state",
+            "policy",
+            "batch",
+            "cfg"
+          ],
+          "returnType": "tuple[JaxTrainState, dict[str, jax.Array]]",
+          "exported": true,
+          "lineCount": 133
+        },
+        {
+          "name": "_reshape_minibatches",
+          "params": [
+            "value",
+            "minibatch_count",
+            "minibatch_size",
+            "padding_value"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "masked_mean",
+          "params": [
+            "x",
+            "mask"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [
+        {
+          "name": "JaxTransitionBatch",
+          "methods": [],
+          "properties": [
+            "self_features",
+            "candidate_features",
+            "global_features",
+            "candidate_mask",
+            "decision_mask",
+            "target_index",
+            "ship_bucket",
+            "log_prob",
+            "returns",
+            "advantages"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "JaxTrainState",
+          "methods": [],
+          "properties": [
+            "params",
+            "opt_state",
+            "optimizer"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "NamedTuple"
+          ]
+        },
+        {
+          "source": "flax",
+          "specifiers": [
+            "flax"
+          ]
+        },
+        {
+          "source": "flax.struct",
+          "specifiers": [
+            "flax.struct"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "optax",
+          "specifiers": [
+            "optax"
+          ]
+        },
+        {
+          "source": "src.conf_schema",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "MAX_FLEET_SPEED",
+            "MAX_PLANETS",
+            "MAX_PRODUCTION"
+          ]
+        },
+        {
+          "source": "src.feature_registry",
+          "specifiers": [
+            "candidate_feature_schema",
+            "global_feature_schema",
+            "self_feature_schema"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "candidate_feature_dim",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": ".jax_env",
+          "specifiers": [
+            "JaxAction",
+            "JaxEnvState",
+            "assign_learner_players",
+            "batched_reset",
+            "batched_step",
+            "batched_step_multi_player",
+            "fleet_speed"
+          ]
+        },
+        {
+          "source": ".jax_features",
+          "specifiers": [
+            "JaxTurnBatch",
+            "encode_turn"
+          ]
+        },
+        {
+          "source": ".jax_policy",
+          "specifiers": [
+            "action_log_prob_and_entropy",
+            "sample_actions"
+          ]
+        },
+        {
+          "source": ".opponent_pool",
+          "specifiers": [
+            "OPPONENT_HISTORICAL",
+            "OPPONENT_LATEST",
+            "OPPONENT_NOOP",
+            "OPPONENT_SCRIPTED_SNIPER",
+            "OpponentRegistry",
+            "OpponentRegistryConfig",
+            "sample_opponent_type_ids_jax"
+          ]
+        }
+      ],
+      "exports": [
+        "validate_policy_param_shapes",
+        "JaxTransitionBatch",
+        "JaxTrainState",
+        "init_train_state",
+        "flatten_batch",
+        "ship_count_for_bucket_jax",
+        "build_action_from_batch",
+        "build_random_action_from_batch",
+        "build_sniper_action_from_batch",
+        "build_noop_action_from_batch",
+        "_sample_policy_action_with_params",
+        "_sample_policy_action",
+        "_select_env_action",
+        "_stack_player_actions",
+        "collect_rollout_jax",
+        "_rollout_diagnostics",
+        "concatenate_transition_batches",
+        "discounted_returns",
+        "ppo_update_jax",
+        "_reshape_minibatches",
+        "masked_mean"
+      ],
+      "totalLines": 1093,
+      "hasStructuralAnalysis": true
+    },
+    "src/jax_train.py": {
+      "filePath": "src/jax_train.py",
+      "contentHash": "d1f33538e58c65d2d26ab10403b032d19151f61392c53c5e16cf1ab5812df380",
+      "functions": [
+        {
+          "name": "_copy_config_for_rollout_group",
+          "params": [
+            "cfg",
+            "player_count",
+            "num_envs"
+          ],
+          "returnType": "TrainConfig",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_configured_rollout_groups",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "list[dict[str, int | str]]",
+          "exported": true,
+          "lineCount": 35
+        },
+        {
+          "name": "_init_rollout_group",
+          "params": [
+            "key",
+            "cfg",
+            "policy",
+            "name",
+            "player_count",
+            "num_envs"
+          ],
+          "returnType": "JaxRolloutGroup",
+          "exported": true,
+          "lineCount": 45
+        },
+        {
+          "name": "init_rollout_groups",
+          "params": [
+            "key",
+            "cfg",
+            "policy"
+          ],
+          "returnType": "tuple[jax.Array, list[JaxRolloutGroup]]",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "_replace_rollout_group_state",
+          "params": [
+            "group",
+            "env_state",
+            "turn_batch"
+          ],
+          "returnType": "JaxRolloutGroup",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_active_group_indices",
+          "params": [
+            "groups",
+            "format_weights"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "run_jax_training",
+          "params": [
+            "cfg",
+            "resume_checkpoint"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 371
+        },
+        {
+          "name": "append_jsonl",
+          "params": [
+            "path",
+            "record"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "load_jax_checkpoint",
+          "params": [
+            "checkpoint_path",
+            "train_state",
+            "cfg"
+          ],
+          "returnType": "tuple[object, jax.Array, int, int, int]",
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "save_jax_checkpoint",
+          "params": [
+            "run_dir",
+            "update",
+            "train_state",
+            "cfg",
+            "key",
+            "total_env_steps",
+            "completed_episodes"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 31
+        }
+      ],
+      "classes": [
+        {
+          "name": "JaxRolloutGroup",
+          "methods": [],
+          "properties": [
+            "name",
+            "cfg",
+            "env_state",
+            "turn_batch",
+            "collect_fn"
+          ],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "logging",
+          "specifiers": [
+            "logging"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "copy",
+          "specifiers": [
+            "deepcopy"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Callable"
+          ]
+        },
+        {
+          "source": ".checkpoint_compat",
+          "specifiers": [
+            "feature_metadata",
+            "validate_checkpoint_feature_compatibility"
+          ]
+        },
+        {
+          "source": ".checkpoint_retention",
+          "specifiers": [
+            "prune_checkpoints"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": ".curriculum",
+          "specifiers": [
+            "CurriculumController"
+          ]
+        },
+        {
+          "source": ".jax_device",
+          "specifiers": [
+            "configure_jax_platform_for_host",
+            "ensure_cuda_jax_if_nvidia_present"
+          ]
+        },
+        {
+          "source": ".replay",
+          "specifiers": [
+            "maybe_write_jax_checkpoint_replay"
+          ]
+        },
+        {
+          "source": ".run_paths",
+          "specifiers": [
+            "resolve_run_paths"
+          ]
+        },
+        {
+          "source": ".seed_scheduler",
+          "specifiers": [
+            "SeedScheduleConfig",
+            "SeedScheduler"
+          ]
+        },
+        {
+          "source": ".telemetry",
+          "specifiers": [
+            "build_telemetry"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": ".jax_env",
+          "specifiers": [
+            "JaxEnvState",
+            "assign_learner_players",
+            "batched_reset"
+          ]
+        },
+        {
+          "source": ".jax_features",
+          "specifiers": [
+            "JaxTurnBatch"
+          ]
+        },
+        {
+          "source": ".jax_policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        },
+        {
+          "source": ".jax_ppo",
+          "specifiers": [
+            "JaxTransitionBatch",
+            "collect_rollout_jax",
+            "concatenate_transition_batches",
+            "init_train_state",
+            "ppo_update_jax",
+            "validate_policy_param_shapes"
+          ]
+        }
+      ],
+      "exports": [
+        "JaxRolloutGroup",
+        "_copy_config_for_rollout_group",
+        "_configured_rollout_groups",
+        "_init_rollout_group",
+        "init_rollout_groups",
+        "_replace_rollout_group_state",
+        "_active_group_indices",
+        "run_jax_training",
+        "append_jsonl",
+        "load_jax_checkpoint",
+        "save_jax_checkpoint"
+      ],
+      "totalLines": 653,
+      "hasStructuralAnalysis": true
+    },
+    "src/normalization.py": {
+      "filePath": "src/normalization.py",
+      "contentHash": "8b7057869aa35bfb848f0fc2685f2d3b7ff1fb4f2954ca0ed9aa2fcd75ceaaf4",
+      "functions": [],
+      "classes": [
+        {
+          "name": "_RunningStats",
+          "methods": [],
+          "properties": [
+            "mean",
+            "var",
+            "count"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ObservationNormalizer",
+          "methods": [
+            "__init__",
+            "update",
+            "normalize_batch",
+            "state_dict",
+            "load_state_dict",
+            "_normalize",
+            "_update_stats",
+            "_stats_to_dict",
+            "_stats_from_dict"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 97
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "TurnBatch"
+          ]
+        }
+      ],
+      "exports": [
+        "_RunningStats",
+        "ObservationNormalizer"
+      ],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "src/opponent_pool.py": {
+      "filePath": "src/opponent_pool.py",
+      "contentHash": "e97d44baf24c05767c981b6ea060449bff869b990fcf1bf392889325c7b16e88",
+      "functions": [
+        {
+          "name": "sample_opponent_type_ids_jax",
+          "params": [
+            "key",
+            "env_count",
+            "player_count",
+            "ids",
+            "probs"
+          ],
+          "returnType": "jax.Array",
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "classes": [
+        {
+          "name": "OpponentMixturePhase",
+          "methods": [],
+          "properties": [
+            "start_update",
+            "end_update",
+            "weights",
+            "temperature"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "OpponentRegistryConfig",
+          "methods": [],
+          "properties": [
+            "weights",
+            "temperature",
+            "curriculum"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "OpponentRegistry",
+          "methods": [
+            "__init__",
+            "_weights_vector",
+            "phase_for_update",
+            "_weights_and_temperature",
+            "ids_and_probs",
+            "ids_and_probs_jax"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 121
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        }
+      ],
+      "exports": [
+        "OpponentMixturePhase",
+        "OpponentRegistryConfig",
+        "OpponentRegistry",
+        "sample_opponent_type_ids_jax"
+      ],
+      "totalLines": 182,
+      "hasStructuralAnalysis": true
+    },
+    "src/opponents.py": {
+      "filePath": "src/opponents.py",
+      "contentHash": "3a9084e9bc51f740e01b17715a48c296e900e94c4cbae23cb6757208d3aaef7e",
+      "functions": [
+        {
+          "name": "clone_normalizer",
+          "params": [
+            "normalizer"
+          ],
+          "returnType": "ObservationNormalizer | None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "dataclass_to_dict",
+          "params": [
+            "metadata"
+          ],
+          "returnType": "dict[str, int | str]",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "build_opponent",
+          "params": [
+            "name",
+            "cfg",
+            "device"
+          ],
+          "returnType": "OpponentPolicy",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "obs_get",
+          "params": [
+            "observation",
+            "key",
+            "default"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [
+        {
+          "name": "OpponentPolicy",
+          "methods": [
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "SniperOpponent",
+          "methods": [
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 21
+        },
+        {
+          "name": "KaggleRandomOpponent",
+          "methods": [
+            "__init__",
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "SelfPlayOpponent",
+          "methods": [
+            "__init__",
+            "sync_from",
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 64
+        },
+        {
+          "name": "SnapshotMetadata",
+          "methods": [],
+          "properties": [
+            "snapshot_id",
+            "update",
+            "source"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "OpponentSelection",
+          "methods": [],
+          "properties": [
+            "policy",
+            "metadata"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "HistoricalSnapshot",
+          "methods": [],
+          "properties": [
+            "metadata",
+            "opponent"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "SelfPlayOpponentPool",
+          "methods": [
+            "__init__",
+            "sync_from",
+            "add_snapshot",
+            "sample_selection",
+            "sample_opponent",
+            "sample_opponents",
+            "act",
+            "metadata"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 116
+        }
+      ],
+      "imports": [
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque",
+            "namedtuple"
+          ]
+        },
+        {
+          "source": "copy",
+          "specifiers": [
+            "deepcopy"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "Protocol"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "encode_turn",
+            "ship_count_for_bucket"
+          ]
+        },
+        {
+          "source": ".jax_policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        },
+        {
+          "source": ".jax_policy",
+          "specifiers": [
+            "sample_jax_actions"
+          ]
+        },
+        {
+          "source": ".normalization",
+          "specifiers": [
+            "ObservationNormalizer"
+          ]
+        }
+      ],
+      "exports": [
+        "OpponentPolicy",
+        "SniperOpponent",
+        "KaggleRandomOpponent",
+        "SelfPlayOpponent",
+        "SnapshotMetadata",
+        "OpponentSelection",
+        "HistoricalSnapshot",
+        "SelfPlayOpponentPool",
+        "clone_normalizer",
+        "dataclass_to_dict",
+        "build_opponent",
+        "obs_get"
+      ],
+      "totalLines": 310,
+      "hasStructuralAnalysis": true
+    },
+    "src/replay.py": {
+      "filePath": "src/replay.py",
+      "contentHash": "db970142821a7362ef6a9cb985b15191e540438f75d073a756184082bf9cad1f",
+      "functions": [
+        {
+          "name": "_seed_for_update",
+          "params": [
+            "cfg",
+            "update"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_reward_to_result",
+          "params": [
+            "reward"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_build_jax_policy_actions",
+          "params": [
+            "cfg",
+            "checkpoint_path"
+          ],
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "maybe_write_jax_checkpoint_replay",
+          "params": [
+            "cfg",
+            "update",
+            "checkpoint_path",
+            "log_path"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 118
+        },
+        {
+          "name": "_pick_earlier_checkpoint",
+          "params": [
+            "run_dir",
+            "update"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "pickle",
+          "specifiers": [
+            "pickle"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": ".features",
+          "specifiers": [
+            "encode_turn",
+            "ship_count_for_bucket"
+          ]
+        },
+        {
+          "source": ".jax_policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        },
+        {
+          "source": ".opponents",
+          "specifiers": [
+            "build_opponent"
+          ]
+        }
+      ],
+      "exports": [
+        "_seed_for_update",
+        "_reward_to_result",
+        "_build_jax_policy_actions",
+        "maybe_write_jax_checkpoint_replay",
+        "_pick_earlier_checkpoint"
+      ],
+      "totalLines": 228,
+      "hasStructuralAnalysis": true
+    },
+    "src/run_paths.py": {
+      "filePath": "src/run_paths.py",
+      "contentHash": "c914d169be3fef76e9877c524539a6a19be7166efdcbf6bd9a430f977ee6b594",
+      "functions": [
+        {
+          "name": "_hydra_runtime_output_dir",
+          "params": [],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "compose_run_name",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "resolve_run_paths",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "tuple[TrainConfig, Path, Path, Path]",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "replace"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "datetime",
+            "timezone"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "_hydra_runtime_output_dir",
+        "compose_run_name",
+        "resolve_run_paths"
+      ],
+      "totalLines": 61,
+      "hasStructuralAnalysis": true
+    },
+    "src/seed_scheduler.py": {
+      "filePath": "src/seed_scheduler.py",
+      "contentHash": "3658a3e6822bcf760836ce5baa050b30f0cbda817c55e1130e9e22634a4356ad",
+      "functions": [],
+      "classes": [
+        {
+          "name": "SeedScheduleConfig",
+          "methods": [],
+          "properties": [
+            "reseed_every_updates",
+            "reseed_on_plateau",
+            "plateau_metric",
+            "plateau_window",
+            "plateau_delta",
+            "heldout_eval_seed_set"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "SeedEvent",
+          "methods": [],
+          "properties": [
+            "update",
+            "old_seed",
+            "new_seed",
+            "reason",
+            "policy"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "SeedScheduler",
+          "methods": [
+            "__init__",
+            "next_seed",
+            "update_metric",
+            "should_reseed",
+            "next_seed_policy",
+            "reseed",
+            "advance",
+            "parse_seed_set",
+            "_is_plateau"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 89
+        }
+      ],
+      "imports": [
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Iterable"
+          ]
+        }
+      ],
+      "exports": [
+        "SeedScheduleConfig",
+        "SeedEvent",
+        "SeedScheduler"
+      ],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "src/telemetry.py": {
+      "filePath": "src/telemetry.py",
+      "contentHash": "6059e70176b61e2ef48bb9bc4daf514cc700373f2a727d9dabf529217f9f8685",
+      "functions": [
+        {
+          "name": "build_telemetry",
+          "params": [
+            "cfg",
+            "run_metadata"
+          ],
+          "returnType": "TelemetryLogger",
+          "exported": true,
+          "lineCount": 2
+        }
+      ],
+      "classes": [
+        {
+          "name": "TelemetryLogger",
+          "methods": [
+            "__init__",
+            "_init",
+            "active",
+            "watch_model",
+            "_flatten",
+            "log",
+            "log_artifact",
+            "log_checkpoint",
+            "log_replay",
+            "finish"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 86
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "asdict"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "TelemetryLogger",
+        "build_telemetry"
+      ],
+      "totalLines": 100,
+      "hasStructuralAnalysis": true
+    },
+    "src/train.py": {
+      "filePath": "src/train.py",
+      "contentHash": "3e3971f817f936b7b26e3c204e6a068e51d7eb3c82a29b5f8c3165e84f8eff1a",
+      "functions": [
+        {
+          "name": "_extract_legacy_cli_args",
+          "params": [
+            "argv"
+          ],
+          "returnType": "tuple[str | None, str | None]",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "_hydra_entry",
+          "params": [
+            "cfg_raw"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "hydra",
+          "specifiers": [
+            "hydra_main"
+          ]
+        },
+        {
+          "source": "omegaconf",
+          "specifiers": [
+            "DictConfig",
+            "OmegaConf"
+          ]
+        },
+        {
+          "source": ".config",
+          "specifiers": [
+            "train_config_from_omegaconf"
+          ]
+        },
+        {
+          "source": ".jax_train",
+          "specifiers": [
+            "run_jax_training"
+          ]
+        }
+      ],
+      "exports": [
+        "_extract_legacy_cli_args",
+        "_hydra_entry"
+      ],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "tests/conftest.py": {
+      "filePath": "tests/conftest.py",
+      "contentHash": "6d34c88cfc06ba1a91f2333fa65f64d270aaa45f686f86b551dbb9dfbef88085",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_configs.py": {
+      "filePath": "tests/test_configs.py",
+      "contentHash": "24c58b563e9e05ca5690f1a28d1899147f98be5366a65758a7709e7883931b34",
+      "functions": [
+        {
+          "name": "load_yaml",
+          "params": [
+            "path"
+          ],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "compose_train_config",
+          "params": [],
+          "returnType": "dict",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "test_attention_shaped_reward_config_matches_unshaped_ppo_budget",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_attention_shaped_reward_config_has_positive_terminal_shaping",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_default_config_uses_jax_training_path",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_critical_defaults_remain_stable",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_preset_override_is_not_a_supported_public_selector",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_train_config_rejects_conflicting_rollout_group_locations",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "test_train_config_rejects_conflicting_phase_locations",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "test_train_config_rejects_legacy_num_env_format_knobs",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "hydra",
+          "specifiers": [
+            "compose",
+            "initialize_config_dir"
+          ]
+        },
+        {
+          "source": "hydra.errors",
+          "specifiers": [
+            "ConfigCompositionException"
+          ]
+        },
+        {
+          "source": "omegaconf",
+          "specifiers": [
+            "OmegaConf"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "train_config_from_omegaconf"
+          ]
+        }
+      ],
+      "exports": [
+        "load_yaml",
+        "compose_train_config",
+        "test_attention_shaped_reward_config_matches_unshaped_ppo_budget",
+        "test_attention_shaped_reward_config_has_positive_terminal_shaping",
+        "test_default_config_uses_jax_training_path",
+        "test_critical_defaults_remain_stable",
+        "test_preset_override_is_not_a_supported_public_selector",
+        "test_train_config_rejects_conflicting_rollout_group_locations",
+        "test_train_config_rejects_conflicting_phase_locations",
+        "test_train_config_rejects_legacy_num_env_format_knobs"
+      ],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_default_cfg_template.py": {
+      "filePath": "tests/test_default_cfg_template.py",
+      "contentHash": "734907d03033730b8858dd47ccc70bfc5900c075c88d3a6a5f7bb3caed388685",
+      "functions": [
+        {
+          "name": "_expected_schema",
+          "params": [
+            "value"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_assert_schema_keys",
+          "params": [
+            "actual",
+            "expected",
+            "path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_default_cfg_yaml_contains_full_train_config_schema",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_train_entrypoint_print_resolved_config_mode_outputs_json_without_training",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "fields",
+            "is_dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "yaml",
+          "specifiers": [
+            "yaml"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "_expected_schema",
+        "_assert_schema_keys",
+        "test_default_cfg_yaml_contains_full_train_config_schema",
+        "test_train_entrypoint_print_resolved_config_mode_outputs_json_without_training"
+      ],
+      "totalLines": 64,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_env.py": {
+      "filePath": "tests/test_env.py",
+      "contentHash": "2d74fb57e870b49bb4a28eee74a0a139e5d6055d27b192337b91ee6584cb67e3",
+      "functions": [
+        {
+          "name": "_obs",
+          "params": [
+            "player",
+            "step"
+          ],
+          "returnType": "dict[str, Any]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "test_reset_uses_configured_player_count_and_side_rotation",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "test_step_builds_joint_action_and_tracks_opponent_observations",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "test_terminal_reward_treats_any_positive_opponent_reward_as_tie",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "RecordingOpponent",
+          "methods": [
+            "__init__",
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "SamplingOpponent",
+          "methods": [
+            "__init__",
+            "sample_opponent"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "FakeEnv",
+          "methods": [
+            "__init__",
+            "reset",
+            "step"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "FakeMake",
+          "methods": [
+            "__init__",
+            "__call__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": "src.env",
+          "specifiers": [
+            "OrbitWarsEnv",
+            "terminal_reward"
+          ]
+        }
+      ],
+      "exports": [
+        "_obs",
+        "RecordingOpponent",
+        "SamplingOpponent",
+        "FakeEnv",
+        "FakeMake",
+        "test_reset_uses_configured_player_count_and_side_rotation",
+        "test_step_builds_joint_action_and_tracks_opponent_observations",
+        "test_terminal_reward_treats_any_positive_opponent_reward_as_tie"
+      ],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_evaluate.py": {
+      "filePath": "tests/test_evaluate.py",
+      "contentHash": "034fa6f6766c752dd8f37015663d6906cace2422f406b341f388ac9b971cb03b",
+      "functions": [
+        {
+          "name": "install_fake_kaggle",
+          "params": [
+            "monkeypatch",
+            "env"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_parse_formats_accepts_player_counts_and_format_labels",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_four_player_evaluation_resets_four_agents_and_uses_three_opponent_slots",
+          "params": [
+            "monkeypatch"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "test_four_player_evaluation_rejects_missing_opponent_slots",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_aggregate_format_reports_four_player_metrics_per_seat",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot",
+          "params": [
+            "monkeypatch"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "test_load_checkpoint_if_available_reads_jax_params",
+          "params": [
+            "tmp_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "test_self_play_opponent_act_returns_valid_move_or_pass",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "classes": [
+        {
+          "name": "RecordingAgent",
+          "methods": [
+            "__init__",
+            "act"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "FakeKaggleEnv",
+          "methods": [
+            "__init__",
+            "reset",
+            "step"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 33
+        }
+      ],
+      "imports": [
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "types",
+          "specifiers": [
+            "types"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "evaluate",
+          "specifiers": [
+            "evaluate"
+          ]
+        }
+      ],
+      "exports": [
+        "RecordingAgent",
+        "FakeKaggleEnv",
+        "install_fake_kaggle",
+        "test_parse_formats_accepts_player_counts_and_format_labels",
+        "test_four_player_evaluation_resets_four_agents_and_uses_three_opponent_slots",
+        "test_four_player_evaluation_rejects_missing_opponent_slots",
+        "test_aggregate_format_reports_four_player_metrics_per_seat",
+        "test_two_player_evaluation_resets_two_agents_and_uses_one_opponent_slot",
+        "test_load_checkpoint_if_available_reads_jax_params",
+        "test_self_play_opponent_act_returns_valid_move_or_pass"
+      ],
+      "totalLines": 194,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_feature_history.py": {
+      "filePath": "tests/test_feature_history.py",
+      "contentHash": "a3afa5c5c4b885c248b0d37f9f95780b916ac5c25a2014724c373c4fde31c1fa",
+      "functions": [
+        {
+          "name": "_state",
+          "params": [
+            "step",
+            "ships"
+          ],
+          "returnType": "GameState",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "test_python_feature_history_stacks_chronological_rows",
+          "params": [],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "_three_planet_state",
+          "params": [
+            "step",
+            "target_positions"
+          ],
+          "returnType": "GameState",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "test_python_candidate_history_aligns_by_source_and_target_id_after_reorder",
+          "params": [],
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "test_python_candidate_history_zeros_missing_prior_targets",
+          "params": [],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "_jax_three_planet_game",
+          "params": [
+            "cfg",
+            "step",
+            "target_positions"
+          ],
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder",
+          "params": [],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "test_jax_candidate_history_zeros_missing_prior_targets",
+          "params": [],
+          "exported": true,
+          "lineCount": 17
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "BASE_CANDIDATE_FEATURE_DIM",
+            "BASE_SELF_FEATURE_DIM",
+            "FeatureHistoryBuffer",
+            "build_feature_snapshot",
+            "candidate_feature_dim",
+            "encode_turn",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.game_types",
+          "specifiers": [
+            "GameState",
+            "PlanetState"
+          ]
+        },
+        {
+          "source": "src.jax_env",
+          "specifiers": [
+            "JaxFleetState",
+            "JaxGameState",
+            "JaxPlanetState",
+            "max_fleets"
+          ]
+        },
+        {
+          "source": "src.jax_features",
+          "specifiers": [
+            "append_feature_history",
+            "empty_feature_history"
+          ]
+        },
+        {
+          "source": "src.jax_features",
+          "specifiers": [
+            "encode_jax_turn"
+          ]
+        }
+      ],
+      "exports": [
+        "_state",
+        "test_python_feature_history_stacks_chronological_rows",
+        "_three_planet_state",
+        "test_python_candidate_history_aligns_by_source_and_target_id_after_reorder",
+        "test_python_candidate_history_zeros_missing_prior_targets",
+        "_jax_three_planet_game",
+        "test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder",
+        "test_jax_candidate_history_zeros_missing_prior_targets"
+      ],
+      "totalLines": 206,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_feature_registry.py": {
+      "filePath": "tests/test_feature_registry.py",
+      "contentHash": "5cb33d368bc8a0aca494e809bb8b51dfa664bc80ae06c828a1728bedf7720631",
+      "functions": [
+        {
+          "name": "test_schema_base_dims_match_constants",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_self_schema_critical_slices",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_candidate_schema_critical_slices",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_global_schema_critical_slices",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_unknown_feature_name_raises_clear_error",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_self_schema_history_slices_are_frame_offset",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 16
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "BASE_CANDIDATE_FEATURE_DIM",
+            "BASE_GLOBAL_FEATURE_DIM",
+            "BASE_SELF_FEATURE_DIM"
+          ]
+        },
+        {
+          "source": "src.feature_registry",
+          "specifiers": [
+            "CANDIDATE_FEATURE_SCHEMA",
+            "GLOBAL_FEATURE_SCHEMA",
+            "SELF_FEATURE_SCHEMA"
+          ]
+        }
+      ],
+      "exports": [
+        "test_schema_base_dims_match_constants",
+        "test_self_schema_critical_slices",
+        "test_candidate_schema_critical_slices",
+        "test_global_schema_critical_slices",
+        "test_unknown_feature_name_raises_clear_error",
+        "test_self_schema_history_slices_are_frame_offset"
+      ],
+      "totalLines": 60,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_features.py": {
+      "filePath": "tests/test_features.py",
+      "contentHash": "f9f25bb91bcd79487b2640a47fe8022a0f492a2c4c67ae356aed1d8e72d99e23",
+      "functions": [
+        {
+          "name": "planet",
+          "params": [
+            "pid",
+            "owner",
+            "x",
+            "y"
+          ],
+          "returnType": "PlanetState",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_real_candidate_slots_reserves_index_zero_for_no_op",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "test_build_candidates_uses_real_slots_and_does_not_cap_enemies_at_one_third",
+          "params": [],
+          "returnType": "(\n    None\n)",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_candidate_diagnostics_excludes_no_op_and_reports_owner_shares",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "test_owner_relative_features_are_fixed_size_and_player_relative",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 48
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "candidate_feature_dim",
+            "build_candidate_features",
+            "build_candidates",
+            "build_global_features",
+            "build_self_features",
+            "global_feature_dim",
+            "real_candidate_slots",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.game_types",
+          "specifiers": [
+            "GameState",
+            "PlanetState"
+          ]
+        },
+        {
+          "source": "src.train",
+          "specifiers": [
+            "candidate_diagnostics"
+          ]
+        }
+      ],
+      "exports": [
+        "planet",
+        "test_real_candidate_slots_reserves_index_zero_for_no_op",
+        "test_build_candidates_uses_real_slots_and_does_not_cap_enemies_at_one_third",
+        "test_candidate_diagnostics_excludes_no_op_and_reports_owner_shares",
+        "test_owner_relative_features_are_fixed_size_and_player_relative"
+      ],
+      "totalLines": 126,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_jax_env.py": {
+      "filePath": "tests/test_jax_env.py",
+      "contentHash": "c2bb1a9def7ed919be61fe8021abf0b164e3522fae7d818c169c11a1e695ced3",
+      "functions": [
+        {
+          "name": "test_jax_reset_is_deterministic_for_identical_key",
+          "params": [],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_jax_batched_reset_and_step_shapes",
+          "params": [],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "test_noop_candidate_slot_is_valid_for_owned_planets_only",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
+          "params": [],
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "test_launch_and_production_match_core_orbit_wars_mechanics",
+          "params": [],
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
+          "params": [],
+          "exported": true,
+          "lineCount": 88
+        },
+        {
+          "name": "test_jax_history_shapes_use_configured_window",
+          "params": [],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "MAX_PLANETS"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "NO_OP_CANDIDATE_INDEX",
+            "candidate_feature_dim",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.jax_env",
+          "specifiers": [
+            "JaxAction",
+            "JaxFleetState",
+            "JaxGameState",
+            "JaxPlanetState",
+            "batched_reset",
+            "batched_step",
+            "empty_action",
+            "max_fleets",
+            "reset",
+            "step"
+          ]
+        },
+        {
+          "source": "src.jax_features",
+          "specifiers": [
+            "encode_turn"
+          ]
+        }
+      ],
+      "exports": [
+        "test_jax_reset_is_deterministic_for_identical_key",
+        "test_jax_batched_reset_and_step_shapes",
+        "test_noop_candidate_slot_is_valid_for_owned_planets_only",
+        "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
+        "test_launch_and_production_match_core_orbit_wars_mechanics",
+        "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
+        "test_jax_history_shapes_use_configured_window"
+      ],
+      "totalLines": 258,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_jax_env_parity.py": {
+      "filePath": "tests/test_jax_env_parity.py",
+      "contentHash": "c1f569fa4bf215c8995f5b13ae698e5a73ab23fe0a2f32b4a62080cd2eded701",
+      "functions": [
+        {
+          "name": "_cfg",
+          "params": [
+            "player_count",
+            "max_fleets"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "_planet_state",
+          "params": [
+            "rows",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "_fleet_state",
+          "params": [
+            "rows",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_state",
+          "params": [
+            "planets",
+            "fleets",
+            "cfg",
+            "step_index",
+            "angular_velocity",
+            "learner_player"
+          ],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "_advance",
+          "params": [
+            "state",
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "_multi_actions",
+          "params": [
+            "cfg",
+            "moves_by_player"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_planet_rows",
+          "params": [
+            "state",
+            "count"
+          ],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "test_reset_generates_fourfold_symmetric_planet_groups_for_two_players",
+          "params": [],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "test_four_player_reset_home_planets_are_rotationally_symmetric",
+          "params": [],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_fleet_does_not_tunnel_through_rotating_planet",
+          "params": [],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "test_fleets_are_removed_when_they_hit_sun_or_leave_board_but_not_inside_board",
+          "params": [],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "test_fast_fleet_hits_planet_before_leaving_board_or_sun",
+          "params": [],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "test_combat_resolution_user_example_for_four_players",
+          "params": [],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_combat_capture_reinforce_insufficient_tie_and_multi_fleet_cases",
+          "params": [],
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fleets",
+          "params": [],
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "test_elimination_does_not_end_game_while_player_has_fleet",
+          "params": [],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "test_four_player_terminal_reward_uses_all_players",
+          "params": [],
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "test_four_player_step_processes_all_player_action_lists_before_production",
+          "params": [],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player",
+          "params": [],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "test_four_player_step_allows_simultaneous_four_way_combat_from_actions",
+          "params": [],
+          "exported": true,
+          "lineCount": 31
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "EnvConfig"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "MAX_PLANETS"
+          ]
+        },
+        {
+          "source": "src.jax_env",
+          "specifiers": [
+            "BOARD_CENTER",
+            "JaxAction",
+            "JaxEnvState",
+            "JaxFleetState",
+            "JaxGameState",
+            "JaxPlanetState",
+            "empty_action",
+            "max_fleets",
+            "reset",
+            "step",
+            "step_multi_player"
+          ]
+        }
+      ],
+      "exports": [
+        "_cfg",
+        "_planet_state",
+        "_fleet_state",
+        "_state",
+        "_advance",
+        "_multi_actions",
+        "_planet_rows",
+        "test_reset_generates_fourfold_symmetric_planet_groups_for_two_players",
+        "test_four_player_reset_home_planets_are_rotationally_symmetric",
+        "test_fleet_does_not_tunnel_through_rotating_planet",
+        "test_fleets_are_removed_when_they_hit_sun_or_leave_board_but_not_inside_board",
+        "test_fast_fleet_hits_planet_before_leaving_board_or_sun",
+        "test_combat_resolution_user_example_for_four_players",
+        "test_combat_capture_reinforce_insufficient_tie_and_multi_fleet_cases",
+        "test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fleets",
+        "test_elimination_does_not_end_game_while_player_has_fleet",
+        "test_four_player_terminal_reward_uses_all_players",
+        "test_four_player_step_processes_all_player_action_lists_before_production",
+        "test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player",
+        "test_four_player_step_allows_simultaneous_four_way_combat_from_actions"
+      ],
+      "totalLines": 459,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_jax_policy.py": {
+      "filePath": "tests/test_jax_policy.py",
+      "contentHash": "fed1586ca885a188d29224b96643f6d826fa261e75493b2d5979a85a937428b1",
+      "functions": [
+        {
+          "name": "mock_inputs",
+          "params": [],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "test_composable_policy_shapes",
+          "params": [
+            "encoder_type",
+            "mock_inputs"
+          ],
+          "exported": true,
+          "lineCount": 57
+        },
+        {
+          "name": "test_deterministic_decoding_reproducibility",
+          "params": [
+            "mock_inputs"
+          ],
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "test_teacher_forcing_alignment",
+          "params": [
+            "mock_inputs"
+          ],
+          "exported": true,
+          "lineCount": 29
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "flax.linen",
+          "specifiers": [
+            "nn"
+          ]
+        },
+        {
+          "source": "src.jax_policy",
+          "specifiers": [
+            "ComposablePlanetPolicy",
+            "MLPBackboneEncoder",
+            "TransformerBackboneEncoder",
+            "GNNBackboneEncoder",
+            "AutoregressivePointerDecoder",
+            "JaxPolicyOutput"
+          ]
+        }
+      ],
+      "exports": [
+        "mock_inputs",
+        "test_composable_policy_shapes",
+        "test_deterministic_decoding_reproducibility",
+        "test_teacher_forcing_alignment"
+      ],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_jax_ppo.py": {
+      "filePath": "tests/test_jax_ppo.py",
+      "contentHash": "ab44abbac24121f2eedcc6554de3e4f207c0f28e90a3b949ad8182c485d4dd70",
+      "functions": [
+        {
+          "name": "test_end_to_end_jax_rollout_and_update_smoke",
+          "params": [
+            "architecture"
+          ],
+          "exported": true,
+          "lineCount": 27
+        },
+        {
+          "name": "test_jax_action_builder_allows_fewer_fleet_slots_than_planets",
+          "params": [],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "test_jax_checkpoint_roundtrip_restores_resume_metadata",
+          "params": [
+            "tmp_path"
+          ],
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "test_collect_rollout_jax_supports_four_player_multi_player_step",
+          "params": [],
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "test_collect_rollout_jax_two_player_static_shapes",
+          "params": [],
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "test_assign_learner_players_uses_env_index_and_episode_count",
+          "params": [],
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "test_collect_rollout_jax_rotates_learner_after_reset_done",
+          "params": [],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit",
+          "params": [],
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs",
+          "params": [],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "test_ppo_update_jax_accepts_four_player_rollout_transitions",
+          "params": [],
+          "exported": true,
+          "lineCount": 23
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": "src.constants",
+          "specifiers": [
+            "MAX_PLANETS"
+          ]
+        },
+        {
+          "source": "src.jax_env",
+          "specifiers": [
+            "batched_reset"
+          ]
+        },
+        {
+          "source": "src.jax_policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        },
+        {
+          "source": "src.jax_ppo",
+          "specifiers": [
+            "collect_rollout_jax",
+            "init_train_state",
+            "ppo_update_jax"
+          ]
+        }
+      ],
+      "exports": [
+        "test_end_to_end_jax_rollout_and_update_smoke",
+        "test_jax_action_builder_allows_fewer_fleet_slots_than_planets",
+        "test_jax_checkpoint_roundtrip_restores_resume_metadata",
+        "test_collect_rollout_jax_supports_four_player_multi_player_step",
+        "test_collect_rollout_jax_two_player_static_shapes",
+        "test_assign_learner_players_uses_env_index_and_episode_count",
+        "test_collect_rollout_jax_rotates_learner_after_reset_done",
+        "test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit",
+        "test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs",
+        "test_ppo_update_jax_accepts_four_player_rollout_transitions"
+      ],
+      "totalLines": 326,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_normalization.py": {
+      "filePath": "tests/test_normalization.py",
+      "contentHash": "95e1215378b67ac2701b8f5a41eb72a92aae99eb2f3b771daecd6530534d4823",
+      "functions": [
+        {
+          "name": "_batch",
+          "params": [
+            "scale"
+          ],
+          "returnType": "TurnBatch",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_observation_normalizer_round_trip_and_normalization",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "TurnBatch"
+          ]
+        },
+        {
+          "source": "src.game_types",
+          "specifiers": [
+            "GameState"
+          ]
+        },
+        {
+          "source": "src.normalization",
+          "specifiers": [
+            "ObservationNormalizer"
+          ]
+        }
+      ],
+      "exports": [
+        "_batch",
+        "test_observation_normalizer_round_trip_and_normalization"
+      ],
+      "totalLines": 46,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

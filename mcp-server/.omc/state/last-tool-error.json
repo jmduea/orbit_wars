@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"mkdir -p vscode-omg/resources/templates/skills/push-omc && cp .github/skills/push-omc/SKILL.md vscode-omg/resources/templates/skills/push-omc/SKILL.md && diff .github/skills/push-omc/SKILL...",
+  "error": "Exit code 1\ncp: .github/skills/push-omc/SKILL.md: No such file or directory",
+  "timestamp": "2026-05-10T13:35:19.728Z",
+  "retry_count": 1
+}
