@@ -7,6 +7,13 @@ from typing import Any
 
 import numpy as np
 
+from src.feature_registry import (
+    candidate_feature_dim,
+    feature_history_steps,
+    global_feature_dim,
+    self_feature_dim,
+)
+
 from .config import EnvConfig
 from .constants import (
     BASE_CANDIDATE_FEATURE_DIM,
@@ -14,7 +21,10 @@ from .constants import (
     BASE_SELF_FEATURE_DIM,
     BOARD_CENTER,
     BOARD_SIZE,
+    MAX_FLEET_SPEED,
     MAX_OWNER_FEATURE_PLAYERS,
+    MAX_PLANETS,
+    MAX_PRODUCTION,
     MAX_STEPS,
     NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
@@ -54,25 +64,6 @@ class TurnBatch:
     candidate_mask: np.ndarray
     contexts: list[DecisionContext]
     state: GameState
-
-
-def feature_history_steps(env_cfg: EnvConfig | None = None) -> int:
-    if env_cfg is None:
-        return 1
-    return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
-
-
-def self_feature_dim(env_cfg: EnvConfig | None = None) -> int:
-    return BASE_SELF_FEATURE_DIM * feature_history_steps(env_cfg)
-
-
-def candidate_feature_dim(env_cfg: EnvConfig | None = None) -> int:
-    return BASE_CANDIDATE_FEATURE_DIM * feature_history_steps(env_cfg)
-
-
-def global_feature_dim(env_cfg: EnvConfig | None = None) -> int:
-    return BASE_GLOBAL_FEATURE_DIM * feature_history_steps(env_cfg)
-
 
 @dataclass(slots=True)
 class FeatureSnapshot:
