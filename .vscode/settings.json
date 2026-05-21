@@ -11,5 +11,7 @@
             "source.organizeImports": "explicit"
         },
         "editor.defaultFormatter": "charliermarsh.ruff"
-    }
+    },
+    "pythonTestExplorer.testFramework": "pytest",
+    "python.testing.pytestEnabled": true
 }
