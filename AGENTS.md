@@ -20,20 +20,20 @@
 ## Python Subsystems
 
 - `src/conf_schema.py` defines structured dataclass config defaults. When adding or renaming config fields, update this first.
-- `src/config.py` composes and validates Hydra configs. It rejects legacy conflicts such as `ppo.rollout_groups`, `ppo.phases`, `ppo.num_envs_2p`, and `ppo.num_envs_4p`.
+- `src/config.py` composes and validates Hydra configs against the canonical responsibility-group schema; do not add compatibility aliases for removed runtime fields.
 - `src/train.py` is a thin Hydra entrypoint that converts OmegaConf to `TrainConfig` and delegates to `src/jax_train.py`.
 - `src/jax_train.py`, `src/jax_env.py`, `src/jax_features.py`, `src/jax_policy.py`, and `src/jax_ppo.py` are the JAX training path. Be careful with shape-defining config such as player count, candidate count, feature history, ship buckets, and model dimensions because these affect JIT compilation and checkpoint compatibility.
 - `src/env.py` and `src/features.py` keep the Python environment/feature path. JAX and Python behavior are compared by parity tests, so mirror semantic changes across both paths when applicable.
 - `src/feature_registry.py` owns ordered feature schemas and dimension checks against constants. Feature additions usually require updates in registry, encoders, JAX encoders, tests, and checkpoint compatibility expectations.
-- `src/checkpoint_compat.py` validates checkpoint feature metadata; preserve this when changing feature dimensions or history behavior.
+- `src/checkpoint_compat.py` validates checkpoint feature metadata and rejects checkpoints that embed the old flat runtime config shape; preserve this when changing feature dimensions or config ownership.
 
 ## Hydra And Experiment Rules
 
 - Prefer editing `conf/` over adding ad hoc config files elsewhere. The old `configs/` layout is intentionally gone.
 - Select config by responsibility group. Prefer `model=...`, `task.*`, `reward.*`, `training.*`, `format=...`, `opponents=...`, `curriculum=...`, `telemetry.*`, and `artifacts.*`.
-- Use normal Hydra assignment for existing keys, such as `ppo.total_updates=2000`; use `+key=value` only for intentionally absent dynamic keys.
-- Opponent behavior should usually be selected via `opponents=<profile>`. Avoid sweeping profile-owned fields like `self_play_enabled`, `self_play_pool_size`, `self_play_snapshot_interval`, and opponent curriculum internals unless deliberately editing the profile.
-- Mixed 2p/4p JAX training uses `training_format.rollout_groups` and curriculum phases. Do not reintroduce deprecated `ppo.*` rollout group knobs.
+- Use normal Hydra assignment for existing keys, such as `training.total_updates=2000`; use `+key=value` only for intentionally absent dynamic keys.
+- Opponent behavior should usually be selected via `opponents=<profile>`. Avoid sweeping profile-owned fields under `opponents.self_play`, `opponents.snapshot`, or stage-local curriculum internals unless deliberately editing that profile.
+- Mixed 2p/4p JAX training uses `format.rollout_groups` and curriculum stages. Do not reintroduce flat or duplicate rollout group knobs.
 
 ## Testing Expectations
 

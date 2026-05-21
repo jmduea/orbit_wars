@@ -13,33 +13,20 @@ from src.jax_ppo import collect_rollout_jax, init_train_state
 def _curriculum_config(stages):
     cfg = TrainConfig()
     cfg.curriculum.enabled = True
-    cfg.curriculum.snapshot.pool_size = 2
-    cfg.curriculum.snapshot.interval_updates = 1
+    cfg.opponents.snapshot.pool_size = 2
+    cfg.opponents.snapshot.interval_updates = 1
     cfg.curriculum.stages = stages
-    cfg.opponent = "self"
+    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.self_play.enabled = True
     return cfg
 
 
 def test_default_hydra_config_uses_new_curriculum_surface():
-    cfg = compose_hydra_train_config(["ppo.total_updates=1"])
+    cfg = compose_hydra_train_config(["training.total_updates=1"])
 
     assert cfg.curriculum.enabled
     assert cfg.curriculum.stages
-    assert cfg.opponent_mix.curriculum == []
-
-
-def test_curriculum_rejects_legacy_opponent_schedule_conflict():
-    cfg = OmegaConf.structured(TrainConfig)
-    cfg.curriculum.enabled = True
-    cfg.curriculum.snapshot.pool_size = 2
-    cfg.curriculum.snapshot.interval_updates = 1
-    cfg.curriculum.stages = [
-        {"id": "stage", "opponent_families": {"latest": 1.0}},
-    ]
-    cfg.opponent_mix.curriculum = [{"start_update": 1, "weights": {"random": 1.0}}]
-
-    with pytest.raises(ValueError, match="opponent_mix.curriculum is deprecated"):
-        train_config_from_omegaconf(cfg)
+    assert cfg.opponents.snapshot.pool_size == 5
 
 
 def test_curriculum_rejects_unknown_family():
@@ -50,20 +37,6 @@ def test_curriculum_rejects_unknown_family():
     ]
 
     with pytest.raises(ValueError, match="unknown families"):
-        train_config_from_omegaconf(cfg)
-
-
-def test_curriculum_rejects_deprecated_self_play_latest_probability():
-    cfg = OmegaConf.structured(TrainConfig)
-    cfg.curriculum.enabled = True
-    cfg.curriculum.snapshot.pool_size = 2
-    cfg.curriculum.snapshot.interval_updates = 1
-    cfg.curriculum.stages = [
-        {"id": "stage", "opponent_families": {"latest": 1.0}},
-    ]
-    cfg.self_play_latest_probability = 0.75
-
-    with pytest.raises(ValueError, match="self_play_latest_probability is deprecated"):
         train_config_from_omegaconf(cfg)
 
 
@@ -84,7 +57,7 @@ def test_curriculum_controller_promotes_on_rolling_mean():
             {"id": "pressure", "opponent_families": {"latest": 1.0}},
         ]
     )
-    controller = CurriculumController(cfg.curriculum)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
 
     assert controller.update(1, {"overall_win_rate": 0.4}) is None
     event = controller.update(2, {"overall_win_rate": 0.6})
@@ -98,8 +71,8 @@ def test_recent_biased_snapshot_selection_prefers_newer_updates():
     cfg = _curriculum_config(
         [{"id": "historical", "opponent_families": {"historical": 1.0}}]
     )
-    cfg.curriculum.snapshot.selection = "recent_biased"
-    controller = CurriculumController(cfg.curriculum)
+    cfg.opponents.snapshot.selection = "recent_biased"
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
 
     view = controller.stage_view(
         10,
@@ -124,12 +97,12 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
     cfg = _curriculum_config(
         [{"id": "latest", "opponent_families": {"latest": 1.0}}]
     )
-    cfg.env.candidate_count = 4
+    cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(120), policy, cfg)
-    controller = CurriculumController(cfg.curriculum)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     controller.stage_index = 0
     pool = _init_historical_snapshot_pool(train_state.params, 2)
     pool, _event = _add_historical_snapshot(pool, train_state.params, update=3)
@@ -163,12 +136,12 @@ def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():
             {"id": "second", "opponent_families": {"latest": 1.0}},
         ]
     )
-    cfg.env.candidate_count = 4
+    cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(130), policy, cfg)
-    controller = CurriculumController(cfg.curriculum)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     builder = _checkpoint_payload_builder(
         train_state,
         cfg,
@@ -189,17 +162,17 @@ def test_two_player_rollout_reports_sampled_random_family_slots():
     cfg = _curriculum_config(
         [{"id": "random", "opponent_families": {"random": 1.0}}]
     )
-    cfg.env.max_fleets = 16
-    cfg.env.candidate_count = 4
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
-    cfg.ppo.num_envs = 2
-    cfg.ppo.rollout_steps = 1
-    reset_keys = jax.random.split(jax.random.PRNGKey(100), cfg.ppo.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    reset_keys = jax.random.split(jax.random.PRNGKey(100), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(101), policy, cfg)
-    controller = CurriculumController(cfg.curriculum)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     stage_view = controller.stage_view(
         1,
         snapshot_ids=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
@@ -226,17 +199,17 @@ def test_historical_family_falls_back_to_latest_when_pool_empty():
     cfg = _curriculum_config(
         [{"id": "historical", "opponent_families": {"historical": 1.0}}]
     )
-    cfg.env.max_fleets = 16
-    cfg.env.candidate_count = 4
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
-    cfg.ppo.num_envs = 2
-    cfg.ppo.rollout_steps = 1
-    reset_keys = jax.random.split(jax.random.PRNGKey(110), cfg.ppo.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    reset_keys = jax.random.split(jax.random.PRNGKey(110), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(111), policy, cfg)
-    controller = CurriculumController(cfg.curriculum)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     stage_view = controller.stage_view(
         1,
         snapshot_ids=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
@@ -281,20 +254,20 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
         ]
     )
     cfg.run_name = "curriculum_events"
-    cfg.save_dir = str(tmp_path)
-    cfg.artifact_pipeline.enabled = False
-    cfg.replay.enabled = False
-    cfg.wandb.enabled = False
-    cfg.env.max_fleets = 16
-    cfg.env.candidate_count = 4
+    cfg.artifacts.save_dir = str(tmp_path)
+    cfg.artifacts.artifact_pipeline.enabled = False
+    cfg.artifacts.replay.enabled = False
+    cfg.telemetry.wandb.enabled = False
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
-    cfg.ppo.num_envs = 1
-    cfg.ppo.rollout_steps = 1
-    cfg.ppo.total_updates = 1
-    cfg.ppo.epochs = 1
-    cfg.ppo.minibatch_size = 32
-    cfg.checkpoint_every = 100
+    cfg.training.num_envs = 1
+    cfg.training.rollout_steps = 1
+    cfg.training.total_updates = 1
+    cfg.training.epochs = 1
+    cfg.training.minibatch_size = 32
+    cfg.artifacts.checkpoint_every = 100
 
     run_jax_training(cfg)
 

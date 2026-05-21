@@ -23,7 +23,7 @@ from src.constants import (
     TOTAL_COMETS,
 )
 
-from .config import EnvConfig
+from .config import RewardConfig, TaskConfig
 from .jax_features import (
     JaxFeatureHistory,
     JaxTurnBatch,
@@ -137,13 +137,13 @@ class JaxStepResult(NamedTuple):
     terminal_survival_time: jax.Array
 
 
-def max_fleets(cfg: EnvConfig) -> int:
+def max_fleets(cfg: TaskConfig) -> int:
     """Return the configured fixed fleet-buffer length for JAX state arrays."""
 
     return int(getattr(cfg, "max_fleets", max(256, cfg.max_fleets * 4)))
 
 
-def empty_action(cfg: EnvConfig) -> JaxAction:
+def empty_action(cfg: TaskConfig) -> JaxAction:
     """Create an empty fixed-size action buffer for one environment."""
 
     fleet_count = max_fleets(cfg)
@@ -155,7 +155,7 @@ def empty_action(cfg: EnvConfig) -> JaxAction:
     )
 
 
-def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
+def reset(key: jax.Array, cfg: TaskConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
     """Create a deterministic initial board from a JAX PRNG key."""
 
     initial_planet_count = MAX_PLANETS - TOTAL_COMETS
@@ -258,7 +258,7 @@ def reset(key: jax.Array, cfg: EnvConfig) -> tuple[JaxEnvState, JaxTurnBatch]:
 def learner_player_for_episode(
     env_index: jax.Array,
     episode_count: jax.Array,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
     alternate_player_sides: bool = True,
 ) -> jax.Array:
     """Return the learner player id for an environment episode.
@@ -280,7 +280,7 @@ def assign_learner_players(
     env_state: JaxEnvState,
     env_index: jax.Array,
     episode_count: jax.Array,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
     alternate_player_sides: bool = True,
 ) -> tuple[JaxEnvState, JaxTurnBatch]:
     """Assign learner player ids and rebuild observations from those perspectives.
@@ -318,7 +318,8 @@ def _finish_step(
     planets: JaxPlanetState,
     fleets: JaxFleetState,
     next_fleet_id: jax.Array,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
+    reward_cfg: RewardConfig,
 ) -> tuple[JaxEnvState, JaxStepResult]:
     planets = planets._replace(
         ships=jnp.where(
@@ -343,10 +344,10 @@ def _finish_step(
         learner_is_first,
         score_share,
         survival_time,
-    ) = _terminal(next_game, state.learner_player, cfg)
-    shaping = _shaping(previous_game, next_game, state.learner_player, cfg)
+    ) = _terminal(next_game, state.learner_player, cfg, reward_cfg)
+    shaping = _shaping(previous_game, next_game, state.learner_player, reward_cfg)
     reward = (
-        jnp.where(done, terminal_reward * cfg.reward_terminal_scale, 0.0)
+        jnp.where(done, terminal_reward * reward_cfg.reward_terminal_scale, 0.0)
         + shaping[0]
         + shaping[1]
         + shaping[2]
@@ -364,7 +365,7 @@ def _finish_step(
         reward=reward,
         done=done,
         terminal_reward=jnp.where(
-            done, terminal_reward * cfg.reward_terminal_scale, 0.0
+            done, terminal_reward * reward_cfg.reward_terminal_scale, 0.0
         ),
         shaping_reward=shaping[0] + shaping[1] + shaping[2],
         reward_capture_planet=shaping[0],
@@ -383,7 +384,8 @@ def step(
     state: JaxEnvState,
     learner_action: JaxAction,
     opponent_action: JaxAction,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
+    reward_cfg: RewardConfig,
 ) -> tuple[JaxEnvState, JaxStepResult]:
     """Advance one two-player JAX Orbit Wars environment by one turn.
 
@@ -419,13 +421,14 @@ def step(
     planets, fleets, next_fleet_id = _launch_fleets(
         planets, fleets, next_fleet_id, actions1, 1, cfg
     )
-    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg)
+    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
 
 
 def step_multi_player(
     state: JaxEnvState,
     player_actions: JaxAction,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
+    reward_cfg: RewardConfig,
 ) -> tuple[JaxEnvState, JaxStepResult]:
     """Advance a multi-player JAX Orbit Wars environment by one turn.
 
@@ -447,7 +450,7 @@ def step_multi_player(
         planets, fleets, next_fleet_id = _launch_fleets(
             planets, fleets, next_fleet_id, action, player, cfg
         )
-    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg)
+    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
 
 
 def _launch_fleets(
@@ -456,7 +459,7 @@ def _launch_fleets(
     next_fleet_id: jax.Array,
     action: JaxAction,
     player: int,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
 ):
     source_idx = jnp.clip(action.source_id, 0, MAX_PLANETS - 1)
     source_owner = jnp.take(planets.owner, source_idx)
@@ -506,7 +509,7 @@ def _concat_fleets(a: JaxFleetState, b: JaxFleetState) -> JaxFleetState:
     )
 
 
-def _compact_fleets(fleets: JaxFleetState, cfg: EnvConfig) -> JaxFleetState:
+def _compact_fleets(fleets: JaxFleetState, cfg: TaskConfig) -> JaxFleetState:
     order = jnp.argsort(jnp.where(fleets.active, 0, 1), stable=True)[: max_fleets(cfg)]
     return jax.tree.map(lambda x: jnp.take(x, order, axis=0), fleets)
 
@@ -515,7 +518,7 @@ def _move_and_resolve(
     previous_game: JaxGameState,
     planets: JaxPlanetState,
     fleets: JaxFleetState,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
 ):
     old_px, old_py = planets.x, planets.y
     init_dx = previous_game.initial_planets.x - BOARD_CENTER[0]
@@ -617,7 +620,7 @@ def _resolve_combat(
     fleets: JaxFleetState,
     hit_any: jax.Array,
     hit_idx: jax.Array,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
 ) -> JaxPlanetState:
     hit_weights = jax.nn.one_hot(hit_idx, MAX_PLANETS, dtype=jnp.float32) * hit_any[
         :, None
@@ -656,7 +659,12 @@ def _resolve_combat(
     return planets._replace(owner=new_owner.astype(jnp.int32), ships=new_ships)
 
 
-def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
+def _terminal(
+    game: JaxGameState,
+    learner_player: jax.Array,
+    cfg: TaskConfig,
+    reward_cfg: RewardConfig,
+):
     owners = jnp.arange(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)
     planet_alive = jax.vmap(
         lambda owner: ((game.planets.owner == owner) & game.planets.active).any()
@@ -703,7 +711,7 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
         jnp.asarray(MAX_STEPS, dtype=jnp.float32),
     ) / jnp.maximum(jnp.asarray(MAX_STEPS, dtype=jnp.float32), 1.0)
     survival_rank_reward = 0.5 * ranked_reward + 0.5 * survival_time
-    mode = getattr(cfg, "terminal_reward_mode", "binary_win").strip().lower()
+    mode = reward_cfg.terminal_reward_mode.strip().lower()
     if mode == "binary_win":
         reward = binary_reward
     elif mode == "ranked":
@@ -714,20 +722,20 @@ def _terminal(game: JaxGameState, learner_player: jax.Array, cfg: EnvConfig):
         reward = survival_rank_reward
     else:
         raise ValueError(
-            "env.terminal_reward_mode must be one of binary_win, ranked, "
+            "reward.terminal_reward_mode must be one of binary_win, ranked, "
             f"score_share, or survival_plus_rank; got {mode!r}."
         )
-    reward = _apply_early_terminal_reward_shaping_jax(reward, game.step, cfg)
+    reward = _apply_early_terminal_reward_shaping_jax(reward, game.step, reward_cfg)
     return done, reward, rank, placement, is_first, score_share, survival_time
 
 
 def _apply_early_terminal_reward_shaping_jax(
-    reward: jax.Array, step_index: jax.Array, cfg: EnvConfig
+    reward: jax.Array, step_index: jax.Array, cfg: RewardConfig
 ) -> jax.Array:
-    if not getattr(cfg, "early_terminal_reward_shaping_enabled", True):
+    if not cfg.early_terminal_reward_shaping_enabled:
         return reward
     horizon = jnp.asarray(
-        max(int(getattr(cfg, "early_terminal_reward_shaping_horizon", 500)), 1),
+        max(int(cfg.early_terminal_reward_shaping_horizon), 1),
         dtype=jnp.float32,
     )
     step_number = jnp.maximum(step_index.astype(jnp.float32) + 1.0, 1.0)
@@ -755,7 +763,10 @@ def _ship_advantage(game: JaxGameState, player: jax.Array):
 
 
 def _shaping(
-    previous: JaxGameState, current: JaxGameState, player: jax.Array, cfg: EnvConfig
+    previous: JaxGameState,
+    current: JaxGameState,
+    player: jax.Array,
+    cfg: RewardConfig,
 ):
     captured = (
         (previous.planets.owner != player)
@@ -786,12 +797,12 @@ def _shaping(
 
 
 batched_reset = jax.vmap(reset, in_axes=(0, None))
-batched_step = jax.vmap(step, in_axes=(0, 0, 0, None))
-batched_step_multi_player = jax.vmap(step_multi_player, in_axes=(0, 0, None))
+batched_step = jax.vmap(step, in_axes=(0, 0, 0, None, None))
+batched_step_multi_player = jax.vmap(step_multi_player, in_axes=(0, 0, None, None))
 
 
-def jit_reset(key: jax.Array, cfg: EnvConfig):
-    """JIT-compiled reset helper for a closed-over ``EnvConfig``."""
+def jit_reset(key: jax.Array, cfg: TaskConfig):
+    """JIT-compiled reset helper for a closed-over ``TaskConfig``."""
 
     return jax.jit(lambda k: reset(k, cfg))(key)
 
@@ -800,10 +811,11 @@ def jit_step(
     state: JaxEnvState,
     learner_action: JaxAction,
     opponent_action: JaxAction,
-    cfg: EnvConfig,
+    cfg: TaskConfig,
+    reward_cfg: RewardConfig,
 ):
-    """JIT-compiled step helper for a closed-over ``EnvConfig``."""
+    """JIT-compiled step helper for a closed-over ``TaskConfig``."""
 
-    return jax.jit(lambda s, a0, a1: step(s, a0, a1, cfg))(
+    return jax.jit(lambda s, a0, a1: step(s, a0, a1, cfg, reward_cfg))(
         state, learner_action, opponent_action
     )

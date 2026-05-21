@@ -77,7 +77,7 @@ def load_config(config_name: str) -> dict[str, Any]:
     cfg = compose_hydra_train_config(DEFAULT_CONFIGS[config_name])
     return {
         "seed": cfg.seed,
-        "env": {"candidate_count": cfg.env.candidate_count},
+        "task": {"candidate_count": cfg.task.candidate_count},
         "run_name": cfg.run_name,
     }
 
@@ -95,8 +95,8 @@ def latest_jsonl_record(path: Path) -> dict[str, Any] | None:
 
 def row_for_config(config_name: str, log_dir: Path) -> dict[str, Any]:
     cfg = load_config(config_name)
-    env_cfg = cfg.get("env", {}) if isinstance(cfg.get("env", {}), dict) else {}
-    candidate_count = int(env_cfg.get("candidate_count", 8))
+    task_cfg = cfg.get("task", {}) if isinstance(cfg.get("task", {}), dict) else {}
+    candidate_count = int(task_cfg.get("candidate_count", 8))
     run_name = str(cfg.get("run_name", config_name))
     row: dict[str, Any] = {
         "config": config_name,

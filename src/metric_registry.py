@@ -710,14 +710,24 @@ def protected_metric_names(cfg: Any | None = None) -> set[str]:
     protected.update(KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES)
     if cfg is None:
         return protected
-    checkpoint_retention = getattr(cfg, "checkpoint_retention", None)
+    artifacts = getattr(cfg, "artifacts", None)
+    checkpoint_retention = (
+        getattr(artifacts, "checkpoint_retention", None)
+        if artifacts is not None
+        else None
+    )
     if checkpoint_retention is not None:
         best_metric_name = str(
             getattr(checkpoint_retention, "best_metric_name", "") or ""
         ).strip()
         if best_metric_name:
             protected.add(best_metric_name)
-    plateau_metric = str(getattr(cfg, "plateau_metric", "") or "").strip()
+    training = getattr(cfg, "training", None)
+    plateau_metric = (
+        str(getattr(training, "plateau_metric", "") or "").strip()
+        if training is not None
+        else ""
+    )
     if plateau_metric:
         protected.add(plateau_metric)
     return protected

@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import EnvConfig
+from src.config import RewardConfig, TaskConfig
 from src.constants import MAX_PLANETS
 from src.jax_env import (
     BOARD_CENTER,
@@ -22,9 +22,13 @@ from src.jax_env import (
 
 
 def _cfg(*, player_count=2, max_fleets=16):
-    return EnvConfig(
+    return TaskConfig(
         max_fleets=max_fleets, candidate_count=4, player_count=player_count
     )
+
+
+def _reward_cfg():
+    return RewardConfig()
 
 
 def _planet_state(rows, cfg):
@@ -104,8 +108,14 @@ def _state(
     )
 
 
-def _advance(state, cfg):
-    return step(state, empty_action(cfg), empty_action(cfg), cfg)
+def _advance(state, cfg, reward_cfg=None):
+    return step(
+        state,
+        empty_action(cfg),
+        empty_action(cfg),
+        cfg,
+        reward_cfg or _reward_cfg(),
+    )
 
 
 def _multi_actions(cfg, moves_by_player):
@@ -292,7 +302,8 @@ def test_combat_capture_reinforce_insufficient_tie_and_multi_fleet_cases():
 
 def test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fleets():
     cfg = _cfg()
-    cfg.early_terminal_reward_shaping_enabled = False
+    reward_cfg = _reward_cfg()
+    reward_cfg.early_terminal_reward_shaping_enabled = False
     cases = [
         ([[0, 0, 80, 80, 3, 50, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 0, 1.0),
         ([[0, 0, 80, 80, 3, 50, 1]], [], 0, 0, 1.0),
@@ -323,6 +334,7 @@ def test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fle
                 learner_player=learner_player,
             ),
             cfg,
+            reward_cfg,
         )
         assert bool(np.asarray(result.done))
         assert float(np.asarray(result.terminal_reward)) == expected_reward
@@ -346,9 +358,12 @@ def test_elimination_does_not_end_game_while_player_has_fleet():
 
 def test_four_player_terminal_reward_uses_all_players():
     cfg = _cfg(player_count=4)
-    cfg.early_terminal_reward_shaping_enabled = False
+    reward_cfg = _reward_cfg()
+    reward_cfg.early_terminal_reward_shaping_enabled = False
     loser_state, loser_result = _advance(
-        _state([[0, 2, 80, 80, 3, 40, 1]], cfg=cfg, learner_player=0), cfg
+        _state([[0, 2, 80, 80, 3, 40, 1]], cfg=cfg, learner_player=0),
+        cfg,
+        reward_cfg,
     )
     winner_state, winner_result = _advance(
         loser_state._replace(
@@ -356,6 +371,7 @@ def test_four_player_terminal_reward_uses_all_players():
             game=loser_state.game._replace(player=jnp.array(2, dtype=jnp.int32)),
         ),
         cfg,
+        reward_cfg,
     )
 
     assert bool(np.asarray(loser_result.done))
@@ -386,7 +402,7 @@ def test_four_player_step_processes_all_player_action_lists_before_production():
         },
     )
 
-    next_state, result = step_multi_player(state, actions, cfg)
+    next_state, result = step_multi_player(state, actions, cfg, _reward_cfg())
 
     np.testing.assert_allclose(
         np.asarray(next_state.game.planets.ships[:4]),
@@ -418,7 +434,7 @@ def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player(
         },
     )
 
-    next_state, _ = step_multi_player(state, actions, cfg)
+    next_state, _ = step_multi_player(state, actions, cfg, _reward_cfg())
 
     np.testing.assert_allclose(
         np.asarray(next_state.game.planets.ships[:4]),
@@ -449,7 +465,7 @@ def test_four_player_step_allows_simultaneous_four_way_combat_from_actions():
         },
     )
 
-    next_state, _ = step_multi_player(state, actions, cfg)
+    next_state, _ = step_multi_player(state, actions, cfg, _reward_cfg())
 
     assert int(np.asarray(next_state.game.planets.owner)[4]) == -1
     assert float(np.asarray(next_state.game.planets.ships)[4]) == 9.0

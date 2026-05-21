@@ -33,7 +33,7 @@ uv run python -m src.train format=mix_2p_4p_16env opponents=self_play_curriculum
 | Change task complexity | `task.candidate_count`, `task.ship_bucket_count`, `task.player_count`, `format` | `training.*`, `model.*` |
 | Change reward shaping | `reward.*` | `task.*`, `training.*` |
 | Change opponent behavior | `opponents`, `opponents.mix.*`, `opponents.snapshot.*` | `curriculum.stages.*` unless testing stage schedules |
-| Change staged progression | `curriculum`, `curriculum.stages.*` | top-level self-play fields |
+| Change staged progression | `curriculum`, `curriculum.stages.*` | `opponents.self_play.*` unless changing the profile |
 | Change logging | `telemetry.metric_groups.*`, `telemetry.wandb.*` | training and task knobs |
 | Change artifacts | `artifacts.*` | training budget unless checkpoint cadence is the variable |
 
@@ -72,8 +72,8 @@ Executable W&B sweep templates live in `conf/sweeps/wandb/`:
 
 Each template sets `telemetry.wandb.group` and `telemetry.wandb.tags` so run tables carry campaign intent.
 
-## Migration Notes
+## Config Source
 
-Legacy nested overrides such as `ppo.total_updates=...`, `env.candidate_count=...`, and `wandb.group=...` still parse during the migration. Prefer new responsibility paths in new docs, scripts, and sweep files.
+Only the responsibility-group paths above are public runtime config. Removed aliases such as old PPO, environment, and W&B roots are rejected instead of translated.
 
 The generated `default_cfg.yaml` artifact has been removed; `conf/config.yaml` plus its selected groups are the source of truth.

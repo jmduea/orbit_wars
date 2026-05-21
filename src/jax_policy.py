@@ -659,27 +659,27 @@ def build_jax_policy(
     implementation.
     """
     hidden = cfg.model.hidden_size
-    buckets = cfg.env.ship_bucket_count
+    buckets = cfg.task.ship_bucket_count
     attention_heads = cfg.model.attention_heads
     k_steps = cfg.model.max_moves_k
     value_head_module = build_value_head(cfg)
-    target_coords_slice = candidate_feature_schema(cfg.env).slice("target_coords")
+    target_coords_slice = candidate_feature_schema(cfg.task).slice("target_coords")
     normalized_architecture = cfg.model.architecture.strip().lower()
     if normalized_architecture == "mlp":
         return JaxPlanetPolicy(
-            candidate_count=cfg.env.candidate_count,
-            ship_bucket_count=cfg.env.ship_bucket_count,
+            candidate_count=cfg.task.candidate_count,
+            ship_bucket_count=cfg.task.ship_bucket_count,
             value_head_module=value_head_module,
             hidden_size=cfg.model.hidden_size,
         )
     elif normalized_architecture in {"attention", "transformer"}:
         return JaxAttentionPlanetPolicy(
-            candidate_count=cfg.env.candidate_count,
-            ship_bucket_count=cfg.env.ship_bucket_count,
+            candidate_count=cfg.task.candidate_count,
+            ship_bucket_count=cfg.task.ship_bucket_count,
             value_head_module=value_head_module,
             hidden_size=cfg.model.hidden_size,
             attention_heads=cfg.model.attention_heads,
-            enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
+            enable_gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
         )
     elif normalized_architecture == "mlp_pointer":
         return ComposablePlanetPolicy(
@@ -695,7 +695,7 @@ def build_jax_policy(
             encoder_module=TransformerBackboneEncoder(
                 hidden_size=hidden,
                 attention_heads=attention_heads,
-                enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
+                enable_gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
             ),
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden

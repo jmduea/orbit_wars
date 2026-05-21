@@ -54,15 +54,15 @@ def main() -> None:
 
     cfg = deepcopy(compose_hydra_train_config(list(args.overrides)))
     if args.num_envs is not None:
-        cfg.ppo.num_envs = args.num_envs
+        cfg.training.num_envs = args.num_envs
     if args.rollout_steps is not None:
-        cfg.ppo.rollout_steps = args.rollout_steps
+        cfg.training.rollout_steps = args.rollout_steps
     if args.architecture is not None:
         cfg.model.architecture = args.architecture
     key = jax.random.PRNGKey(cfg.seed)
     key, reset_key, policy_key = jax.random.split(key, 3)
     env_state, turn_batch = batched_reset(
-        jax.random.split(reset_key, cfg.ppo.num_envs), cfg.env
+        jax.random.split(reset_key, cfg.training.num_envs), cfg.task
     )
     policy = build_jax_policy(
         cfg=cfg,
@@ -101,8 +101,8 @@ def main() -> None:
         json.dumps(
             {
                 "backend": "jax_rl",
-                "num_envs": cfg.ppo.num_envs,
-                "rollout_steps": cfg.ppo.rollout_steps,
+                "num_envs": cfg.training.num_envs,
+                "rollout_steps": cfg.training.rollout_steps,
                 "updates": args.updates,
                 "warmup": args.warmup,
                 "seconds": total_seconds,

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
-import pickle
 import random
 from pathlib import Path
 
 import jax
 
+from .checkpoint_compat import (
+    load_checkpoint_payload,
+    validate_checkpoint_config_compatibility,
+)
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
 from .jax_policy import build_jax_policy
@@ -18,12 +21,12 @@ from .trajectory_shield import (
 
 
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
-    policy = cfg.replay.seed_policy.strip().lower()
+    policy = cfg.artifacts.replay.seed_policy.strip().lower()
     if policy == "fixed":
         return int(cfg.seed)
     if policy == "update":
         return int(cfg.seed + update)
-    raise ValueError(f"Unsupported replay.seed_policy: {cfg.replay.seed_policy!r}")
+    raise ValueError(f"Unsupported replay.seed_policy: {cfg.artifacts.replay.seed_policy!r}")
 
 
 def _reward_to_result(reward: float) -> str:
@@ -35,12 +38,14 @@ def _reward_to_result(reward: float) -> str:
 
 
 def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
-    with checkpoint_path.open("rb") as file:
-        checkpoint = pickle.load(file)
+    checkpoint = load_checkpoint_payload(checkpoint_path)
     if not isinstance(checkpoint, dict) or "params" not in checkpoint:
         raise ValueError(
             f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
         )
+    validate_checkpoint_config_compatibility(
+        checkpoint, checkpoint_path=checkpoint_path
+    )
 
     params = checkpoint["params"]
     if isinstance(params, dict) and "params" in params and len(params) == 1:
@@ -50,7 +55,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
     )
 
     def act(observation: object) -> list[list[float | int]]:
-        batch = encode_turn(observation, cfg.env, env_index=0)
+        batch = encode_turn(observation, cfg.task, env_index=0)
         if batch.self_features.shape[0] == 0:
             return []
         sampled = select_runtime_shielded_policy_actions(
@@ -58,7 +63,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
             policy,
             {"params": params},
             batch,
-            cfg.env,
+            cfg.task,
             deterministic=True,
         )
         target_indices = jax.device_get(sampled.target_index)
@@ -68,7 +73,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
         for row_idx, context in enumerate(batch.contexts):
             remaining_ships = int(context.source_ships)
             for step_idx in range(target_indices.shape[1]):
-                if len(moves) >= int(cfg.env.max_fleets):
+                if len(moves) >= int(cfg.task.max_fleets):
                     break
                 target_idx = int(target_indices[row_idx, step_idx])
                 bucket_idx = int(ship_buckets[row_idx, step_idx])
@@ -79,7 +84,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
                 if not bool(context.candidate_mask[target_idx]):
                     continue
                 ships = ship_count_for_bucket(
-                    remaining_ships, bucket_idx, cfg.env.ship_bucket_count
+                    remaining_ships, bucket_idx, cfg.task.ship_bucket_count
                 )
                 if ships <= 0:
                     continue
@@ -91,7 +96,7 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
                     target_id,
                     angle,
                     ships,
-                    cfg.env,
+                    cfg.task,
                 ):
                     continue
                 remaining_ships = max(0, remaining_ships - ships)
@@ -108,17 +113,17 @@ def maybe_write_jax_checkpoint_replay(
     checkpoint_path: Path,
     log_path: Path,
 ) -> Path | None:
-    if not cfg.replay.enabled:
+    if not cfg.artifacts.replay.enabled:
         return None
-    every_n = max(int(cfg.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.checkpoint_every), 1), 1)
-    if checkpoint_index % every_n != 0 and update != cfg.ppo.total_updates:
+    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
+    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
+    if checkpoint_index % every_n != 0 and update != cfg.training.total_updates:
         return None
 
     from kaggle_environments import make
 
     run_dir = checkpoint_path.parent
-    replay_dir = run_dir / cfg.replay.output_dir
+    replay_dir = run_dir / cfg.artifacts.replay.output_dir
     replay_dir.mkdir(parents=True, exist_ok=True)
     seed = _seed_for_update(cfg, update)
     learner_act = _build_jax_policy_actions(cfg, checkpoint_path)
@@ -174,7 +179,7 @@ def maybe_write_jax_checkpoint_replay(
         env.reset(num_agents=int(scenario["num_agents"]))
         states = env.step([[] for _ in range(int(scenario["num_agents"]))])
         step_count = 0
-        while step_count < max(int(cfg.replay.max_steps), 1):
+        while step_count < max(int(cfg.artifacts.replay.max_steps), 1):
             learner_obs = states[0].observation if states[0] is not None else {}
             joint_actions: list[list[list[float | int]]] = [learner_act(learner_obs)]
             for opp_idx, opponent in enumerate(scenario["opponents"], start=1):

@@ -14,7 +14,7 @@ from src.feature_registry import (
     self_feature_dim,
 )
 
-from .config import EnvConfig
+from .config import TaskConfig
 from .constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
@@ -89,7 +89,7 @@ class FeatureHistoryBuffer:
 
 def encode_turn(
     observation: Any,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     *,
     env_index: int = 0,
     feature_history: FeatureHistoryBuffer | None = None,
@@ -271,7 +271,7 @@ def build_feature_snapshot(batch: TurnBatch) -> FeatureSnapshot:
 
 
 def build_candidates(
-    src: PlanetState, state: GameState, env_cfg: EnvConfig
+    src: PlanetState, state: GameState, env_cfg: TaskConfig
 ) -> list[PlanetState]:
     """Build real target planets for candidate slots 1..candidate_count-1.
 
@@ -311,7 +311,7 @@ def build_candidates(
 def build_self_features(
     src: PlanetState,
     state: GameState,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     feature_history: FeatureHistoryBuffer | None = None,
 ) -> np.ndarray:
     my_planets = [planet for planet in state.planets if planet.owner == state.player]
@@ -371,7 +371,7 @@ def build_candidate_features(
     src: PlanetState,
     candidates: list[PlanetState],
     state: GameState,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     feature_history: FeatureHistoryBuffer | None = None,
     *,
     env_index: int = 0,
@@ -474,7 +474,7 @@ def build_candidate_features(
 
 def build_global_features(
     state: GameState,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     feature_history: FeatureHistoryBuffer | None = None,
 ) -> np.ndarray:
     my_planets = [planet for planet in state.planets if planet.owner == state.player]
@@ -533,7 +533,7 @@ def _latest_snapshot(history: FeatureHistoryBuffer | None) -> FeatureSnapshot | 
 
 
 def incoming_fleet_pressure(
-    planet: PlanetState, state: GameState, env_cfg: EnvConfig
+    planet: PlanetState, state: GameState, env_cfg: TaskConfig
 ) -> tuple[float, float]:
     friendly = 0.0
     enemy = 0.0
@@ -560,7 +560,7 @@ def fleet_aims_at_planet(fleet: Any, planet: PlanetState) -> bool:
     return math.hypot(planet.x - closest_x, planet.y - closest_y) <= planet.radius
 
 
-def owner_relative_production(state: GameState, env_cfg: EnvConfig) -> np.ndarray:
+def owner_relative_production(state: GameState, env_cfg: TaskConfig) -> np.ndarray:
     player_count = clipped_player_count(env_cfg)
     production = np.zeros((MAX_OWNER_FEATURE_PLAYERS,), dtype=np.float32)
     for planet in state.planets:
@@ -572,7 +572,7 @@ def owner_relative_production(state: GameState, env_cfg: EnvConfig) -> np.ndarra
 
 
 def owner_relative_summary(
-    state: GameState, env_cfg: EnvConfig
+    state: GameState, env_cfg: TaskConfig
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Return fixed-size owner-relative count/ship/fleet summaries.
 
@@ -615,7 +615,7 @@ def owner_relative_summary(
 
 
 def target_owner_one_hot(
-    owner: int, state: GameState, env_cfg: EnvConfig
+    owner: int, state: GameState, env_cfg: TaskConfig
 ) -> np.ndarray:
     """Encode a target owner relative to ``state.player`` in four fixed slots."""
 
@@ -626,7 +626,7 @@ def target_owner_one_hot(
     return one_hot
 
 
-def clipped_player_count(env_cfg: EnvConfig) -> int:
+def clipped_player_count(env_cfg: TaskConfig) -> int:
     return max(
         1, min(MAX_OWNER_FEATURE_PLAYERS, int(getattr(env_cfg, "player_count", 2)))
     )

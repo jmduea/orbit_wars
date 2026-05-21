@@ -168,8 +168,8 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
     from src.jax_train import _queue_optional_jobs_if_due
 
     cfg = TrainConfig()
-    cfg.replay.enabled = True
-    cfg.replay.max_steps = 20
+    cfg.artifacts.replay.enabled = True
+    cfg.artifacts.replay.max_steps = 20
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
@@ -197,8 +197,8 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     from src.jax_train import _queue_optional_jobs_if_due
 
     cfg = TrainConfig()
-    cfg.replay.enabled = False
-    cfg.artifact_pipeline.docker_validation_async = True
+    cfg.artifacts.replay.enabled = False
+    cfg.artifacts.artifact_pipeline.docker_validation_async = True
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
@@ -267,8 +267,8 @@ def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, m
         return FakeProcess()
 
     cfg = TrainConfig()
-    cfg.artifact_pipeline.worker_poll_seconds = 0.5
-    cfg.artifact_pipeline.worker_idle_exit_seconds = 1.0
+    cfg.artifacts.artifact_pipeline.worker_poll_seconds = 0.5
+    cfg.artifacts.artifact_pipeline.worker_idle_exit_seconds = 1.0
     monkeypatch.setattr(jax_train.subprocess, "Popen", fake_popen)
 
     worker_state: dict[str, object] = {}

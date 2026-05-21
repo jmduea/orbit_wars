@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import EnvConfig
+from src.config import TaskConfig
 from src.constants import MAX_PLANETS
 from src.features import (
     BASE_CANDIDATE_FEATURE_DIM,
@@ -31,7 +31,7 @@ def _state(step: int, ships: int) -> GameState:
 
 
 def test_python_feature_history_stacks_chronological_rows():
-    cfg = EnvConfig(candidate_count=2, feature_history_steps=2)
+    cfg = TaskConfig(candidate_count=2, feature_history_steps=2)
     history = FeatureHistoryBuffer(max_steps=cfg.feature_history_steps - 1)
 
     first = encode_turn(_state(0, 10), cfg, feature_history=history)
@@ -45,7 +45,7 @@ def test_python_feature_history_stacks_chronological_rows():
         previous_slice, first.self_features[0, BASE_SELF_FEATURE_DIM:]
     )
     no_history_current = encode_turn(
-        _state(1, 30), EnvConfig(candidate_count=2)
+        _state(1, 30), TaskConfig(candidate_count=2)
     ).self_features[0]
     np.testing.assert_allclose(current_slice[:24], no_history_current[:24])
     # The stacked current slice also exposes temporal planning signals derived
@@ -70,7 +70,7 @@ def _three_planet_state(step: int, target_positions: dict[int, float]) -> GameSt
 
 
 def test_python_candidate_history_aligns_by_source_and_target_id_after_reorder():
-    cfg = EnvConfig(candidate_count=3, feature_history_steps=2)
+    cfg = TaskConfig(candidate_count=3, feature_history_steps=2)
     history = FeatureHistoryBuffer(max_steps=cfg.feature_history_steps - 1)
 
     first = encode_turn(
@@ -102,7 +102,7 @@ def test_python_candidate_history_aligns_by_source_and_target_id_after_reorder()
 
 
 def test_python_candidate_history_zeros_missing_prior_targets():
-    cfg = EnvConfig(candidate_count=2, feature_history_steps=2)
+    cfg = TaskConfig(candidate_count=2, feature_history_steps=2)
     history = FeatureHistoryBuffer(max_steps=cfg.feature_history_steps - 1)
 
     first = encode_turn(
@@ -122,7 +122,7 @@ def test_python_candidate_history_zeros_missing_prior_targets():
 
 
 def _jax_three_planet_game(
-    cfg: EnvConfig, step: int, target_positions: dict[int, float]
+    cfg: TaskConfig, step: int, target_positions: dict[int, float]
 ):
     active = jnp.zeros((MAX_PLANETS,), dtype=bool)
     active = active.at[:3].set(True)
@@ -171,7 +171,7 @@ def _jax_three_planet_game(
 
 
 def test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder():
-    cfg = EnvConfig(max_fleets=4, candidate_count=3, feature_history_steps=2)
+    cfg = TaskConfig(max_fleets=4, candidate_count=3, feature_history_steps=2)
     empty_history = empty_feature_history(cfg)
     first_game = _jax_three_planet_game(cfg, 0, {1: 20.0, 2: 30.0})
     first = encode_jax_turn(first_game, cfg, empty_history)
@@ -197,7 +197,7 @@ def test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder():
 
 
 def test_jax_candidate_history_zeros_missing_prior_targets():
-    cfg = EnvConfig(max_fleets=4, candidate_count=2, feature_history_steps=2)
+    cfg = TaskConfig(max_fleets=4, candidate_count=2, feature_history_steps=2)
     empty_history = empty_feature_history(cfg)
     first_game = _jax_three_planet_game(cfg, 0, {1: 20.0, 2: 30.0})
     first = encode_jax_turn(first_game, cfg, empty_history)

@@ -23,7 +23,7 @@ from .trajectory_shield import (
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]
 )
-DEFAULT_RUNTIME_ENV = TrainConfig().env
+DEFAULT_RUNTIME_ENV = TrainConfig().task
 
 
 class OpponentPolicy(Protocol):
@@ -102,7 +102,7 @@ class SelfPlayOpponent:
         self.normalizer = clone_normalizer(normalizer)
 
     def act(self, observation: Any) -> list[list[float | int]]:
-        batch = encode_turn(observation, self.cfg.env, env_index=0)
+        batch = encode_turn(observation, self.cfg.task, env_index=0)
         if batch.self_features.shape[0] == 0:
             return []
         policy_batch = (
@@ -118,7 +118,7 @@ class SelfPlayOpponent:
             self.policy,
             {"params": self.params},
             batch,
-            self.cfg.env,
+            self.cfg.task,
             deterministic=self.deterministic,
             self_features=policy_batch.self_features,
             candidate_features=policy_batch.candidate_features,
@@ -133,7 +133,7 @@ class SelfPlayOpponent:
         for row_idx, context in enumerate(batch.contexts):
             remaining_ships = int(context.source_ships)
             for step_idx in range(target_indices.shape[1]):
-                if len(moves) >= int(self.cfg.env.max_fleets):
+                if len(moves) >= int(self.cfg.task.max_fleets):
                     break
                 target_idx = int(target_indices[row_idx, step_idx])
                 bucket_idx = int(ship_buckets[row_idx, step_idx])
@@ -144,7 +144,7 @@ class SelfPlayOpponent:
                 if not context.candidate_mask[target_idx]:
                     continue
                 ships = ship_count_for_bucket(
-                    remaining_ships, bucket_idx, self.cfg.env.ship_bucket_count
+                    remaining_ships, bucket_idx, self.cfg.task.ship_bucket_count
                 )
                 if ships <= 0:
                     continue
@@ -156,7 +156,7 @@ class SelfPlayOpponent:
                     target_id,
                     angle,
                     ships,
-                    self.cfg.env,
+                    self.cfg.task,
                 ):
                     continue
                 remaining_ships = max(0, remaining_ships - ships)
@@ -193,10 +193,10 @@ class SelfPlayOpponentPool:
         self.random_bot = KaggleRandomOpponent()
         self.sniper_bot = SniperOpponent()
         self.latest = SelfPlayOpponent(
-            cfg, device=device, deterministic=cfg.self_play_deterministic
+            cfg, device=device, deterministic=cfg.opponents.self_play.deterministic
         )
         self.history: deque[HistoricalSnapshot] = deque(
-            maxlen=max(0, cfg.self_play_pool_size)
+            maxlen=max(0, cfg.opponents.snapshot.pool_size)
         )
         self.latest_metadata = SnapshotMetadata(
             snapshot_id=0, update=0, source="latest"
@@ -223,7 +223,7 @@ class SelfPlayOpponentPool:
         if self.history.maxlen == 0:
             return
         snapshot = SelfPlayOpponent(
-            self.cfg, device=self.device, deterministic=self.cfg.self_play_deterministic
+            self.cfg, device=self.device, deterministic=self.cfg.opponents.self_play.deterministic
         )
         snapshot.sync_from(source_policy, normalizer)
         metadata = SnapshotMetadata(
@@ -233,7 +233,7 @@ class SelfPlayOpponentPool:
         self.history.append(HistoricalSnapshot(metadata=metadata, opponent=snapshot))
 
     def sample_selection(self) -> OpponentSelection:
-        mode = self.cfg.multi_opponent_mode.strip().lower()
+        mode = self.cfg.opponents.mode.multi_opponent_mode.strip().lower()
         if mode == "shared_current":
             return OpponentSelection(
                 policy=self.latest, metadata=dataclass_to_dict(self.latest_metadata)
@@ -251,9 +251,11 @@ class SelfPlayOpponentPool:
         if mode != "mixed":
             raise ValueError(
                 "multi_opponent_mode must be one of shared_current, sampled_pool, or mixed; "
-                f"got {self.cfg.multi_opponent_mode!r}."
+                f"got {self.cfg.opponents.mode.multi_opponent_mode!r}."
             )
-        latest_probability = min(max(self.cfg.self_play_latest_probability, 0.0), 1.0)
+        latest_probability = min(
+            max(self.cfg.opponents.mix.weights.get("latest", 0.0), 0.0), 1.0
+        )
         if random.random() < latest_probability:
             return OpponentSelection(
                 policy=self.latest, metadata=dataclass_to_dict(self.latest_metadata)
@@ -278,7 +280,7 @@ class SelfPlayOpponentPool:
     def sample_opponents(self, count: int) -> list[OpponentSelection]:
         if count <= 0:
             return []
-        if self.cfg.multi_opponent_mode.strip().lower() == "shared_current":
+        if self.cfg.opponents.mode.multi_opponent_mode.strip().lower() == "shared_current":
             shared = OpponentSelection(
                 policy=self.latest, metadata=dataclass_to_dict(self.latest_metadata)
             )
@@ -331,10 +333,10 @@ def build_opponent(
     if name == "self":
         if cfg is None or device is None:
             raise ValueError("cfg and device are required for self opponent")
-        if cfg.self_play_enabled:
+        if cfg.opponents.self_play.enabled:
             return SelfPlayOpponentPool(cfg, device=device)
         return SelfPlayOpponent(
-            cfg, device=device, deterministic=cfg.self_play_deterministic
+            cfg, device=device, deterministic=cfg.opponents.self_play.deterministic
         )
     raise ValueError(f"Unknown opponent: {name}")
 

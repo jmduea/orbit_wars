@@ -5,7 +5,7 @@ from typing import Mapping
 
 import numpy as np
 
-from .config import EnvConfig
+from .config import TaskConfig, TrainConfig
 from .feature_registry import (
     candidate_feature_dim,
     feature_history_steps,
@@ -15,8 +15,112 @@ from .feature_registry import (
 
 FEATURE_METADATA_KEY = "feature_metadata"
 
+LEGACY_CONFIG_FIELDS = (
+    "env",
+    "ppo",
+    "training_format",
+    "opponent_mix",
+    "wandb",
+    "artifact_pipeline",
+    "replay",
+    "checkpoint_retention",
+    "save_dir",
+    "checkpoint_every",
+    "self_play_enabled",
+    "self_play_update_interval",
+    "self_play_latest_probability",
+    "self_play_pool_size",
+    "self_play_snapshot_interval",
+    "opponent",
+    "multi_opponent_mode",
+    "alternate_player_sides",
+)
 
-def feature_metadata(env_cfg: EnvConfig) -> dict[str, int]:
+CANONICAL_CONFIG_FIELDS = (
+    "model",
+    "task",
+    "reward",
+    "training",
+    "format",
+    "curriculum",
+    "opponents",
+    "telemetry",
+    "artifacts",
+)
+
+
+def load_checkpoint_payload(checkpoint_path: str | Path) -> object:
+    """Load a checkpoint pickle, turning old config pickles into a clear error."""
+
+    import pickle
+
+    path = Path(checkpoint_path)
+    try:
+        with path.open("rb") as file:
+            return pickle.load(file)
+    except (AttributeError, ImportError, ModuleNotFoundError) as exc:
+        raise ValueError(
+            f"Checkpoint at {path} was saved with the pre-migration legacy config "
+            "schema and cannot be loaded by the canonical responsibility-group "
+            "runtime. Retrain from the current config or migrate the checkpoint "
+            "with an explicit one-off conversion."
+        ) from exc
+
+
+def _config_has_field(config: object, field_name: str) -> bool:
+    if isinstance(config, Mapping):
+        return field_name in config
+    try:
+        return hasattr(config, field_name)
+    except Exception:
+        return False
+
+
+def validate_checkpoint_config_compatibility(
+    checkpoint: object,
+    *,
+    checkpoint_path: str | Path | None = None,
+) -> None:
+    """Reject checkpoints that embed the old flat runtime config shape."""
+
+    if not isinstance(checkpoint, Mapping) or "config" not in checkpoint:
+        return
+    stored_config = checkpoint["config"]
+    if isinstance(stored_config, TrainConfig):
+        return
+
+    legacy_fields = [
+        field_name
+        for field_name in LEGACY_CONFIG_FIELDS
+        if _config_has_field(stored_config, field_name)
+    ]
+    location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+    if legacy_fields:
+        fields = ", ".join(legacy_fields[:5])
+        suffix = "" if len(legacy_fields) <= 5 else ", ..."
+        raise ValueError(
+            f"Checkpoint{location} contains legacy config fields ({fields}{suffix}). "
+            "Legacy checkpoint configs are no longer normalized at runtime; retrain "
+            "from the current responsibility-group config or migrate this checkpoint "
+            "with an explicit one-off conversion."
+        )
+
+    missing_fields = [
+        field_name
+        for field_name in CANONICAL_CONFIG_FIELDS
+        if not _config_has_field(stored_config, field_name)
+    ]
+    if missing_fields:
+        fields = ", ".join(missing_fields[:5])
+        suffix = "" if len(missing_fields) <= 5 else ", ..."
+        raise ValueError(
+            f"Checkpoint{location} does not contain the canonical responsibility-group "
+            f"config fields ({fields}{suffix}). Retrain from the current config or "
+            "migrate the checkpoint explicitly before loading it."
+        )
+
+
+def feature_metadata(env_cfg: TaskConfig) -> dict[str, int]:
     """Return checkpoint metadata that describes feature-dependent input shapes."""
 
     return {
@@ -109,7 +213,7 @@ def infer_feature_metadata_from_state_dict(
 
 def validate_checkpoint_feature_compatibility(
     checkpoint: object,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     *,
     checkpoint_path: str | Path | None = None,
 ) -> None:

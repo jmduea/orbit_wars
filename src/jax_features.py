@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 from src.feature_registry import CANDIDATE_FEATURE_SCHEMA, GLOBAL_FEATURE_SCHEMA
 
-from .config import EnvConfig
+from .config import TaskConfig
 from .constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
@@ -31,7 +31,7 @@ from .constants import (
 class JaxFeatureInterface:
     """Interface for encoding game states for policy input"""
 
-    def __init__(self, env_cfg: EnvConfig):
+    def __init__(self, env_cfg: TaskConfig):
         self.max_planets = int(MAX_PLANETS)
         self.candidate_count = int(env_cfg.candidate_count)
         self.ship_bucket_count = int(env_cfg.ship_bucket_count)
@@ -68,7 +68,7 @@ class JaxTurnBatch(NamedTuple):
 
 
 def encode_turn(
-    game, env_cfg: EnvConfig, history: JaxFeatureHistory | None = None
+    game, env_cfg: TaskConfig, history: JaxFeatureHistory | None = None
 ) -> JaxTurnBatch:
     """Encode a JAX game state into fixed-shape policy inputs.
 
@@ -103,11 +103,11 @@ def encode_turn(
     )
 
 
-def feature_history_steps(env_cfg: EnvConfig) -> int:
+def feature_history_steps(env_cfg: TaskConfig) -> int:
     return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
 
 
-def empty_feature_history(env_cfg: EnvConfig) -> JaxFeatureHistory:
+def empty_feature_history(env_cfg: TaskConfig) -> JaxFeatureHistory:
     steps = max(0, feature_history_steps(env_cfg) - 1)
     return JaxFeatureHistory(
         self_features=jnp.zeros(
@@ -134,7 +134,7 @@ def empty_feature_history(env_cfg: EnvConfig) -> JaxFeatureHistory:
     )
 
 
-def current_feature_snapshot(game, env_cfg: EnvConfig) -> JaxFeatureHistory:
+def current_feature_snapshot(game, env_cfg: TaskConfig) -> JaxFeatureHistory:
     candidate_ids, candidates, _candidate_mask, _target_angles = _candidate_features(
         game.planets, game.fleets, game.player, env_cfg
     )
@@ -152,7 +152,7 @@ def current_feature_snapshot(game, env_cfg: EnvConfig) -> JaxFeatureHistory:
 
 
 def append_feature_history(
-    history: JaxFeatureHistory | None, game, env_cfg: EnvConfig
+    history: JaxFeatureHistory | None, game, env_cfg: TaskConfig
 ) -> JaxFeatureHistory:
     steps = max(0, feature_history_steps(env_cfg) - 1)
     if steps == 0:
@@ -180,7 +180,7 @@ def _ordered_history_indices(history: JaxFeatureHistory, steps: int) -> jax.Arra
     return (start + jnp.arange(steps, dtype=jnp.int32)) % steps
 
 
-def _ordered_history(history: JaxFeatureHistory, env_cfg: EnvConfig) -> JaxFeatureHistory:
+def _ordered_history(history: JaxFeatureHistory, env_cfg: TaskConfig) -> JaxFeatureHistory:
     steps = max(0, feature_history_steps(env_cfg) - 1)
     if steps == 0:
         return history
@@ -197,7 +197,7 @@ def _ordered_history(history: JaxFeatureHistory, env_cfg: EnvConfig) -> JaxFeatu
     )
 
 def _stack_self_history(
-    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: TaskConfig
 ) -> jax.Array:
     if feature_history_steps(env_cfg) <= 1:
         return current
@@ -213,7 +213,7 @@ def _stack_candidate_history(
     source_ids: jax.Array,
     candidate_ids: jax.Array,
     history: JaxFeatureHistory | None,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
 ) -> jax.Array:
     if feature_history_steps(env_cfg) <= 1:
         return current
@@ -250,7 +250,7 @@ def _target_aligned_candidate_history(
 
 
 def _stack_global_history(
-    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: EnvConfig
+    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: TaskConfig
 ) -> jax.Array:
     if feature_history_steps(env_cfg) <= 1:
         return current
@@ -265,7 +265,7 @@ def _self_features(
     planets,
     fleets,
     player,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     history: JaxFeatureHistory | None = None,
 ):
     mine = planets.active & (planets.owner == player)
@@ -340,7 +340,7 @@ def _candidate_features(
     planets,
     fleets,
     player,
-    env_cfg: EnvConfig,
+    env_cfg: TaskConfig,
     history: JaxFeatureHistory | None = None,
 ):
     p = MAX_PLANETS
@@ -480,7 +480,7 @@ def _candidate_features(
 
 
 def _global_features(
-    game, env_cfg: EnvConfig, history: JaxFeatureHistory | None = None
+    game, env_cfg: TaskConfig, history: JaxFeatureHistory | None = None
 ):
     planets = game.planets
     fleets = game.fleets
@@ -545,7 +545,7 @@ def _global_features(
     )
 
 
-def _previous_self_features(source_ids, history, env_cfg: EnvConfig):
+def _previous_self_features(source_ids, history, env_cfg: TaskConfig):
     if history is None or feature_history_steps(env_cfg) <= 1:
         return (
             jnp.zeros((MAX_PLANETS, BASE_SELF_FEATURE_DIM), dtype=jnp.float32),
@@ -560,7 +560,7 @@ def _previous_self_features(source_ids, history, env_cfg: EnvConfig):
     return selected, present
 
 
-def _previous_candidate_features(source_ids, target_ids, history, env_cfg: EnvConfig):
+def _previous_candidate_features(source_ids, target_ids, history, env_cfg: TaskConfig):
     if history is None or feature_history_steps(env_cfg) <= 1:
         return (
             jnp.zeros(
@@ -591,7 +591,7 @@ def _previous_candidate_features(source_ids, target_ids, history, env_cfg: EnvCo
     return selected, present
 
 
-def _previous_global_features(history, env_cfg: EnvConfig):
+def _previous_global_features(history, env_cfg: TaskConfig):
     if history is None or feature_history_steps(env_cfg) <= 1:
         return (
             jnp.zeros((BASE_GLOBAL_FEATURE_DIM,), dtype=jnp.float32),
@@ -633,7 +633,7 @@ def _incoming_fleet_pressure(x, y, radius, fleets, player):
     return friendly, enemy
 
 
-def owner_relative_production(planets, player, env_cfg: EnvConfig):
+def owner_relative_production(planets, player, env_cfg: TaskConfig):
     player_count = clipped_player_count(env_cfg)
     slots = relative_owner_slots(planets.owner, player, player_count)
     valid_planets = (
@@ -647,7 +647,7 @@ def owner_relative_production(planets, player, env_cfg: EnvConfig):
     return production / (MAX_PLANETS * MAX_PRODUCTION)
 
 
-def owner_relative_summary(planets, fleets, player, env_cfg: EnvConfig):
+def owner_relative_summary(planets, fleets, player, env_cfg: TaskConfig):
     """Return fixed-size owner-relative summaries for up to four players."""
 
     player_count = clipped_player_count(env_cfg)
@@ -687,7 +687,7 @@ def owner_relative_summary(planets, fleets, player, env_cfg: EnvConfig):
     )
 
 
-def target_owner_one_hot(owner, player, env_cfg: EnvConfig):
+def target_owner_one_hot(owner, player, env_cfg: TaskConfig):
     """Encode target owners relative to ``player`` with neutral as all-zero."""
 
     player_count = clipped_player_count(env_cfg)
@@ -700,7 +700,7 @@ def target_owner_one_hot(owner, player, env_cfg: EnvConfig):
     ) * valid_owner[..., None].astype(jnp.float32)
 
 
-def clipped_player_count(env_cfg: EnvConfig) -> int:
+def clipped_player_count(env_cfg: TaskConfig) -> int:
     return max(
         1, min(MAX_OWNER_FEATURE_PLAYERS, int(getattr(env_cfg, "player_count", 2)))
     )

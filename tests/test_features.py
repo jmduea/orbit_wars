@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.config import EnvConfig
+from src.config import TaskConfig
 from src.constants import MAX_PLANETS
 from src.features import (
     build_candidate_features,
@@ -37,7 +37,7 @@ def test_build_candidates_uses_real_slots_and_does_not_cap_enemies_at_one_third(
     state = GameState(
         step=0, player=0, planets=[src, *enemies, neutral, friendly], fleets=[]
     )
-    cfg = EnvConfig(candidate_count=8)
+    cfg = TaskConfig(candidate_count=8)
 
     candidates = build_candidates(src, state, cfg)
 
@@ -47,7 +47,7 @@ def test_build_candidates_uses_real_slots_and_does_not_cap_enemies_at_one_third(
     assert sum(candidate.owner == 0 for candidate in candidates) == 1
 
 def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
-    cfg = EnvConfig(max_fleets=8, candidate_count=4, player_count=4)
+    cfg = TaskConfig(max_fleets=8, candidate_count=4, player_count=4)
     src = PlanetState(id=0, owner=2, x=10.0, y=10.0, radius=1.0, ships=20, production=1)
     targets = [
         PlanetState(id=1, owner=3, x=12.0, y=10.0, radius=1.0, ships=30, production=1),

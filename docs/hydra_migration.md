@@ -22,9 +22,9 @@ uv run python -m src.train format=mix_2p_4p_16env opponents=self_play_curriculum
 | Short budget scan | `uv run python -m src.train training.total_updates=250` |
 | Reward shaping scan | `uv run python -m src.train reward.reward_production_delta=0.01` |
 
-## Legacy Override Compatibility
+## Removed Override Aliases
 
-During migration, existing nested field overrides still parse where possible, for example `ppo.total_updates=...` and `env.candidate_count=...`. New commands should prefer `training.*`, `task.*`, and other responsibility paths.
+The public config surface is the responsibility-group schema. Old nested roots are not compatibility aliases; update commands to `training.*`, `task.*`, `reward.*`, `telemetry.*`, `artifacts.*`, `format.*`, `opponents.*`, or `curriculum.*`.
 
 ## Source of Truth
 

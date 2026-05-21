@@ -13,6 +13,7 @@ update_chunk_rows_min: 4096
 update_chunk_rows_max: null
 rollout_microbatch_envs: null
 enable_gradient_checkpointing: true
+log_every: 5
 reseed_every_updates: 0
 reseed_on_plateau: false
 plateau_metric: episode_reward_mean

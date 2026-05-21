@@ -38,7 +38,7 @@ uv run python -m src.train task.candidate_count=16 reward.reward_production_delt
 uv run python -m src.train format=mix_2p_4p_16env opponents=self_play_curriculum
 ```
 
-Legacy nested overrides such as `ppo.total_updates=...` and `env.candidate_count=...` still parse during the migration, but new commands should prefer the responsibility groups above.
+Overrides outside these responsibility groups are rejected by Hydra instead of being normalized at runtime.
 
 ## Sweeps
 

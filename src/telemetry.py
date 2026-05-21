@@ -14,8 +14,8 @@ class TelemetryLogger:
         self._cfg = cfg
         self._run = None
         self._wandb = None
-        self._enabled = bool(cfg.wandb.enabled)
-        self._log_model_every = max(int(cfg.wandb.log_model_every), 1)
+        self._enabled = bool(cfg.telemetry.wandb.enabled)
+        self._log_model_every = max(int(cfg.telemetry.wandb.log_model_every), 1)
         self._init(run_metadata or {})
 
     def _init(self, run_metadata: dict[str, Any]) -> None:
@@ -26,11 +26,11 @@ class TelemetryLogger:
         except ImportError:
             return
         self._wandb = wandb
-        tags = list(self._cfg.wandb.tags)
+        tags = list(self._cfg.telemetry.wandb.tags)
         self._run = wandb.init(
-            project=self._cfg.wandb.project,
-            entity=self._cfg.wandb.entity,
-            group=self._cfg.wandb.group,
+            project=self._cfg.telemetry.wandb.project,
+            entity=self._cfg.telemetry.wandb.entity,
+            group=self._cfg.telemetry.wandb.group,
             tags=tags,
             name=self._cfg.run_name,
             config={},
@@ -53,7 +53,7 @@ class TelemetryLogger:
         return self._run is not None and self._wandb is not None
 
     def watch_model(self, model: Any) -> None:
-        if not self.active or not self._cfg.wandb.watch_model:
+        if not self.active or not self._cfg.telemetry.wandb.watch_model:
             return
         self._wandb.watch(model, log="all", log_freq=self._log_model_every)
 
@@ -73,7 +73,7 @@ class TelemetryLogger:
         self._wandb.log(self._flatten(record), step=step)
 
     def log_artifact(self, path: str | Path, *, name: str, artifact_type: str) -> None:
-        if not self.active or not self._cfg.wandb.log_artifacts:
+        if not self.active or not self._cfg.telemetry.wandb.log_artifacts:
             return
         artifact_path = Path(path)
         if not artifact_path.exists():

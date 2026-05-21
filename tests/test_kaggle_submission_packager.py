@@ -23,12 +23,19 @@ from src.conf_schema import TrainConfig
 
 def _fake_config() -> SimpleNamespace:
     return SimpleNamespace(
-        env=SimpleNamespace(
+        task=SimpleNamespace(
             candidate_count=8,
             ship_bucket_count=8,
             max_fleets=256,
             player_count=2,
             max_ships=400.0,
+            feature_history_steps=1,
+            trajectory_shield_enabled=True,
+            trajectory_shield_hit_mode="selected_target",
+            trajectory_shield_horizon=500,
+            trajectory_shield_epsilon=1e-6,
+        ),
+        reward=SimpleNamespace(
             reward_capture_planet=0.0,
             reward_ship_delta=0.0,
             reward_production_delta=0.0,
@@ -36,11 +43,6 @@ def _fake_config() -> SimpleNamespace:
             early_terminal_reward_shaping_enabled=True,
             early_terminal_reward_shaping_horizon=500,
             terminal_reward_mode="binary_win",
-            feature_history_steps=1,
-            trajectory_shield_enabled=True,
-            trajectory_shield_hit_mode="selected_target",
-            trajectory_shield_horizon=500,
-            trajectory_shield_epsilon=1e-6,
         ),
         model=SimpleNamespace(
             architecture="gnn_pointer",
@@ -52,7 +54,7 @@ def _fake_config() -> SimpleNamespace:
             normalize_observations=True,
             obs_norm_clip=10.0,
         ),
-        ppo=SimpleNamespace(enable_gradient_checkpointing=False),
+        training=SimpleNamespace(enable_gradient_checkpointing=False),
     )
 
 
@@ -89,12 +91,12 @@ def test_export_runtime_artifact_strips_training_state(tmp_path: Path) -> None:
 
 def test_plain_data_tolerates_old_pickled_dataclass_missing_new_field() -> None:
     cfg = TrainConfig()
-    delattr(cfg.artifact_pipeline, "replay_backend")
+    delattr(cfg.artifacts.artifact_pipeline, "replay_backend")
 
     data = _to_plain_data(cfg)
 
-    assert "artifact_pipeline" in data
-    assert "replay_backend" not in data["artifact_pipeline"]
+    assert "artifact_pipeline" in data["artifacts"]
+    assert "replay_backend" not in data["artifacts"]["artifact_pipeline"]
     assert data["model"]["architecture"] == "gnn_pointer"
 
 

@@ -90,8 +90,8 @@ def test_filter_metric_record_filters_event_fields_but_keeps_checkpoint_operatio
 
 def test_enabled_metric_names_include_dynamic_retention_and_plateau_metrics():
     cfg = TrainConfig()
-    cfg.checkpoint_retention.best_metric_name = "total_loss"
-    cfg.plateau_metric = "policy_loss"
+    cfg.artifacts.checkpoint_retention.best_metric_name = "total_loss"
+    cfg.training.plateau_metric = "policy_loss"
     groups = _metric_groups(losses=False)
 
     names = enabled_metric_names(

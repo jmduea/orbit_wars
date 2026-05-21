@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Sequence
 
-from src.conf_schema import EnvConfig
+from src.conf_schema import TaskConfig
 from src.constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
@@ -193,31 +193,31 @@ _validate_schema_dim(
 
 
 # -- env-aware factories --
-def feature_history_steps(env_cfg: EnvConfig | None = None) -> int:
+def feature_history_steps(env_cfg: TaskConfig | None = None) -> int:
     if env_cfg is None:
         return 1
     return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
 
 
-def self_feature_schema(env_cfg: EnvConfig | None = None) -> FeatureGroupRegistry:
+def self_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
     return SELF_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
 
 
-def self_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+def self_feature_dim(env_cfg: TaskConfig | None = None) -> int:
     return self_feature_schema(env_cfg).total_dim
 
 
-def candidate_feature_schema(env_cfg: EnvConfig | None = None) -> FeatureGroupRegistry:
+def candidate_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
     return CANDIDATE_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
 
 
-def candidate_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+def candidate_feature_dim(env_cfg: TaskConfig | None = None) -> int:
     return candidate_feature_schema(env_cfg).total_dim
 
 
-def global_feature_schema(env_cfg: EnvConfig | None = None) -> FeatureGroupRegistry:
+def global_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
     return GLOBAL_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
 
 
-def global_feature_dim(env_cfg: EnvConfig | None = None) -> int:
+def global_feature_dim(env_cfg: TaskConfig | None = None) -> int:
     return global_feature_schema(env_cfg).total_dim

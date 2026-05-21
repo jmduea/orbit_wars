@@ -34,10 +34,10 @@ def test_jax_replay_actor_handles_sequence_policy_outputs(
     monkeypatch, tmp_path: Path
 ) -> None:
     cfg = TrainConfig()
-    cfg.env.candidate_count = 12
-    cfg.env.ship_bucket_count = 4
-    cfg.env.max_fleets = 8
-    cfg.env.trajectory_shield_enabled = False
+    cfg.task.candidate_count = 12
+    cfg.task.ship_bucket_count = 4
+    cfg.task.max_fleets = 8
+    cfg.task.trajectory_shield_enabled = False
 
     checkpoint_path = tmp_path / "jax_ckpt_000100.pkl"
     with checkpoint_path.open("wb") as file:

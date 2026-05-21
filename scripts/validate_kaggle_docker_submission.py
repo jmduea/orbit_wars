@@ -123,9 +123,10 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
     config_dict = _to_plain_data(config)
     if not isinstance(config_dict, dict):
         raise ValidationError("checkpoint_schema_failed", "Checkpoint config could not be serialized")
-    env_cfg = _require_dict(config_dict, "env")
+    task_cfg = _require_dict(config_dict, "task")
+    reward_cfg = _require_dict(config_dict, "reward")
     model_cfg = _require_dict(config_dict, "model")
-    ppo_cfg = _require_dict(config_dict, "ppo")
+    training_cfg = _require_dict(config_dict, "training")
     architecture = str(model_cfg.get("architecture", "")).strip().lower()
     if architecture not in {
         "mlp",
@@ -149,11 +150,12 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
         "checkpoint_update": int(checkpoint.get("update", -1)),
         "params": params,
         "config": {
-            "env": env_cfg,
+            "task": task_cfg,
+            "reward": reward_cfg,
             "model": model_cfg,
-            "ppo": {
+            "training": {
                 "enable_gradient_checkpointing": bool(
-                    ppo_cfg.get("enable_gradient_checkpointing", False)
+                    training_cfg.get("enable_gradient_checkpointing", False)
                 )
             },
         },
@@ -347,12 +349,21 @@ from typing import Any
 
 
 @dataclass(slots=True)
-class EnvConfig:
+class TaskConfig:
     candidate_count: int = 8
     ship_bucket_count: int = 8
     max_fleets: int = 256
     player_count: int = 2
     max_ships: float = 400.0
+    feature_history_steps: int = 1
+    trajectory_shield_enabled: bool = True
+    trajectory_shield_hit_mode: str = "selected_target"
+    trajectory_shield_horizon: int = 500
+    trajectory_shield_epsilon: float = 1e-6
+
+
+@dataclass(slots=True)
+class RewardConfig:
     reward_capture_planet: float = 0.0
     reward_ship_delta: float = 0.0
     reward_production_delta: float = 0.0
@@ -360,11 +371,6 @@ class EnvConfig:
     early_terminal_reward_shaping_enabled: bool = True
     early_terminal_reward_shaping_horizon: int = 500
     terminal_reward_mode: str = "binary_win"
-    feature_history_steps: int = 1
-    trajectory_shield_enabled: bool = True
-    trajectory_shield_hit_mode: str = "selected_target"
-    trajectory_shield_horizon: int = 500
-    trajectory_shield_epsilon: float = 1e-6
 
 
 @dataclass(slots=True)
@@ -380,22 +386,24 @@ class ModelConfig:
 
 
 @dataclass(slots=True)
-class PPOConfig:
+class TrainingConfig:
     enable_gradient_checkpointing: bool = False
 
 
 @dataclass(slots=True)
 class TrainConfig:
-    env: EnvConfig = field(default_factory=EnvConfig)
+    task: TaskConfig = field(default_factory=TaskConfig)
+    reward: RewardConfig = field(default_factory=RewardConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
-    ppo: PPOConfig = field(default_factory=PPOConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
 
 
 def config_from_plain(data: dict[str, Any]) -> TrainConfig:
     return TrainConfig(
-        env=EnvConfig(**data.get("env", {})),
+        task=TaskConfig(**data.get("task", {})),
+        reward=RewardConfig(**data.get("reward", {})),
         model=ModelConfig(**data.get("model", {})),
-        ppo=PPOConfig(**data.get("ppo", {})),
+        training=TrainingConfig(**data.get("training", {})),
     )
 '''
 
@@ -437,7 +445,7 @@ def _load_state():
     params = artifact["params"]
     policy = build_jax_policy(cfg)
     _warm_policy(policy, params, cfg)
-    history = FeatureHistoryBuffer(max_steps=int(cfg.env.feature_history_steps))
+    history = FeatureHistoryBuffer(max_steps=int(cfg.task.feature_history_steps))
     manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
     _STATE = {
         "cfg": cfg,
@@ -451,13 +459,13 @@ def _load_state():
 
 
 def _warm_policy(policy, params, cfg) -> None:
-    self_features = jnp.zeros((MAX_PLANETS, self_feature_dim(cfg.env)), dtype=jnp.float32)
+    self_features = jnp.zeros((MAX_PLANETS, self_feature_dim(cfg.task)), dtype=jnp.float32)
     candidate_features = jnp.zeros(
-        (MAX_PLANETS, int(cfg.env.candidate_count), candidate_feature_dim(cfg.env)),
+        (MAX_PLANETS, int(cfg.task.candidate_count), candidate_feature_dim(cfg.task)),
         dtype=jnp.float32,
     )
-    global_features = jnp.zeros((MAX_PLANETS, global_feature_dim(cfg.env)), dtype=jnp.float32)
-    candidate_mask = jnp.ones((MAX_PLANETS, int(cfg.env.candidate_count)), dtype=jnp.bool_)
+    global_features = jnp.zeros((MAX_PLANETS, global_feature_dim(cfg.task)), dtype=jnp.float32)
+    candidate_mask = jnp.ones((MAX_PLANETS, int(cfg.task.candidate_count)), dtype=jnp.bool_)
     outputs = policy.apply(
         {"params": params},
         self_features,
@@ -471,7 +479,7 @@ def _warm_policy(policy, params, cfg) -> None:
 def agent(obs: Any) -> list[list[float | int]]:
     state = _load_state()
     cfg = state["cfg"]
-    batch = encode_turn(obs, cfg.env, env_index=0, feature_history=state["history"])
+    batch = encode_turn(obs, cfg.task, env_index=0, feature_history=state["history"])
     if batch.self_features.shape[0] == 0:
         return []
     sampled = select_runtime_shielded_policy_actions(
@@ -479,7 +487,7 @@ def agent(obs: Any) -> list[list[float | int]]:
         state["policy"],
         {"params": state["params"]},
         batch,
-        cfg.env,
+        cfg.task,
         deterministic=True,
     )
     target_indices = jax.device_get(sampled.target_index)
@@ -489,7 +497,7 @@ def agent(obs: Any) -> list[list[float | int]]:
     for row_idx, context in enumerate(batch.contexts):
         remaining_ships = int(context.source_ships)
         for step_idx in range(target_indices.shape[1]):
-            if len(moves) >= int(cfg.env.max_fleets):
+            if len(moves) >= int(cfg.task.max_fleets):
                 break
             target_idx = int(target_indices[row_idx, step_idx])
             bucket_idx = int(ship_buckets[row_idx, step_idx])
@@ -499,7 +507,7 @@ def agent(obs: Any) -> list[list[float | int]]:
                 continue
             if not bool(context.candidate_mask[target_idx]):
                 continue
-            ships = _ship_count_for_bucket(remaining_ships, bucket_idx, int(cfg.env.ship_bucket_count))
+            ships = _ship_count_for_bucket(remaining_ships, bucket_idx, int(cfg.task.ship_bucket_count))
             if ships <= 0:
                 continue
             target_id = int(context.candidate_ids[target_idx])
@@ -510,7 +518,7 @@ def agent(obs: Any) -> list[list[float | int]]:
                 target_id,
                 angle,
                 int(ships),
-                cfg.env,
+                cfg.task,
             ):
                 continue
             remaining_ships = max(0, remaining_ships - ships)

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import EnvConfig
+from src.config import RewardConfig, TaskConfig
 from src.constants import MAX_PLANETS
 from src.features import (
     NO_OP_CANDIDATE_INDEX,
@@ -26,7 +26,7 @@ from src.jax_features import encode_turn
 
 
 def test_jax_reset_is_deterministic_for_identical_key():
-    cfg = EnvConfig(max_fleets=32, candidate_count=6)
+    cfg = TaskConfig(max_fleets=32, candidate_count=6)
     key = jax.random.PRNGKey(123)
 
     state_a, batch_a = reset(key, cfg)
@@ -44,7 +44,7 @@ def test_jax_reset_is_deterministic_for_identical_key():
 
 
 def test_jax_batched_reset_and_step_shapes():
-    cfg = EnvConfig(max_fleets=16, candidate_count=5)
+    cfg = TaskConfig(max_fleets=16, candidate_count=5)
     keys = jax.random.split(jax.random.PRNGKey(7), 3)
 
     states, batches = batched_reset(keys, cfg)
@@ -61,14 +61,16 @@ def test_jax_batched_reset_and_step_shapes():
 
     action = empty_action(cfg)
     batched_action = jax.tree.map(lambda x: jnp.broadcast_to(x, (3,) + x.shape), action)
-    next_states, results = batched_step(states, batched_action, batched_action, cfg)
+    next_states, results = batched_step(
+        states, batched_action, batched_action, cfg, RewardConfig()
+    )
     assert next_states.game.step.shape == (3,)
     assert results.reward.shape == (3,)
     assert results.batch.self_features.shape == (3, MAX_PLANETS, self_feature_dim())
 
 
 def test_noop_candidate_slot_is_valid_for_owned_planets_only():
-    cfg = EnvConfig(max_fleets=16, candidate_count=4)
+    cfg = TaskConfig(max_fleets=16, candidate_count=4)
     _state, batch = reset(jax.random.PRNGKey(0), cfg)
     masks = np.asarray(batch.candidate_mask)
     decision_mask = np.asarray(batch.decision_mask).astype(bool)
@@ -78,7 +80,7 @@ def test_noop_candidate_slot_is_valid_for_owned_planets_only():
 
 
 def test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker():
-    cfg = EnvConfig(max_fleets=16, candidate_count=3)
+    cfg = TaskConfig(max_fleets=16, candidate_count=3)
     planet_ids = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
     owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
     owner = owner.at[0].set(0)
@@ -133,7 +135,7 @@ def test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker():
 
 
 def test_launch_and_production_match_core_orbit_wars_mechanics():
-    cfg = EnvConfig(max_fleets=16, candidate_count=4)
+    cfg = TaskConfig(max_fleets=16, candidate_count=4)
     state, _batch = reset(jax.random.PRNGKey(0), cfg)
     owners = np.asarray(state.game.planets.owner)
     source_id = int(np.flatnonzero(owners == 0)[0])
@@ -147,7 +149,7 @@ def test_launch_and_production_match_core_orbit_wars_mechanics():
         ships=action.ships.at[0].set(3.0),
         valid=action.valid.at[0].set(True),
     )
-    next_state, _result = step(state, action, empty_action(cfg), cfg)
+    next_state, _result = step(state, action, empty_action(cfg), cfg, RewardConfig())
 
     ships_after = float(np.asarray(next_state.game.planets.ships)[source_id])
     assert ships_after == ships_before - 3.0 + production
@@ -155,7 +157,7 @@ def test_launch_and_production_match_core_orbit_wars_mechanics():
 
 
 def test_jax_owner_relative_feature_shapes_and_values_for_four_players():
-    cfg = EnvConfig(max_fleets=8, candidate_count=4, player_count=4)
+    cfg = TaskConfig(max_fleets=8, candidate_count=4, player_count=4)
     planet_ids = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
     owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
     owner = owner.at[:8].set(jnp.array([2, 3, 0, 1, -1, -1, -1, -1], dtype=jnp.int32))
@@ -245,7 +247,7 @@ def test_jax_owner_relative_feature_shapes_and_values_for_four_players():
 
 
 def test_jax_history_shapes_use_configured_window():
-    cfg = EnvConfig(max_fleets=16, candidate_count=5, feature_history_steps=3)
+    cfg = TaskConfig(max_fleets=16, candidate_count=5, feature_history_steps=3)
     _state, batch = reset(jax.random.PRNGKey(11), cfg)
 
     assert batch.self_features.shape == (MAX_PLANETS, self_feature_dim(cfg))

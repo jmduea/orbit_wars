@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
 import subprocess
 import sys
 import time
@@ -18,14 +17,20 @@ from src.artifact_pipeline import (  # noqa: E402
     load_optional_jobs,
     load_pending_optional_jobs,
 )
+from src.checkpoint_compat import (  # noqa: E402
+    load_checkpoint_payload,
+    validate_checkpoint_config_compatibility,
+)
 from src.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
 
 
 def _load_checkpoint_config(checkpoint_path: Path) -> Any:
-    with checkpoint_path.open("rb") as file:
-        checkpoint = pickle.load(file)
+    checkpoint = load_checkpoint_payload(checkpoint_path)
     if not isinstance(checkpoint, dict) or "config" not in checkpoint:
         raise ValueError(f"checkpoint does not contain config: {checkpoint_path}")
+    validate_checkpoint_config_compatibility(
+        checkpoint, checkpoint_path=checkpoint_path
+    )
     return checkpoint["config"]
 
 
@@ -46,13 +51,13 @@ def _run_replay_job(job: dict[str, object]) -> None:
     checkpoint_path = Path(str(job["checkpoint_path"]))
     log_path = Path(str(job["log_path"]))
     cfg = _load_checkpoint_config(checkpoint_path)
-    artifact_cfg = getattr(cfg, "artifact_pipeline", None)
+    artifact_cfg = cfg.artifacts.artifact_pipeline
     backend = str(job.get("backend", getattr(artifact_cfg, "replay_backend", "docker")))
     if backend == "docker":
         job.setdefault("docker_image", getattr(artifact_cfg, "docker_image", "gcr.io/kaggle-images/python-simulations"))
         job.setdefault("player_count", getattr(artifact_cfg, "docker_player_count", "both"))
         job.setdefault("timeout_seconds", getattr(artifact_cfg, "docker_timeout_seconds", 1.0))
-        job.setdefault("episode_steps", getattr(cfg.replay, "max_steps", 500))
+        job.setdefault("episode_steps", getattr(cfg.artifacts.replay, "max_steps", 500))
         job.setdefault("seed", int(getattr(cfg, "seed", 42)) + int(job["update"]))
         _run_docker_validation_job(job)
         return

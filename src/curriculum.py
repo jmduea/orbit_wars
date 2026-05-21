@@ -60,9 +60,8 @@ class CurriculumStage:
 class CurriculumController:
     """Host-side staged curriculum controller that emits immutable JAX stage views."""
 
-    def __init__(self, curriculum_cfg: Any) -> None:
+    def __init__(self, curriculum_cfg: Any, snapshot_cfg: Any | None = None) -> None:
         self.enabled = bool(getattr(curriculum_cfg, "enabled", False))
-        snapshot_cfg = getattr(curriculum_cfg, "snapshot", None)
         self.snapshot_selection = str(getattr(snapshot_cfg, "selection", "uniform"))
         raw_stages = list(getattr(curriculum_cfg, "stages", []) or [])
         if not self.enabled or not raw_stages:
@@ -256,7 +255,10 @@ class CurriculumController:
 
 
 def default_stage_view(cfg: Any) -> StageView:
-    family = "random" if getattr(cfg, "opponent", "self") == "random" else "latest"
+    opponents = getattr(cfg, "opponents", None)
+    mode = getattr(opponents, "mode", None) if opponents is not None else None
+    opponent = getattr(mode, "opponent", "self")
+    family = "random" if opponent == "random" else "latest"
     controller = CurriculumController(
         type(
             "DefaultCurriculum",

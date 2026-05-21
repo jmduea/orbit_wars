@@ -7,13 +7,25 @@ from hydra.core.config_store import ConfigStore
 
 
 @dataclass(slots=True)
-class EnvConfig:
+class TaskConfig:
     """Environment and feature-shape configuration shared by all backends."""
+
     candidate_count: int = 8
     ship_bucket_count: int = 8
     max_fleets: int = 256
     player_count: int = 2
     max_ships: float = 400.0
+    feature_history_steps: int = 1
+    trajectory_shield_enabled: bool = True
+    trajectory_shield_hit_mode: str = "selected_target"
+    trajectory_shield_horizon: int = 500
+    trajectory_shield_epsilon: float = 1e-6
+
+
+@dataclass(slots=True)
+class RewardConfig:
+    """Reward shaping and terminal reward configuration."""
+
     reward_capture_planet: float = 0.0
     reward_ship_delta: float = 0.0
     reward_production_delta: float = 0.0
@@ -21,11 +33,6 @@ class EnvConfig:
     early_terminal_reward_shaping_enabled: bool = True
     early_terminal_reward_shaping_horizon: int = 500
     terminal_reward_mode: str = "binary_win"
-    feature_history_steps: int = 1
-    trajectory_shield_enabled: bool = True
-    trajectory_shield_hit_mode: str = "selected_target"
-    trajectory_shield_horizon: int = 500
-    trajectory_shield_epsilon: float = 1e-6
 
 
 @dataclass(slots=True)
@@ -44,7 +51,7 @@ class ModelConfig:
 
 
 @dataclass(slots=True)
-class PPOConfig:
+class TrainingConfig:
     """PPO rollout, optimization, and loss hyperparameters."""
 
     rollout_steps: int = 32
@@ -62,10 +69,16 @@ class PPOConfig:
     vf_coef: float = 0.5
     lr: float = 3e-4
     max_grad_norm: float = 0.5
+    log_every: int = 1
+    reseed_every_updates: int = 0
+    reseed_on_plateau: bool = False
+    plateau_metric: str = "episode_reward_mean"
+    plateau_window: int = 10
+    plateau_delta: float = 0.0
 
 
 @dataclass(slots=True)
-class TrainingFormatConfig:
+class FormatConfig:
     format_schedule: list[dict[str, Any]] = field(default_factory=list)
     format_mix: list[dict[str, Any]] = field(default_factory=list)
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
@@ -84,7 +97,6 @@ class CurriculumSnapshotConfig:
 @dataclass(slots=True)
 class CurriculumConfig:
     enabled: bool = False
-    snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
     stages: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -105,6 +117,7 @@ class MetricGroupsConfig:
 @dataclass(slots=True)
 class TelemetryConfig:
     metric_groups: MetricGroupsConfig = field(default_factory=MetricGroupsConfig)
+    wandb: WandBConfig = field(default_factory=lambda: WandBConfig())
 
 
 @dataclass(slots=True)
@@ -133,7 +146,28 @@ class OpponentMixConfig:
         }
     )
     temperature: float = 1.0
-    curriculum: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class OpponentSelfPlayConfig:
+    enabled: bool = False
+    update_interval: int = 10
+    deterministic: bool = False
+
+
+@dataclass(slots=True)
+class OpponentModeConfig:
+    opponent: str = "random"
+    multi_opponent_mode: str = "mixed"
+    alternate_player_sides: bool = True
+
+
+@dataclass(slots=True)
+class OpponentsConfig:
+    self_play: OpponentSelfPlayConfig = field(default_factory=OpponentSelfPlayConfig)
+    mode: OpponentModeConfig = field(default_factory=OpponentModeConfig)
+    mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
+    snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
 
 
 @dataclass(slots=True)
@@ -183,42 +217,30 @@ class ArtifactPipelineConfig:
 
 
 @dataclass(slots=True)
-class TrainConfig:
-    seed: int = 42
-    run_name: str = "orbit_wars_template_ppo"
-    device: str = "auto"
+class ArtifactsConfig:
     save_dir: str = "artifacts/rl_template"
     checkpoint_every: int = 10
-    log_every: int = 1
-    opponent: str = "random"
-    self_play_update_interval: int = 10
-    self_play_deterministic: bool = False
-    self_play_enabled: bool = False
-    self_play_pool_size: int = 0
-    self_play_snapshot_interval: int = 0
-    self_play_latest_probability: float = 0.5
-    multi_opponent_mode: str = "mixed"
-    alternate_player_sides: bool = True
-    env: EnvConfig = field(default_factory=EnvConfig)
-    model: ModelConfig = field(default_factory=ModelConfig)
-    ppo: PPOConfig = field(default_factory=PPOConfig)
-    training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
-    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
-    opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
-    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
-    wandb: WandBConfig = field(default_factory=WandBConfig)
+    artifact_pipeline: ArtifactPipelineConfig = field(default_factory=ArtifactPipelineConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     checkpoint_retention: CheckpointRetentionConfig = field(
         default_factory=CheckpointRetentionConfig
     )
-    artifact_pipeline: ArtifactPipelineConfig = field(
-        default_factory=ArtifactPipelineConfig
-    )
-    reseed_every_updates: int = 0
-    reseed_on_plateau: bool = False
-    plateau_metric: str = "episode_reward_mean"
-    plateau_window: int = 10
-    plateau_delta: float = 0.0
+
+
+@dataclass(slots=True)
+class TrainConfig:
+    seed: int = 42
+    run_name: str = "orbit_wars_template_ppo"
+    device: str = "auto"
+    model: ModelConfig = field(default_factory=ModelConfig)
+    task: TaskConfig = field(default_factory=TaskConfig)
+    reward: RewardConfig = field(default_factory=RewardConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    format: FormatConfig = field(default_factory=FormatConfig)
+    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
+    opponents: OpponentsConfig = field(default_factory=OpponentsConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
+    artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None

@@ -15,7 +15,7 @@ from src.metric_registry import filter_event_record, filter_update_record
 def test_hydra_config_supports_metric_group_overrides():
     cfg = compose_hydra_train_config(
         [
-            "ppo.total_updates=1",
+            "training.total_updates=1",
             "telemetry.metric_groups.trajectory_shield_debug=true",
             "telemetry.metric_groups.losses=false",
         ]
@@ -28,7 +28,7 @@ def test_hydra_config_supports_metric_group_overrides():
 
 def test_invalid_plateau_metric_is_rejected():
     cfg = OmegaConf.structured(TrainConfig)
-    cfg.plateau_metric = "average_episode_reward"
+    cfg.training.plateau_metric = "average_episode_reward"
 
     with pytest.raises(
         ValueError, match="registered canonical scalar telemetry metric"
@@ -38,7 +38,7 @@ def test_invalid_plateau_metric_is_rejected():
 
 def test_non_scalar_plateau_metric_is_rejected():
     cfg = OmegaConf.structured(TrainConfig)
-    cfg.plateau_metric = "opponent_composition"
+    cfg.training.plateau_metric = "opponent_composition"
 
     with pytest.raises(
         ValueError, match="registered canonical scalar telemetry metric"
@@ -48,7 +48,7 @@ def test_non_scalar_plateau_metric_is_rejected():
 
 def test_string_plateau_metric_is_rejected():
     cfg = OmegaConf.structured(TrainConfig)
-    cfg.plateau_metric = "curriculum_stage_id"
+    cfg.training.plateau_metric = "curriculum_stage_id"
 
     with pytest.raises(
         ValueError, match="registered canonical scalar telemetry metric"
@@ -58,7 +58,7 @@ def test_string_plateau_metric_is_rejected():
 
 def test_string_retention_metric_is_rejected():
     cfg = OmegaConf.structured(TrainConfig)
-    cfg.checkpoint_retention.best_metric_name = "seed_scheduler_policy"
+    cfg.artifacts.checkpoint_retention.best_metric_name = "seed_scheduler_policy"
 
     with pytest.raises(
         ValueError, match="registered canonical scalar telemetry metric"
@@ -70,7 +70,7 @@ def test_filter_update_record_preserves_configured_retention_metric():
     cfg = TrainConfig()
     cfg.telemetry.metric_groups.losses = False
     cfg.telemetry.metric_groups.opponent_composition = False
-    cfg.checkpoint_retention.best_metric_name = "total_loss"
+    cfg.artifacts.checkpoint_retention.best_metric_name = "total_loss"
 
     record = {
         "update": 3,
@@ -124,8 +124,8 @@ def test_checkpoint_pruning_can_read_preserved_metric_from_filtered_jsonl(
 ):
     cfg = TrainConfig()
     cfg.telemetry.metric_groups.losses = False
-    cfg.checkpoint_retention.best_metric_name = "total_loss"
-    cfg.checkpoint_retention.best_metric_mode = "max"
+    cfg.artifacts.checkpoint_retention.best_metric_name = "total_loss"
+    cfg.artifacts.checkpoint_retention.best_metric_mode = "max"
 
     log_path = tmp_path / "metrics.jsonl"
     records = [
@@ -168,8 +168,8 @@ def test_checkpoint_pruning_can_read_preserved_metric_from_filtered_jsonl(
         keep_last_n=0,
         keep_every_n_updates=0,
         keep_best_k_by_metric=1,
-        best_metric_name=cfg.checkpoint_retention.best_metric_name,
-        best_metric_mode=cfg.checkpoint_retention.best_metric_mode,
+        best_metric_name=cfg.artifacts.checkpoint_retention.best_metric_name,
+        best_metric_mode=cfg.artifacts.checkpoint_retention.best_metric_mode,
         min_update_for_pruning=0,
         dry_run_pruning=False,
         protected_paths=None,

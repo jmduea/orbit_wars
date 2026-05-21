@@ -16,7 +16,6 @@ mix:
     random: 0.0
     noop: 0.0
   temperature: 1.0
-  curriculum: []
 snapshot:
   pool_size: 5
   interval_updates: 100

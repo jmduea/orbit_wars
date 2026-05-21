@@ -22,7 +22,9 @@ from .artifact_pipeline import (
 )
 from .checkpoint_compat import (
     feature_metadata,
+    load_checkpoint_payload,
     validate_checkpoint_feature_compatibility,
+    validate_checkpoint_config_compatibility,
 )
 from .checkpoint_retention import prune_checkpoints
 from .config import TrainConfig
@@ -82,8 +84,8 @@ def _copy_config_for_rollout_group(
     """Return a rollout-specific config with static player/env counts."""
 
     group_cfg = deepcopy(cfg)
-    group_cfg.env.player_count = int(player_count)
-    group_cfg.ppo.num_envs = int(num_envs)
+    group_cfg.task.player_count = int(player_count)
+    group_cfg.training.num_envs = int(num_envs)
     return group_cfg
 
 
@@ -92,18 +94,18 @@ def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
 
     The JAX trainer keeps independent 2-player and 4-player environment states
     and compiles one collector per declared static format. If no groups are
-    configured, it falls back to the legacy single-format collector.
+    configured, it uses the single-format collector for the configured task.
     """
 
-    raw_groups = cfg.training_format.rollout_groups
+    raw_groups = cfg.format.rollout_groups
     groups: list[dict[str, int | str]] = []
     for index, group in enumerate(raw_groups):
-        player_count = int(group.get("player_count", cfg.env.player_count))
+        player_count = int(group.get("player_count", cfg.task.player_count))
         if player_count not in {2, 4}:
             raise ValueError(
                 f"JAX rollout groups support player_count 2 or 4, got {player_count}."
             )
-        num_envs = int(group.get("num_envs", cfg.ppo.num_envs))
+        num_envs = int(group.get("num_envs", cfg.training.num_envs))
         if num_envs <= 0:
             continue
         groups.append(
@@ -117,9 +119,9 @@ def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
         return groups
     return [
         {
-            "name": f"{cfg.env.player_count}p",
-            "player_count": int(cfg.env.player_count),
-            "num_envs": int(cfg.ppo.num_envs),
+            "name": f"{cfg.task.player_count}p",
+            "player_count": int(cfg.task.player_count),
+            "num_envs": int(cfg.training.num_envs),
         }
     ]
 
@@ -138,16 +140,16 @@ def _init_rollout_group(
     group_cfg = _copy_config_for_rollout_group(
         cfg, player_count=player_count, num_envs=num_envs
     )
-    reset_keys = jax.random.split(key, group_cfg.ppo.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, group_cfg.env)
-    env_indices = jnp.arange(group_cfg.ppo.num_envs, dtype=jnp.int32)
-    episode_counts = jnp.zeros((group_cfg.ppo.num_envs,), dtype=jnp.int32)
+    reset_keys = jax.random.split(key, group_cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
+    env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
+    episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)
     env_state, turn_batch = assign_learner_players(
         env_state,
         env_indices,
         episode_counts,
-        group_cfg.env,
-        group_cfg.alternate_player_sides,
+        group_cfg.task,
+        group_cfg.opponents.mode.alternate_player_sides,
     )
 
     def collect_fn(
@@ -229,7 +231,7 @@ def _checkpoint_payload_builder(
     opt_state = train_state.opt_state
     rng_key = key
     cfg_snapshot = deepcopy(cfg)
-    metadata = feature_metadata(cfg_snapshot.env)
+    metadata = feature_metadata(cfg_snapshot.task)
     curriculum_state_snapshot = (
         deepcopy(curriculum.state_dict()) if curriculum is not None else None
     )
@@ -265,11 +267,11 @@ def _checkpoint_payload_builder(
 
 
 def _checkpoint_replay_due(cfg: TrainConfig, update: int) -> bool:
-    if not cfg.replay.enabled:
+    if not cfg.artifacts.replay.enabled:
         return False
-    every_n = max(int(cfg.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.checkpoint_every), 1), 1)
-    return checkpoint_index % every_n == 0 or update == cfg.ppo.total_updates
+    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
+    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
+    return checkpoint_index % every_n == 0 or update == cfg.training.total_updates
 
 
 def _queue_optional_jobs_if_due(
@@ -291,13 +293,13 @@ def _queue_optional_jobs_if_due(
                 update=update,
                 checkpoint_path=checkpoint_path,
                 payload={
-                    "backend": cfg.artifact_pipeline.replay_backend,
+                    "backend": cfg.artifacts.artifact_pipeline.replay_backend,
                     "log_path": str(log_path),
-                    "replay_output_dir": cfg.replay.output_dir,
-                    "docker_image": cfg.artifact_pipeline.docker_image,
-                    "player_count": cfg.artifact_pipeline.docker_player_count,
-                    "timeout_seconds": cfg.artifact_pipeline.docker_timeout_seconds,
-                    "episode_steps": cfg.replay.max_steps,
+                    "replay_output_dir": cfg.artifacts.replay.output_dir,
+                    "docker_image": cfg.artifacts.artifact_pipeline.docker_image,
+                    "player_count": cfg.artifacts.artifact_pipeline.docker_player_count,
+                    "timeout_seconds": cfg.artifacts.artifact_pipeline.docker_timeout_seconds,
+                    "episode_steps": cfg.artifacts.replay.max_steps,
                     "seed": cfg.seed + update,
                 },
             )
@@ -310,10 +312,10 @@ def _queue_optional_jobs_if_due(
                 update=update,
                 checkpoint_path=checkpoint_path,
                 payload={
-                    "docker_image": cfg.artifact_pipeline.docker_image,
-                    "player_count": cfg.artifact_pipeline.docker_player_count,
-                    "timeout_seconds": cfg.artifact_pipeline.docker_timeout_seconds,
-                    "episode_steps": cfg.replay.max_steps,
+                    "docker_image": cfg.artifacts.artifact_pipeline.docker_image,
+                    "player_count": cfg.artifacts.artifact_pipeline.docker_player_count,
+                    "timeout_seconds": cfg.artifacts.artifact_pipeline.docker_timeout_seconds,
+                    "episode_steps": cfg.artifacts.replay.max_steps,
                     "seed": cfg.seed + update,
                 },
             )
@@ -327,7 +329,7 @@ def _start_artifact_worker_if_needed(
     queue_dir: Path,
     worker_state: dict[str, subprocess.Popen[object]],
 ) -> None:
-    if not cfg.artifact_pipeline.worker_autostart:
+    if not cfg.artifacts.artifact_pipeline.worker_autostart:
         return
     worker = worker_state.get("process")
     if worker is not None and worker.poll() is None:
@@ -340,9 +342,9 @@ def _start_artifact_worker_if_needed(
         str(Path(__file__).resolve().parents[1] / "scripts" / "run_artifact_worker.py"),
         str(queue_dir),
         "--poll-seconds",
-        str(cfg.artifact_pipeline.worker_poll_seconds),
+        str(cfg.artifacts.artifact_pipeline.worker_poll_seconds),
         "--idle-exit-seconds",
-        str(cfg.artifact_pipeline.worker_idle_exit_seconds),
+        str(cfg.artifacts.artifact_pipeline.worker_idle_exit_seconds),
     ]
     stdout = stdout_path.open("a", encoding="utf-8")
     stderr = stderr_path.open("a", encoding="utf-8")
@@ -360,7 +362,7 @@ def _active_group_indices(
 ) -> list[int]:
     active: list[int] = []
     for idx, group in enumerate(groups):
-        player_count = int(group.cfg.env.player_count)
+        player_count = int(group.cfg.task.player_count)
         if float(format_weights.get(player_count, 0.0)) > 0.0:
             active.append(idx)
     return active or list(range(len(groups)))
@@ -434,10 +436,10 @@ def _restore_curriculum_artifacts(
     curriculum: CurriculumController,
     historical_pool: HistoricalSnapshotPool,
 ) -> HistoricalSnapshotPool:
-    import pickle
-
-    with Path(checkpoint_path).open("rb") as file:
-        checkpoint = pickle.load(file)
+    checkpoint = load_checkpoint_payload(checkpoint_path)
+    validate_checkpoint_config_compatibility(
+        checkpoint, checkpoint_path=checkpoint_path
+    )
     if not isinstance(checkpoint, dict):
         return historical_pool
     state = checkpoint.get("curriculum_state")
@@ -451,7 +453,7 @@ def _restore_curriculum_artifacts(
 def _snapshot_due(cfg: TrainConfig, update: int) -> bool:
     if not cfg.curriculum.enabled:
         return False
-    interval = int(cfg.curriculum.snapshot.interval_updates)
+    interval = int(cfg.opponents.snapshot.interval_updates)
     return interval > 0 and update % interval == 0
 
 
@@ -478,7 +480,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         train_state, key, start_update, total_env_steps, completed_episodes = (
             load_jax_checkpoint(resume_checkpoint, train_state, cfg)
         )
-        validate_policy_param_shapes(train_state.params, cfg.env)
+        validate_policy_param_shapes(train_state.params, cfg.task)
         print(
             f"Resuming JAX training from {resume_checkpoint} at update {start_update}"
         )
@@ -497,17 +499,17 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     seed_scheduler = SeedScheduler(
         base_seed=cfg.seed,
         cfg=SeedScheduleConfig(
-            reseed_every_updates=cfg.reseed_every_updates,
-            reseed_on_plateau=cfg.reseed_on_plateau,
-            plateau_metric=cfg.plateau_metric,
-            plateau_window=cfg.plateau_window,
-            plateau_delta=cfg.plateau_delta,
+            reseed_every_updates=cfg.training.reseed_every_updates,
+            reseed_on_plateau=cfg.training.reseed_on_plateau,
+            plateau_metric=cfg.training.plateau_metric,
+            plateau_window=cfg.training.plateau_window,
+            plateau_delta=cfg.training.plateau_delta,
             heldout_eval_seed_set=cfg.heldout_eval_seed_set,
         ),
     )
-    curriculum = CurriculumController(cfg.curriculum)
+    curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     historical_pool = _init_historical_snapshot_pool(
-        train_state.params, cfg.curriculum.snapshot.pool_size
+        train_state.params, cfg.opponents.snapshot.pool_size
     )
     if resume_checkpoint is not None:
         historical_pool = _restore_curriculum_artifacts(
@@ -515,7 +517,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         )
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
-    artifact_cfg = cfg.artifact_pipeline
+    artifact_cfg = cfg.artifacts.artifact_pipeline
     artifact_queue_dir = run_dir / artifact_cfg.queue_dir
     checkpoint_pipeline = (
         AsyncArtifactPipeline(
@@ -582,7 +584,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir))
                 )
 
-            retention = cfg.checkpoint_retention
+            retention = cfg.artifacts.checkpoint_retention
             pruning = prune_checkpoints(
                 run_dir,
                 log_path=log_path,
@@ -618,7 +620,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     completed_training = False
     close_error: Exception | None = None
     try:
-        for update in range(start_update, cfg.ppo.total_updates + 1):
+        for update in range(start_update, cfg.training.total_updates + 1):
             if checkpoint_pipeline is not None:
                 handle_checkpoint_results(checkpoint_pipeline.drain_results())
             update_start = time.perf_counter()
@@ -752,7 +754,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "lost_avg_production_diff",
                 "won_avg_launch_fleet_speed",
                 "lost_avg_launch_fleet_speed",
-                cfg.plateau_metric,
+                cfg.training.plateau_metric,
             )
             rollout_scalar_values = jnp.asarray(
                 [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
@@ -769,7 +771,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     
             ppo_start = time.perf_counter()
             metrics_accum: dict[str, jax.Array] | None = None
-            for _ in range(cfg.ppo.epochs):
+            for _ in range(cfg.training.epochs):
                 train_state, update_metrics = update_fn(train_state, transitions)
                 metrics_accum = (
                     update_metrics
@@ -778,7 +780,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
             assert metrics_accum is not None
             metrics = jax.tree.map(
-                lambda x: x / float(max(cfg.ppo.epochs, 1)), metrics_accum
+                lambda x: x / float(max(cfg.training.epochs, 1)), metrics_accum
             )
             metric_names = tuple(metrics.keys())
             metric_values = jnp.asarray([metrics[name] for name in metric_names])
@@ -851,7 +853,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             total_env_steps += env_steps
             completed_episodes += episodes
-            seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
+            seed_scheduler.update_metric(float(rollout_scalars[cfg.training.plateau_metric]))
             curriculum_telemetry = curriculum.stage_telemetry(stage_view, update)
             update_events = list(phase_events)
             transition = curriculum.update(
@@ -932,7 +934,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
                 "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
                 "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
-                "seed_scheduler_plateau_metric": cfg.plateau_metric,
+                "seed_scheduler_plateau_metric": cfg.training.plateau_metric,
                 "reseed_events": reseed_events,
                 **curriculum_telemetry,
                 "opponent_slots_total": float(rollout_scalars["opponent_slots_total"]),
@@ -1031,15 +1033,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             }
             append_jsonl(log_path, record)
             telemetry.log(record, step=update)
-            if update % cfg.log_every == 0:
+            if update % cfg.training.log_every == 0:
                 print(
                     f"update={update} steps={total_env_steps} episodes={completed_episodes} "
                     f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
                     f"entropy={record['entropy']:.3f}"
                 )
-            if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-                is_final = update == cfg.ppo.total_updates
+            if update % cfg.artifacts.checkpoint_every == 0 or update == cfg.training.total_updates:
+                is_final = update == cfg.training.total_updates
                 if checkpoint_pipeline is None:
                     checkpoint_path = save_jax_checkpoint(
                         run_dir,
@@ -1123,16 +1125,16 @@ def load_jax_checkpoint(
 ) -> tuple[object, jax.Array, int, int, int]:
     """Load JAX training state and counters from a checkpoint payload."""
 
-    import pickle
-
-    with Path(checkpoint_path).open("rb") as file:
-        checkpoint = pickle.load(file)
+    checkpoint = load_checkpoint_payload(checkpoint_path)
     if not isinstance(checkpoint, dict) or "params" not in checkpoint:
         raise ValueError(
             f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
         )
+    validate_checkpoint_config_compatibility(
+        checkpoint, checkpoint_path=checkpoint_path
+    )
     validate_checkpoint_feature_compatibility(
-        checkpoint, cfg.env, checkpoint_path=checkpoint_path
+        checkpoint, cfg.task, checkpoint_path=checkpoint_path
     )
     params = jax.device_put(checkpoint["params"])
     opt_state = checkpoint.get("opt_state")
@@ -1150,7 +1152,7 @@ def load_jax_checkpoint(
     total_env_steps = int(
         checkpoint.get(
             "total_env_steps",
-            checkpoint_update * cfg.ppo.rollout_steps * cfg.ppo.num_envs,
+            checkpoint_update * cfg.training.rollout_steps * cfg.training.num_envs,
         )
     )
     completed_episodes = int(checkpoint.get("completed_episodes", 0))

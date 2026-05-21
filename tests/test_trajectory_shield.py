@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import EnvConfig
+from src.config import TaskConfig
 from src.constants import MAX_PLANETS
 from src.features import encode_turn
 from src.game_types import GameState, PlanetState
@@ -66,8 +66,8 @@ class FakeRuntimePolicy:
         )
 
 
-def _cfg(**overrides) -> EnvConfig:
-    cfg = EnvConfig(candidate_count=4, ship_bucket_count=4, max_fleets=8)
+def _cfg(**overrides) -> TaskConfig:
+    cfg = TaskConfig(candidate_count=4, ship_bucket_count=4, max_fleets=8)
     for key, value in overrides.items():
         setattr(cfg, key, value)
     return cfg

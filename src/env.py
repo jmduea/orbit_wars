@@ -4,7 +4,7 @@ from src.constants import MAX_STEPS
 from dataclasses import dataclass
 from typing import Any
 
-from .config import EnvConfig, TrainConfig
+from .config import RewardConfig, TaskConfig, TrainConfig
 from .features import (
     FeatureHistoryBuffer,
     TurnBatch,
@@ -49,7 +49,7 @@ class OrbitWarsEnv:
         self.episode_index = 0
         self.learner_player = 0
         self.feature_history = FeatureHistoryBuffer(
-            max(0, self.cfg.env.feature_history_steps - 1)
+            max(0, self.cfg.task.feature_history_steps - 1)
         )
 
     def reset(self, seed: int | None = None) -> TurnBatch:
@@ -58,15 +58,15 @@ class OrbitWarsEnv:
         if seed is not None:
             configuration["seed"] = int(seed)
             configuration["randomSeed"] = int(seed)
-        player_count = self.cfg.env.player_count
+        player_count = self.cfg.task.player_count
         if player_count < 1:
-            raise ValueError("cfg.env.player_count must be at least 1")
-        if self.cfg.alternate_player_sides:
+            raise ValueError("cfg.task.player_count must be at least 1")
+        if self.cfg.opponents.mode.alternate_player_sides:
             self.learner_player = (self.env_index + self.episode_index) % player_count
         else:
             self.learner_player = 0
         self.feature_history = FeatureHistoryBuffer(
-            max(0, self.cfg.env.feature_history_steps - 1)
+            max(0, self.cfg.task.feature_history_steps - 1)
         )
         opponent_players = [
             player for player in range(player_count) if player != self.learner_player
@@ -111,7 +111,7 @@ class OrbitWarsEnv:
         self.episode_index += 1
         batch = encode_turn(
             self.previous_player_state,
-            self.cfg.env,
+            self.cfg.task,
             env_index=self.env_index,
             feature_history=self.feature_history,
         )
@@ -121,13 +121,13 @@ class OrbitWarsEnv:
     def step(self, player_action: list[list[float | int]]) -> StepResult:
         if self.env is None:
             raise RuntimeError("Call reset() before step().")
-        player_count = self.cfg.env.player_count
+        player_count = self.cfg.task.player_count
         joint_action: list[list[list[float | int]]] = [[] for _ in range(player_count)]
         learner_state = self.previous_player_state or parse_observation(self.last_obs)
         joint_action[self.learner_player] = filter_moves_with_trajectory_shield(
             player_action,
             learner_state,
-            self.cfg.env,
+            self.cfg.task,
         )
         for player, opponent in self.active_opponents.items():
             opponent_state = self.previous_opponent_states.get(player) or parse_observation(
@@ -136,7 +136,7 @@ class OrbitWarsEnv:
             joint_action[player] = filter_moves_with_trajectory_shield(
                 opponent.act(self.last_opponent_obs[player]),
                 opponent_state,
-                self.cfg.env,
+                self.cfg.task,
             )
 
         states = self.env.step(joint_action)
@@ -158,20 +158,20 @@ class OrbitWarsEnv:
         done = extract_status(player_state) != "ACTIVE"
 
         terminal_diagnostics = terminal_reward_diagnostics(
-            next_player_state, self.cfg.env
+            next_player_state, self.cfg.task, self.cfg.reward
         )
         terminal_component = (
             apply_early_terminal_reward_shaping(
                 terminal_diagnostics["terminal_reward_unscaled"],
                 next_player_state.step,
-                self.cfg.env,
+                self.cfg.reward,
             )
-            * self.cfg.env.reward_terminal_scale
+            * self.cfg.reward.reward_terminal_scale
             if done
             else 0.0
         )
         shaping_components = shaped_reward_components(
-            self.previous_player_state, next_player_state, self.cfg.env
+            self.previous_player_state, next_player_state, self.cfg.reward
         )
         shaping_component = sum(shaping_components.values())
         reward = terminal_component + shaping_component
@@ -189,7 +189,7 @@ class OrbitWarsEnv:
 
         batch = encode_turn(
             next_player_state,
-            self.cfg.env,
+            self.cfg.task,
             env_index=self.env_index,
             feature_history=self.feature_history,
         )
@@ -238,14 +238,14 @@ class OrbitWarsEnv:
             return [
                 (
                     single_sampler(),
-                    {"snapshot_id": -1, "update": 0, "source": self.cfg.opponent},
+                    {"snapshot_id": -1, "update": 0, "source": self.cfg.opponents.mode.opponent},
                 )
                 for _ in range(count)
             ]
         return [
             (
                 self.opponent,
-                {"snapshot_id": -1, "update": 0, "source": self.cfg.opponent},
+                {"snapshot_id": -1, "update": 0, "source": self.cfg.opponents.mode.opponent},
             )
             for _ in range(count)
         ]
@@ -257,7 +257,7 @@ class OrbitWarsEnv:
 def shaped_reward_components(
     previous_state: GameState | None,
     current_state: GameState,
-    env_cfg: EnvConfig,
+    reward_cfg: RewardConfig,
 ) -> dict[str, float]:
     components = {
         "reward_capture_planet": 0.0,
@@ -282,19 +282,19 @@ def shaped_reward_components(
         elif previous_planet.owner == player and current_planet.owner != player:
             lost += 1
 
-    components["reward_capture_planet"] = env_cfg.reward_capture_planet * float(
+    components["reward_capture_planet"] = reward_cfg.reward_capture_planet * float(
         captured - lost
     )
 
     previous_ship_advantage = ship_advantage(previous_state, player)
     current_ship_advantage = ship_advantage(current_state, player)
-    components["reward_ship_delta"] = env_cfg.reward_ship_delta * (
+    components["reward_ship_delta"] = reward_cfg.reward_ship_delta * (
         current_ship_advantage - previous_ship_advantage
     )
 
     previous_production = controlled_production(previous_state.planets, player)
     current_production = controlled_production(current_state.planets, player)
-    components["reward_production_delta"] = env_cfg.reward_production_delta * (
+    components["reward_production_delta"] = reward_cfg.reward_production_delta * (
         current_production - previous_production
     )
     return components
@@ -349,10 +349,13 @@ def extract_reward(state: Any) -> float:
 
 
 def terminal_reward(
-    player_state: Any, opponent_states: Any, env_cfg: EnvConfig | None = None
+    player_state: Any,
+    opponent_states: Any,
+    task_cfg: TaskConfig | None = None,
+    reward_cfg: RewardConfig | None = None,
 ) -> float:
     player_reward = extract_reward(player_state)
-    if env_cfg is None:
+    if task_cfg is None:
         if not isinstance(opponent_states, (list, tuple)):
             opponent_states = [opponent_states]
         opponent_rewards = [extract_reward(opp_state) for opp_state in opponent_states]
@@ -361,32 +364,33 @@ def terminal_reward(
         ):
             return 0.0
         return player_reward
-    player_count = int(getattr(env_cfg, "player_count", 2))
+    player_count = int(getattr(task_cfg, "player_count", 2))
     rewards = [player_reward]
     if not isinstance(opponent_states, (list, tuple)):
         opponent_states = [opponent_states]
     rewards.extend(extract_reward(opp_state) for opp_state in opponent_states)
-    return terminal_reward_from_scores(rewards[:player_count], env_cfg)[
+    return terminal_reward_from_scores(rewards[:player_count], task_cfg, reward_cfg)[
         "terminal_reward_unscaled"
     ]
 
 
 def terminal_reward_diagnostics(
-    state: GameState, env_cfg: EnvConfig
+    state: GameState, task_cfg: TaskConfig, reward_cfg: RewardConfig | None = None
 ) -> dict[str, float]:
-    player_count = int(getattr(env_cfg, "player_count", 2))
+    reward_cfg = reward_cfg or RewardConfig()
+    player_count = int(getattr(task_cfg, "player_count", 2))
     scores = []
     for player in range(player_count):
         score = sum(planet.ships for planet in state.planets if planet.owner == player)
         score += sum(fleet.ships for fleet in state.fleets if fleet.owner == player)
         scores.append(float(score))
     diagnostics = terminal_reward_from_scores(
-        scores, env_cfg, learner_index=state.player
+        scores, task_cfg, reward_cfg, learner_index=state.player
     )
     diagnostics["terminal_survival_time"] = min(
         float(state.step + 1), float(MAX_STEPS)
     ) / max(float(MAX_STEPS), 1.0)
-    if getattr(env_cfg, "terminal_reward_mode", "binary_win").strip().lower() == (
+    if reward_cfg.terminal_reward_mode.strip().lower() == (
         "survival_plus_rank"
     ):
         diagnostics["terminal_reward_unscaled"] = (
@@ -397,9 +401,13 @@ def terminal_reward_diagnostics(
 
 
 def terminal_reward_from_scores(
-    scores: list[float], env_cfg: EnvConfig, learner_index: int = 0
+    scores: list[float],
+    task_cfg: TaskConfig,
+    reward_cfg: RewardConfig | None = None,
+    learner_index: int = 0,
 ) -> dict[str, float]:
-    player_count = max(int(getattr(env_cfg, "player_count", len(scores))), 1)
+    reward_cfg = reward_cfg or RewardConfig()
+    player_count = max(int(getattr(task_cfg, "player_count", len(scores))), 1)
     padded_scores = [0.0 for _ in range(player_count)]
     for index, score in enumerate(scores[:player_count]):
         padded_scores[index] = float(score)
@@ -417,7 +425,7 @@ def terminal_reward_from_scores(
         if player_count > 1
         else 1.0
     )
-    mode = getattr(env_cfg, "terminal_reward_mode", "binary_win").strip().lower()
+    mode = reward_cfg.terminal_reward_mode.strip().lower()
     if mode == "binary_win":
         reward = 1.0 if is_first > 0.0 else -1.0
     elif mode == "ranked":
@@ -428,7 +436,7 @@ def terminal_reward_from_scores(
         reward = ranked_reward
     else:
         raise ValueError(
-            "env.terminal_reward_mode must be one of binary_win, ranked, "
+            "reward.terminal_reward_mode must be one of binary_win, ranked, "
             f"score_share, or survival_plus_rank; got {mode!r}."
         )
     return {
@@ -443,11 +451,11 @@ def terminal_reward_from_scores(
 
 
 def apply_early_terminal_reward_shaping(
-    terminal_reward_value: float, step_index: int, env_cfg: EnvConfig
+    terminal_reward_value: float, step_index: int, reward_cfg: RewardConfig
 ) -> float:
-    if not getattr(env_cfg, "early_terminal_reward_shaping_enabled", True):
+    if not reward_cfg.early_terminal_reward_shaping_enabled:
         return float(terminal_reward_value)
-    horizon = max(int(getattr(env_cfg, "early_terminal_reward_shaping_horizon", 500)), 1)
+    horizon = max(int(reward_cfg.early_terminal_reward_shaping_horizon), 1)
     step_number = max(int(step_index) + 1, 1)
     if step_number >= horizon:
         return float(terminal_reward_value)

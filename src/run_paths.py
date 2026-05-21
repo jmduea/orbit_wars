@@ -53,8 +53,9 @@ def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, Path, Path, Path]:
         save_dir = output_dir / "checkpoints"
         logs_dir = output_dir / "logs"
     else:
-        save_dir = Path(cfg.save_dir)
+        save_dir = Path(cfg.artifacts.save_dir)
         logs_dir = save_dir / "logs"
     run_dir = save_dir / run_name
     log_path = logs_dir / f"{run_name}.jsonl"
-    return replace(cfg, run_name=run_name, save_dir=str(save_dir)), run_dir, log_path, save_dir
+    artifacts = replace(cfg.artifacts, save_dir=str(save_dir))
+    return replace(cfg, run_name=run_name, artifacts=artifacts), run_dir, log_path, save_dir
