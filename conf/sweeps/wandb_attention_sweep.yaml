@@ -13,6 +13,8 @@ command:
 parameters:
   replay:
     value: disabled
+  curriculum:
+    value: self_play_staged
   opponent_mix:
     value: self_play_curriculum
   env.candidate_count:

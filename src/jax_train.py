@@ -66,6 +66,16 @@ class JaxRolloutGroup:
     collect_fn: Callable
 
 
+@dataclass(slots=True)
+class HistoricalSnapshotPool:
+    params: dict
+    snapshot_ids: jax.Array
+    snapshot_updates: jax.Array
+    valid_mask: jax.Array
+    next_slot: int = 0
+    next_id: int = 1
+
+
 def _copy_config_for_rollout_group(
     cfg: TrainConfig, *, player_count: int, num_envs: int
 ) -> TrainConfig:
@@ -145,10 +155,20 @@ def _init_rollout_group(
         state,
         batch,
         ts,
+        stage_view=None,
+        historical_params_pool=None,
         update_idx=jnp.asarray(0, dtype=jnp.int32),
     ):
         return collect_rollout_jax(
-            rollout_key, state, batch, ts, policy, group_cfg, update=update_idx
+            rollout_key,
+            state,
+            batch,
+            ts,
+            policy,
+            group_cfg,
+            stage_view=stage_view,
+            historical_params_pool=historical_params_pool,
+            update=update_idx,
         )
 
     collect_fn = jax.jit(collect_fn)
@@ -202,15 +222,30 @@ def _checkpoint_payload_builder(
     update: int,
     total_env_steps: int,
     completed_episodes: int,
+    curriculum: CurriculumController | None = None,
+    historical_pool: HistoricalSnapshotPool | None = None,
 ) -> Callable[[], dict[str, object]]:
     params = train_state.params
     opt_state = train_state.opt_state
     rng_key = key
     cfg_snapshot = deepcopy(cfg)
     metadata = feature_metadata(cfg_snapshot.env)
+    curriculum_state_snapshot = (
+        deepcopy(curriculum.state_dict()) if curriculum is not None else None
+    )
+    historical_pool_snapshot = None
+    if historical_pool is not None:
+        historical_pool_snapshot = {
+            "params": jax.device_get(historical_pool.params),
+            "snapshot_ids": jax.device_get(historical_pool.snapshot_ids),
+            "snapshot_updates": jax.device_get(historical_pool.snapshot_updates),
+            "valid_mask": jax.device_get(historical_pool.valid_mask),
+            "next_slot": historical_pool.next_slot,
+            "next_id": historical_pool.next_id,
+        }
 
     def build_payload() -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "update": update,
             "params": jax.device_get(params),
             "opt_state": jax.device_get(opt_state),
@@ -220,6 +255,11 @@ def _checkpoint_payload_builder(
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
         }
+        if curriculum_state_snapshot is not None:
+            payload["curriculum_state"] = deepcopy(curriculum_state_snapshot)
+        if historical_pool_snapshot is not None:
+            payload["historical_snapshot_pool"] = historical_pool_snapshot
+        return payload
 
     return build_payload
 
@@ -326,6 +366,95 @@ def _active_group_indices(
     return active or list(range(len(groups)))
 
 
+def _init_historical_snapshot_pool(
+    params: dict, pool_size: int
+) -> HistoricalSnapshotPool:
+    capacity = max(int(pool_size), 1)
+    stacked_params = jax.tree.map(
+        lambda value: jnp.broadcast_to(
+            jnp.asarray(value)[None, ...], (capacity,) + jnp.asarray(value).shape
+        ),
+        params,
+    )
+    return HistoricalSnapshotPool(
+        params=stacked_params,
+        snapshot_ids=jnp.zeros((capacity,), dtype=jnp.int32),
+        snapshot_updates=jnp.zeros((capacity,), dtype=jnp.int32),
+        valid_mask=jnp.zeros((capacity,), dtype=bool),
+    )
+
+
+def _add_historical_snapshot(
+    pool: HistoricalSnapshotPool, params: dict, *, update: int
+) -> tuple[HistoricalSnapshotPool, dict[str, object]]:
+    slot = int(pool.next_slot)
+    snapshot_id = int(pool.next_id)
+    new_params = jax.tree.map(
+        lambda bank, value: bank.at[slot].set(value), pool.params, params
+    )
+    was_valid = bool(jax.device_get(pool.valid_mask[slot]))
+    next_pool = HistoricalSnapshotPool(
+        params=new_params,
+        snapshot_ids=pool.snapshot_ids.at[slot].set(snapshot_id),
+        snapshot_updates=pool.snapshot_updates.at[slot].set(int(update)),
+        valid_mask=pool.valid_mask.at[slot].set(True),
+        next_slot=(slot + 1) % int(pool.valid_mask.shape[0]),
+        next_id=snapshot_id + 1,
+    )
+    event = {
+        "event": "historical_snapshot_added",
+        "update": int(update),
+        "snapshot_id": snapshot_id,
+        "snapshot_slot": slot,
+        "historical_snapshot_evicted": was_valid,
+    }
+    return next_pool, event
+
+
+def _restore_historical_snapshot_pool(
+    payload: object, fallback: HistoricalSnapshotPool
+) -> HistoricalSnapshotPool:
+    if not isinstance(payload, dict):
+        return fallback
+    try:
+        return HistoricalSnapshotPool(
+            params=jax.device_put(payload["params"]),
+            snapshot_ids=jax.device_put(payload["snapshot_ids"]),
+            snapshot_updates=jax.device_put(payload["snapshot_updates"]),
+            valid_mask=jax.device_put(payload["valid_mask"]),
+            next_slot=int(payload.get("next_slot", fallback.next_slot)),
+            next_id=int(payload.get("next_id", fallback.next_id)),
+        )
+    except KeyError:
+        return fallback
+
+
+def _restore_curriculum_artifacts(
+    checkpoint_path: str,
+    curriculum: CurriculumController,
+    historical_pool: HistoricalSnapshotPool,
+) -> HistoricalSnapshotPool:
+    import pickle
+
+    with Path(checkpoint_path).open("rb") as file:
+        checkpoint = pickle.load(file)
+    if not isinstance(checkpoint, dict):
+        return historical_pool
+    state = checkpoint.get("curriculum_state")
+    if isinstance(state, dict):
+        curriculum.load_state_dict(state)
+    return _restore_historical_snapshot_pool(
+        checkpoint.get("historical_snapshot_pool"), historical_pool
+    )
+
+
+def _snapshot_due(cfg: TrainConfig, update: int) -> bool:
+    if not cfg.curriculum.enabled:
+        return False
+    interval = int(cfg.curriculum.snapshot.interval_updates)
+    return interval > 0 and update % interval == 0
+
+
 def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
     """Run an end-to-end JAX training loop for the JAX environment backend.
 
@@ -376,8 +505,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             heldout_eval_seed_set=cfg.heldout_eval_seed_set,
         ),
     )
-    curriculum = CurriculumController(cfg.training_format.phases)
-    curriculum.apply(cfg)
+    curriculum = CurriculumController(cfg.curriculum)
+    historical_pool = _init_historical_snapshot_pool(
+        train_state.params, cfg.curriculum.snapshot.pool_size
+    )
+    if resume_checkpoint is not None:
+        historical_pool = _restore_curriculum_artifacts(
+            resume_checkpoint, curriculum, historical_pool
+        )
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
     artifact_cfg = cfg.artifact_pipeline
@@ -505,7 +640,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         "policy": reseed_event.policy,
                     }
                 )
-            curriculum.apply(cfg)
+            stage_view = curriculum.stage_view(
+                update,
+                snapshot_ids=historical_pool.snapshot_ids,
+                snapshot_valid_mask=historical_pool.valid_mask,
+                snapshot_updates=historical_pool.snapshot_updates,
+            )
             active_indices = _active_group_indices(
                 rollout_groups, curriculum.current_format_weights()
             )
@@ -523,6 +663,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     group.env_state,
                     group.turn_batch,
                     train_state,
+                    stage_view,
+                    historical_pool.params,
                     jnp.asarray(update, dtype=jnp.int32),
                 )
                 next_groups.append(
@@ -583,6 +725,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "opponent_current_slots",
                 "opponent_random_slots",
                 "opponent_snapshot_slots",
+                "opponent_slots_total",
+                "opponent_slots_latest",
+                "opponent_slots_historical",
+                "opponent_slots_random",
+                "opponent_slots_noop",
+                "opponent_slots_nearest_sniper",
+                "opponent_slots_turtle",
+                "opponent_slots_opportunistic",
+                "opponent_historical_fallback_latest_slots",
                 "won_non_noop_actions_per_step",
                 "lost_non_noop_actions_per_step",
                 "won_avg_fleet_launch_size",
@@ -701,6 +852,39 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             total_env_steps += env_steps
             completed_episodes += episodes
             seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
+            curriculum_telemetry = curriculum.stage_telemetry(stage_view, update)
+            update_events = list(phase_events)
+            transition = curriculum.update(
+                update,
+                {
+                    "overall_win_rate": overall_win_rate,
+                    "win_rate_2p": win_rate_2p,
+                    "first_place_rate_4p": first_place_rate_4p,
+                    "average_reward": average_reward,
+                    "average_episode_reward": average_episode_reward,
+                    "episode_reward_mean": average_episode_reward,
+                    "survival_time": survival_time,
+                    "score_share": score_share,
+                    "approx_kl": float(metrics_host.get("approx_kl", 0.0)),
+                },
+            )
+            if transition is not None:
+                update_events.append(transition)
+            if _snapshot_due(cfg, update):
+                historical_pool, snapshot_event = _add_historical_snapshot(
+                    historical_pool, train_state.params, update=update
+                )
+                update_events.append(snapshot_event)
+            phase_events = []
+            historical_ids = jax.device_get(historical_pool.snapshot_ids).tolist()
+            historical_ages = jax.device_get(
+                jnp.where(
+                    historical_pool.valid_mask,
+                    jnp.asarray(update, dtype=jnp.int32)
+                    - historical_pool.snapshot_updates,
+                    0,
+                )
+            ).tolist()
             record: dict[str, object] = {
                 "update": update,
                 "total_env_steps": total_env_steps,
@@ -750,46 +934,101 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
                 "seed_scheduler_plateau_metric": cfg.plateau_metric,
                 "reseed_events": reseed_events,
+                **curriculum_telemetry,
+                "opponent_slots_total": float(rollout_scalars["opponent_slots_total"]),
+                "opponent_slots_latest": float(
+                    rollout_scalars["opponent_slots_latest"]
+                ),
+                "opponent_slots_historical": float(
+                    rollout_scalars["opponent_slots_historical"]
+                ),
+                "opponent_slots_random": float(
+                    rollout_scalars["opponent_slots_random"]
+                ),
+                "opponent_slots_noop": float(rollout_scalars["opponent_slots_noop"]),
+                "opponent_slots_nearest_sniper": float(
+                    rollout_scalars["opponent_slots_nearest_sniper"]
+                ),
+                "opponent_slots_turtle": float(
+                    rollout_scalars["opponent_slots_turtle"]
+                ),
+                "opponent_slots_opportunistic": float(
+                    rollout_scalars["opponent_slots_opportunistic"]
+                ),
+                "opponent_historical_fallback_latest_slots": float(
+                    rollout_scalars["opponent_historical_fallback_latest_slots"]
+                ),
+                "historical_pool_size": int(
+                    jax.device_get(historical_pool.valid_mask).sum()
+                ),
+                "historical_pool_capacity": int(historical_pool.valid_mask.shape[0]),
+                "historical_snapshot_ids": historical_ids,
+                "historical_snapshot_ages_updates": historical_ages,
                 **{name: float(value) for name, value in metrics_host.items()},
-                "won_non_noop_actions_per_step": float(rollout_scalars["won_non_noop_actions_per_step"]),
-                "lost_non_noop_actions_per_step": float(rollout_scalars["lost_non_noop_actions_per_step"]),
-                "won_avg_fleet_launch_size": float(rollout_scalars["won_avg_fleet_launch_size"]),
-                "lost_avg_fleet_launch_size": float(rollout_scalars["lost_avg_fleet_launch_size"]),
-                "won_avg_planets_owned": float(rollout_scalars["won_avg_planets_owned"]),
-                "lost_avg_planets_owned": float(rollout_scalars["lost_avg_planets_owned"]),
+                "won_non_noop_actions_per_step": float(
+                    rollout_scalars["won_non_noop_actions_per_step"]
+                ),
+                "lost_non_noop_actions_per_step": float(
+                    rollout_scalars["lost_non_noop_actions_per_step"]
+                ),
+                "won_avg_fleet_launch_size": float(
+                    rollout_scalars["won_avg_fleet_launch_size"]
+                ),
+                "lost_avg_fleet_launch_size": float(
+                    rollout_scalars["lost_avg_fleet_launch_size"]
+                ),
+                "won_avg_planets_owned": float(
+                    rollout_scalars["won_avg_planets_owned"]
+                ),
+                "lost_avg_planets_owned": float(
+                    rollout_scalars["lost_avg_planets_owned"]
+                ),
                 "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
-                "lost_avg_planets_lost": float(rollout_scalars["lost_avg_planets_lost"]),
-                "won_avg_planets_taken": float(rollout_scalars["won_avg_planets_taken"]),
-                "lost_avg_planets_taken": float(rollout_scalars["lost_avg_planets_taken"]),
-                "won_avg_garrisoned_ships_per_planet": float(rollout_scalars["won_avg_garrisoned_ships_per_planet"]),
-                "lost_avg_garrisoned_ships_per_planet": float(rollout_scalars["lost_avg_garrisoned_ships_per_planet"]),
+                "lost_avg_planets_lost": float(
+                    rollout_scalars["lost_avg_planets_lost"]
+                ),
+                "won_avg_planets_taken": float(
+                    rollout_scalars["won_avg_planets_taken"]
+                ),
+                "lost_avg_planets_taken": float(
+                    rollout_scalars["lost_avg_planets_taken"]
+                ),
+                "won_avg_garrisoned_ships_per_planet": float(
+                    rollout_scalars["won_avg_garrisoned_ships_per_planet"]
+                ),
+                "lost_avg_garrisoned_ships_per_planet": float(
+                    rollout_scalars["lost_avg_garrisoned_ships_per_planet"]
+                ),
                 "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
                 "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
-                "won_avg_production_diff": float(rollout_scalars["won_avg_production_diff"]),
-                "lost_avg_production_diff": float(rollout_scalars["lost_avg_production_diff"]),
-                "won_avg_launch_fleet_speed": float(rollout_scalars["won_avg_launch_fleet_speed"]),
-                "lost_avg_launch_fleet_speed": float(rollout_scalars["lost_avg_launch_fleet_speed"]),
+                "won_avg_production_diff": float(
+                    rollout_scalars["won_avg_production_diff"]
+                ),
+                "lost_avg_production_diff": float(
+                    rollout_scalars["lost_avg_production_diff"]
+                ),
+                "won_avg_launch_fleet_speed": float(
+                    rollout_scalars["won_avg_launch_fleet_speed"]
+                ),
+                "lost_avg_launch_fleet_speed": float(
+                    rollout_scalars["lost_avg_launch_fleet_speed"]
+                ),
                 "opponent_composition": {
-                    "latest": float(rollout_scalars["opponent_current_slots"]),
-                    "random": float(rollout_scalars["opponent_random_slots"]),
-                    "historical": float(rollout_scalars["opponent_snapshot_slots"]),
+                    "latest": float(rollout_scalars["opponent_slots_latest"]),
+                    "historical": float(rollout_scalars["opponent_slots_historical"]),
+                    "random": float(rollout_scalars["opponent_slots_random"]),
+                    "noop": float(rollout_scalars["opponent_slots_noop"]),
+                    "nearest_sniper": float(
+                        rollout_scalars["opponent_slots_nearest_sniper"]
+                    ),
+                    "turtle": float(rollout_scalars["opponent_slots_turtle"]),
+                    "opportunistic": float(
+                        rollout_scalars["opponent_slots_opportunistic"]
+                    ),
                 },
-                "curriculum_phase_id": curriculum.current_phase_id(),
-                "curriculum_phase_events": list(phase_events),
+                "curriculum_phase_id": curriculum_telemetry["curriculum_stage_id"],
+                "curriculum_phase_events": list(update_events),
             }
-            phase_events = []
-            transition = curriculum.update(
-                update,
-                {
-                    "win_rate_2p": win_rate_2p,
-                    "first_place_rate_4p": first_place_rate_4p,
-                    "survival_time": survival_time,
-                    "score_share": score_share,
-                    "kl_stability": float(record.get("approx_kl", 0.0)),
-                },
-            )
-            if transition is not None:
-                phase_events.append(transition)
             append_jsonl(log_path, record)
             telemetry.log(record, step=update)
             if update % cfg.log_every == 0:
@@ -810,6 +1049,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         key=key,
                         total_env_steps=total_env_steps,
                         completed_episodes=completed_episodes,
+                        curriculum=curriculum,
+                        historical_pool=historical_pool,
                     )
                     handle_checkpoint_results(
                         [
@@ -834,6 +1075,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                             update=update,
                             total_env_steps=total_env_steps,
                             completed_episodes=completed_episodes,
+                            curriculum=curriculum,
+                            historical_pool=historical_pool,
                         ),
                         final=is_final,
                     )
@@ -929,6 +1172,8 @@ def save_jax_checkpoint(
     key: jax.Array,
     total_env_steps: int,
     completed_episodes: int,
+    curriculum: CurriculumController | None = None,
+    historical_pool: HistoricalSnapshotPool | None = None,
 ) -> Path:
     """Persist the latest and update-numbered JAX checkpoint payloads."""
     payload = _checkpoint_payload_builder(
@@ -938,5 +1183,7 @@ def save_jax_checkpoint(
         update=update,
         total_env_steps=total_env_steps,
         completed_episodes=completed_episodes,
+        curriculum=curriculum,
+        historical_pool=historical_pool,
     )()
     return commit_checkpoint_payload(run_dir, update, payload)

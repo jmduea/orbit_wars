@@ -3,7 +3,7 @@
 Legacy flat YAML files in `configs/` were removed. Use Hydra experiment selection in `conf/experiment/`.
 
 | Removed legacy config | Hydra command replacement |
-|---|---|
+| --- | --- |
 | `configs/full_training.yaml` | `python -m src.train experiment=full_training` |
 | `configs/attention_training.yaml` | `python -m src.train experiment=attention_training` |
 | `configs/shaped_reward_training.yaml` | `python -m src.train experiment=shaped_reward_training` |
@@ -24,3 +24,23 @@ Default parity command (equivalent to `default_cfg.yaml`):
 ```bash
 python -m src.train
 ```
+
+## Curriculum migration
+
+Progressive opponent scheduling now lives in the top-level `curriculum` config group.
+
+| Legacy schedule surface | Replacement |
+| --- | --- |
+| `opponent_mix.curriculum` | `curriculum.stages[*].opponent_families` plus `curriculum.stages[*].promote_if` |
+| `training_format.phases` | `curriculum.stages`; keep `training_format.rollout_groups` static |
+| `self_play_pool_size` | `curriculum.snapshot.pool_size` for staged self-play |
+| `self_play_snapshot_interval` | `curriculum.snapshot.interval_updates` |
+| `self_play_latest_probability` | `curriculum.stages[*].opponent_families.latest` |
+
+Canonical self-play runs should select both compatibility and curriculum profiles:
+
+```bash
+python -m src.train curriculum=self_play_staged opponent_mix=self_play_curriculum
+```
+
+When `curriculum.enabled=true`, non-empty `opponent_mix.curriculum` or `training_format.phases` are rejected to avoid silently composing two progressive-difficulty systems.

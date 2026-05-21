@@ -72,6 +72,22 @@ class TrainingFormatConfig:
 
 
 @dataclass(slots=True)
+class CurriculumSnapshotConfig:
+    pool_size: int = 0
+    interval_updates: int = 0
+    deterministic: bool = True
+    selection: str = "uniform"
+    fallback: str = "latest"
+
+
+@dataclass(slots=True)
+class CurriculumConfig:
+    enabled: bool = False
+    snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
+    stages: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class WandBConfig:
     enabled: bool = False
     project: str | None = None
@@ -89,7 +105,9 @@ class OpponentMixConfig:
         default_factory=lambda: {
             "latest": 1.0,
             "historical": 0.0,
-            "scripted_sniper": 0.0,
+            "nearest_sniper": 0.0,
+            "turtle": 0.0,
+            "opportunistic": 0.0,
             "random": 0.0,
             "noop": 0.0,
         }
@@ -165,6 +183,7 @@ class TrainConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
+    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)

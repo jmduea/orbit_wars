@@ -35,6 +35,7 @@ uv run python -m src.train experiment=attention_training +notes=hydra_test
 ```
 
 If Hydra reports that a key is not in the struct/schema, either:
+
 1. Use the correct existing key name, or
 2. Intentionally add with `+...` when dynamic keys are supported for your workflow.
 
@@ -101,26 +102,33 @@ uv run python -m src.train experiment=jax_training resume_checkpoint=/path/to/ja
 - Canonical experiment editing and sweeps happen only in `conf/` (`conf/config.yaml`, `conf/experiment/*.yaml`, and config groups).
 - `configs/` has been removed; use Hydra experiment selection from `conf/experiment/` for all authoring and execution.
 
-## 6) Canonical opponent profiles and sweep-safe knobs
+## 6) Canonical opponent profiles, curricula, and sweep-safe knobs
 
-Use `opponent_mix=<profile>` to choose a canonical opponent profile. These profiles own the brittle self-play/opponent-mixture combinations.
+Use `curriculum=<profile>` to choose progressive difficulty and `opponent_mix=<profile>` for static compatibility settings. Progressive opponent schedules live under `curriculum.stages`; `opponent_mix.curriculum` and `training_format.phases` are legacy schedule surfaces and are rejected when the new curriculum is enabled.
 
 Canonical profiles:
-- `opponent_mix/latest_only`: No self-play pool; sample only latest policy.
-- `opponent_mix/self_play_curriculum`: Self-play enabled with historical snapshots and curriculum progression.
+
+- `curriculum/latest_only`: No staged curriculum; sample latest policy through static opponent settings.
+- `curriculum/self_play_staged`: Metric-gated staged self-play with random/bootstrap opponents, frozen historical snapshots, and scripted exploiters.
+- `opponent_mix/latest_only`: Static latest-only opponent compatibility profile.
+- `opponent_mix/self_play_curriculum`: Enables self-play compatibility flags while leaving staged scheduling to `curriculum.self_play_staged`.
 
 ### Sweep-safe knobs matrix
 
 | Field | Sweep-safe? | Notes |
-|---|---|---|
+| --- | --- | --- |
+| `curriculum` (config group choice) | **Yes** | Primary high-level sweep axis for staged difficulty. |
+| `curriculum.stages[*].opponent_families.*` | **Yes** | Safe for intentional staged opponent-mixture ablations. |
+| `curriculum.stages[*].promote_if.*` | **Yes** | Safe when testing promotion thresholds/windows. |
+| `curriculum.snapshot.*` | **Usually** | Keep `pool_size` and `interval_updates` coherent with historical weights. |
 | `opponent_mix` (config group choice) | **Yes** | Primary high-level sweep axis for opponent behavior. |
-| `opponent_mix.weights.*` | **Yes** | Safe to sweep for mixture ablations. |
+| `opponent_mix.weights.*` | **Limited** | Static compatibility values; prefer stage weights for progressive training. |
 | `opponent_mix.temperature` | **Yes** | Safe to sweep sampling sharpness. |
 | `ppo.*`, `env.reward_*` | **Yes** | Typical training/reward sweeps. |
 | `self_play_enabled` | **No** | Fixed by opponent profile; avoid overriding directly in sweeps. |
 | `self_play_pool_size` | **No** | Fixed by profile and validated against `self_play_enabled`. |
 | `self_play_snapshot_interval` | **No** | Fixed by profile and validated against `self_play_enabled`. |
-| `opponent_mix.curriculum` | **No** | Profile-owned schedule; edit profile file intentionally instead of CLI sweeps. |
+| `opponent_mix.curriculum` | **No** | Deprecated schedule surface; use `curriculum.stages`. |
 
 ### Copy/paste multirun examples (canonical fields only)
 
@@ -129,9 +137,8 @@ Sweep profile + mixture weights:
 ```bash
 uv run python -m src.train -m \
   experiment=jax_training \
-  opponent_mix=latest_only,self_play_curriculum \
-  opponent_mix.weights.latest=0.5,0.7 \
-  opponent_mix.weights.random=0.0,0.2
+  curriculum=latest_only,self_play_staged \
+  opponent_mix=latest_only,self_play_curriculum
 ```
 
 Sweep profile + temperature:
@@ -139,8 +146,8 @@ Sweep profile + temperature:
 ```bash
 uv run python -m src.train -m \
   experiment=jax_training \
-  opponent_mix=self_play_curriculum \
-  opponent_mix.temperature=0.8,1.0,1.2
+  curriculum=self_play_staged \
+  curriculum.stages.1.opponent_families.historical=0.15,0.25
 ```
 
 Reward + opponent-mixture sweep:
@@ -148,69 +155,83 @@ Reward + opponent-mixture sweep:
 ```bash
 uv run python -m src.train -m \
   experiment=jax_training \
+  curriculum=latest_only,self_play_staged \
   opponent_mix=latest_only,self_play_curriculum \
   env.reward_capture_planet=0.05,0.1 \
-  opponent_mix.weights.scripted_sniper=0.0,0.1
+  curriculum.stages.1.opponent_families.nearest_sniper=0.0,0.1
 ```
 
 ## 7) Experiment tuning playbook (what to change for each goal)
 
 Use this section as the authoritative “which knob for which goal” map. Each goal lists:
+
 - **Primary keys to edit** (the actual knobs for that goal).
 - **Nearby keys to avoid** for that specific goal (easy-to-confuse controls that change something else).
 
 ### I want to change model capacity
 
-**Primary keys to edit**
+#### Model capacity primary keys
+
 - `model=<group_name>` (preferred): pick a model profile such as `entity_transformer_500k`, `entity_transformer_700k`, `entity_transformer_1m`, or `attention`.
 - `model.hidden_size`: primary width/capacity knob.
 - `model.attention_heads`: attention partitioning/capacity coupling knob (keep compatible with hidden size).
 
-**Nearby keys to avoid for this goal**
+#### Model capacity nearby keys to avoid
+
 - `ppo.minibatch_size`, `ppo.rollout_steps`, `ppo.num_envs`: these change optimization/runtime budget, not architecture capacity.
 - `env.*` keys like `env.player_count` or `env.max_planets`: these change task difficulty/distribution, not model size.
 - `model.normalize_observations`, `model.obs_norm_clip`: normalization behavior, not capacity.
 
 ### I want to change training budget
 
-**Primary keys to edit**
+#### Training budget primary keys
+
 - `ppo.total_updates`: top-level budget horizon.
 - `ppo.num_envs`: controls parallel sample collection rate.
 - `ppo.rollout_steps`: controls samples per update.
 - `ppo.epochs`: optimization work per update.
 - `ppo.minibatch_size`: optimization granularity and throughput.
 
-**Nearby keys to avoid for this goal**
+#### Training budget nearby keys to avoid
+
 - `model.hidden_size`, `model.attention_heads`: capacity knobs (architecture changes).
 - `env.reward_*`: objective shaping, not budget.
 - `self_play_enabled`, `opponent_mix.curriculum`: opponent-distribution controls, not core budget.
 
 ### I want to change opponent curriculum
 
-**Primary keys to edit**
-- `opponent_mix=<profile>`: select canonical policy (`latest_only` or `self_play_curriculum`).
-- `opponent_mix.weights.latest`
-- `opponent_mix.weights.historical`
-- `opponent_mix.weights.scripted_sniper`
-- `opponent_mix.weights.random`
-- `opponent_mix.temperature`
-- `opponent_mix.curriculum` (intentional schedule edits only; usually by editing the profile file).
+#### Opponent curriculum primary keys
 
-**Nearby keys to avoid for this goal**
+- `curriculum=<profile>`: select staged difficulty (`latest_only` or `self_play_staged`).
+- `curriculum.stages[*].opponent_families.latest`
+- `curriculum.stages[*].opponent_families.historical`
+- `curriculum.stages[*].opponent_families.nearest_sniper`
+- `curriculum.stages[*].opponent_families.turtle`
+- `curriculum.stages[*].opponent_families.opportunistic`
+- `curriculum.stages[*].opponent_families.random`
+- `curriculum.stages[*].opponent_families.noop`
+- `curriculum.stages[*].promote_if.*`
+- `curriculum.snapshot.pool_size` and `curriculum.snapshot.interval_updates`
+
+#### Opponent curriculum nearby keys to avoid
+
 - `opponent`, `multi_opponent_mode`: legacy/low-level behavior toggles that can conflict with canonical profile intent.
 - `self_play_enabled`, `self_play_pool_size`, `self_play_snapshot_interval`, `self_play_latest_probability`: profile-owned fields; do not sweep ad hoc when using canonical opponent profiles.
+- `opponent_mix.curriculum`, `training_format.phases`: deprecated schedule surfaces; use `curriculum.stages`.
 - `env.reward_*`: reward shaping changes learning target, not opponent sampling policy.
 
 ### I want to change environment difficulty
 
-**Primary keys to edit**
+#### Environment difficulty primary keys
+
 - `env.player_count`: major difficulty and multi-agent interaction shift.
 - `env.max_planets`, `env.max_fleets`, `env.candidate_count`: state/action complexity knobs.
 - `env.MAX_STEPS`: horizon/difficulty knob.
 - `env.max_ships`, `env.max_production`, `env.ship_speed`: game dynamics difficulty knobs.
 - `training_format=<group_name>` and/or `training_format.schedule`: use curated player-count schedules for curriculum-like environment shifts.
 
-**Nearby keys to avoid for this goal**
+#### Environment difficulty nearby keys to avoid
+
 - `ppo.*`: training compute/budget knobs; can mask real difficulty effects if changed at the same time.
 - `model.*`: capacity knobs; can compensate for difficulty changes and confound attribution.
 - `opponent_mix.*`: opponent distribution knobs; keep fixed when isolating environment-difficulty effects.
@@ -276,6 +297,7 @@ uv run python -m src.train \
 ```
 
 Recommended hygiene conventions:
+
 - Use campaign prefixes in `hydra.sweep.dir` (for example `multirun/budget_sweeps`, `multirun/opponent_curriculum`).
 - Encode the key varied axis in `hydra.sweep.subdir`.
 - Keep checkpoint/artifact destinations stable while changing Hydra metadata directories only.

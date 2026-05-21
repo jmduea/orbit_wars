@@ -10,9 +10,34 @@ import numpy as np
 
 OPPONENT_LATEST = 0
 OPPONENT_HISTORICAL = 1
-OPPONENT_SCRIPTED_SNIPER = 2
-OPPONENT_RANDOM = 3
-OPPONENT_NOOP = 4
+OPPONENT_NEAREST_SNIPER = 2
+OPPONENT_TURTLE = 3
+OPPONENT_OPPORTUNISTIC = 4
+OPPONENT_RANDOM = 5
+OPPONENT_NOOP = 6
+OPPONENT_SCRIPTED_SNIPER = OPPONENT_NEAREST_SNIPER
+OPPONENT_FAMILY_NAMES = (
+    "latest",
+    "historical",
+    "nearest_sniper",
+    "turtle",
+    "opportunistic",
+    "random",
+    "noop",
+)
+OPPONENT_FAMILY_IDS = jnp.asarray(
+    [
+        OPPONENT_LATEST,
+        OPPONENT_HISTORICAL,
+        OPPONENT_NEAREST_SNIPER,
+        OPPONENT_TURTLE,
+        OPPONENT_OPPORTUNISTIC,
+        OPPONENT_RANDOM,
+        OPPONENT_NOOP,
+    ],
+    dtype=jnp.int32,
+)
+OPPONENT_FAMILY_COUNT = len(OPPONENT_FAMILY_NAMES)
 
 
 @dataclass(slots=True)
@@ -29,7 +54,9 @@ class OpponentRegistryConfig:
         default_factory=lambda: {
             "latest": 1.0,
             "historical": 0.0,
-            "scripted_sniper": 0.0,
+            "nearest_sniper": 0.0,
+            "turtle": 0.0,
+            "opportunistic": 0.0,
             "random": 0.0,
             "noop": 0.0,
         }
@@ -50,7 +77,9 @@ class OpponentRegistry:
             [
                 float(weights.get("latest", 0.0)),
                 float(weights.get("historical", 0.0)),
-                float(weights.get("scripted_sniper", 0.0)),
+                float(weights.get("nearest_sniper", weights.get("scripted_sniper", 0.0))),
+                float(weights.get("turtle", 0.0)),
+                float(weights.get("opportunistic", 0.0)),
                 float(weights.get("random", 0.0)),
                 float(weights.get("noop", 0.0)),
             ],
@@ -91,7 +120,9 @@ class OpponentRegistry:
         items = [
             (OPPONENT_LATEST, weights.get("latest", 0.0)),
             (OPPONENT_HISTORICAL, weights.get("historical", 0.0)),
-            (OPPONENT_SCRIPTED_SNIPER, weights.get("scripted_sniper", 0.0)),
+            (OPPONENT_NEAREST_SNIPER, weights.get("nearest_sniper", weights.get("scripted_sniper", 0.0))),
+            (OPPONENT_TURTLE, weights.get("turtle", 0.0)),
+            (OPPONENT_OPPORTUNISTIC, weights.get("opportunistic", 0.0)),
             (OPPONENT_RANDOM, weights.get("random", 0.0)),
             (OPPONENT_NOOP, weights.get("noop", 0.0)),
         ]
@@ -145,20 +176,9 @@ class OpponentRegistry:
         logits = jnp.log(jnp.maximum(selected_weights, 1e-12)) / temperature
         logits = jnp.where(selected_weights > 0.0, logits, jnp.asarray(-1e9, dtype=jnp.float32))
         probs = jax.nn.softmax(logits)
-        fallback = jnp.asarray([1.0, 0.0, 0.0, 0.0], dtype=jnp.float32)
-        fallback = jnp.pad(fallback, (0, 1))
+        fallback = jnp.asarray([1.0] + [0.0] * (OPPONENT_FAMILY_COUNT - 1), dtype=jnp.float32)
         probs = jnp.where(jnp.sum(selected_weights) > 0.0, probs, fallback)
-        ids = jnp.asarray(
-            [
-                OPPONENT_LATEST,
-                OPPONENT_HISTORICAL,
-                OPPONENT_SCRIPTED_SNIPER,
-                OPPONENT_RANDOM,
-                OPPONENT_NOOP,
-            ],
-            dtype=jnp.int32,
-        )
-        return ids, probs
+        return OPPONENT_FAMILY_IDS, probs
 
 
 def sample_opponent_type_ids_jax(

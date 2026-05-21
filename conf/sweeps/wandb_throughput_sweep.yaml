@@ -13,6 +13,8 @@ command:
 parameters:
   replay:
     value: disabled
+  curriculum:
+    value: latest_only
   opponent_mix:
     value: latest_only
   ppo.total_updates:

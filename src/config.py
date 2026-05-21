@@ -13,6 +13,28 @@ from .conf_schema import (
     register_config_schemas,
 )
 
+_CURRICULUM_FAMILIES = {
+    "latest",
+    "historical",
+    "random",
+    "noop",
+    "nearest_sniper",
+    "turtle",
+    "opportunistic",
+}
+
+_PROMOTION_METRICS = {
+    "overall_win_rate",
+    "win_rate_2p",
+    "first_place_rate_4p",
+    "average_reward",
+    "average_episode_reward",
+    "survival_time",
+    "score_share",
+    "approx_kl",
+    "episode_reward_mean",
+}
+
 __all__ = [
     "EnvConfig",
     "ArtifactPipelineConfig",
@@ -119,6 +141,11 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     if Path(artifact_pipeline.queue_dir).is_absolute():
         raise ValueError("artifact_pipeline.queue_dir must be relative to the run directory.")
 
+    _validate_curriculum_config(cfg)
+
+    if cfg.curriculum.enabled:
+        return
+
     if not cfg.self_play_enabled:
         if cfg.self_play_pool_size != 0:
             raise ValueError(
@@ -146,6 +173,120 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "self_play_snapshot_interval must be > 0 when self_play_enabled is true."
             )
+
+
+def _validate_curriculum_config(cfg: TrainConfig) -> None:
+    curriculum = cfg.curriculum
+    if not curriculum.enabled:
+        return
+    if cfg.training_format.phases:
+        raise ValueError(
+            "training_format.phases is deprecated when curriculum.enabled is true; "
+            "migrate progressive difficulty to curriculum.stages."
+        )
+    if cfg.opponent_mix.curriculum:
+        raise ValueError(
+            "opponent_mix.curriculum is deprecated when curriculum.enabled is true; "
+            "migrate weighted opponent schedules to curriculum.stages."
+        )
+    if cfg.self_play_pool_size not in {0, int(curriculum.snapshot.pool_size)}:
+        raise ValueError(
+            "self_play_pool_size is deprecated when curriculum.enabled is true; "
+            "use curriculum.snapshot.pool_size."
+        )
+    if cfg.self_play_snapshot_interval not in {
+        0,
+        int(curriculum.snapshot.interval_updates),
+    }:
+        raise ValueError(
+            "self_play_snapshot_interval is deprecated when curriculum.enabled is true; "
+            "use curriculum.snapshot.interval_updates."
+        )
+    if float(cfg.self_play_latest_probability) != 0.5:
+        raise ValueError(
+            "self_play_latest_probability is deprecated when curriculum.enabled is true; "
+            "use curriculum.stages[*].opponent_families.latest."
+        )
+    if not curriculum.stages:
+        raise ValueError(
+            "curriculum.stages must be non-empty when curriculum.enabled is true."
+        )
+    snapshot = curriculum.snapshot
+    if snapshot.selection not in {"uniform", "recent_biased"}:
+        raise ValueError(
+            "curriculum.snapshot.selection must be 'uniform' or 'recent_biased'."
+        )
+    if snapshot.fallback != "latest":
+        raise ValueError(
+            "curriculum.snapshot.fallback currently supports only 'latest'."
+        )
+    seen_ids: set[str] = set()
+    for index, stage in enumerate(curriculum.stages):
+        if not isinstance(stage, dict):
+            raise ValueError("curriculum.stages entries must be mappings.")
+        stage_id = str(stage.get("id", "")).strip()
+        if not stage_id:
+            raise ValueError(f"curriculum.stages[{index}].id must be non-empty.")
+        if stage_id in seen_ids:
+            raise ValueError(f"curriculum.stages id {stage_id!r} is duplicated.")
+        seen_ids.add(stage_id)
+        if int(stage.get("min_updates", 0)) < 0:
+            raise ValueError(
+                f"curriculum.stages[{index}].min_updates must be non-negative."
+            )
+        if int(stage.get("cooldown_updates", 0)) < 0:
+            raise ValueError(
+                f"curriculum.stages[{index}].cooldown_updates must be non-negative."
+            )
+        weights = dict(stage.get("opponent_families", {}))
+        if not weights:
+            raise ValueError(
+                f"curriculum.stages[{index}].opponent_families must be non-empty."
+            )
+        unknown = sorted(set(weights) - _CURRICULUM_FAMILIES)
+        if unknown:
+            raise ValueError(
+                f"curriculum.stages[{index}].opponent_families contains unknown families: "
+                f"{', '.join(unknown)}."
+            )
+        total = 0.0
+        for family, raw_weight in weights.items():
+            weight = float(raw_weight)
+            if weight < 0.0 or weight == float("inf") or weight != weight:
+                raise ValueError(
+                    f"curriculum.stages[{index}].opponent_families.{family} must be finite and non-negative."
+                )
+            total += weight
+        if total <= 0.0:
+            raise ValueError(
+                f"curriculum.stages[{index}].opponent_families must sum to > 0."
+            )
+        if float(weights.get("historical", 0.0)) > 0.0:
+            if int(snapshot.pool_size) <= 0 or int(snapshot.interval_updates) <= 0:
+                raise ValueError(
+                    "curriculum historical opponents require snapshot.pool_size > 0 "
+                    "and snapshot.interval_updates > 0."
+                )
+        promote_if = stage.get("promote_if")
+        if promote_if:
+            if not isinstance(promote_if, dict):
+                raise ValueError(
+                    f"curriculum.stages[{index}].promote_if must be a mapping."
+                )
+            metric = str(promote_if.get("metric", "")).strip()
+            if metric not in _PROMOTION_METRICS:
+                raise ValueError(
+                    f"curriculum.stages[{index}].promote_if.metric must be one of "
+                    f"{', '.join(sorted(_PROMOTION_METRICS))}."
+                )
+            if str(promote_if.get("op", ">=")).strip() not in {">=", ">", "<=", "<"}:
+                raise ValueError(
+                    f"curriculum.stages[{index}].promote_if.op is invalid."
+                )
+            if int(promote_if.get("window_updates", 1)) <= 0:
+                raise ValueError(
+                    f"curriculum.stages[{index}].promote_if.window_updates must be positive."
+                )
 
 
 def _validate_no_legacy_format_conflicts(cfg_raw: Any) -> None:

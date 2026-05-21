@@ -1,0 +1,10 @@
+# @package _global_
+curriculum:
+  enabled: false
+  snapshot:
+    pool_size: 0
+    interval_updates: 0
+    deterministic: true
+    selection: uniform
+    fallback: latest
+  stages: []

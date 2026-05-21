@@ -1,0 +1,53 @@
+# @package _global_
+curriculum:
+  enabled: true
+  snapshot:
+    pool_size: 5
+    interval_updates: 100
+    deterministic: true
+    selection: uniform
+    fallback: latest
+  stages:
+    - id: bootstrap_random
+      min_updates: 100
+      cooldown_updates: 0
+      promote_if:
+        metric: overall_win_rate
+        op: ">="
+        value: 0.55
+        window_updates: 5
+      opponent_families:
+        latest: 0.0
+        historical: 0.0
+        random: 1.0
+        noop: 0.0
+        nearest_sniper: 0.0
+        turtle: 0.0
+        opportunistic: 0.0
+    - id: mixed_exploiters
+      min_updates: 100
+      cooldown_updates: 10
+      promote_if:
+        metric: overall_win_rate
+        op: ">="
+        value: 0.60
+        window_updates: 5
+      opponent_families:
+        latest: 0.55
+        historical: 0.20
+        random: 0.05
+        noop: 0.05
+        nearest_sniper: 0.07
+        turtle: 0.04
+        opportunistic: 0.04
+    - id: self_play_pressure
+      min_updates: 100
+      cooldown_updates: 10
+      opponent_families:
+        latest: 0.45
+        historical: 0.35
+        random: 0.03
+        noop: 0.02
+        nearest_sniper: 0.07
+        turtle: 0.04
+        opportunistic: 0.04

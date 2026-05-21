@@ -3,6 +3,7 @@
 defaults:
   - jax_training
   - override /training_format: mix_2p_4p_16env
+  - override /curriculum: self_play_staged
   - override /opponent_mix: self_play_curriculum
 
 ppo:

@@ -14,17 +14,21 @@ parameters:
   model:
     value: gnn_pointer
   replay:
-    value: enabled
+    value: disabled
+  curriculum:
+    value: self_play_staged
   opponent_mix:
     value: self_play_curriculum
   env.feature_history_steps:
     values: [1, 5, 10]
+  env.trajectory_shield_enabled:
+    value: false
   ppo.total_updates:
-    value: 100
+    values: [1000, 5000]
   ppo.rollout_steps:
-    values: [32, 64, 128, 256]
+    values: [32, 64, 128]
   ppo.epochs:
-    values: [2, 3, 4]
+    values: [1, 2, 3]
   ppo.ent_coef:
     values: [0.001, 0.005, 0.01, 0.02]
   ppo.lr:
@@ -33,19 +37,19 @@ parameters:
     values: [0.1, 0.2, 0.3]
   ppo.gamma:
     distribution: uniform
-    min: 0.85
+    min: 0.95
     max: 0.9997
   ppo.vf_coef:
-    values: [0.5, 1.0]
+    values: [0.7, 1.0]
   model.hidden_size:
-    values: [128, 192, 224, 256]
+    values: [128, 192]
   model.max_moves_k:
-    values: [2, 5, 10, 20]
+    values: [3, 5, 7]
   model.gnn_k_neighbors:
-    values: [4, 8, 12, 24]
+    values: [8, 10, 12]
   model.gnn_message_passing_layers:
-    values: [1, 2, 3, 4]
+    values: [1, 2]
   model.normalize_observations:
     value: true
   model.obs_norm_clip:
-    values: [10.0, 20.0]
+    value: 20.0

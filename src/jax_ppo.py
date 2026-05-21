@@ -20,6 +20,7 @@ from src.feature_registry import (
 )
 
 from .config import TrainConfig
+from .curriculum import StageView, default_stage_view
 from .jax_env import (
     JaxAction,
     JaxEnvState,
@@ -34,10 +35,12 @@ from .jax_policy import action_log_prob_and_entropy
 from .opponent_pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
+    OPPONENT_NEAREST_SNIPER,
     OPPONENT_NOOP,
+    OPPONENT_OPPORTUNISTIC,
+    OPPONENT_RANDOM,
     OPPONENT_SCRIPTED_SNIPER,
-    OpponentRegistry,
-    OpponentRegistryConfig,
+    OPPONENT_TURTLE,
     sample_opponent_type_ids_jax,
 )
 from .trajectory_shield import (
@@ -317,6 +320,89 @@ def build_sniper_action_from_batch(
     nearest_slot = jnp.argmax(real_candidate_mask.astype(jnp.int32), axis=-1)
     has_target = real_candidate_mask.any(axis=-1)
     target = jnp.where(has_target, nearest_slot, 0).reshape(-1)
+    selected_bucket_mask = jnp.take_along_axis(
+        bucket_mask.reshape(-1, cfg.env.candidate_count, cfg.env.ship_bucket_count),
+        target[:, None, None].repeat(cfg.env.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_ids = jnp.arange(cfg.env.ship_bucket_count, dtype=jnp.int32)
+    bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
+    bucket = jnp.where(has_target.reshape(-1), bucket, 0)
+    return build_action_from_batch(batch, target, bucket, cfg)
+
+
+def build_turtle_action_from_batch(
+    batch: JaxTurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    """Conservative scripted policy: small neutral expansion, otherwise no-op."""
+
+    bucket_mask = (
+        default_ship_bucket_mask(batch.candidate_mask, cfg.env.ship_bucket_count)
+        if ship_bucket_mask is None
+        else ship_bucket_mask
+    )
+    ownership = batch.candidate_features[
+        ..., candidate_feature_schema(cfg.env).slice("target_ownership_flags")
+    ]
+    neutral = ownership[..., 0] > 0.5
+    real_bucket = bucket_mask[..., 1:].any(axis=-1)
+    valid_neutral = (
+        batch.candidate_mask
+        & neutral
+        & real_bucket
+        & (
+            jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :]
+            > 0
+        )
+    )
+    target = jnp.argmax(valid_neutral.astype(jnp.int32), axis=-1)
+    has_target = valid_neutral.any(axis=-1)
+    target = jnp.where(has_target, target, 0).reshape(-1)
+    selected_bucket_mask = jnp.take_along_axis(
+        bucket_mask.reshape(-1, cfg.env.candidate_count, cfg.env.ship_bucket_count),
+        target[:, None, None].repeat(cfg.env.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_ids = jnp.arange(cfg.env.ship_bucket_count, dtype=jnp.int32)
+    nonzero_bucket_mask = selected_bucket_mask & (bucket_ids[None, :] > 0)
+    bucket = jnp.argmax(nonzero_bucket_mask.astype(jnp.int32), axis=-1)
+    bucket = jnp.where(
+        has_target.reshape(-1) & nonzero_bucket_mask.any(axis=-1), bucket, 0
+    )
+    return build_action_from_batch(batch, target, bucket, cfg)
+
+
+def build_opportunistic_action_from_batch(
+    batch: JaxTurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    """Scripted policy that prioritizes immediately attackable enemy candidates."""
+
+    bucket_mask = (
+        default_ship_bucket_mask(batch.candidate_mask, cfg.env.ship_bucket_count)
+        if ship_bucket_mask is None
+        else ship_bucket_mask
+    )
+    ownership = batch.candidate_features[
+        ..., candidate_feature_schema(cfg.env).slice("target_ownership_flags")
+    ]
+    enemy = ownership[..., 2] > 0.5
+    real_bucket = bucket_mask[..., 1:].any(axis=-1)
+    valid_enemy = (
+        batch.candidate_mask
+        & enemy
+        & real_bucket
+        & (
+            jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :]
+            > 0
+        )
+    )
+    target = jnp.argmax(valid_enemy.astype(jnp.int32), axis=-1)
+    has_target = valid_enemy.any(axis=-1)
+    target = jnp.where(has_target, target, 0).reshape(-1)
     selected_bucket_mask = jnp.take_along_axis(
         bucket_mask.reshape(-1, cfg.env.candidate_count, cfg.env.ship_bucket_count),
         target[:, None, None].repeat(cfg.env.ship_bucket_count, axis=-1),
@@ -613,6 +699,97 @@ def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
     return jax.tree.map(lambda *xs: jnp.stack(xs, axis=1), *player_actions)
 
 
+def _gather_action_by_env(pool_action: JaxAction, indices: jax.Array) -> JaxAction:
+    env_indices = jnp.arange(indices.shape[0], dtype=jnp.int32)
+    return jax.tree.map(lambda field: field[indices, env_indices], pool_action)
+
+
+def _sample_historical_action(
+    key: jax.Array,
+    game,
+    batch: JaxTurnBatch,
+    historical_params_pool: dict | None,
+    stage_view: StageView,
+    current_action: JaxAction,
+    policy: object,
+    cfg: TrainConfig,
+) -> tuple[JaxAction, jax.Array]:
+    env_count = batch.self_features.shape[0]
+    has_snapshot = jnp.any(stage_view.snapshot_valid_mask)
+    if historical_params_pool is None:
+        return current_action, jnp.zeros((env_count,), dtype=jnp.int32)
+    logits = jnp.where(
+        stage_view.snapshot_valid_mask,
+        jnp.log(jnp.maximum(stage_view.historical_selection_probs, 1e-12)),
+        jnp.asarray(-1e9, dtype=jnp.float32),
+    )
+    selected = jax.random.categorical(key, logits, shape=(env_count,))
+    pool_size = stage_view.snapshot_valid_mask.shape[0]
+    pool_actions = jax.vmap(
+        lambda idx, params: _sample_policy_action_with_params(
+            jax.random.fold_in(key, idx),
+            game,
+            batch,
+            params,
+            policy,
+            cfg,
+            deterministic=cfg.curriculum.snapshot.deterministic,
+        )
+    )(jnp.arange(pool_size, dtype=jnp.int32), historical_params_pool)
+    historical_action = _gather_action_by_env(pool_actions, selected)
+    fallback = jnp.logical_not(has_snapshot)
+    action = jax.tree.map(
+        lambda hist, cur: jnp.where(fallback, cur, hist),
+        historical_action,
+        current_action,
+    )
+    fallback_count = jnp.where(
+        fallback,
+        jnp.ones((env_count,), dtype=jnp.int32),
+        jnp.zeros((env_count,), dtype=jnp.int32),
+    )
+    return action, fallback_count
+
+
+def _opponent_count_metrics(
+    effective_type_ids: jax.Array,
+    learner_player: jax.Array,
+) -> dict[str, jax.Array]:
+    player_ids = jnp.arange(effective_type_ids.shape[1], dtype=jnp.int32)
+    slot_mask = player_ids[None, :] != learner_player[:, None]
+    slot_values = slot_mask.astype(jnp.float32)
+    return {
+        "opponent_slots_total": slot_values.sum(),
+        "opponent_slots_latest": ((effective_type_ids == OPPONENT_LATEST) & slot_mask)
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_historical": (
+            (effective_type_ids == OPPONENT_HISTORICAL) & slot_mask
+        )
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_random": ((effective_type_ids == OPPONENT_RANDOM) & slot_mask)
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_noop": ((effective_type_ids == OPPONENT_NOOP) & slot_mask)
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_nearest_sniper": (
+            (effective_type_ids == OPPONENT_NEAREST_SNIPER) & slot_mask
+        )
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_turtle": ((effective_type_ids == OPPONENT_TURTLE) & slot_mask)
+        .astype(jnp.float32)
+        .sum(),
+        "opponent_slots_opportunistic": (
+            (effective_type_ids == OPPONENT_OPPORTUNISTIC) & slot_mask
+        )
+        .astype(jnp.float32)
+        .sum(),
+    }
+
+
 def collect_rollout_jax(
     key: jax.Array,
     env_state: JaxEnvState,
@@ -621,6 +798,8 @@ def collect_rollout_jax(
     policy: object,
     cfg: TrainConfig,
     opponent_params_by_player: tuple[dict, ...] | None = None,
+    stage_view: StageView | None = None,
+    historical_params_pool: dict | None = None,
     update: int = 0,
 ) -> tuple[
     jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]
@@ -634,6 +813,7 @@ def collect_rollout_jax(
     """
 
     env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32)
+    active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
 
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache = carry
@@ -652,6 +832,39 @@ def collect_rollout_jax(
         log_prob = sample.log_prob
         learner_action = build_action_from_batch(batch, target, bucket, cfg)
 
+        env_count = state.game.step.shape[0]
+        opponent_type_ids = sample_opponent_type_ids_jax(
+            jax.random.fold_in(opp_key, 9973),
+            env_count,
+            cfg.env.player_count,
+            ids=active_stage_view.family_ids,
+            probs=active_stage_view.family_probs,
+        )
+        has_historical = jnp.any(active_stage_view.snapshot_valid_mask)
+        effective_type_ids = jnp.where(
+            (opponent_type_ids == OPPONENT_HISTORICAL)
+            & jnp.logical_not(has_historical),
+            active_stage_view.fallback_family_id,
+            opponent_type_ids,
+        )
+        family_counts = _opponent_count_metrics(
+            effective_type_ids, state.learner_player
+        )
+        historical_fallback_slots = (
+            (
+                (
+                    (opponent_type_ids == OPPONENT_HISTORICAL)
+                    & (effective_type_ids == OPPONENT_LATEST)
+                )
+                & (
+                    jnp.arange(cfg.env.player_count, dtype=jnp.int32)[None, :]
+                    != state.learner_player[:, None]
+                )
+            )
+            .astype(jnp.float32)
+            .sum()
+        )
+
         if cfg.env.player_count == 2:
             opp_game = state.game._replace(
                 player=(1 - state.learner_player).astype(jnp.int32)
@@ -661,8 +874,13 @@ def collect_rollout_jax(
                     game, turn, cfg.env
                 )
             )(opp_game, opp_batch_cache)
+            slot_type = jnp.take_along_axis(
+                effective_type_ids,
+                (1 - state.learner_player).astype(jnp.int32)[:, None],
+                axis=1,
+            ).squeeze(axis=1)
             if cfg.opponent == "self":
-                opponent_action = _sample_policy_action(
+                current_action = _sample_policy_action(
                     opp_key,
                     opp_game,
                     opp_batch_cache,
@@ -670,6 +888,49 @@ def collect_rollout_jax(
                     policy,
                     cfg,
                     deterministic=cfg.self_play_deterministic,
+                )
+                historical_action, _historical_fallback_by_env = (
+                    _sample_historical_action(
+                        jax.random.fold_in(opp_key, 71),
+                        opp_game,
+                        opp_batch_cache,
+                        historical_params_pool,
+                        active_stage_view,
+                        current_action,
+                        policy,
+                        cfg,
+                    )
+                )
+                random_action = build_random_action_from_batch(
+                    opp_key, opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
+                )
+                nearest_action = build_sniper_action_from_batch(
+                    opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
+                )
+                turtle_action = build_turtle_action_from_batch(
+                    opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
+                )
+                opportunistic_action = build_opportunistic_action_from_batch(
+                    opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
+                )
+                noop_action = build_noop_action_from_batch(opp_batch_cache, cfg)
+                action = _select_env_action(
+                    slot_type == OPPONENT_RANDOM, random_action, current_action
+                )
+                action = _select_env_action(
+                    slot_type == OPPONENT_HISTORICAL, historical_action, action
+                )
+                action = _select_env_action(
+                    slot_type == OPPONENT_NEAREST_SNIPER, nearest_action, action
+                )
+                action = _select_env_action(
+                    slot_type == OPPONENT_TURTLE, turtle_action, action
+                )
+                action = _select_env_action(
+                    slot_type == OPPONENT_OPPORTUNISTIC, opportunistic_action, action
+                )
+                opponent_action = _select_env_action(
+                    slot_type == OPPONENT_NOOP, noop_action, action
                 )
             elif cfg.opponent == "random":
                 opponent_action = build_random_action_from_batch(
@@ -692,7 +953,6 @@ def collect_rollout_jax(
                     player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
                 )
             )(player_ids)
-            env_count = state.game.step.shape[0]
             flat_player_games = jax.tree.map(
                 lambda x: x.reshape((cfg.env.player_count * env_count,) + x.shape[2:]),
                 player_games,
@@ -704,21 +964,6 @@ def collect_rollout_jax(
                 lambda x: x.reshape((cfg.env.player_count, env_count) + x.shape[1:]),
                 flat_player_batch,
             )
-            registry = OpponentRegistry(
-                OpponentRegistryConfig(
-                    weights=dict(cfg.opponent_mix.weights),
-                    temperature=cfg.opponent_mix.temperature,
-                    curriculum=list(cfg.opponent_mix.curriculum),
-                )
-            )
-            ids, probs = registry.ids_and_probs_jax(jnp.asarray(update, dtype=jnp.int32))
-            opponent_type_ids = sample_opponent_type_ids_jax(
-                jax.random.fold_in(opp_key, 9973),
-                state.learner_player.shape[0],
-                cfg.env.player_count,
-                ids=ids,
-                probs=probs,
-            )
             for player_id in range(cfg.env.player_count):
                 player_batch = jax.tree.map(lambda x: x[player_id], player_batches)
                 player_game = jax.tree.map(lambda x: x[player_id], player_games)
@@ -728,7 +973,7 @@ def collect_rollout_jax(
                     )
                 )(player_game, player_batch)
                 player_key = jax.random.fold_in(opp_key, player_id)
-                slot_type = opponent_type_ids[:, player_id]
+                slot_type = effective_type_ids[:, player_id]
                 if cfg.opponent == "self":
                     opponent_params = (
                         train_state.params
@@ -744,20 +989,39 @@ def collect_rollout_jax(
                         cfg,
                         deterministic=cfg.self_play_deterministic,
                     )
-                    historical_action = current_action
+                    historical_action, _historical_fallback_by_env = (
+                        _sample_historical_action(
+                            jax.random.fold_in(player_key, 71),
+                            player_game,
+                            player_batch,
+                            historical_params_pool,
+                            active_stage_view,
+                            current_action,
+                            policy,
+                            cfg,
+                        )
+                    )
                     random_action = build_random_action_from_batch(
                         jax.random.fold_in(player_key, cfg.env.player_count),
                         player_shielded.batch,
                         cfg,
                         player_shielded.ship_bucket_mask,
                     )
-                    scripted_action = build_sniper_action_from_batch(
+                    nearest_action = build_sniper_action_from_batch(
+                        player_shielded.batch, cfg, player_shielded.ship_bucket_mask
+                    )
+                    turtle_action = build_turtle_action_from_batch(
+                        player_shielded.batch, cfg, player_shielded.ship_bucket_mask
+                    )
+                    opportunistic_action = build_opportunistic_action_from_batch(
                         player_shielded.batch, cfg, player_shielded.ship_bucket_mask
                     )
                     noop_action = build_noop_action_from_batch(player_batch, cfg)
                     use_latest = slot_type == OPPONENT_LATEST
                     use_historical = slot_type == OPPONENT_HISTORICAL
                     use_scripted = slot_type == OPPONENT_SCRIPTED_SNIPER
+                    use_turtle = slot_type == OPPONENT_TURTLE
+                    use_opportunistic = slot_type == OPPONENT_OPPORTUNISTIC
                     use_noop = slot_type == OPPONENT_NOOP
                     action = _select_env_action(
                         use_latest, current_action, random_action
@@ -765,8 +1029,10 @@ def collect_rollout_jax(
                     action = _select_env_action(
                         use_historical, historical_action, action
                     )
+                    action = _select_env_action(use_scripted, nearest_action, action)
+                    action = _select_env_action(use_turtle, turtle_action, action)
                     action = _select_env_action(
-                        use_scripted, scripted_action, action
+                        use_opportunistic, opportunistic_action, action
                     )
                     opponent_action = _select_env_action(use_noop, noop_action, action)
                 elif cfg.opponent == "random":
@@ -868,6 +1134,19 @@ def collect_rollout_jax(
             "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
             "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
             "trajectory_shield_legal_non_noop_rate": sample.diagnostics.legal_non_noop_rate,
+            "opponent_slots_total": family_counts["opponent_slots_total"],
+            "opponent_slots_latest": family_counts["opponent_slots_latest"],
+            "opponent_slots_historical": family_counts["opponent_slots_historical"],
+            "opponent_slots_random": family_counts["opponent_slots_random"],
+            "opponent_slots_noop": family_counts["opponent_slots_noop"],
+            "opponent_slots_nearest_sniper": family_counts[
+                "opponent_slots_nearest_sniper"
+            ],
+            "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
+            "opponent_slots_opportunistic": family_counts[
+                "opponent_slots_opportunistic"
+            ],
+            "opponent_historical_fallback_latest_slots": historical_fallback_slots,
         }
         return (key, next_state, next_batch, next_opp_batch_cache), transition
 
@@ -1072,9 +1351,15 @@ def _rollout_diagnostics(
             0.0,
         ),
         "only_noop_fraction": only_noop_fraction,
-        "trajectory_shield_blocked_count": data["trajectory_shield_blocked_count"].sum(),
-        "trajectory_shield_blocked_sun_count": data["trajectory_shield_blocked_sun_count"].sum(),
-        "trajectory_shield_blocked_bounds_count": data["trajectory_shield_blocked_bounds_count"].sum(),
+        "trajectory_shield_blocked_count": data[
+            "trajectory_shield_blocked_count"
+        ].sum(),
+        "trajectory_shield_blocked_sun_count": data[
+            "trajectory_shield_blocked_sun_count"
+        ].sum(),
+        "trajectory_shield_blocked_bounds_count": data[
+            "trajectory_shield_blocked_bounds_count"
+        ].sum(),
         "trajectory_shield_blocked_unintended_hit_count": data[
             "trajectory_shield_blocked_unintended_hit_count"
         ].sum(),
@@ -1142,9 +1427,20 @@ def _rollout_diagnostics(
         "overall_win_rate": jnp.where(
             episode_done > 0.0, first_place_sum / episode_done, 0.0
         ),
-        "opponent_current_slots": opponent_slots * current_share,
-        "opponent_random_slots": opponent_slots * random_share,
-        "opponent_snapshot_slots": opponent_slots * snapshot_share,
+        "opponent_slots_total": data["opponent_slots_total"].sum(),
+        "opponent_slots_latest": data["opponent_slots_latest"].sum(),
+        "opponent_slots_historical": data["opponent_slots_historical"].sum(),
+        "opponent_slots_random": data["opponent_slots_random"].sum(),
+        "opponent_slots_noop": data["opponent_slots_noop"].sum(),
+        "opponent_slots_nearest_sniper": data["opponent_slots_nearest_sniper"].sum(),
+        "opponent_slots_turtle": data["opponent_slots_turtle"].sum(),
+        "opponent_slots_opportunistic": data["opponent_slots_opportunistic"].sum(),
+        "opponent_historical_fallback_latest_slots": data[
+            "opponent_historical_fallback_latest_slots"
+        ].sum(),
+        "opponent_current_slots": data["opponent_slots_latest"].sum(),
+        "opponent_random_slots": data["opponent_slots_random"].sum(),
+        "opponent_snapshot_slots": data["opponent_slots_historical"].sum(),
         "won_non_noop_actions_per_step": jnp.where(
             win_episode_rows > 0.0,
             (non_noop_count * done_float.sum())
