@@ -17,7 +17,6 @@ from typing import Any
 
 import jax
 
-
 DOCKER_IMAGE = "gcr.io/kaggle-images/python-simulations"
 RUNTIME_FORMAT_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parents[1]
