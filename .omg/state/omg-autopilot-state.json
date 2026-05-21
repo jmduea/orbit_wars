@@ -1,0 +1,12 @@
+{
+  "phase": "execution_started",
+  "task": "composable multi-value head",
+  "spec": ".omg/specs/deep-interview-composable-multi-value-head.md",
+  "plan": ".omg/plans/composable-multi-value-head-ralplan.md",
+  "decisions": [
+    "Use narrow value-head factory matching encoder/decoder composition",
+    "Represent format explicitly as player_count 2 or 4",
+    "Clean module composition takes priority over old checkpoint parameter compatibility"
+  ],
+  "updated_at": "2026-05-21T17:06:41.911Z"
+}

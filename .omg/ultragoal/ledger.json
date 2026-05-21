@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "goals": [
+    {
+      "id": "502bf01b",
+      "objective": "Convert JaxPlanetPolicy and JaxAttentionPlanetPolicy to the ComposablePlanetPolicy framework, update PPO to handle AutoregressivePointerDecoder outputs, set gnn_pointer as the default architecture, and verify training runs without silent failure.",
+      "status": "completed",
+      "created_at": "2026-05-21T02:04:26.323Z",
+      "updated_at": "2026-05-21T02:32:29.270Z",
+      "completed_at": "2026-05-21T02:32:29.270Z",
+      "checkpoints": [
+        {
+          "id": "bc0625b8",
+          "goal_id": "502bf01b",
+          "status": "checkpoint",
+          "evidence": "Created active ultragoal 502bf01b for composable policy conversion, PPO autoregressive pointer support, gnn_pointer default, and training validation.",
+          "note": "Goal initialized before code exploration.",
+          "created_at": "2026-05-21T02:04:31.910Z"
+        },
+        {
+          "id": "2783c14a",
+          "goal_id": "502bf01b",
+          "status": "checkpoint",
+          "evidence": "Converted JaxPlanetPolicy/JaxAttentionPlanetPolicy to ComposablePlanetPolicy wrappers; PPO rollout/update now carries sequence-shaped target/bucket/log_prob/returns/advantages for multi-launch pointer decoding; gnn_pointer is Hydra/schema/default_cfg default. Verification passed: rtk uv run --group dev pytest tests/test_jax_policy.py tests/test_jax_ppo.py tests/test_feature_registry.py -q => 25 passed; rtk uv run python scripts/generate_default_cfg.py --check => pass; tiny gnn_pointer training smoke exited successfully with update=1 steps=1 loss=-0.0052 entropy=3.440.",
+          "note": "Implementation and verification completed.",
+          "created_at": "2026-05-21T02:32:24.348Z"
+        },
+        {
+          "id": "477bcc1a",
+          "goal_id": "502bf01b",
+          "status": "completed",
+          "evidence": "All requested requirements are implemented and verified. Multi-launch is preserved end-to-end: pointer decoder exposes decoded target sequences, rollout stores sequence-shaped targets/buckets/log_probs, action construction emits multiple fleet slots per source with bounded per-step ship allocation, and PPO update uses teacher-forced target sequences for autoregressive log-prob recomputation. Defaults are gnn_pointer in schema/Hydra/default_cfg. Verification: 25 focused tests passed, default_cfg --check passed, and one-update gnn_pointer training smoke completed with finite update line: update=1 steps=1 episodes=0 loss=-0.0052 entropy=3.440.",
+          "created_at": "2026-05-21T02:32:29.270Z"
+        }
+      ]
+    }
+  ]
+}
