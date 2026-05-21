@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+
 OPPONENT_LATEST = 0
 OPPONENT_HISTORICAL = 1
 OPPONENT_NEAREST_SNIPER = 2

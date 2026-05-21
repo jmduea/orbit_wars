@@ -53,12 +53,6 @@ from .jax_ppo import (  # noqa: E402
     ppo_update_jax,
     validate_policy_param_shapes,
 )
-from .metric_registry import (  # noqa: E402
-    filter_event_record,
-    filter_update_record,
-    required_ppo_metric_names,
-    required_rollout_scalar_names,
-)
 
 
 @dataclass(slots=True)
@@ -554,9 +548,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "checkpoint_reason": result.reason,
                 "checkpoint_error": result.error,
             }
-            output_event_record = filter_event_record(event_record, cfg)
-            append_jsonl(log_path, output_event_record)
-            telemetry.log(output_event_record, step=result.update)
+            append_jsonl(log_path, event_record)
+            telemetry.log(event_record, step=result.update)
             if result.status == "failed":
                 checkpoint_failures.append(result)
                 continue
@@ -697,7 +690,70 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 shield_legal_count / shield_original_count,
                 0.0,
             )
-            rollout_scalar_keys = required_rollout_scalar_names(cfg)
+            rollout_scalar_keys = (
+                "samples",
+                "env_steps",
+                "episode_done",
+                "avg_reward",
+                "episode_reward_sum",
+                "episodes_2p",
+                "episodes_4p",
+                "wins_2p",
+                "first_places_4p",
+                "placement_4p_sum",
+                "survival_time_sum",
+                "score_share_sum",
+                "decision_count",
+                "noop_count",
+                "friendly_target_count",
+                "enemy_target_count",
+                "neutral_target_count",
+                "trajectory_shield_blocked_count",
+                "trajectory_shield_blocked_sun_count",
+                "trajectory_shield_blocked_bounds_count",
+                "trajectory_shield_blocked_unintended_hit_count",
+                "trajectory_shield_blocked_horizon_count",
+                "trajectory_shield_fallback_noop_count",
+                "trajectory_shield_legal_non_noop_count",
+                "trajectory_shield_original_non_noop_count",
+                "trajectory_shield_legal_non_noop_rate",
+                "overall_win_rate",
+                "noop_percent",
+                "friendly_target_percent",
+                "enemy_target_percent",
+                "neutral_target_percent",
+                "opponent_current_slots",
+                "opponent_random_slots",
+                "opponent_snapshot_slots",
+                "opponent_slots_total",
+                "opponent_slots_latest",
+                "opponent_slots_historical",
+                "opponent_slots_random",
+                "opponent_slots_noop",
+                "opponent_slots_nearest_sniper",
+                "opponent_slots_turtle",
+                "opponent_slots_opportunistic",
+                "opponent_historical_fallback_latest_slots",
+                "won_non_noop_actions_per_step",
+                "lost_non_noop_actions_per_step",
+                "won_avg_fleet_launch_size",
+                "lost_avg_fleet_launch_size",
+                "won_avg_planets_owned",
+                "lost_avg_planets_owned",
+                "won_avg_planets_lost",
+                "lost_avg_planets_lost",
+                "won_avg_planets_taken",
+                "lost_avg_planets_taken",
+                "won_avg_garrisoned_ships_per_planet",
+                "lost_avg_garrisoned_ships_per_planet",
+                "won_avg_planet_diff",
+                "lost_avg_planet_diff",
+                "won_avg_production_diff",
+                "lost_avg_production_diff",
+                "won_avg_launch_fleet_speed",
+                "lost_avg_launch_fleet_speed",
+                cfg.plateau_metric,
+            )
             rollout_scalar_values = jnp.asarray(
                 [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
                 dtype=jnp.float32,
@@ -724,43 +780,78 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             metrics = jax.tree.map(
                 lambda x: x / float(max(cfg.ppo.epochs, 1)), metrics_accum
             )
-            metric_names = required_ppo_metric_names(cfg, tuple(metrics.keys()))
-            if metric_names:
-                metric_values = jnp.asarray([metrics[name] for name in metric_names])
-                # Intentional sync boundary: perform one compact host transfer for
-                # the PPO scalars still needed for output or training control.
-                metric_values_host = jax.device_get(metric_values)
-                metrics_host = dict(
-                    zip(metric_names, metric_values_host.tolist(), strict=True)
-                )
-            else:
-                metrics_host = {}
+            metric_names = tuple(metrics.keys())
+            metric_values = jnp.asarray([metrics[name] for name in metric_names])
+            # Intentional sync boundary: perform a single compact host transfer for
+            # PPO scalars and keep logging values identical.
+            metric_values_host = jax.device_get(metric_values)
+            metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
             ppo_seconds = time.perf_counter() - ppo_start
             update_seconds = time.perf_counter() - update_start
             env_steps = int(rollout_scalars["env_steps"])
             episodes = int(rollout_scalars["episode_done"])
-            win_rate_2p = float(rollout_scalars.get("win_rate_2p", 0.0))
-            first_place_rate_4p = float(rollout_scalars.get("first_place_rate_4p", 0.0))
-            average_placement_4p = float(
-                rollout_scalars.get("average_placement_4p", 0.0)
+            episodes_2p = float(rollout_scalars["episodes_2p"])
+            episodes_4p = float(rollout_scalars["episodes_4p"])
+            episode_count = float(rollout_scalars["episode_done"])
+            win_rate_2p = (
+                float(rollout_scalars["wins_2p"]) / episodes_2p
+                if episodes_2p
+                else 0.0
             )
-            survival_time = float(rollout_scalars.get("survival_time", 0.0))
-            score_share = float(rollout_scalars.get("score_share", 0.0))
-            average_reward = float(rollout_scalars["average_reward"])
-            episode_reward_mean = float(rollout_scalars["episode_reward_mean"])
-            overall_win_rate = float(rollout_scalars["overall_win_rate"])
-            noop_percent = float(rollout_scalars.get("noop_percent", 0.0))
-            friendly_target_percent = float(
-                rollout_scalars.get("friendly_target_percent", 0.0)
+            first_place_rate_4p = (
+                float(rollout_scalars["first_places_4p"]) / episodes_4p
+                if episodes_4p
+                else 0.0
             )
-            enemy_target_percent = float(
-                rollout_scalars.get("enemy_target_percent", 0.0)
+            average_placement_4p = (
+                float(rollout_scalars["placement_4p_sum"]) / episodes_4p
+                if episodes_4p
+                else 0.0
             )
-            neutral_target_percent = float(
-                rollout_scalars.get("neutral_target_percent", 0.0)
+            survival_time = (
+                float(rollout_scalars["survival_time_sum"]) / episode_count
+                if episode_count
+                else 0.0
+            )
+            score_share = (
+                float(rollout_scalars["score_share_sum"]) / episode_count
+                if episode_count
+                else 0.0
+            )
+            average_reward = float(rollout_scalars["avg_reward"])
+            average_episode_reward = (
+                float(rollout_scalars["episode_reward_sum"]) / episode_count if episode_count else 0.0
+            )
+            overall_win_rate = (
+                (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
+                / episode_count
+                if episode_count
+                else 0.0
+            )
+            decision_count = float(rollout_scalars["decision_count"])
+            noop_percent = (
+                (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            friendly_target_percent = (
+                (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            enemy_target_percent = (
+                (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            neutral_target_percent = (
+                (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
             )
             total_env_steps += env_steps
             completed_episodes += episodes
+            seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
             curriculum_telemetry = curriculum.stage_telemetry(stage_view, update)
             update_events = list(phase_events)
             transition = curriculum.update(
@@ -770,7 +861,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     "win_rate_2p": win_rate_2p,
                     "first_place_rate_4p": first_place_rate_4p,
                     "average_reward": average_reward,
-                    "episode_reward_mean": episode_reward_mean,
+                    "average_episode_reward": average_episode_reward,
+                    "episode_reward_mean": average_episode_reward,
                     "survival_time": survival_time,
                     "score_share": score_share,
                     "approx_kl": float(metrics_host.get("approx_kl", 0.0)),
@@ -803,33 +895,31 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "average_placement_4p": average_placement_4p,
                 "overall_win_rate": overall_win_rate,
                 "average_reward": average_reward,
-                "episode_reward_mean": episode_reward_mean,
+                "average_episode_reward": average_episode_reward,
                 "noop_percent": noop_percent,
                 "friendly_target_percent": friendly_target_percent,
                 "enemy_target_percent": enemy_target_percent,
                 "neutral_target_percent": neutral_target_percent,
                 "trajectory_shield_blocked_count": float(
-                    rollout_scalars.get("trajectory_shield_blocked_count", 0.0)
+                    rollout_scalars["trajectory_shield_blocked_count"]
                 ),
                 "trajectory_shield_blocked_sun_count": float(
-                    rollout_scalars.get("trajectory_shield_blocked_sun_count", 0.0)
+                    rollout_scalars["trajectory_shield_blocked_sun_count"]
                 ),
                 "trajectory_shield_blocked_bounds_count": float(
-                    rollout_scalars.get("trajectory_shield_blocked_bounds_count", 0.0)
+                    rollout_scalars["trajectory_shield_blocked_bounds_count"]
                 ),
                 "trajectory_shield_blocked_unintended_hit_count": float(
-                    rollout_scalars.get(
-                        "trajectory_shield_blocked_unintended_hit_count", 0.0
-                    )
+                    rollout_scalars["trajectory_shield_blocked_unintended_hit_count"]
                 ),
                 "trajectory_shield_blocked_horizon_count": float(
-                    rollout_scalars.get("trajectory_shield_blocked_horizon_count", 0.0)
+                    rollout_scalars["trajectory_shield_blocked_horizon_count"]
                 ),
                 "trajectory_shield_fallback_noop_count": float(
-                    rollout_scalars.get("trajectory_shield_fallback_noop_count", 0.0)
+                    rollout_scalars["trajectory_shield_fallback_noop_count"]
                 ),
                 "trajectory_shield_legal_non_noop_rate": float(
-                    rollout_scalars.get("trajectory_shield_legal_non_noop_rate", 0.0)
+                    rollout_scalars["trajectory_shield_legal_non_noop_rate"]
                 ),
                 "survival_time": survival_time,
                 "score_share": score_share,
@@ -845,34 +935,28 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "seed_scheduler_plateau_metric": cfg.plateau_metric,
                 "reseed_events": reseed_events,
                 **curriculum_telemetry,
-                "opponent_slots_total": float(
-                    rollout_scalars.get("opponent_slots_total", 0.0)
-                ),
+                "opponent_slots_total": float(rollout_scalars["opponent_slots_total"]),
                 "opponent_slots_latest": float(
-                    rollout_scalars.get("opponent_slots_latest", 0.0)
+                    rollout_scalars["opponent_slots_latest"]
                 ),
                 "opponent_slots_historical": float(
-                    rollout_scalars.get("opponent_slots_historical", 0.0)
+                    rollout_scalars["opponent_slots_historical"]
                 ),
                 "opponent_slots_random": float(
-                    rollout_scalars.get("opponent_slots_random", 0.0)
+                    rollout_scalars["opponent_slots_random"]
                 ),
-                "opponent_slots_noop": float(
-                    rollout_scalars.get("opponent_slots_noop", 0.0)
-                ),
+                "opponent_slots_noop": float(rollout_scalars["opponent_slots_noop"]),
                 "opponent_slots_nearest_sniper": float(
-                    rollout_scalars.get("opponent_slots_nearest_sniper", 0.0)
+                    rollout_scalars["opponent_slots_nearest_sniper"]
                 ),
                 "opponent_slots_turtle": float(
-                    rollout_scalars.get("opponent_slots_turtle", 0.0)
+                    rollout_scalars["opponent_slots_turtle"]
                 ),
                 "opponent_slots_opportunistic": float(
-                    rollout_scalars.get("opponent_slots_opportunistic", 0.0)
+                    rollout_scalars["opponent_slots_opportunistic"]
                 ),
                 "opponent_historical_fallback_latest_slots": float(
-                    rollout_scalars.get(
-                        "opponent_historical_fallback_latest_slots", 0.0
-                    )
+                    rollout_scalars["opponent_historical_fallback_latest_slots"]
                 ),
                 "historical_pool_size": int(
                     jax.device_get(historical_pool.valid_mask).sum()
@@ -882,99 +966,77 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "historical_snapshot_ages_updates": historical_ages,
                 **{name: float(value) for name, value in metrics_host.items()},
                 "won_non_noop_actions_per_step": float(
-                    rollout_scalars.get("won_non_noop_actions_per_step", 0.0)
+                    rollout_scalars["won_non_noop_actions_per_step"]
                 ),
                 "lost_non_noop_actions_per_step": float(
-                    rollout_scalars.get("lost_non_noop_actions_per_step", 0.0)
+                    rollout_scalars["lost_non_noop_actions_per_step"]
                 ),
                 "won_avg_fleet_launch_size": float(
-                    rollout_scalars.get("won_avg_fleet_launch_size", 0.0)
+                    rollout_scalars["won_avg_fleet_launch_size"]
                 ),
                 "lost_avg_fleet_launch_size": float(
-                    rollout_scalars.get("lost_avg_fleet_launch_size", 0.0)
+                    rollout_scalars["lost_avg_fleet_launch_size"]
                 ),
                 "won_avg_planets_owned": float(
-                    rollout_scalars.get("won_avg_planets_owned", 0.0)
+                    rollout_scalars["won_avg_planets_owned"]
                 ),
                 "lost_avg_planets_owned": float(
-                    rollout_scalars.get("lost_avg_planets_owned", 0.0)
+                    rollout_scalars["lost_avg_planets_owned"]
                 ),
-                "won_avg_planets_lost": float(
-                    rollout_scalars.get("won_avg_planets_lost", 0.0)
-                ),
+                "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
                 "lost_avg_planets_lost": float(
-                    rollout_scalars.get("lost_avg_planets_lost", 0.0)
+                    rollout_scalars["lost_avg_planets_lost"]
                 ),
                 "won_avg_planets_taken": float(
-                    rollout_scalars.get("won_avg_planets_taken", 0.0)
+                    rollout_scalars["won_avg_planets_taken"]
                 ),
                 "lost_avg_planets_taken": float(
-                    rollout_scalars.get("lost_avg_planets_taken", 0.0)
+                    rollout_scalars["lost_avg_planets_taken"]
                 ),
                 "won_avg_garrisoned_ships_per_planet": float(
-                    rollout_scalars.get("won_avg_garrisoned_ships_per_planet", 0.0)
+                    rollout_scalars["won_avg_garrisoned_ships_per_planet"]
                 ),
                 "lost_avg_garrisoned_ships_per_planet": float(
-                    rollout_scalars.get("lost_avg_garrisoned_ships_per_planet", 0.0)
+                    rollout_scalars["lost_avg_garrisoned_ships_per_planet"]
                 ),
-                "won_avg_planet_diff": float(
-                    rollout_scalars.get("won_avg_planet_diff", 0.0)
-                ),
-                "lost_avg_planet_diff": float(
-                    rollout_scalars.get("lost_avg_planet_diff", 0.0)
-                ),
+                "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
+                "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
                 "won_avg_production_diff": float(
-                    rollout_scalars.get("won_avg_production_diff", 0.0)
+                    rollout_scalars["won_avg_production_diff"]
                 ),
                 "lost_avg_production_diff": float(
-                    rollout_scalars.get("lost_avg_production_diff", 0.0)
+                    rollout_scalars["lost_avg_production_diff"]
                 ),
                 "won_avg_launch_fleet_speed": float(
-                    rollout_scalars.get("won_avg_launch_fleet_speed", 0.0)
+                    rollout_scalars["won_avg_launch_fleet_speed"]
                 ),
                 "lost_avg_launch_fleet_speed": float(
-                    rollout_scalars.get("lost_avg_launch_fleet_speed", 0.0)
+                    rollout_scalars["lost_avg_launch_fleet_speed"]
                 ),
                 "opponent_composition": {
-                    "latest": float(rollout_scalars.get("opponent_slots_latest", 0.0)),
-                    "historical": float(
-                        rollout_scalars.get("opponent_slots_historical", 0.0)
-                    ),
-                    "random": float(rollout_scalars.get("opponent_slots_random", 0.0)),
-                    "noop": float(rollout_scalars.get("opponent_slots_noop", 0.0)),
+                    "latest": float(rollout_scalars["opponent_slots_latest"]),
+                    "historical": float(rollout_scalars["opponent_slots_historical"]),
+                    "random": float(rollout_scalars["opponent_slots_random"]),
+                    "noop": float(rollout_scalars["opponent_slots_noop"]),
                     "nearest_sniper": float(
-                        rollout_scalars.get("opponent_slots_nearest_sniper", 0.0)
+                        rollout_scalars["opponent_slots_nearest_sniper"]
                     ),
-                    "turtle": float(rollout_scalars.get("opponent_slots_turtle", 0.0)),
+                    "turtle": float(rollout_scalars["opponent_slots_turtle"]),
                     "opportunistic": float(
-                        rollout_scalars.get("opponent_slots_opportunistic", 0.0)
+                        rollout_scalars["opponent_slots_opportunistic"]
                     ),
                 },
                 "curriculum_phase_id": curriculum_telemetry["curriculum_stage_id"],
                 "curriculum_phase_events": list(update_events),
             }
-            plateau_metric_value = record.get(cfg.plateau_metric)
-            if not isinstance(plateau_metric_value, int | float):
-                raise KeyError(
-                    "Configured plateau_metric was not produced by the telemetry record: "
-                    f"{cfg.plateau_metric}"
-                )
-            seed_scheduler.update_metric(float(plateau_metric_value))
-            output_record = filter_update_record(record, cfg)
-            append_jsonl(log_path, output_record)
-            telemetry.log(output_record, step=update)
+            append_jsonl(log_path, record)
+            telemetry.log(record, step=update)
             if update % cfg.log_every == 0:
-                total_loss_display = (
-                    f"{record['total_loss']:.4f}" if "total_loss" in record else "n/a"
-                )
-                entropy_display = (
-                    f"{record['entropy']:.3f}" if "entropy" in record else "n/a"
-                )
                 print(
                     f"update={update} steps={total_env_steps} episodes={completed_episodes} "
-                    f"loss={total_loss_display} sps={record['samples_per_sec']:.1f} "
+                    f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
-                    f"entropy={entropy_display}"
+                    f"entropy={record['entropy']:.3f}"
                 )
             if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
                 is_final = update == cfg.ppo.total_updates
