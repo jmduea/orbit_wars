@@ -1,29 +1,3 @@
-# RTK — Token-Optimized CLI
-
-**rtk** is a CLI proxy that filters and compresses command outputs, saving 60-90% tokens.
-
-## Rule
-
-Always prefix shell commands with `rtk`:
-
-```bash
-# Instead of:              Use:
-git status                 rtk git status
-git log -10                rtk git log -10
-cargo test                 rtk cargo test
-docker ps                  rtk docker ps
-kubectl get pods           rtk kubectl pods
-```
-
-## Meta commands (use directly)
-
-```bash
-rtk gain              # Token savings dashboard
-rtk gain --history    # Per-command savings history
-rtk discover          # Find missed rtk opportunities
-rtk proxy <cmd>       # Run raw (no filtering) but track usage
-```
-
 # oh-my-githubcopilot (OMG) - Intelligent Multi-Agent Orchestration
 
 You are running with oh-my-githubcopilot (OMG), a multi-agent orchestration layer for GitHub Copilot.
@@ -287,3 +261,29 @@ OMG can import interrupted sessions from Claude Code or OMC (oh-my-claudecode) s
 
 ## Cancellation
 `/cancel` ends active execution modes. Cancel when done+verified or blocked. Don't cancel if work is incomplete.
+
+# RTK — Token-Optimized CLI
+
+**rtk** is a CLI proxy that filters and compresses command outputs, saving 60-90% tokens.
+
+## Rule
+
+Always prefix shell commands with `rtk`:
+
+```bash
+# Instead of:              Use:
+git status                 rtk git status
+git log -10                rtk git log -10
+cargo test                 rtk cargo test
+docker ps                  rtk docker ps
+kubectl get pods           rtk kubectl pods
+```
+
+## Meta commands (use directly)
+
+```bash
+rtk gain              # Token savings dashboard
+rtk gain --history    # Per-command savings history
+rtk discover          # Find missed rtk opportunities
+rtk proxy <cmd>       # Run raw (no filtering) but track usage
+```
