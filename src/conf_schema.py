@@ -32,6 +32,8 @@ class ModelConfig:
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
+    gnn_k_neighbors: int = 5
+    gnn_message_passing_layers: int = 2
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 

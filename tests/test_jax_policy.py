@@ -2,6 +2,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from src.config import TrainConfig
+
 # Import your composable system modules here
 from src.jax_policy import (
     AutoregressivePointerDecoder,
@@ -10,6 +12,7 @@ from src.jax_policy import (
     JaxPolicyOutput,
     MLPBackboneEncoder,
     TransformerBackboneEncoder,
+    build_jax_policy,
 )
 
 # Define standard test hyper-parameters matching your Orbit Wars environment setup
@@ -107,6 +110,19 @@ def test_composable_policy_shapes(encoder_type, mock_inputs):
         SHIP_BUCKET_COUNT,
     )
     assert output.value.shape == (BATCH_SIZE,)
+
+
+def test_gnn_pointer_policy_uses_configured_graph_depth():
+    cfg = TrainConfig()
+    cfg.model.architecture = "gnn_pointer"
+    cfg.model.gnn_k_neighbors = 7
+    cfg.model.gnn_message_passing_layers = 3
+
+    policy = build_jax_policy(cfg)
+
+    assert isinstance(policy.encoder_module, GNNBackboneEncoder)
+    assert policy.encoder_module.k_neighbors == 7
+    assert policy.encoder_module.msg_passing_layers == 3
 
 
 def test_deterministic_decoding_reproducibility(mock_inputs):

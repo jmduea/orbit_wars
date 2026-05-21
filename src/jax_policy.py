@@ -195,6 +195,12 @@ class GNNBackboneEncoder(nn.Module):
     msg_passing_layers: int = 2
     target_coords_slice: slice = slice(4, 6)
 
+    def setup(self) -> None:
+        if self.k_neighbors < 1:
+            raise ValueError("k_neighbors must be at least 1.")
+        if self.msg_passing_layers < 1:
+            raise ValueError("msg_passing_layers must be at least 1.")
+
     @nn.compact
     def __call__(
         self,
@@ -614,7 +620,10 @@ def build_jax_policy(
     elif normalized_architecture == "gnn_pointer":
         return ComposablePlanetPolicy(
             encoder_module=GNNBackboneEncoder(
-                hidden_size=hidden, target_coords_slice=target_coords_slice
+                hidden_size=hidden,
+                k_neighbors=cfg.model.gnn_k_neighbors,
+                msg_passing_layers=cfg.model.gnn_message_passing_layers,
+                target_coords_slice=target_coords_slice,
             ),
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
