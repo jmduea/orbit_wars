@@ -74,6 +74,20 @@ uv run python -m src.train \
 - Checkpoints are `jax_ckpt_*.pkl` / `jax_ckpt_last.pkl`.
 - Keep architecture- and shape-compatible presets when resuming checkpoints.
 
+## Kaggle submission validation
+
+Validate a trained checkpoint against Kaggle's simulation Docker image before uploading:
+
+```bash
+uv run python scripts/validate_kaggle_docker_submission.py \
+   --checkpoint artifacts/<run>/jax_ckpt_last.pkl \
+   --player-count both
+```
+
+The command builds a Kaggle-style `submission.tar.gz` with root `main.py`, exports a stripped inference artifact instead of shipping the raw training checkpoint, and runs the exact tarball inside `gcr.io/kaggle-images/python-simulations`. Passing output reports dependency versions, package path, cold import time, first-action latency, and seeded 2-player/4-player self-play results.
+
+Use `--skip-docker` to build and inspect the package without launching Docker. Failures exit non-zero and identify the phase, such as `dependency_probe_failed`, `package_layout_failed`, `submission_import_failed`, `artifact_load_failed`, `first_action_failed`, `timeout_failed`, `invalid_action_failed`, `episode_failed_2p`, or `episode_failed_4p`.
+
 ## Multirun basics
 
 Hydra multirun (`-m`) launches one job per override combination:
