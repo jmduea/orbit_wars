@@ -188,35 +188,62 @@ def build_action_from_batch(
 
     env_count = batch.self_features.shape[0]
     planet_count = batch.self_features.shape[1]
-    target_index = target_index.reshape(env_count, planet_count)
-    ship_bucket = ship_bucket.reshape(env_count, planet_count)
+    target_index = target_index.reshape(env_count, planet_count, -1)
+    ship_bucket = ship_bucket.reshape(env_count, planet_count, -1)
+    launch_steps = target_index.shape[-1]
     chosen_mask = jnp.take_along_axis(
-        batch.candidate_mask, target_index[..., None], axis=-1
+        batch.candidate_mask[..., None, :], target_index[..., None], axis=-1
     ).squeeze(-1)
     chosen_angle = jnp.take_along_axis(
-        batch.target_angles, target_index[..., None], axis=-1
+        batch.target_angles[..., None, :], target_index[..., None], axis=-1
     ).squeeze(-1)
-    ships = ship_count_for_bucket_jax(
-        batch.source_ships, ship_bucket, cfg.env.ship_bucket_count
-    )
-    valid = (
-        batch.decision_mask
+    step_valid = (
+        batch.decision_mask[..., None]
         & chosen_mask
         & (target_index > 0)
         & (ship_bucket > 0)
-        & (ships > 0.0)
     )
+
+    def allocate_step(remaining_ships, step_bucket):
+        requested = ship_count_for_bucket_jax(
+            remaining_ships, step_bucket, cfg.env.ship_bucket_count
+        )
+        launched = jnp.minimum(remaining_ships, requested)
+        return jnp.maximum(remaining_ships - launched, 0.0), launched
+
+    _remaining_ships, ships_by_step = jax.lax.scan(
+        allocate_step,
+        batch.source_ships,
+        jnp.moveaxis(ship_bucket, -1, 0),
+    )
+    ships = jnp.moveaxis(ships_by_step, 0, -1)
+    valid = step_valid & (ships > 0.0)
     fleet_slots = cfg.env.max_fleets
-    action_width = min(planet_count, fleet_slots)
+    action_width = min(planet_count * launch_steps, fleet_slots)
     pad = fleet_slots - action_width
+    source_ids = jnp.broadcast_to(
+        batch.source_ids[..., None], (env_count, planet_count, launch_steps)
+    )
     source_id = jnp.pad(
-        batch.source_ids[:, :action_width], ((0, 0), (0, pad)), constant_values=-1
+        source_ids.reshape(env_count, planet_count * launch_steps)[:, :action_width],
+        ((0, 0), (0, pad)),
+        constant_values=-1,
     )
     angle = jnp.pad(
-        chosen_angle[:, :action_width], ((0, 0), (0, pad)), constant_values=0.0
+        chosen_angle.reshape(env_count, planet_count * launch_steps)[:, :action_width],
+        ((0, 0), (0, pad)),
+        constant_values=0.0,
     )
-    ships = jnp.pad(ships[:, :action_width], ((0, 0), (0, pad)), constant_values=0.0)
-    valid = jnp.pad(valid[:, :action_width], ((0, 0), (0, pad)), constant_values=False)
+    ships = jnp.pad(
+        ships.reshape(env_count, planet_count * launch_steps)[:, :action_width],
+        ((0, 0), (0, pad)),
+        constant_values=0.0,
+    )
+    valid = jnp.pad(
+        valid.reshape(env_count, planet_count * launch_steps)[:, :action_width],
+        ((0, 0), (0, pad)),
+        constant_values=False,
+    )
     return JaxAction(source_id=source_id, angle=angle, ships=ships, valid=valid)
 
 
@@ -289,7 +316,15 @@ def _sample_policy_action_with_params(
     flat_self, flat_candidate, flat_global, flat_mask, _flat_decision = flatten_batch(
         batch
     )
-    output = policy.apply(params, flat_self, flat_candidate, flat_global, flat_mask)
+    output = policy.apply(
+        params,
+        flat_self,
+        flat_candidate,
+        flat_global,
+        flat_mask,
+        rng=key,
+        deterministic=deterministic,
+    )
     target, bucket, _log_prob, _entropy = sample_actions(
         key, output, deterministic=deterministic
     )
@@ -370,7 +405,13 @@ def collect_rollout_jax(
             flatten_batch(batch)
         )
         output = policy.apply(
-            train_state.params, flat_self, flat_candidate, flat_global, flat_mask
+            train_state.params,
+            flat_self,
+            flat_candidate,
+            flat_global,
+            flat_mask,
+            rng=learner_key,
+            deterministic=False,
         )
         target, bucket, log_prob, _entropy = sample_actions(
             learner_key, output, deterministic=False
@@ -542,10 +583,19 @@ def collect_rollout_jax(
             "candidate_features": batch.candidate_features,
             "global_features": batch.global_features,
             "candidate_mask": batch.candidate_mask,
-            "decision_mask": flat_decision.reshape(batch.decision_mask.shape),
-            "target_index": target.reshape(batch.decision_mask.shape),
-            "ship_bucket": bucket.reshape(batch.decision_mask.shape),
-            "log_prob": log_prob.reshape(batch.decision_mask.shape),
+            "decision_mask": jnp.broadcast_to(
+                flat_decision.reshape(batch.decision_mask.shape)[..., None],
+                batch.decision_mask.shape + (target.shape[-1],),
+            ),
+            "target_index": target.reshape(
+                batch.decision_mask.shape + (target.shape[-1],)
+            ),
+            "ship_bucket": bucket.reshape(
+                batch.decision_mask.shape + (bucket.shape[-1],)
+            ),
+            "log_prob": log_prob.reshape(
+                batch.decision_mask.shape + (log_prob.shape[-1],)
+            ),
             "value": output.value.reshape(batch.decision_mask.shape),
             "reward": result.reward,
             "done": result.done,
@@ -573,8 +623,10 @@ def collect_rollout_jax(
         length=cfg.ppo.rollout_steps,
     )
     returns_step = discounted_returns(data["reward"], data["done"], cfg.ppo.gamma)
-    returns = jnp.broadcast_to(returns_step[..., None], data["value"].shape)
-    advantages = returns - data["value"]
+    returns = jnp.broadcast_to(
+        returns_step[..., None, None], data["target_index"].shape
+    )
+    advantages = returns - data["value"][..., None]
     transitions = JaxTransitionBatch(
         self_features=data["self_features"],
         candidate_features=data["candidate_features"],
@@ -662,10 +714,12 @@ def _rollout_diagnostics(
     global_schema = global_feature_schema(cfg.env)
 
     valid_non_noop_targets = data["candidate_mask"][..., 1:].astype(jnp.float32).sum(axis=-1)
-    row_mask = data["decision_mask"].astype(jnp.float32)
-    valid_non_noop_targets_sum = (valid_non_noop_targets * row_mask).sum()
+    row_mask = transitions.decision_mask.astype(jnp.float32)
+    valid_non_noop_targets_sum = (valid_non_noop_targets[..., None] * row_mask).sum()
     valid_non_noop_target_rows = row_mask.sum()
-    only_noop_rows = ((valid_non_noop_targets <= 0.0).astype(jnp.float32) * row_mask).sum()
+    only_noop_rows = (
+        (valid_non_noop_targets[..., None] <= 0.0).astype(jnp.float32) * row_mask
+    ).sum()
     only_noop_fraction = jnp.where(
         valid_non_noop_target_rows > 0.0,
         only_noop_rows / valid_non_noop_target_rows,
@@ -690,7 +744,7 @@ def _rollout_diagnostics(
     source_ships = (
         data["self_features"][..., self_schema.slice("source_ships")].squeeze(-1)
         * cfg.env.max_ships
-    )
+    )[..., None]
     launched_ships = ship_count_for_bucket_jax(source_ships, data["ship_bucket"], cfg.env.ship_bucket_count)
     launched_ship_mask = ((selected_target != 0).astype(jnp.float32) * row_mask)
     launched_ship_count = launched_ship_mask.sum()
@@ -699,9 +753,11 @@ def _rollout_diagnostics(
         launched_ship_mask * fleet_speed(launched_ships, MAX_FLEET_SPEED)
     ).sum()
 
-    terminal_row_mask = row_mask * done_float[..., None]
-    win_row_mask = terminal_row_mask * data["terminal_is_first"][..., None]
-    loss_row_mask = terminal_row_mask * (1.0 - data["terminal_is_first"][..., None])
+    terminal_row_mask = row_mask * done_float[..., None, None]
+    win_row_mask = terminal_row_mask * data["terminal_is_first"][..., None, None]
+    loss_row_mask = terminal_row_mask * (
+        1.0 - data["terminal_is_first"][..., None, None]
+    )
     win_episode_rows = win_row_mask.sum()
     loss_episode_rows = loss_row_mask.sum()
 
@@ -723,12 +779,12 @@ def _rollout_diagnostics(
     planets_taken_step = jnp.maximum(planet_delta, 0.0)
     planets_lost_step = jnp.maximum(-planet_delta, 0.0)
     selected_candidate_features = jnp.take_along_axis(
-        data["candidate_features"],
+        data["candidate_features"][..., None, :, :],
         selected_target[..., None, None].repeat(
             data["candidate_features"].shape[-1], axis=-1
         ),
-        axis=3,
-    ).squeeze(axis=3)
+        axis=4,
+    ).squeeze(axis=4)
 
     target_ownership_slice = candidate_schema.slice("target_ownership_flags")
     target_ownership = selected_candidate_features[..., target_ownership_slice]
@@ -823,64 +879,70 @@ def _rollout_diagnostics(
         ),
         "won_avg_planets_owned": jnp.where(
             win_episode_rows > 0.0,
-            (my_planets * win_row_mask).sum() / win_episode_rows,
+            (my_planets[..., None] * win_row_mask).sum() / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_owned": jnp.where(
             loss_episode_rows > 0.0,
-            (my_planets * loss_row_mask).sum() / loss_episode_rows,
+            (my_planets[..., None] * loss_row_mask).sum() / loss_episode_rows,
             0.0,
         ),
         "won_avg_planets_lost": jnp.where(
             win_episode_rows > 0.0,
-            (planets_lost_step * win_row_mask).sum() / win_episode_rows,
+            (planets_lost_step[..., None] * win_row_mask).sum() / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_lost": jnp.where(
             loss_episode_rows > 0.0,
-            (planets_lost_step * loss_row_mask).sum() / loss_episode_rows,
+            (planets_lost_step[..., None] * loss_row_mask).sum() / loss_episode_rows,
             0.0,
         ),
         "won_avg_planets_taken": jnp.where(
             win_episode_rows > 0.0,
-            (planets_taken_step * win_row_mask).sum() / win_episode_rows,
+            (planets_taken_step[..., None] * win_row_mask).sum() / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_taken": jnp.where(
             loss_episode_rows > 0.0,
-            (planets_taken_step * loss_row_mask).sum() / loss_episode_rows,
+            (planets_taken_step[..., None] * loss_row_mask).sum() / loss_episode_rows,
             0.0,
         ),
         "won_avg_garrisoned_ships_per_planet": jnp.where(
             win_episode_rows > 0.0,
-            ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * win_row_mask).sum()
+            (
+                ((my_garrison_ships / jnp.maximum(my_planets, 1.0))[..., None])
+                * win_row_mask
+            ).sum()
             / win_episode_rows,
             0.0,
         ),
         "lost_avg_garrisoned_ships_per_planet": jnp.where(
             loss_episode_rows > 0.0,
-            ((my_garrison_ships / jnp.maximum(my_planets, 1.0)) * loss_row_mask).sum()
+            (
+                ((my_garrison_ships / jnp.maximum(my_planets, 1.0))[..., None])
+                * loss_row_mask
+            ).sum()
             / loss_episode_rows,
             0.0,
         ),
         "won_avg_planet_diff": jnp.where(
             win_episode_rows > 0.0,
-            (planet_diff * win_row_mask).sum() / win_episode_rows,
+            (planet_diff[..., None] * win_row_mask).sum() / win_episode_rows,
             0.0,
         ),
         "lost_avg_planet_diff": jnp.where(
             loss_episode_rows > 0.0,
-            (planet_diff * loss_row_mask).sum() / loss_episode_rows,
+            (planet_diff[..., None] * loss_row_mask).sum() / loss_episode_rows,
             0.0,
         ),
         "won_avg_production_diff": jnp.where(
             win_episode_rows > 0.0,
-            (production_diff * win_row_mask).sum() / win_episode_rows,
+            (production_diff[..., None] * win_row_mask).sum() / win_episode_rows,
             0.0,
         ),
         "lost_avg_production_diff": jnp.where(
             loss_episode_rows > 0.0,
-            (production_diff * loss_row_mask).sum() / loss_episode_rows,
+            (production_diff[..., None] * loss_row_mask).sum() / loss_episode_rows,
             0.0,
         ),
         "won_avg_launch_fleet_speed": jnp.where(
@@ -955,18 +1017,19 @@ def ppo_update_jax(
     rollouts can trade memory pressure for throughput.
     """
 
-    mask = batch.decision_mask.reshape(-1).astype(jnp.float32)
+    sequence_k = batch.target_index.shape[-1]
+    mask = batch.decision_mask.reshape(-1, sequence_k).astype(jnp.float32)
     self_features = batch.self_features.reshape(-1, self_feature_dim(cfg.env))
     candidate_features = batch.candidate_features.reshape(
         -1, cfg.env.candidate_count, candidate_feature_dim(cfg.env)
     )
     global_features = batch.global_features.reshape(-1, global_feature_dim(cfg.env))
     candidate_mask = batch.candidate_mask.reshape(-1, cfg.env.candidate_count)
-    target = batch.target_index.reshape(-1)
-    bucket = batch.ship_bucket.reshape(-1)
-    old_log_prob = batch.log_prob.reshape(-1)
-    returns = batch.returns.reshape(-1)
-    advantages = batch.advantages.reshape(-1)
+    target = batch.target_index.reshape(-1, sequence_k)
+    bucket = batch.ship_bucket.reshape(-1, sequence_k)
+    old_log_prob = batch.log_prob.reshape(-1, sequence_k)
+    returns = batch.returns.reshape(-1, sequence_k)
+    advantages = batch.advantages.reshape(-1, sequence_k)
     advantage_mean = masked_mean(advantages, mask)
     advantages = (advantages - advantage_mean) / jnp.sqrt(
         masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
@@ -1017,6 +1080,7 @@ def ppo_update_jax(
                 minibatch["candidate_features"],
                 minibatch["global_features"],
                 minibatch["candidate_mask"],
+                target_sequence=minibatch["target"],
             )
             new_log_prob, entropy = action_log_prob_and_entropy(
                 output, minibatch["target"], minibatch["bucket"]
@@ -1031,7 +1095,7 @@ def ppo_update_jax(
                 minibatch["mask"],
             )
             value_loss = 0.5 * masked_mean(
-                (minibatch["returns"] - output.value) ** 2, minibatch["mask"]
+                (minibatch["returns"] - output.value[:, None]) ** 2, minibatch["mask"]
             )
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             loss = (

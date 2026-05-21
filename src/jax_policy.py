@@ -22,11 +22,15 @@ class JaxPolicyOutput(NamedTuple):
         Shape: (batch, sequence_k, candidates, ship_buckets)
     value: jax.Array
         Shape: (batch,)
+    decoded_target_sequence: jax.Array
+        Shape: (batch, sequence_k). Target path used by autoregressive decoders,
+        or -1 for decoders whose steps can be sampled from logits directly.
     """
 
     target_logits: jax.Array
     ship_logits: jax.Array
     value: jax.Array
+    decoded_target_sequence: jax.Array
 
 
 class EncoderOutput(NamedTuple):
@@ -86,6 +90,7 @@ class TransformerBackboneEncoder(nn.Module):
 
     hidden_size: int = 128
     attention_heads: int = 4
+    enable_gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         """Validate attention hyperparameters before parameter initialization."""
@@ -115,8 +120,13 @@ class TransformerBackboneEncoder(nn.Module):
             candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
         )
 
-        # Self Attention over Planet graph
-        attended_candidates = nn.MultiHeadDotProductAttention(
+        attention_module = (
+            nn.remat(nn.MultiHeadDotProductAttention)
+            if self.enable_gradient_checkpointing
+            else nn.MultiHeadDotProductAttention
+        )
+
+        attended_candidates = attention_module(
             num_heads=self.attention_heads,
             qkv_features=self.hidden_size,
             out_features=self.hidden_size,
@@ -138,13 +148,37 @@ class TransformerBackboneEncoder(nn.Module):
             candidate_hidden + attended_candidates
         )
 
+        context_query = mlp(
+            jnp.concatenate([self_hidden, global_hidden], axis=-1),
+            self.hidden_size,
+            self.hidden_size,
+            "context_query",
+        )[:, None, :]
+        attended_context = attention_module(
+            num_heads=self.attention_heads,
+            qkv_features=self.hidden_size,
+            out_features=self.hidden_size,
+            name="context_attention",
+        )(
+            context_query,
+            attended_candidates,
+            mask=jnp.broadcast_to(
+                safe_mask[:, None, None, :],
+                (batch_size, self.attention_heads, 1, candidate_hidden.shape[1]),
+            ),
+        )
+        attended_context = nn.LayerNorm(name="context_norm")(
+            context_query + attended_context
+        ).squeeze(axis=1)
+
         pooled_candidates = masked_mean(attended_candidates, candidate_mask)
-        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
-        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
+        value_input = jnp.concatenate(
+            [self_hidden, global_hidden, attended_context, pooled_candidates], axis=-1
+        )
 
         return EncoderOutput(
             attended_candidates=attended_candidates,
-            context_query=context_query,
+            context_query=attended_context,
             value_input=value_input,
         )
 
@@ -188,7 +222,8 @@ class GNNBackboneEncoder(nn.Module):
         dist_matrix = jnp.sum(diffs**2, axis=-1)
 
         # 4. Extract neighbor connections and mask out dead padded elements
-        _, topk_indices = jax.lax.top_k(-dist_matrix, k=self.k_neighbors)
+        neighbor_count = min(self.k_neighbors, num_planets)
+        _, topk_indices = jax.lax.top_k(-dist_matrix, k=neighbor_count)
         adj_matrix = jnp.sum(jax.nn.one_hot(topk_indices, num_planets), axis=-2).astype(
             bool
         )
@@ -236,6 +271,48 @@ class GNNBackboneEncoder(nn.Module):
 # --- Decoders ---
 
 
+class FeedForwardActionDecoder(nn.Module):
+    """Single-step target and ship-bucket decoder for non-autoregressive policies."""
+
+    ship_bucket_count: int
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        encoder_out: EncoderOutput,
+        candidate_mask: jax.Array,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+        del target_sequence, rng, deterministic
+
+        expanded_context = jnp.broadcast_to(
+            encoder_out.context_query[:, None, :],
+            encoder_out.attended_candidates.shape[:-1]
+            + (encoder_out.context_query.shape[-1],),
+        )
+        joint = jnp.concatenate(
+            [expanded_context, encoder_out.attended_candidates], axis=-1
+        )
+        target_hidden = nn.relu(nn.Dense(self.hidden_size, name="target_dense")(joint))
+        target_logits = nn.Dense(1, name="target_out")(target_hidden).squeeze(-1)
+        target_logits = jnp.where(
+            candidate_mask, target_logits, jnp.finfo(jnp.float32).min
+        )
+        ship_hidden = nn.relu(nn.Dense(self.hidden_size, name="ship_dense")(joint))
+        ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out")(ship_hidden)
+        decoded_target_sequence = jnp.full(
+            (target_logits.shape[0], 1), -1, dtype=jnp.int32
+        )
+        return (
+            target_logits[:, None, :],
+            ship_logits[:, None, :, :],
+            decoded_target_sequence,
+        )
+
+
 class AutoregressivePointerDecoder(nn.Module):
     """K-Step sequential pointer network decoding strategy.
 
@@ -254,8 +331,8 @@ class AutoregressivePointerDecoder(nn.Module):
         candidate_mask: jax.Array,
         target_sequence: jax.Array | None = None,
         rng: jax.Array | None = None,
-        deterministic: bool = False,  # FIXED: Added to signature contract
-    ) -> tuple[jax.Array, jax.Array]:
+        deterministic: bool = False,
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
         batch_size = encoder_out.context_query.shape[0]
 
         decoder_cell = nn.GRUCell(features=self.hidden_size, name="dec_gru")
@@ -275,7 +352,7 @@ class AutoregressivePointerDecoder(nn.Module):
             start_token[None, :], (batch_size, self.hidden_size)
         )
 
-        all_target_logits, all_ship_logits = [], []
+        all_target_logits, all_ship_logits, all_chosen_targets = [], [], []
         current_state = init_decoder_state
         current_rng = rng
 
@@ -302,7 +379,6 @@ class AutoregressivePointerDecoder(nn.Module):
             step_ship_logits = ship_out(nn.relu(ship_dense(ship_input)))
             all_ship_logits.append(step_ship_logits)
 
-            # FIXED: Branching safely handles explicit deterministic exploitation modes
             if target_sequence is not None:
                 chosen_target = target_sequence[:, step_idx]
             elif deterministic or current_rng is None:
@@ -312,12 +388,17 @@ class AutoregressivePointerDecoder(nn.Module):
                 chosen_target = jax.random.categorical(
                     step_rng, step_target_logits, axis=-1
                 )
+            all_chosen_targets.append(chosen_target)
 
             current_input_emb = jnp.take_along_axis(
                 encoder_out.attended_candidates, chosen_target[:, None, None], axis=1
             ).squeeze(1)
 
-        return jnp.stack(all_target_logits, axis=1), jnp.stack(all_ship_logits, axis=1)
+        return (
+            jnp.stack(all_target_logits, axis=1),
+            jnp.stack(all_ship_logits, axis=1),
+            jnp.stack(all_chosen_targets, axis=1),
+        )
 
 
 # --- Composable Policy Wrapper ---
@@ -346,7 +427,7 @@ class ComposablePlanetPolicy(nn.Module):
         )
 
         # Route encoder outputs through selected decoder head to produce final action logits
-        target_logits, ship_logits = self.decoder_module(
+        target_logits, ship_logits, decoded_target_sequence = self.decoder_module(
             encoder_out,
             candidate_mask,
             target_sequence=target_sequence,
@@ -361,15 +442,15 @@ class ComposablePlanetPolicy(nn.Module):
         value = nn.Dense(1, name="value_out")(value_hidden).squeeze(-1)
 
         return JaxPolicyOutput(
-            target_logits=target_logits, ship_logits=ship_logits, value=value
+            target_logits=target_logits,
+            ship_logits=ship_logits,
+            value=value,
+            decoded_target_sequence=decoded_target_sequence,
         )
-class JaxPlanetPolicy(nn.Module):
-    """MLP policy/value network for fixed-shape JAX Orbit Wars decisions.
 
-    The module consumes flattened decision rows and returns one target
-    distribution over candidates, one ship-bucket distribution per candidate,
-    and one scalar value estimate per row.
-    """
+
+class JaxPlanetPolicy(nn.Module):
+    """Composable MLP policy/value network for fixed-shape JAX decisions."""
 
     candidate_count: int
     ship_bucket_count: int
@@ -382,45 +463,31 @@ class JaxPlanetPolicy(nn.Module):
         candidate_features: jax.Array,
         global_features: jax.Array,
         candidate_mask: jax.Array,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
     ) -> JaxPolicyOutput:
-        self_hidden = mlp(
-            self_features, self.hidden_size, self.hidden_size, "self_encoder"
-        )
-        global_hidden = mlp(
-            global_features, self.hidden_size, self.hidden_size, "global_encoder"
-        )
-        candidate_hidden = mlp(
-            candidate_features, self.hidden_size, self.hidden_size, "candidate_encoder"
-        )
-        expanded_self = jnp.broadcast_to(
-            self_hidden[:, None, :], candidate_hidden.shape
-        )
-        expanded_global = jnp.broadcast_to(
-            global_hidden[:, None, :], candidate_hidden.shape
-        )
-        joint = jnp.concatenate(
-            [expanded_self, expanded_global, candidate_hidden], axis=-1
-        )
-        target_hidden = nn.relu(nn.Dense(self.hidden_size, name="target_dense")(joint))
-        target_logits = nn.Dense(1, name="target_out")(target_hidden).squeeze(-1)
-        target_logits = jnp.where(
-            candidate_mask, target_logits, jnp.finfo(jnp.float32).min
-        )
-        ship_hidden = nn.relu(nn.Dense(self.hidden_size, name="ship_dense")(joint))
-        ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out")(ship_hidden)
-        pooled = candidate_hidden.mean(axis=1)
-        value_input = jnp.concatenate([self_hidden, global_hidden, pooled], axis=-1)
-        value_hidden = nn.relu(
-            nn.Dense(self.hidden_size, name="value_dense")(value_input)
-        )
-        value = nn.Dense(1, name="value_out")(value_hidden).squeeze(-1)
-        return JaxPolicyOutput(
-            target_logits=target_logits, ship_logits=ship_logits, value=value
+        del self.candidate_count
+
+        return ComposablePlanetPolicy(
+            encoder_module=MLPBackboneEncoder(hidden_size=self.hidden_size),
+            decoder_module=FeedForwardActionDecoder(
+                ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
+            ),
+            hidden_size=self.hidden_size,
+        )(
+            self_features,
+            candidate_features,
+            global_features,
+            candidate_mask,
+            target_sequence=target_sequence,
+            rng=rng,
+            deterministic=deterministic,
         )
 
 
 class JaxAttentionPlanetPolicy(nn.Module):
-    """Flax attention/transformer policy for fixed-shape JAX feature batches."""
+    """Composable attention/transformer policy for fixed-shape JAX batches."""
 
     candidate_count: int
     ship_bucket_count: int
@@ -444,106 +511,30 @@ class JaxAttentionPlanetPolicy(nn.Module):
         candidate_features: jax.Array,
         global_features: jax.Array,
         candidate_mask: jax.Array,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
     ) -> JaxPolicyOutput:
-        candidate_mask = candidate_mask.astype(bool)
-        safe_mask = safe_attention_mask(candidate_mask)
-        self_hidden = mlp(
-            self_features, self.hidden_size, self.hidden_size, "self_encoder"
-        )
-        global_hidden = mlp(
-            global_features, self.hidden_size, self.hidden_size, "global_encoder"
-        )
-        candidate_hidden = mlp(
-            candidate_features, self.hidden_size, self.hidden_size, "candidate_encoder"
-        )
+        del self.candidate_count
 
-        self_attention_mask = safe_mask[:, None, None, :]
-        attention_module = (
-            nn.remat(nn.MultiHeadDotProductAttention)
-            if self.enable_gradient_checkpointing
-            else nn.MultiHeadDotProductAttention
-        )
-        attended_candidates = attention_module(
-            num_heads=self.attention_heads,
-            qkv_features=self.hidden_size,
-            out_features=self.hidden_size,
-            name="candidate_attention",
-        )(
-            candidate_hidden,
-            candidate_hidden,
-            mask=jnp.broadcast_to(
-                self_attention_mask,
-                (
-                    candidate_hidden.shape[0],
-                    self.attention_heads,
-                    self.candidate_count,
-                    self.candidate_count,
-                ),
+        return ComposablePlanetPolicy(
+            encoder_module=TransformerBackboneEncoder(
+                hidden_size=self.hidden_size,
+                attention_heads=self.attention_heads,
+                enable_gradient_checkpointing=self.enable_gradient_checkpointing,
             ),
-        )
-        attended_candidates = nn.LayerNorm(name="target_norm")(
-            candidate_hidden + attended_candidates
-        )
-
-        context_query = mlp(
-            jnp.concatenate([self_hidden, global_hidden], axis=-1),
-            self.hidden_size,
-            self.hidden_size,
-            "context_query",
-        )[:, None, :]
-        context_attention_mask = jnp.broadcast_to(
-            safe_mask[:, None, None, :],
-            (candidate_hidden.shape[0], self.attention_heads, 1, self.candidate_count),
-        )
-        attended_context = attention_module(
-            num_heads=self.attention_heads,
-            qkv_features=self.hidden_size,
-            out_features=self.hidden_size,
-            name="context_attention",
+            decoder_module=FeedForwardActionDecoder(
+                ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
+            ),
+            hidden_size=self.hidden_size,
         )(
-            context_query,
-            attended_candidates,
-            mask=context_attention_mask,
-        )
-        attended_context = nn.LayerNorm(name="context_norm")(
-            context_query + attended_context
-        ).squeeze(axis=1)
-
-        expanded_self = jnp.broadcast_to(
-            self_hidden[:, None, :], attended_candidates.shape
-        )
-        expanded_global = jnp.broadcast_to(
-            global_hidden[:, None, :], attended_candidates.shape
-        )
-        expanded_context = jnp.broadcast_to(
-            attended_context[:, None, :], attended_candidates.shape
-        )
-        target_input = jnp.concatenate(
-            [expanded_self, expanded_global, expanded_context, attended_candidates],
-            axis=-1,
-        )
-        target_hidden = nn.relu(
-            nn.Dense(self.hidden_size, name="target_dense")(target_input)
-        )
-        target_logits = nn.Dense(1, name="target_out")(target_hidden).squeeze(-1)
-        target_logits = jnp.where(
-            candidate_mask, target_logits, jnp.finfo(jnp.float32).min
-        )
-
-        pooled_candidates = masked_mean(attended_candidates, candidate_mask)
-        ship_hidden = nn.relu(
-            nn.Dense(self.hidden_size, name="ship_dense")(target_input)
-        )
-        ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out")(ship_hidden)
-        value_input = jnp.concatenate(
-            [self_hidden, global_hidden, attended_context, pooled_candidates], axis=-1
-        )
-        value_hidden = nn.relu(
-            nn.Dense(self.hidden_size, name="value_dense")(value_input)
-        )
-        value = nn.Dense(1, name="value_out")(value_hidden).squeeze(-1)
-        return JaxPolicyOutput(
-            target_logits=target_logits, ship_logits=ship_logits, value=value
+            self_features,
+            candidate_features,
+            global_features,
+            candidate_mask.astype(bool),
+            target_sequence=target_sequence,
+            rng=rng,
+            deterministic=deterministic,
         )
 
 # --- Helper Functions ---
@@ -583,10 +574,8 @@ def build_jax_policy(
     hidden = cfg.model.hidden_size
     buckets = cfg.env.ship_bucket_count
     attention_heads = cfg.model.attention_heads
-    k_steps = getattr(cfg.model, "max_moves_k", 5)  # TODO: integrate into config schema
+    k_steps = cfg.model.max_moves_k
     target_coords_slice = candidate_feature_schema(cfg.env).slice("target_coords")
-    # TODO: Switch case?
-    # TODO: Refactor JaxPlanetPolicy and JaxAttentionPlanetPolicy to use the ComposablePlanetPolicy framework
     normalized_architecture = cfg.model.architecture.strip().lower()
     if normalized_architecture == "mlp":
         return JaxPlanetPolicy(
@@ -608,15 +597,19 @@ def build_jax_policy(
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            hidden_size=hidden,
         )
     elif normalized_architecture == "transformer_pointer":
         return ComposablePlanetPolicy(
             encoder_module=TransformerBackboneEncoder(
-                hidden_size=hidden, attention_heads=attention_heads
+                hidden_size=hidden,
+                attention_heads=attention_heads,
+                enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
             ),
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            hidden_size=hidden,
         )
     elif normalized_architecture == "gnn_pointer":
         return ComposablePlanetPolicy(
@@ -626,6 +619,7 @@ def build_jax_policy(
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            hidden_size=hidden,
         )
     else:
         raise ValueError(
@@ -647,16 +641,19 @@ def sample_actions(
     """
 
     key_target, key_ship = jax.random.split(key)
-    target_index = jnp.where(
-        deterministic,
-        jnp.argmax(output.target_logits, axis=-1),
-        jax.random.categorical(key_target, output.target_logits, axis=-1),
-    )
+    target_logits = ensure_policy_sequence(output.target_logits)
+    ship_logits = ensure_policy_sequence(output.ship_logits)
+    decoded_targets = output.decoded_target_sequence
+    if deterministic:
+        target_index = jnp.argmax(target_logits, axis=-1)
+    else:
+        sampled_target = jax.random.categorical(key_target, target_logits, axis=-1)
+        target_index = jnp.where(decoded_targets >= 0, decoded_targets, sampled_target)
     selected_ship_logits = jnp.take_along_axis(
-        output.ship_logits,
-        target_index[:, None, None].repeat(output.ship_logits.shape[-1], axis=-1),
-        axis=1,
-    ).squeeze(axis=1)
+        ship_logits,
+        target_index[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
+        axis=2,
+    ).squeeze(axis=2)
     ship_bucket = jnp.where(
         deterministic,
         jnp.argmax(selected_ship_logits, axis=-1),
@@ -673,21 +670,61 @@ def action_log_prob_and_entropy(
 ) -> tuple[jax.Array, jax.Array]:
     """Compute joint log-probability and entropy for target/bucket actions."""
 
-    target_log_probs = jax.nn.log_softmax(output.target_logits, axis=-1)
-    target_probs = jax.nn.softmax(output.target_logits, axis=-1)
+    squeeze_sequence = target_index.ndim == 1
+    target_logits = ensure_policy_sequence(output.target_logits)
+    ship_logits = ensure_policy_sequence(output.ship_logits)
+    target_index = ensure_action_sequence(target_index)
+    ship_bucket = ensure_action_sequence(ship_bucket)
+    target_log_probs = jax.nn.log_softmax(target_logits, axis=-1)
+    target_probs = jax.nn.softmax(target_logits, axis=-1)
     target_lp = jnp.take_along_axis(
-        target_log_probs, target_index[:, None], axis=-1
+        target_log_probs, target_index[..., None], axis=-1
     ).squeeze(-1)
     selected_ship_logits = jnp.take_along_axis(
-        output.ship_logits,
-        target_index[:, None, None].repeat(output.ship_logits.shape[-1], axis=-1),
-        axis=1,
-    ).squeeze(axis=1)
+        ship_logits,
+        target_index[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
+        axis=2,
+    ).squeeze(axis=2)
     ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
     ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
     ship_lp = jnp.take_along_axis(
-        ship_log_probs, ship_bucket[:, None], axis=-1
+        ship_log_probs, ship_bucket[..., None], axis=-1
     ).squeeze(-1)
     target_entropy = -(target_probs * target_log_probs).sum(axis=-1)
     ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
-    return target_lp + ship_lp, target_entropy + ship_entropy
+    log_prob = target_lp + ship_lp
+    entropy = target_entropy + ship_entropy
+    if squeeze_sequence:
+        return log_prob[:, 0], entropy[:, 0]
+    return log_prob, entropy
+
+
+def ensure_policy_sequence(value: jax.Array) -> jax.Array:
+    """Represent policy logits with an explicit sequence axis."""
+
+    if value.ndim == 2:
+        return value[:, None, :]
+    if value.ndim == 3:
+        return value
+    return value
+
+
+def ensure_action_sequence(value: jax.Array) -> jax.Array:
+    """Represent sampled action ids with an explicit sequence axis."""
+
+    if value.ndim == 1:
+        return value[:, None]
+    return value
+
+
+def first_policy_step(output: JaxPolicyOutput) -> JaxPolicyOutput:
+    """Project a K-step policy output to the executable first move."""
+
+    if output.target_logits.ndim == 3:
+        return JaxPolicyOutput(
+            target_logits=output.target_logits[:, 0, :],
+            ship_logits=output.ship_logits[:, 0, :, :],
+            value=output.value,
+            decoded_target_sequence=output.decoded_target_sequence[:, :1],
+        )
+    return output

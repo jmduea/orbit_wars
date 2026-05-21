@@ -7,9 +7,19 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from .conf_schema import (
+    EnvConfig,
     TrainConfig,
     register_config_schemas,
 )
+
+__all__ = [
+    "EnvConfig",
+    "TrainConfig",
+    "compose_hydra_train_config",
+    "default_train_config_path",
+    "load_hydra_train_config",
+    "train_config_from_omegaconf",
+]
 
 
 def default_train_config_path() -> Path:

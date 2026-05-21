@@ -8,7 +8,9 @@ from src.jax_policy import build_jax_policy
 from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
 
 
-@pytest.mark.parametrize("architecture", ["mlp", "attention", "transformer"])
+@pytest.mark.parametrize(
+    "architecture", ["mlp", "attention", "transformer", "gnn_pointer"]
+)
 def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     cfg = TrainConfig()
     cfg.model.architecture = architecture
@@ -16,6 +18,7 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
+    cfg.model.max_moves_k = 3
     cfg.ppo.num_envs = 2
     cfg.ppo.rollout_steps = 1
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.ppo.num_envs)
@@ -65,6 +68,26 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
     assert random_action.valid.shape == (cfg.ppo.num_envs, cfg.env.max_fleets)
 
 
+def test_jax_action_builder_emits_multiple_launch_slots_per_source():
+    from src.jax_ppo import build_action_from_batch
+
+    cfg = TrainConfig()
+    cfg.env.max_fleets = 32
+    cfg.env.candidate_count = 4
+    cfg.ppo.num_envs = 1
+    _env_state, turn_batch = batched_reset(
+        jax.random.split(jax.random.PRNGKey(43), cfg.ppo.num_envs), cfg.env
+    )
+    target = jax.numpy.ones((cfg.ppo.num_envs * MAX_PLANETS, 3), dtype=jax.numpy.int32)
+    bucket = jax.numpy.ones_like(target)
+
+    action = build_action_from_batch(turn_batch, target, bucket, cfg)
+
+    assert action.source_id.shape == (cfg.ppo.num_envs, cfg.env.max_fleets)
+    assert action.valid.shape == (cfg.ppo.num_envs, cfg.env.max_fleets)
+    assert action.source_id[0, 1] == action.source_id[0, 0]
+
+
 def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
     from src.jax_train import load_jax_checkpoint, save_jax_checkpoint
 
@@ -72,6 +95,7 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
+    cfg.model.max_moves_k = 3
     cfg.ppo.rollout_steps = 3
     cfg.ppo.num_envs = 2
     policy = build_jax_policy(cfg=cfg)
@@ -125,6 +149,7 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
         cfg.ppo.rollout_steps,
         cfg.ppo.num_envs,
         MAX_PLANETS,
+        cfg.model.max_moves_k,
     )
     assert (
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
@@ -140,6 +165,7 @@ def test_collect_rollout_jax_two_player_static_shapes():
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
+    cfg.model.max_moves_k = 3
     cfg.ppo.num_envs = 3
     cfg.ppo.rollout_steps = 1
     cfg.opponent = "random"
@@ -159,7 +185,7 @@ def test_collect_rollout_jax_two_player_static_shapes():
         60,
         transitions.self_features.shape[-1],
     )
-    assert transitions.decision_mask.shape == (1, 3, 60)
+    assert transitions.decision_mask.shape == (1, 3, 60, cfg.model.max_moves_k)
     assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
     from src.jax_env import assign_learner_players
@@ -192,6 +218,7 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     cfg.env.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
+    cfg.model.max_moves_k = 3
     cfg.ppo.num_envs = 4
     cfg.ppo.rollout_steps = 1
     cfg.opponent = "random"
@@ -271,6 +298,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
         cfg.ppo.rollout_steps,
         4,
         MAX_PLANETS,
+        cfg.model.max_moves_k,
     )
 
 

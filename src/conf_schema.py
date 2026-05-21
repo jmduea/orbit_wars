@@ -28,9 +28,10 @@ class EnvConfig:
 class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
-    architecture: str = "mlp"
+    architecture: str = "gnn_pointer"
     hidden_size: int = 128
     attention_heads: int = 4
+    max_moves_k: int = 3
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 
