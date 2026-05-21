@@ -20,6 +20,13 @@
         "bash": ".github/hooks/post-tool-use.sh",
         "powershell": ".github/hooks/post-tool-use.ps1"
       }
+    ],
+    "stop": [
+      {
+        "type": "command",
+        "bash": ".github/hooks/stop.sh",
+        "powershell": ".github/hooks/stop.ps1"
+      }
     ]
   }
 }

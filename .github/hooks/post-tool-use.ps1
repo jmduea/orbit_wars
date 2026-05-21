@@ -42,6 +42,108 @@ switch ($ToolName) {
     'delete' { $ToolName = 'deleteFile' }
 }
 
+function Test-FileMutationTool {
+    param([string]$Name)
+    return @('editFiles', 'createFile', 'apply_patch', 'create_file', 'functions.apply_patch', 'functions.create_file') -contains $Name
+}
+
+function Get-SafePythonPath {
+    param([string]$PathValue)
+
+    if (-not $PathValue) { return $null }
+    if ($PathValue -notmatch '\.py$') { return $null }
+    if ($PathValue -match '[;''&|`$(){}<>]' -or $PathValue -match '\.\.[\/]') { return $null }
+
+    $AbsolutePath = if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        $PathValue
+    } else {
+        Join-Path $Workspace $PathValue
+    }
+
+    $FullPath = [System.IO.Path]::GetFullPath($AbsolutePath)
+    $WorkspaceFullPath = [System.IO.Path]::GetFullPath($Workspace)
+    if (-not $FullPath.StartsWith($WorkspaceFullPath + [System.IO.Path]::DirectorySeparatorChar)) { return $null }
+
+    $RelativePath = [System.IO.Path]::GetRelativePath($WorkspaceFullPath, $FullPath)
+    if ($RelativePath -match '^\.venv[\/]' -or
+        $RelativePath -match '^outputs[\/]' -or
+        $RelativePath -match '^wandb[\/]' -or
+        $RelativePath -match '^artifacts[\/]' -or
+        $RelativePath -match '^\.git[\/]' -or
+        $RelativePath -match '^\.omg[\/]' -or
+        $RelativePath -match '^\.omc[\/]') { return $null }
+
+    if (-not (Test-Path $FullPath -PathType Leaf)) { return $null }
+    return $FullPath
+}
+
+function Get-PythonFilesFromToolInput {
+    param([string]$InputText)
+
+    $Files = New-Object System.Collections.Generic.List[string]
+    $NormalizedInput = $InputText -replace '\\n', "`n"
+
+    foreach ($Match in [regex]::Matches($NormalizedInput, '"(?:filePath|path)"\s*:\s*"([^"]+\.py)"')) {
+        $SafePath = Get-SafePythonPath $Match.Groups[1].Value
+        if ($SafePath) { $Files.Add($SafePath) }
+    }
+
+    foreach ($Match in [regex]::Matches($NormalizedInput, '\*\*\* (?:Add|Update) File: ([^\r\n"]+\.py)')) {
+        $SafePath = Get-SafePythonPath $Match.Groups[1].Value.Trim()
+        if ($SafePath) { $Files.Add($SafePath) }
+    }
+
+    return $Files | Sort-Object -Unique
+}
+
+function Invoke-RuffForFiles {
+    param([string[]]$Files)
+
+    if (-not $Files -or $Files.Count -eq 0) { return }
+
+    $ReportFile = Join-Path $OmgStateDir 'ruff-gate.json'
+    $WorkspaceFullPath = [System.IO.Path]::GetFullPath($Workspace)
+    $RelativeFiles = @($Files | ForEach-Object { [System.IO.Path]::GetRelativePath($WorkspaceFullPath, $_) })
+    $Status = 'ok'
+    $OutputText = ''
+
+    Push-Location $Workspace
+    try {
+        if (Get-Command uv -ErrorAction SilentlyContinue) {
+            $OutputText = (& uv run --group dev ruff check --fix -- @RelativeFiles 2>&1 | Out-String)
+            $FirstExit = $LASTEXITCODE
+            if ($FirstExit -eq 0) { $OutputText += (& uv run --group dev ruff format -- @RelativeFiles 2>&1 | Out-String) }
+            $SecondExit = $LASTEXITCODE
+            if ($FirstExit -eq 0 -and $SecondExit -eq 0) { $OutputText += (& uv run --group dev ruff check -- @RelativeFiles 2>&1 | Out-String) }
+            $ThirdExit = $LASTEXITCODE
+            if ($FirstExit -ne 0 -or $SecondExit -ne 0 -or $ThirdExit -ne 0) { $Status = 'failed' }
+        } elseif (Get-Command ruff -ErrorAction SilentlyContinue) {
+            $OutputText = (& ruff check --fix -- @RelativeFiles 2>&1 | Out-String)
+            $FirstExit = $LASTEXITCODE
+            if ($FirstExit -eq 0) { $OutputText += (& ruff format -- @RelativeFiles 2>&1 | Out-String) }
+            $SecondExit = $LASTEXITCODE
+            if ($FirstExit -eq 0 -and $SecondExit -eq 0) { $OutputText += (& ruff check -- @RelativeFiles 2>&1 | Out-String) }
+            $ThirdExit = $LASTEXITCODE
+            if ($FirstExit -ne 0 -or $SecondExit -ne 0 -or $ThirdExit -ne 0) { $Status = 'failed' }
+        } else {
+            $Status = 'skipped'
+            $OutputText = 'Ruff was not found on PATH, and uv is not installed.'
+        }
+    } finally {
+        Pop-Location
+    }
+
+    $Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $SafeOutput = (($OutputText -split "`r?`n") | Select-Object -First 40) -join ' '
+    $Payload = [ordered]@{
+        status = $Status
+        files = ($RelativeFiles -join ' ')
+        timestamp = $Timestamp
+        details = $SafeOutput
+    }
+    $Payload | ConvertTo-Json -Compress | Set-Content -Path $ReportFile
+}
+
 $OmgStateDir = Join-Path $Workspace '.omg' 'state'
 
 # Ensure state directory exists
@@ -112,6 +214,13 @@ if ($ToolName -eq 'runInTerminal') {
             Set-Content -Path $TestResultFile -Value "{`"last_test_run`": `"passed`", `"timestamp`": `"$Timestamp`"}"
         }
     }
+}
+
+# Run Ruff after Python file edits. This keeps agent-written Python formatted and
+# applies safe lint fixes immediately after create/edit style tools complete.
+if (Test-FileMutationTool $ToolName) {
+    $PythonFiles = @(Get-PythonFilesFromToolInput $ToolInput)
+    Invoke-RuffForFiles $PythonFiles
 }
 
 # --- Plankton: Opt-in type check + lint after file edits ---

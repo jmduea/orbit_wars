@@ -33,6 +33,118 @@ case "$TOOL_NAME" in
   delete) TOOL_NAME="deleteFile" ;;
 esac
 
+is_file_mutation_tool() {
+  case "$TOOL_NAME" in
+    editFiles|createFile|apply_patch|create_file|functions.apply_patch|functions.create_file)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_safe_python_path() {
+  local file_path="$1"
+
+  [ -n "$file_path" ] || return 1
+
+  if [[ "$file_path" =~ [\'\"\;\&\|\`\$\(\)\{\}\<\>] ]]; then
+    return 1
+  fi
+
+  case "$file_path" in
+    *../*|../*|*/..) return 1 ;;
+    *.py) ;;
+    *) return 1 ;;
+  esac
+
+  case "$file_path" in
+    /*) ;;
+    *) file_path="$WORKSPACE/$file_path" ;;
+  esac
+
+  case "$file_path" in
+    "$WORKSPACE"/*) ;;
+    *) return 1 ;;
+  esac
+
+  case "$file_path" in
+    "$WORKSPACE/.venv"/*|"$WORKSPACE/outputs"/*|"$WORKSPACE/wandb"/*|"$WORKSPACE/artifacts"/*|"$WORKSPACE/.git"/*|"$WORKSPACE/.omg"/*|"$WORKSPACE/.omc"/*)
+      return 1
+      ;;
+  esac
+
+  [ -f "$file_path" ] || return 1
+  printf '%s\n' "$file_path"
+  return 0
+}
+
+collect_python_files_from_tool_input() {
+  local files_file="$1"
+  local normalized_input
+
+  normalized_input=$(printf '%s' "$TOOL_INPUT" | sed 's/\\n/\
+/g')
+
+  printf '%s' "$normalized_input" \
+    | grep -oE '"(filePath|path)"[[:space:]]*:[[:space:]]*"[^"]+\.py"' \
+    | sed -E 's/.*"(filePath|path)"[[:space:]]*:[[:space:]]*"([^"]+)".*/\2/' \
+    | while IFS= read -r file_path; do
+        is_safe_python_path "$file_path" || true
+      done >> "$files_file"
+
+  printf '%s' "$normalized_input" \
+    | grep -oE '\*\*\* (Add|Update) File: [^[:cntrl:]"]+\.py' \
+    | sed -E 's/^\*\*\* (Add|Update) File: //' \
+    | while IFS= read -r file_path; do
+        is_safe_python_path "$file_path" || true
+      done >> "$files_file"
+}
+
+run_ruff_for_files() {
+  local files_file="$1"
+  local report_file="$OMG_STATE_DIR/ruff-gate.json"
+  local timestamp
+  local ruff_output
+  local ruff_status="ok"
+  local rel_files=()
+  local file_path
+
+  [ -s "$files_file" ] || return 0
+
+  sort -u "$files_file" -o "$files_file" 2>/dev/null || true
+
+  while IFS= read -r file_path; do
+    rel_files+=("${file_path#"$WORKSPACE/"}")
+  done < "$files_file"
+
+  [ "${#rel_files[@]}" -gt 0 ] || return 0
+
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  if command -v uv >/dev/null 2>&1; then
+    ruff_output=$(cd "$WORKSPACE" && uv run --group dev ruff check --fix -- "${rel_files[@]}" 2>&1 && uv run --group dev ruff format -- "${rel_files[@]}" 2>&1 && uv run --group dev ruff check -- "${rel_files[@]}" 2>&1)
+    ruff_exit=$?
+  elif command -v ruff >/dev/null 2>&1; then
+    ruff_output=$(cd "$WORKSPACE" && ruff check --fix -- "${rel_files[@]}" 2>&1 && ruff format -- "${rel_files[@]}" 2>&1 && ruff check -- "${rel_files[@]}" 2>&1)
+    ruff_exit=$?
+  else
+    ruff_status="skipped"
+    ruff_output="Ruff was not found on PATH, and uv is not installed."
+    ruff_exit=0
+  fi
+
+  if [ "$ruff_exit" -ne 0 ]; then
+    ruff_status="failed"
+  fi
+
+  ruff_output=$(printf '%s' "$ruff_output" | head -40 | tr '"' "'" | tr '\n' ' ')
+  printf '{"status":"%s","files":"%s","timestamp":"%s","details":"%s"}\n' \
+    "$ruff_status" "$(printf '%s ' "${rel_files[@]}" | sed 's/[[:space:]]*$//')" "$timestamp" "$ruff_output" \
+    > "$report_file" 2>/dev/null
+}
+
 OMG_STATE_DIR="$WORKSPACE/.omg/state"
 
 # Ensure state directory exists
@@ -97,6 +209,16 @@ if [ "$TOOL_NAME" = "runInTerminal" ]; then
         > "$OMG_STATE_DIR/last-test-result.json" 2>/dev/null
     fi
   fi
+fi
+
+# Run Ruff after Python file edits. This keeps agent-written Python formatted and
+# applies safe lint fixes immediately after create/edit style tools complete.
+if is_file_mutation_tool; then
+  RUFF_FILES=$(mktemp 2>/dev/null || printf '/tmp/omg-ruff-files.%s' "$$")
+  : > "$RUFF_FILES" 2>/dev/null || true
+  collect_python_files_from_tool_input "$RUFF_FILES"
+  run_ruff_for_files "$RUFF_FILES"
+  rm -f "$RUFF_FILES" 2>/dev/null || true
 fi
 
 # --- Plankton: Opt-in type check + lint after file edits ---
