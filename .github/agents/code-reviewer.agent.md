@@ -5,7 +5,7 @@ description: >
   Use when: code review, logic defect detection, SOLID principle checks,
   style review, performance review, quality strategy, spec compliance verification.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

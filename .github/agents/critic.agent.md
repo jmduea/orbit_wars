@@ -5,7 +5,7 @@ description: >
   Use when: plan review, code review quality gate, gap analysis, pre-mortem analysis,
   final approval checks, finding flaws in proposals, challenging assumptions.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [execute, read, agent, search]
+tools: [execute, read, agent, search, 'omg-workflow/*']
 agents: [planner, analyst, architect, executor, security-reviewer]
 user-invocable: true
 ---

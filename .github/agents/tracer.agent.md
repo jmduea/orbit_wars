@@ -6,7 +6,7 @@ description: >
   hypothesis testing, uncertainty tracking, outcome explanation,
   incident investigation, why did X happen.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

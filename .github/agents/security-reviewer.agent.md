@@ -6,7 +6,7 @@ description: >
   input validation review, auth/authz checks, dependency security audit,
   vulnerability assessment, penetration test guidance.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

@@ -5,7 +5,7 @@ description: >
   Use when: reviewing Java code, Java best practices, type safety,
   Java-specific patterns, idiomatic Java, Spring framework review.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

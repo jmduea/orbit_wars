@@ -5,7 +5,7 @@ description: >
   Use when: verifying task completion, checking acceptance criteria, validating implementations,
   running verification suites, assessing regression risk, confirming work is done.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

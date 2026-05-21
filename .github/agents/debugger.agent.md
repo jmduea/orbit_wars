@@ -5,7 +5,7 @@ description: >
   Use when: debugging bugs, fixing build errors, tracing stack traces, resolving compilation failures,
   import errors, dependency issues, type errors, configuration errors.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, agent, edit, search]
+tools: [execute, read, agent, edit, search, 'omg-workflow/*']
 agents: [architect]
 user-invocable: true
 ---

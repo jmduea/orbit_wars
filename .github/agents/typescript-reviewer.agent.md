@@ -5,7 +5,7 @@ description: >
   Use when: reviewing TypeScript code, TypeScript best practices, type safety,
   TypeScript-specific patterns, idiomatic TypeScript, strict mode compliance.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

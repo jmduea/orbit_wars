@@ -5,7 +5,7 @@ description: >
   Use when: reviewing Swift code, Swift best practices, type safety,
   Swift-specific patterns, idiomatic Swift, concurrency review, SwiftUI patterns.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

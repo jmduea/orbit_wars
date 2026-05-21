@@ -5,7 +5,7 @@ description: >
   Use when: reviewing C# code, C# best practices, type safety,
   C#-specific patterns, idiomatic C#, async/await review, nullable analysis.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

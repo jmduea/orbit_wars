@@ -5,7 +5,7 @@ description: >
   Use when: interactive testing, service verification, CLI testing, integration testing,
   spinning up services, end-to-end verification, runtime behavior testing.
 model: "Claude Sonnet 4.6 (copilot)"
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

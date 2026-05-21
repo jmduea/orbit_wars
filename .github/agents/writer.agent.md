@@ -5,7 +5,7 @@ description: >
   Use when: writing documentation, README files, API docs, architecture docs,
   user guides, code comments, technical writing.
 model: "Claude Sonnet 4.6 (copilot)"
-tools: [execute, read, edit, search]
+tools: [execute, read, edit, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

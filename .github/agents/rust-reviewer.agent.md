@@ -5,7 +5,7 @@ description: >
   Use when: reviewing Rust code, Rust best practices, memory safety,
   Rust-specific patterns, idiomatic Rust, ownership and borrowing.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

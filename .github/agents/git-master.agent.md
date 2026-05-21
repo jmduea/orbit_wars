@@ -5,7 +5,7 @@ description: >
   Use when: creating commits, splitting commits, rebasing, branch management,
   git history cleanup, commit message formatting, git archaeology.
 model: "Claude Sonnet 4.6 (copilot)"
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

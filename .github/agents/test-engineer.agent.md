@@ -5,7 +5,7 @@ description: >
   Use when: writing tests, test strategy, TDD enforcement, flaky test diagnosis,
   coverage gap analysis, test suite design, red-green-refactor cycle.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, edit, search]
+tools: [execute, read, edit, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

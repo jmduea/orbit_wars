@@ -5,7 +5,7 @@ description: >
   Use when: implementing code changes, writing features, fixing bugs,
   executing plan steps, making code modifications, building functionality.
 model: "GPT-5.4 (copilot)"
-tools: [execute, read, agent, edit, search]
+tools: [execute, read, agent, edit, search, 'omg-workflow/*']
 agents: [explore, architect]
 user-invocable: true
 ---

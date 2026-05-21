@@ -5,7 +5,7 @@ description: >
   Use when: architecture analysis, code diagnosis, debugging root causes,
   implementation verification, structural recommendations, system design review.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [execute, read, agent, search]
+tools: [execute, read, agent, search, 'omg-workflow/*']
 agents: [critic]
 user-invocable: true
 ---

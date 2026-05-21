@@ -6,7 +6,7 @@ description: >
   mapping project structure, understanding code relationships, answering
   "where is X?" questions.
 model: "GPT-5.4 (copilot)"
-tools: [execute, read, agent, search]
+tools: [execute, read, agent, search, 'omg-workflow/*']
 agents: [document-specialist]
 user-invocable: true
 ---

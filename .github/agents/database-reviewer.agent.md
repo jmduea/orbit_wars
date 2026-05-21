@@ -5,7 +5,7 @@ description: >
   Use when: reviewing SQL queries, ORM code, database migrations, query performance,
   database-specific patterns, schema design, transaction management.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

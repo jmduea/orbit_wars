@@ -5,7 +5,7 @@ description: >
   Use when: reviewing Go code, Go best practices, goroutine safety,
   Go-specific patterns, idiomatic Go, concurrency correctness.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

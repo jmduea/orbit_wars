@@ -5,7 +5,7 @@ description: >
   Use when: requirements analysis, gap identification, acceptance criteria definition,
   scope risk assessment, assumption validation, edge case enumeration.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [read, agent, search]
+tools: [read, agent, search, 'omg-workflow/*']
 agents: [planner, architect, critic]
 user-invocable: true
 ---

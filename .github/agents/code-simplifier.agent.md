@@ -5,7 +5,7 @@ description: >
   Use when: code simplification, reducing complexity, cleaning up code,
   improving readability, removing redundancy, refactoring for clarity.
 model: "GPT-5.3-Codex (copilot)"
-tools: [execute, read, edit, search]
+tools: [execute, read, edit, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

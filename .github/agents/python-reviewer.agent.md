@@ -5,7 +5,7 @@ description: >
   Use when: reviewing Python code, Python best practices, type hints,
   Python-specific patterns, idiomatic Python, PEP 8 compliance.
 model: "GPT-5.5 (copilot)"
-tools: [read, search]
+tools: [read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 

@@ -5,7 +5,7 @@ description: >
   Use when: creating work plans, planning implementation strategy, scoping tasks,
   breaking down complex features, project planning, design planning.
 model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
-tools: [execute, read, agent, edit, search]
+tools: [execute, read, agent, edit, search, 'omg-workflow/*']
 agents: [explore, document-specialist, analyst]
 user-invocable: true
 ---

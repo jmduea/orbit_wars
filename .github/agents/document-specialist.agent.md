@@ -6,7 +6,7 @@ description: >
   package evaluation, version compatibility, academic papers, standards lookup,
   external literature research.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, agent, search, web/fetch]
+tools: [execute, read, agent, search, web/fetch, 'omg-workflow/*']
 agents: [explore]
 user-invocable: true
 ---

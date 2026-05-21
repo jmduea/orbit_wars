@@ -5,7 +5,7 @@ description: >
   Use when: data analysis, statistical analysis, hypothesis testing,
   visualization, research execution, data exploration, report generation.
 model: "GPT-5.5 (copilot)"
-tools: [execute, read, search]
+tools: [execute, read, search, 'omg-workflow/*']
 user-invocable: true
 ---
 
