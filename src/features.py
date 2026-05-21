@@ -32,7 +32,7 @@ from .constants import (
     SUN_RADIUS,
 )
 from .game_types import GameState, PlanetState, parse_observation
-from .trajectory_shield import conservative_target_is_safe
+from .trajectory_shield import any_ship_bucket_is_safe
 
 
 def real_candidate_slots(candidate_count: int) -> int:
@@ -291,7 +291,7 @@ def build_candidates(
     unsafe_targets: list[PlanetState] = []
     for tgt in ordered:
         angle = math.atan2(tgt.y - src.y, tgt.x - src.x)
-        if conservative_target_is_safe(
+        if any_ship_bucket_is_safe(
             state, src.id, tgt.id, angle, int(src.ships), env_cfg
         ):
             safe_targets.append(tgt)
@@ -465,9 +465,7 @@ def build_candidate_features(
             dtype=np.float32,
         )
         ship_counts[idx] = max(0, int(src.ships))
-        candidate_mask[idx] = conservative_target_is_safe(
-            state, src.id, tgt.id, angle, int(src.ships), env_cfg
-        )
+        candidate_mask[idx] = True
         candidate_ids[idx] = tgt.id
         target_angles[idx] = angle
 

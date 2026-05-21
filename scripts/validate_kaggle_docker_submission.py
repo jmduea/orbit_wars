@@ -417,7 +417,7 @@ from src.constants import MAX_PLANETS
 from src.features import FeatureHistoryBuffer, encode_turn
 from src.feature_registry import candidate_feature_dim, global_feature_dim, self_feature_dim
 from src.jax_policy import build_jax_policy
-from src.trajectory_shield import is_trajectory_safe_for_launch, mask_policy_output_for_shield
+from src.trajectory_shield import is_trajectory_safe_for_launch, select_runtime_shielded_policy_actions
 
 
 _ROOT = Path(__file__).resolve().parent
@@ -474,24 +474,16 @@ def agent(obs: Any) -> list[list[float | int]]:
     batch = encode_turn(obs, cfg.env, env_index=0, feature_history=state["history"])
     if batch.self_features.shape[0] == 0:
         return []
-    self_features, candidate_features, global_features, candidate_mask = _padded_policy_inputs(batch)
-    outputs = state["policy"].apply(
+    sampled = select_runtime_shielded_policy_actions(
+        jax.random.PRNGKey(0),
+        state["policy"],
         {"params": state["params"]},
-        self_features,
-        candidate_features,
-        global_features,
-        candidate_mask,
+        batch,
+        cfg.env,
+        deterministic=True,
     )
-    outputs = mask_policy_output_for_shield(outputs, candidate_mask, int(cfg.env.ship_bucket_count))
-    target_logits = _ensure_sequence(outputs.target_logits)
-    ship_logits = _ensure_ship_sequence(outputs.ship_logits)
-    target_indices = jax.device_get(jnp.argmax(target_logits, axis=-1))
-    selected_ship_logits = jnp.take_along_axis(
-        ship_logits,
-        jnp.asarray(target_indices)[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
-        axis=2,
-    ).squeeze(axis=2)
-    ship_buckets = jax.device_get(jnp.argmax(selected_ship_logits, axis=-1))
+    target_indices = jax.device_get(sampled.target_index)
+    ship_buckets = jax.device_get(sampled.ship_bucket)
 
     moves: list[list[float | int]] = []
     for row_idx, context in enumerate(batch.contexts):

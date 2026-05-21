@@ -17,7 +17,11 @@ from .constants import (
     SUN_RADIUS,
 )
 from .game_types import GameState, PlanetState
-from .jax_policy import JaxPolicyOutput, action_log_prob_and_entropy, ensure_policy_sequence
+from .jax_policy import (
+    JaxPolicyOutput,
+    action_log_prob_and_entropy,
+    ensure_policy_sequence,
+)
 
 SAFE_REASON = "safe"
 SUN_REASON = "sun"
@@ -58,6 +62,11 @@ class ShieldedActionSample(NamedTuple):
     ship_bucket: jax.Array
     log_prob: jax.Array
     entropy: jax.Array
+
+
+class RuntimeShieldedActionSequence(NamedTuple):
+    target_index: jax.Array
+    ship_bucket: jax.Array
 
 
 def trajectory_shield_enabled(env_cfg: Any) -> bool:
@@ -434,6 +443,28 @@ def conservative_target_is_safe(
     return True
 
 
+def any_ship_bucket_is_safe(
+    state: GameState,
+    source_id: int,
+    target_id: int,
+    angle: float,
+    source_ships: int,
+    env_cfg: Any,
+) -> bool:
+    if not trajectory_shield_enabled(env_cfg):
+        return True
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    for bucket in range(1, bucket_count):
+        ships = ship_count_for_bucket_py(source_ships, bucket, bucket_count)
+        if ships <= 0:
+            continue
+        if is_trajectory_safe_for_launch(
+            state, source_id, target_id, angle, ships, env_cfg
+        ):
+            return True
+    return False
+
+
 def infer_target_id_for_move(state: GameState, source_id: int, angle: float) -> int | None:
     source = next((planet for planet in state.planets if planet.id == source_id), None)
     if source is None:
@@ -490,38 +521,23 @@ def mask_policy_output_for_shield(
     base_mask = candidate_mask.astype(bool)
     if ship_bucket_mask is None:
         ship_bucket_mask = default_ship_bucket_mask(base_mask, ship_bucket_count)
-    elif ship_bucket_mask.ndim == 4:
+    elif ship_bucket_mask.ndim == 4 and ship_bucket_mask.shape[0] != base_mask.shape[0]:
         ship_bucket_mask = ship_bucket_mask.reshape(
             -1, ship_bucket_mask.shape[-2], ship_bucket_mask.shape[-1]
         )
     ship_bucket_mask = ship_bucket_mask.astype(bool)
     sequence_k = target_logits.shape[1]
-    first_step_mask = (base_mask & ship_bucket_mask.any(axis=-1))[:, None, :]
-    if sequence_k > 1:
-        noop_only = jnp.zeros((base_mask.shape[0], sequence_k - 1, base_mask.shape[-1]), dtype=bool)
-        noop_only = noop_only.at[..., 0].set(True)
-        target_mask = jnp.concatenate([first_step_mask, noop_only], axis=1)
+    if ship_bucket_mask.ndim == 3:
+        sequence_ship_bucket_mask = jnp.broadcast_to(
+            ship_bucket_mask[:, None, :, :],
+            (base_mask.shape[0], sequence_k, ship_logits.shape[-2], ship_logits.shape[-1]),
+        )
     else:
-        target_mask = first_step_mask
+        sequence_ship_bucket_mask = ship_bucket_mask
+    target_mask = base_mask[:, None, :] & sequence_ship_bucket_mask.any(axis=-1)
     illegal_logit = jnp.finfo(jnp.float32).min
     masked_target_logits = jnp.where(target_mask, target_logits, illegal_logit)
-
-    first_step_ship_mask = ship_bucket_mask[:, None, :, :]
-    if sequence_k > 1:
-        followup_ship_mask = jnp.zeros(
-            (
-                base_mask.shape[0],
-                sequence_k - 1,
-                ship_logits.shape[-2],
-                ship_logits.shape[-1],
-            ),
-            dtype=bool,
-        )
-        followup_ship_mask = followup_ship_mask.at[:, :, 0, 0].set(True)
-        ship_mask = jnp.concatenate([first_step_ship_mask, followup_ship_mask], axis=1)
-    else:
-        ship_mask = first_step_ship_mask
-    masked_ship_logits = jnp.where(ship_mask, ship_logits, illegal_logit)
+    masked_ship_logits = jnp.where(sequence_ship_bucket_mask, ship_logits, illegal_logit)
     return output._replace(target_logits=masked_target_logits, ship_logits=masked_ship_logits)
 
 
@@ -570,6 +586,142 @@ def sample_shielded_policy_actions(
         ship_bucket=ship_bucket,
         log_prob=log_prob,
         entropy=entropy,
+    )
+
+
+def runtime_ship_bucket_mask(
+    batch: Any,
+    remaining_ships: list[int],
+    env_cfg: Any,
+) -> jax.Array:
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    row_count = len(batch.contexts)
+    candidate_count = int(batch.candidate_mask.shape[-1])
+    mask = [
+        [[False for _bucket in range(bucket_count)] for _candidate in range(candidate_count)]
+        for _row in range(row_count)
+    ]
+    for row_idx, context in enumerate(batch.contexts):
+        if candidate_count > 0 and bool(context.candidate_mask[0]):
+            mask[row_idx][0][0] = True
+        for target_idx in range(1, min(candidate_count, len(context.candidate_ids))):
+            if not bool(context.candidate_mask[target_idx]):
+                continue
+            target_id = int(context.candidate_ids[target_idx])
+            if target_id < 0:
+                continue
+            angle = float(context.target_angles[target_idx])
+            for bucket in range(1, bucket_count):
+                ships = ship_count_for_bucket_py(remaining_ships[row_idx], bucket, bucket_count)
+                if ships <= 0:
+                    continue
+                if is_trajectory_safe_for_launch(
+                    batch.state,
+                    int(context.source_id),
+                    target_id,
+                    angle,
+                    ships,
+                    env_cfg,
+                ):
+                    mask[row_idx][target_idx][bucket] = True
+    for row_idx, row_mask in enumerate(mask):
+        if not any(any(bucket_mask) for bucket_mask in row_mask):
+            mask[row_idx][0][0] = True
+    return jnp.asarray(mask, dtype=bool)
+
+
+def select_runtime_shielded_policy_actions(
+    key: jax.Array,
+    policy: Any,
+    variables: Any,
+    batch: Any,
+    env_cfg: Any,
+    *,
+    deterministic: bool,
+    self_features: Any | None = None,
+    candidate_features: Any | None = None,
+    global_features: Any | None = None,
+    candidate_mask: Any | None = None,
+) -> RuntimeShieldedActionSequence:
+    self_features = batch.self_features if self_features is None else self_features
+    candidate_features = batch.candidate_features if candidate_features is None else candidate_features
+    global_features = batch.global_features if global_features is None else global_features
+    candidate_mask = batch.candidate_mask if candidate_mask is None else candidate_mask
+    candidate_mask_array = jnp.asarray(candidate_mask).astype(bool)
+    probe_output = policy.apply(
+        variables,
+        jnp.asarray(self_features),
+        jnp.asarray(candidate_features),
+        jnp.asarray(global_features),
+        candidate_mask_array,
+    )
+    target_logits = ensure_policy_sequence(probe_output.target_logits)
+    sequence_k = int(target_logits.shape[1])
+    row_count = int(candidate_mask_array.shape[0])
+    target_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.int32)
+    bucket_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.int32)
+    remaining_ships = [max(0, int(context.source_ships)) for context in batch.contexts]
+    illegal_logit = jnp.finfo(jnp.float32).min
+
+    for step_idx in range(sequence_k):
+        step_output = policy.apply(
+            variables,
+            jnp.asarray(self_features),
+            jnp.asarray(candidate_features),
+            jnp.asarray(global_features),
+            candidate_mask_array,
+            target_sequence=target_sequence,
+            rng=jax.random.fold_in(key, step_idx),
+            deterministic=deterministic,
+        )
+        step_target_logits = ensure_policy_sequence(step_output.target_logits)[:, step_idx, :]
+        step_ship_logits = step_output.ship_logits
+        if step_ship_logits.ndim == 3:
+            step_ship_logits = step_ship_logits[:, None, :, :]
+        step_ship_logits = step_ship_logits[:, step_idx, :, :]
+        step_bucket_mask = runtime_ship_bucket_mask(batch, remaining_ships, env_cfg)
+        step_target_mask = step_bucket_mask.any(axis=-1)
+        masked_target_logits = jnp.where(step_target_mask, step_target_logits, illegal_logit)
+        if deterministic:
+            target = jnp.argmax(masked_target_logits, axis=-1)
+        else:
+            target = jax.random.categorical(
+                jax.random.fold_in(key, 10_000 + step_idx), masked_target_logits, axis=-1
+            )
+        selected_bucket_mask = jnp.take_along_axis(
+            step_bucket_mask,
+            target[:, None, None].repeat(step_bucket_mask.shape[-1], axis=-1),
+            axis=1,
+        ).squeeze(axis=1)
+        selected_ship_logits = jnp.take_along_axis(
+            step_ship_logits,
+            target[:, None, None].repeat(step_ship_logits.shape[-1], axis=-1),
+            axis=1,
+        ).squeeze(axis=1)
+        selected_ship_logits = jnp.where(
+            selected_bucket_mask, selected_ship_logits, illegal_logit
+        )
+        if deterministic:
+            bucket = jnp.argmax(selected_ship_logits, axis=-1)
+        else:
+            bucket = jax.random.categorical(
+                jax.random.fold_in(key, 20_000 + step_idx), selected_ship_logits, axis=-1
+            )
+        target_values = [int(value) for value in jax.device_get(target)]
+        bucket_values = [int(value) for value in jax.device_get(bucket)]
+        for row_idx, (target_idx, bucket_idx) in enumerate(zip(target_values, bucket_values, strict=False)):
+            if target_idx <= 0 or bucket_idx <= 0:
+                continue
+            ships = ship_count_for_bucket_py(
+                remaining_ships[row_idx], bucket_idx, bucket_count=int(getattr(env_cfg, "ship_bucket_count", 1))
+            )
+            remaining_ships[row_idx] = max(0, remaining_ships[row_idx] - ships)
+        target_sequence = target_sequence.at[:, step_idx].set(target)
+        bucket_sequence = bucket_sequence.at[:, step_idx].set(bucket)
+
+    return RuntimeShieldedActionSequence(
+        target_index=target_sequence,
+        ship_bucket=bucket_sequence,
     )
 
 
@@ -692,12 +844,18 @@ def trajectory_shield_reason_name(code: int | jax.Array) -> str:
     return _CODE_TO_REASON[int(code)]
 
 
-def apply_trajectory_shield_to_turn_batch(game, batch: Any, env_cfg: Any) -> ShieldedBatchResult:
+def apply_trajectory_shield_to_turn_batch(
+    game,
+    batch: Any,
+    env_cfg: Any,
+    source_ships_override: jax.Array | None = None,
+) -> ShieldedBatchResult:
     slot_count = batch.candidate_ids.shape[-1]
     bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
     default_bucket_mask = default_ship_bucket_mask(batch.candidate_mask, bucket_count)
     original_real_mask = batch.candidate_mask[:, 1:] if slot_count > 1 else batch.candidate_mask[:, :0]
     original_legal_total = original_real_mask.astype(jnp.float32).sum()
+    source_ships = batch.source_ships if source_ships_override is None else source_ships_override
     if not trajectory_shield_enabled(env_cfg):
         diagnostics = ShieldDiagnostics(
             blocked_count=jnp.asarray(0.0, dtype=jnp.float32),
@@ -756,6 +914,7 @@ def apply_trajectory_shield_to_turn_batch(game, batch: Any, env_cfg: Any) -> Shi
                 )
             )(ship_counts)
             bucket_legal = reason_codes == _REASON_TO_CODE[SAFE_REASON]
+            bucket_legal = bucket_legal & (ship_counts <= source_ships)
             legal = jnp.any(bucket_legal)
             first_failure = jnp.argmax(reason_codes != _REASON_TO_CODE[SAFE_REASON])
             reason_code = jnp.where(
@@ -773,7 +932,7 @@ def apply_trajectory_shield_to_turn_batch(game, batch: Any, env_cfg: Any) -> Shi
         evaluate_slot = jax.vmap(evaluate_target, in_axes=(None, None, 0, 0, 0))
         shielded_real_mask, reason_codes, legal_bucket_mask = jax.vmap(evaluate_slot, in_axes=(0, 0, 0, 0, 0))(
             batch.source_ids,
-            batch.source_ships,
+            source_ships,
             real_candidate_ids,
             real_angles,
             original_real_mask,

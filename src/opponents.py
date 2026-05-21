@@ -17,8 +17,7 @@ from .normalization import ObservationNormalizer
 from .trajectory_shield import (
     filter_moves_with_trajectory_shield,
     is_trajectory_safe_for_launch,
-    mask_policy_output_for_shield,
-    sample_shielded_policy_actions,
+    select_runtime_shielded_policy_actions,
 )
 
 Planet = namedtuple(
@@ -113,21 +112,18 @@ class SelfPlayOpponent:
         )
         if self.params is None:
             raise ValueError("SelfPlayOpponent params are not initialized; call sync_from first.")
-        outputs = self.policy.apply(
-            {"params": self.params},
-            jnp.asarray(policy_batch.self_features),
-            jnp.asarray(policy_batch.candidate_features),
-            jnp.asarray(policy_batch.global_features),
-            jnp.asarray(policy_batch.candidate_mask).astype(bool),
-        )
-        outputs = mask_policy_output_for_shield(
-            outputs,
-            jnp.asarray(policy_batch.candidate_mask).astype(bool),
-            self.cfg.env.ship_bucket_count,
-        )
         self.rng, step_key = jax.random.split(self.rng)
-        sampled = sample_shielded_policy_actions(
-            step_key, outputs, deterministic=self.deterministic
+        sampled = select_runtime_shielded_policy_actions(
+            step_key,
+            self.policy,
+            {"params": self.params},
+            batch,
+            self.cfg.env,
+            deterministic=self.deterministic,
+            self_features=policy_batch.self_features,
+            candidate_features=policy_batch.candidate_features,
+            global_features=policy_batch.global_features,
+            candidate_mask=policy_batch.candidate_mask,
         )
         target_indices = sampled.target_index
         ship_buckets = sampled.ship_bucket

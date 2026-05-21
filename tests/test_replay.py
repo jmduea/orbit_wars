@@ -37,6 +37,7 @@ def test_jax_replay_actor_handles_sequence_policy_outputs(
     cfg.env.candidate_count = 12
     cfg.env.ship_bucket_count = 4
     cfg.env.max_fleets = 8
+    cfg.env.trajectory_shield_enabled = False
 
     checkpoint_path = tmp_path / "jax_ckpt_000100.pkl"
     with checkpoint_path.open("wb") as file:
@@ -70,4 +71,4 @@ def test_jax_replay_actor_handles_sequence_policy_outputs(
 
     act = replay._build_jax_policy_actions(cfg, checkpoint_path)
 
-        assert act({}) == [[7, 3.0, 7], [7, 5.0, 3]]
+    assert act({}) == [[7, 3.0, 7], [7, 5.0, 3]]

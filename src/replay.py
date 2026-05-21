@@ -6,7 +6,6 @@ import random
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
@@ -14,20 +13,8 @@ from .jax_policy import build_jax_policy
 from .opponents import build_opponent
 from .trajectory_shield import (
     is_trajectory_safe_for_launch,
-    mask_policy_output_for_shield,
+    select_runtime_shielded_policy_actions,
 )
-
-
-def _ensure_target_sequence(values: jax.Array) -> jax.Array:
-    if values.ndim == 2:
-        return values[:, None, :]
-    return values
-
-
-def _ensure_ship_sequence(values: jax.Array) -> jax.Array:
-    if values.ndim == 3:
-        return values[:, None, :, :]
-    return values
 
 
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
@@ -66,29 +53,16 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
         batch = encode_turn(observation, cfg.env, env_index=0)
         if batch.self_features.shape[0] == 0:
             return []
-        outputs = policy.apply(
+        sampled = select_runtime_shielded_policy_actions(
+            jax.random.PRNGKey(_seed_for_update(cfg, 0)),
+            policy,
             {"params": params},
-            jnp.asarray(batch.self_features),
-            jnp.asarray(batch.candidate_features),
-            jnp.asarray(batch.global_features),
-            jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
+            batch,
+            cfg.env,
+            deterministic=True,
         )
-        outputs = mask_policy_output_for_shield(
-            outputs,
-            jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
-            cfg.env.ship_bucket_count,
-        )
-        target_logits = _ensure_target_sequence(outputs.target_logits)
-        ship_logits = _ensure_ship_sequence(outputs.ship_logits)
-        target_indices = jax.device_get(jnp.argmax(target_logits, axis=-1))
-        selected_ship_logits = jnp.take_along_axis(
-            ship_logits,
-            jnp.asarray(target_indices)[..., None, None].repeat(
-                ship_logits.shape[-1], axis=-1
-            ),
-            axis=2,
-        ).squeeze(axis=2)
-        ship_buckets = jax.device_get(jnp.argmax(selected_ship_logits, axis=-1))
+        target_indices = jax.device_get(sampled.target_index)
+        ship_buckets = jax.device_get(sampled.ship_bucket)
 
         moves: list[list[float | int]] = []
         for row_idx, context in enumerate(batch.contexts):

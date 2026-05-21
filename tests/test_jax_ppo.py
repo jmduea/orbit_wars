@@ -89,6 +89,34 @@ def test_jax_action_builder_emits_multiple_launch_slots_per_source():
     assert action.source_id[0, 1] == action.source_id[0, 0]
 
 
+def test_jax_action_builder_invalid_step_does_not_consume_later_ships():
+    from src.jax_ppo import build_action_from_batch
+
+    cfg = TrainConfig()
+    cfg.env.max_fleets = MAX_PLANETS * 2
+    cfg.env.candidate_count = 4
+    cfg.env.ship_bucket_count = 4
+    cfg.ppo.num_envs = 1
+    _env_state, turn_batch = batched_reset(
+        jax.random.split(jax.random.PRNGKey(44), cfg.ppo.num_envs), cfg.env
+    )
+    flat_decision = turn_batch.decision_mask.reshape(-1)
+    row_idx = int(jax.numpy.argmax(flat_decision))
+    source_ships = float(turn_batch.source_ships.reshape(-1)[row_idx])
+    target = jax.numpy.zeros((cfg.ppo.num_envs * MAX_PLANETS, 2), dtype=jax.numpy.int32)
+    bucket = jax.numpy.zeros_like(target)
+    target = target.at[row_idx, 0].set(0)
+    bucket = bucket.at[row_idx, 0].set(3)
+    target = target.at[row_idx, 1].set(1)
+    bucket = bucket.at[row_idx, 1].set(3)
+
+    action = build_action_from_batch(turn_batch, target, bucket, cfg)
+
+    fleet_slot = (row_idx % MAX_PLANETS) * 2 + 1
+    assert bool(action.valid[0, fleet_slot])
+    assert float(action.ships[0, fleet_slot]) == source_ships
+
+
 def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
     from src.jax_train import load_jax_checkpoint, save_jax_checkpoint
 
@@ -248,7 +276,7 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     assert jax.numpy.array_equal(env_state.learner_player, expected_players)
 
 
-def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_masks_followup_steps():
+def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks():
     cfg = TrainConfig()
     cfg.model.architecture = "gnn_pointer"
     cfg.model.max_moves_k = 3
@@ -270,7 +298,14 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_masks_followup_s
     )
 
     assert transitions.decision_mask.shape[-1] == cfg.model.max_moves_k
-    assert not bool(jax.numpy.any(transitions.decision_mask[..., 1:]))
+    assert jax.numpy.array_equal(
+        transitions.decision_mask[..., 0], transitions.decision_mask[..., 1]
+    )
+    assert transitions.ship_bucket_mask.shape[-3:] == (
+        cfg.model.max_moves_k,
+        cfg.env.candidate_count,
+        cfg.env.ship_bucket_count,
+    )
     assert "trajectory_shield_blocked_count" in rollout_metrics
     assert "trajectory_shield_fallback_noop_count" in rollout_metrics
     assert "trajectory_shield_legal_non_noop_count" in rollout_metrics
