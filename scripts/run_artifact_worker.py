@@ -108,6 +108,7 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
             f"Docker validation failed with exit code {completed.returncode}; "
             f"see {output_dir / 'stderr.log'}"
         )
+    replay_html_paths = sorted(str(path) for path in (output_dir / "replays").glob("*.html"))
     _write_status(
         job_file,
         "completed",
@@ -115,6 +116,7 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
         output_dir=str(output_dir),
         stdout_path=str(output_dir / "stdout.log"),
         stderr_path=str(output_dir / "stderr.log"),
+        replay_html_paths=replay_html_paths,
     )
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pickle
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -216,6 +217,38 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     assert len(jobs) == 1
     assert jobs[0]["kind"] == "docker_validation"
     assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+
+
+def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
+    from scripts import run_artifact_worker
+
+    checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+    job_path = write_optional_job(
+        tmp_path / "jobs",
+        kind="replay",
+        update=1,
+        checkpoint_path=checkpoint_path,
+        payload={"backend": "docker", "log_path": str(tmp_path / "metrics.jsonl")},
+    )
+    job = load_pending_optional_jobs(tmp_path / "jobs")[0]
+
+    def fake_run(command, **kwargs):
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        replay_dir = output_dir / "replays"
+        replay_dir.mkdir(parents=True, exist_ok=True)
+        (replay_dir / "replay_u000001_2p.html").write_text("<html></html>", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(run_artifact_worker.subprocess, "run", fake_run)
+
+    run_artifact_worker._run_docker_validation_job(job)
+
+    status = json.loads(job_path.read_text(encoding="utf-8"))
+    assert status["status"] == "completed"
+    assert status["backend"] == "docker"
+    assert len(status["replay_html_paths"]) == 1
+    assert status["replay_html_paths"][0].endswith("replay_u000001_2p.html")
 
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):

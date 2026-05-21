@@ -83,6 +83,8 @@ Training writes Docker-backed replay/evaluation jobs under each run's `artifact_
 uv run python scripts/run_artifact_worker.py artifacts/<run>/artifact_jobs --once
 ```
 
+Docker-rendered replay HTML files are written under the completed job output directory, for example `artifact_jobs/docker_u000100_<job_id>/replays/replay_u000100_2p.html`, and the completed job JSON records them in `replay_html_paths`.
+
 If a worker exits while a job is marked `running`, recover it explicitly:
 
 ```bash

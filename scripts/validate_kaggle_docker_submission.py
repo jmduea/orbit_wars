@@ -217,6 +217,9 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
     if docker_info.returncode != 0:
         message = (docker_info.stderr or docker_info.stdout or "docker daemon is not reachable").strip()
         raise ValidationError("docker_unavailable", message)
+    replay_output_dir = args.output_dir.resolve() / "replays"
+    replay_output_dir.mkdir(parents=True, exist_ok=True)
+    replay_output_dir.chmod(0o777)
     with tempfile.TemporaryDirectory(prefix="orbit-wars-kaggle-docker-") as temp_dir_text:
         temp_dir = Path(temp_dir_text)
         validator_path = temp_dir / "validate_submission.py"
@@ -237,6 +240,8 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
             f"{package_path.resolve()}:/work/submission.tar.gz:ro",
             "-v",
             f"{validator_path.resolve()}:/work/validate_submission.py:ro",
+            "-v",
+            f"{replay_output_dir}:/work/replays:rw",
             args.docker_image,
             "python",
             "/work/validate_submission.py",
@@ -250,6 +255,10 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
             str(args.timeout_seconds),
             "--episode-steps",
             str(args.episode_steps),
+            "--replay-output-dir",
+            "/work/replays",
+            "--checkpoint-update",
+            str(_checkpoint_update_from_package_manifest(package_path)),
         ]
         completed = subprocess.run(command, text=True, capture_output=True, check=False)
         if completed.stdout:
@@ -263,6 +272,19 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
                     "docker exited 137; container was killed, commonly by OOM or an external stop",
                 )
             raise ValidationError("docker_validation_failed", f"docker exited {completed.returncode}")
+
+
+def _checkpoint_update_from_package_manifest(package_path: Path) -> int:
+    try:
+        with tarfile.open(package_path, "r:gz") as archive:
+            manifest_file = archive.extractfile("manifest.json")
+            if manifest_file is None:
+                return -1
+            manifest = json.loads(manifest_file.read().decode("utf-8"))
+    except Exception:
+        return -1
+    update = manifest.get("checkpoint_update")
+    return int(update) if isinstance(update, int) else -1
 
 
 def _validate_tar_member(member: tarfile.TarInfo, root: Path, *, phase_error: type[Exception]) -> None:
@@ -559,7 +581,15 @@ def main() -> int:
             player_counts = [2, 4] if args.player_count == "both" else [int(args.player_count)]
             for player_count in player_counts:
                 modules = [import_submission(extract_dir, module_name=f"submission_main_p{idx}_{player_count}")[0] for idx in range(player_count)]
-                results.append(run_episode(modules, player_count, args.seed, args.timeout_seconds, args.episode_steps))
+                results.append(run_episode(
+                    modules,
+                    player_count,
+                    args.seed,
+                    args.timeout_seconds,
+                    args.episode_steps,
+                    args.replay_output_dir,
+                    args.checkpoint_update,
+                ))
             print(json.dumps({
                 "ok": True,
                 "phase": "complete",
@@ -583,6 +613,8 @@ def parse_args():
     parser.add_argument("--player-count", choices=("2", "4", "both"), default="both")
     parser.add_argument("--timeout-seconds", type=float, default=1.0)
     parser.add_argument("--episode-steps", type=int, default=500)
+    parser.add_argument("--replay-output-dir", type=Path, default=None)
+    parser.add_argument("--checkpoint-update", type=int, default=-1)
     return parser.parse_args()
 
 
@@ -682,7 +714,7 @@ def first_action_probe(module, timeout_seconds: float, episode_steps: int) -> fl
     return elapsed
 
 
-def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, episode_steps: int):
+def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, episode_steps: int, replay_output_dir, checkpoint_update: int):
     from kaggle_environments import make
 
     latencies = []
@@ -713,6 +745,12 @@ def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, e
     rewards = [getattr(step, "reward", None) for step in final]
     if any(status not in ("DONE", "ACTIVE", None) for status in statuses):
         raise PhaseError(f"episode_failed_{player_count}p", f"bad statuses: {statuses}")
+    replay_html_path = None
+    if replay_output_dir is not None:
+        replay_output_dir.mkdir(parents=True, exist_ok=True)
+        update_label = f"{checkpoint_update:06d}" if checkpoint_update >= 0 else "unknown"
+        replay_html_path = replay_output_dir / f"replay_u{update_label}_{player_count}p.html"
+        replay_html_path.write_text(env.render(mode="html"), encoding="utf-8")
     return {
         "player_count": player_count,
         "statuses": statuses,
@@ -720,6 +758,7 @@ def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, e
         "max_action_seconds": max(latencies) if latencies else 0.0,
         "agent_calls": len(latencies),
         "episode_steps": episode_steps,
+        "replay_html_path": str(replay_html_path) if replay_html_path is not None else None,
     }
 
 
