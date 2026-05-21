@@ -1,6 +1,6 @@
 defaults:
   - model: gnn_pointer
-  - training_format: mix_2p_4p_8env
+  - training_format: mix_2p_4p_16env
   - opponent_mix: self_play_curriculum
   - replay: enabled
   - checkpoint_retention: default
@@ -12,7 +12,7 @@ seed: 42
 run_name: orbit_wars_template_ppo
 device: auto
 save_dir: artifacts/rl_template
-checkpoint_every: 50
+checkpoint_every: 100
 log_every: 5
 opponent: self
 self_play_update_interval: 10
@@ -32,10 +32,10 @@ env:
   early_terminal_reward_shaping_enabled: true
   early_terminal_reward_shaping_horizon: 500
   terminal_reward_mode: binary_win
-  feature_history_steps: 50
+  feature_history_steps: 30
 ppo:
   rollout_steps: 250
-  num_envs: 16
+  num_envs: 32
   total_updates: 500
   epochs: 4
   minibatch_size: 512

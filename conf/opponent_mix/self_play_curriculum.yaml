@@ -1,7 +1,7 @@
 # @package _global_
 self_play_enabled: true
 self_play_pool_size: 5
-self_play_snapshot_interval: 50
+self_play_snapshot_interval: 100
 self_play_latest_probability: 0.6
 
 opponent_mix:
@@ -19,8 +19,8 @@ opponent_mix:
         latest: 0.0
         historical: 0.0
         scripted_sniper: 0.0
-        random: 0.3
-        noop: 0.7
+        random: 1.0
+        noop: 0.0
     - start_update: 101
       end_update: -1
       weights:
