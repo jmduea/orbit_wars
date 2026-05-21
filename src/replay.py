@@ -14,6 +14,18 @@ from .jax_policy import build_jax_policy
 from .opponents import build_opponent
 
 
+def _ensure_target_sequence(values: jax.Array) -> jax.Array:
+    if values.ndim == 2:
+        return values[:, None, :]
+    return values
+
+
+def _ensure_ship_sequence(values: jax.Array) -> jax.Array:
+    if values.ndim == 3:
+        return values[:, None, :, :]
+    return values
+
+
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
     policy = cfg.replay.seed_policy.strip().lower()
     if policy == "fixed":
@@ -57,34 +69,41 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
             jnp.asarray(batch.global_features),
             jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
         )
-        target_indices = jax.device_get(jnp.argmax(outputs.target_logits, axis=-1))
+        target_logits = _ensure_target_sequence(outputs.target_logits)
+        ship_logits = _ensure_ship_sequence(outputs.ship_logits)
+        target_indices = jax.device_get(jnp.argmax(target_logits, axis=-1))
         selected_ship_logits = jnp.take_along_axis(
-            outputs.ship_logits,
-            jnp.asarray(target_indices)[:, None, None].repeat(
-                outputs.ship_logits.shape[-1], axis=-1
+            ship_logits,
+            jnp.asarray(target_indices)[..., None, None].repeat(
+                ship_logits.shape[-1], axis=-1
             ),
-            axis=1,
-        ).squeeze(axis=1)
+            axis=2,
+        ).squeeze(axis=2)
         ship_buckets = jax.device_get(jnp.argmax(selected_ship_logits, axis=-1))
 
         moves: list[list[float | int]] = []
         for row_idx, context in enumerate(batch.contexts):
-            target_idx = int(target_indices[row_idx])
-            bucket_idx = int(ship_buckets[row_idx])
-            if target_idx == 0 or bucket_idx == 0:
-                continue
-            if target_idx >= len(context.candidate_ids):
-                continue
-            if not context.candidate_mask[target_idx]:
-                continue
-            ships = ship_count_for_bucket(
-                context.source_ships, bucket_idx, cfg.env.ship_bucket_count
-            )
-            if ships <= 0:
-                continue
-            moves.append(
-                [context.source_id, float(context.target_angles[target_idx]), ships]
-            )
+            remaining_ships = int(context.source_ships)
+            for step_idx in range(target_indices.shape[1]):
+                if len(moves) >= int(cfg.env.max_fleets):
+                    break
+                target_idx = int(target_indices[row_idx, step_idx])
+                bucket_idx = int(ship_buckets[row_idx, step_idx])
+                if target_idx == 0 or bucket_idx == 0:
+                    continue
+                if target_idx >= len(context.candidate_ids):
+                    continue
+                if not bool(context.candidate_mask[target_idx]):
+                    continue
+                ships = ship_count_for_bucket(
+                    remaining_ships, bucket_idx, cfg.env.ship_bucket_count
+                )
+                if ships <= 0:
+                    continue
+                remaining_ships = max(0, remaining_ships - ships)
+                moves.append(
+                    [context.source_id, float(context.target_angles[target_idx]), ships]
+                )
         return moves
 
     return act
