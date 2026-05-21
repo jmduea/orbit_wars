@@ -7,6 +7,7 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from .conf_schema import (
+    ArtifactPipelineConfig,
     EnvConfig,
     TrainConfig,
     register_config_schemas,
@@ -14,6 +15,7 @@ from .conf_schema import (
 
 __all__ = [
     "EnvConfig",
+    "ArtifactPipelineConfig",
     "TrainConfig",
     "compose_hydra_train_config",
     "default_train_config_path",
@@ -79,6 +81,24 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         )
     if ppo.rollout_microbatch_envs is not None and int(ppo.rollout_microbatch_envs) <= 0:
         raise ValueError("ppo.rollout_microbatch_envs must be a positive integer when set.")
+
+    artifact_pipeline = cfg.artifact_pipeline
+    if int(artifact_pipeline.checkpoint_queue_size) <= 0:
+        raise ValueError("artifact_pipeline.checkpoint_queue_size must be positive.")
+    for field_name in (
+        "checkpoint_timeout_seconds",
+        "final_flush_timeout_seconds",
+        "interrupt_flush_timeout_seconds",
+        "exception_flush_timeout_seconds",
+    ):
+        if float(getattr(artifact_pipeline, field_name)) <= 0.0:
+            raise ValueError(f"artifact_pipeline.{field_name} must be positive.")
+    if int(artifact_pipeline.latest_lag_warning_updates) < 0:
+        raise ValueError("artifact_pipeline.latest_lag_warning_updates must be non-negative.")
+    if not str(artifact_pipeline.queue_dir).strip():
+        raise ValueError("artifact_pipeline.queue_dir must be a non-empty relative path.")
+    if Path(artifact_pipeline.queue_dir).is_absolute():
+        raise ValueError("artifact_pipeline.queue_dir must be relative to the run directory.")
 
     if not cfg.self_play_enabled:
         if cfg.self_play_pool_size != 0:

@@ -8,6 +8,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from .artifact_pipeline import (
+    ArtifactPipelineError,
+    AsyncArtifactPipeline,
+    CheckpointJob,
+    CheckpointResult,
+    commit_checkpoint_payload,
+    load_active_optional_jobs,
+    protected_paths_from_jobs,
+    write_optional_job,
+)
 from .checkpoint_compat import (
     feature_metadata,
     validate_checkpoint_feature_compatibility,
@@ -182,6 +192,81 @@ def _replace_rollout_group_state(
     )
 
 
+def _checkpoint_payload_builder(
+    train_state: object,
+    cfg: TrainConfig,
+    *,
+    key: jax.Array,
+    update: int,
+    total_env_steps: int,
+    completed_episodes: int,
+) -> Callable[[], dict[str, object]]:
+    params = train_state.params
+    opt_state = train_state.opt_state
+    rng_key = key
+    cfg_snapshot = deepcopy(cfg)
+    metadata = feature_metadata(cfg_snapshot.env)
+
+    def build_payload() -> dict[str, object]:
+        return {
+            "update": update,
+            "params": jax.device_get(params),
+            "opt_state": jax.device_get(opt_state),
+            "rng_key": jax.device_get(rng_key),
+            "config": cfg_snapshot,
+            "feature_metadata": metadata,
+            "total_env_steps": total_env_steps,
+            "completed_episodes": completed_episodes,
+        }
+
+    return build_payload
+
+
+def _checkpoint_replay_due(cfg: TrainConfig, update: int) -> bool:
+    if not cfg.replay.enabled:
+        return False
+    every_n = max(int(cfg.replay.every_n_checkpoints), 1)
+    checkpoint_index = max(update // max(int(cfg.checkpoint_every), 1), 1)
+    return checkpoint_index % every_n == 0 or update == cfg.ppo.total_updates
+
+
+def _queue_optional_jobs_if_due(
+    cfg: TrainConfig,
+    *,
+    update: int,
+    checkpoint_path: Path,
+    log_path: Path,
+    queue_dir: Path,
+    queue_replay: bool,
+    queue_docker_validation: bool,
+) -> list[Path]:
+    job_paths: list[Path] = []
+    if queue_replay and _checkpoint_replay_due(cfg, update):
+        job_paths.append(
+            write_optional_job(
+                queue_dir,
+                kind="replay",
+                update=update,
+                checkpoint_path=checkpoint_path,
+                payload={
+                    "log_path": str(log_path),
+                    "replay_output_dir": cfg.replay.output_dir,
+                },
+            )
+        )
+    if queue_docker_validation:
+        job_paths.append(
+            write_optional_job(
+                queue_dir,
+                kind="docker_validation",
+                update=update,
+                checkpoint_path=checkpoint_path,
+                payload={"player_count": "both"},
+            )
+        )
+    return job_paths
+
+
 def _active_group_indices(
     groups: list[JaxRolloutGroup], format_weights: dict[int, float]
 ) -> list[int]:
@@ -247,289 +332,66 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     curriculum.apply(cfg)
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
+    artifact_cfg = cfg.artifact_pipeline
+    artifact_queue_dir = run_dir / artifact_cfg.queue_dir
+    checkpoint_pipeline = (
+        AsyncArtifactPipeline(
+            checkpoint_queue_size=artifact_cfg.checkpoint_queue_size,
+            coalesce_intermediate_checkpoints=artifact_cfg.coalesce_intermediate_checkpoints,
+            ledger_path=(run_dir / "artifact_pipeline.jsonl")
+            if artifact_cfg.ledger_enabled
+            else None,
+        )
+        if artifact_cfg.enabled
+        else None
+    )
+    checkpoint_failures: list[CheckpointResult] = []
 
-    for update in range(start_update, cfg.ppo.total_updates + 1):
-        update_start = time.perf_counter()
-        reseed_events: list[dict[str, object]] = []
-        rollout_start = time.perf_counter()
-        transitions_by_group: list[JaxTransitionBatch] = []
-        rollout_metrics_by_group: list[dict[str, jax.Array]] = []
-        next_groups: list[JaxRolloutGroup] = []
-        should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
-        if should_reseed:
-            reseed_event = seed_scheduler.reseed(update, reseed_reason)
-            key = jax.random.PRNGKey(reseed_event.new_seed)
-            reseed_events.append(
-                {
-                    "update": reseed_event.update,
-                    "old_seed": reseed_event.old_seed,
-                    "new_seed": reseed_event.new_seed,
-                    "reason": reseed_event.reason,
-                    "policy": reseed_event.policy,
-                }
-            )
-        curriculum.apply(cfg)
-        active_indices = _active_group_indices(
-            rollout_groups, curriculum.current_format_weights()
-        )
-        key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
-        for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
-            group = rollout_groups[group_idx]
-            (
-                _next_rollout_key,
-                env_state,
-                turn_batch,
-                transitions,
-                rollout_metrics,
-            ) = group.collect_fn(
-                rollout_key,
-                group.env_state,
-                group.turn_batch,
-                train_state,
-                jnp.asarray(update, dtype=jnp.int32),
-            )
-            next_groups.append(
-                _replace_rollout_group_state(group, env_state, turn_batch)
-            )
-            transitions_by_group.append(transitions)
-            rollout_metrics_by_group.append(rollout_metrics)
-        merged_groups = list(rollout_groups)
-        for group_idx, updated_group in zip(active_indices, next_groups, strict=True):
-            merged_groups[group_idx] = updated_group
-        rollout_groups = merged_groups
-        transitions = concatenate_transition_batches(transitions_by_group)
-        rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
-        rollout_scalar_keys = (
-            "samples",
-            "env_steps",
-            "episode_done",
-            "avg_reward",
-            "episode_reward_sum",
-            "episodes_2p",
-            "episodes_4p",
-            "wins_2p",
-            "first_places_4p",
-            "placement_4p_sum",
-            "survival_time_sum",
-            "score_share_sum",
-            "decision_count",
-            "noop_count",
-            "friendly_target_count",
-            "enemy_target_count",
-            "neutral_target_count",
-            "overall_win_rate",
-            "noop_percent",
-            "friendly_target_percent",
-            "enemy_target_percent",
-            "neutral_target_percent",
-            "opponent_current_slots",
-            "opponent_random_slots",
-            "opponent_snapshot_slots",
-            "won_non_noop_actions_per_step",
-            "lost_non_noop_actions_per_step",
-            "won_avg_fleet_launch_size",
-            "lost_avg_fleet_launch_size",
-            "won_avg_planets_owned",
-            "lost_avg_planets_owned",
-            "won_avg_planets_lost",
-            "lost_avg_planets_lost",
-            "won_avg_planets_taken",
-            "lost_avg_planets_taken",
-            "won_avg_garrisoned_ships_per_planet",
-            "lost_avg_garrisoned_ships_per_planet",
-            "won_avg_planet_diff",
-            "lost_avg_planet_diff",
-            "won_avg_production_diff",
-            "lost_avg_production_diff",
-            "won_avg_launch_fleet_speed",
-            "lost_avg_launch_fleet_speed",
-            cfg.plateau_metric,
-        )
-        rollout_scalar_values = jnp.asarray(
-            [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
-            dtype=jnp.float32,
-        )
-        # Intentional sync boundary: transfer only compact rollout scalars once so
-        # rollout timing reflects completed device work without materializing trees.
-        rollout_scalars_host = jax.device_get(rollout_scalar_values)
-        rollout_scalars = dict(
-            zip(rollout_scalar_keys, rollout_scalars_host.tolist(), strict=True)
-        )
-        rollout_samples = float(rollout_scalars["samples"])
-        rollout_seconds = time.perf_counter() - rollout_start
+    def protected_artifact_paths() -> set[Path]:
+        paths = {run_dir / "jax_ckpt_last.pkl"}
+        if checkpoint_pipeline is not None:
+            paths.update(checkpoint_pipeline.protected_paths())
+        paths.update(protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir)))
+        return paths
 
-        ppo_start = time.perf_counter()
-        metrics_accum: dict[str, jax.Array] | None = None
-        for _ in range(cfg.ppo.epochs):
-            train_state, update_metrics = update_fn(train_state, transitions)
-            metrics_accum = (
-                update_metrics
-                if metrics_accum is None
-                else jax.tree.map(jnp.add, metrics_accum, update_metrics)
-            )
-        assert metrics_accum is not None
-        metrics = jax.tree.map(
-            lambda x: x / float(max(cfg.ppo.epochs, 1)), metrics_accum
-        )
-        metric_names = tuple(metrics.keys())
-        metric_values = jnp.asarray([metrics[name] for name in metric_names])
-        # Intentional sync boundary: perform a single compact host transfer for
-        # PPO scalars and keep logging values identical.
-        metric_values_host = jax.device_get(metric_values)
-        metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
-        ppo_seconds = time.perf_counter() - ppo_start
-        update_seconds = time.perf_counter() - update_start
-        env_steps = int(rollout_scalars["env_steps"])
-        episodes = int(rollout_scalars["episode_done"])
-        episodes_2p = float(rollout_scalars["episodes_2p"])
-        episodes_4p = float(rollout_scalars["episodes_4p"])
-        episode_count = float(rollout_scalars["episode_done"])
-        win_rate_2p = (
-            float(rollout_scalars["wins_2p"]) / episodes_2p
-            if episodes_2p
-            else 0.0
-        )
-        first_place_rate_4p = (
-            float(rollout_scalars["first_places_4p"]) / episodes_4p
-            if episodes_4p
-            else 0.0
-        )
-        average_placement_4p = (
-            float(rollout_scalars["placement_4p_sum"]) / episodes_4p
-            if episodes_4p
-            else 0.0
-        )
-        survival_time = (
-            float(rollout_scalars["survival_time_sum"]) / episode_count
-            if episode_count
-            else 0.0
-        )
-        score_share = (
-            float(rollout_scalars["score_share_sum"]) / episode_count
-            if episode_count
-            else 0.0
-        )
-        average_reward = float(rollout_scalars["avg_reward"])
-        average_episode_reward = (
-            float(rollout_scalars["episode_reward_sum"]) / episode_count if episode_count else 0.0
-        )
-        overall_win_rate = (
-            (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
-            / episode_count
-            if episode_count
-            else 0.0
-        )
-        decision_count = float(rollout_scalars["decision_count"])
-        noop_percent = (
-            (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
-            if decision_count
-            else 0.0
-        )
-        friendly_target_percent = (
-            (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
-            if decision_count
-            else 0.0
-        )
-        enemy_target_percent = (
-            (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
-            if decision_count
-            else 0.0
-        )
-        neutral_target_percent = (
-            (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
-            if decision_count
-            else 0.0
-        )
-        total_env_steps += env_steps
-        completed_episodes += episodes
-        seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
-        record: dict[str, object] = {
-            "update": update,
-            "total_env_steps": total_env_steps,
-            "completed_episodes": completed_episodes,
-            "samples": int(rollout_samples),
-            "win_rate_2p": win_rate_2p,
-            "first_place_rate_4p": first_place_rate_4p,
-            "average_placement_4p": average_placement_4p,
-            "overall_win_rate": overall_win_rate,
-            "average_reward": average_reward,
-            "average_episode_reward": average_episode_reward,
-            "noop_percent": noop_percent,
-            "friendly_target_percent": friendly_target_percent,
-            "enemy_target_percent": enemy_target_percent,
-            "neutral_target_percent": neutral_target_percent,
-            "survival_time": survival_time,
-            "score_share": score_share,
-            "update_seconds": update_seconds,
-            "elapsed_seconds": time.perf_counter() - train_start_time,
-            "rollout_seconds": rollout_seconds,
-            "ppo_seconds": ppo_seconds,
-            "env_steps_per_sec": env_steps / max(update_seconds, 1e-9),
-            "rollout_env_steps_per_sec": env_steps / max(rollout_seconds, 1e-9),
-            "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
-            "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
-            "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
-            "seed_scheduler_plateau_metric": cfg.plateau_metric,
-            "reseed_events": reseed_events,
-            **{name: float(value) for name, value in metrics_host.items()},
-            "won_non_noop_actions_per_step": float(rollout_scalars["won_non_noop_actions_per_step"]),
-            "lost_non_noop_actions_per_step": float(rollout_scalars["lost_non_noop_actions_per_step"]),
-            "won_avg_fleet_launch_size": float(rollout_scalars["won_avg_fleet_launch_size"]),
-            "lost_avg_fleet_launch_size": float(rollout_scalars["lost_avg_fleet_launch_size"]),
-            "won_avg_planets_owned": float(rollout_scalars["won_avg_planets_owned"]),
-            "lost_avg_planets_owned": float(rollout_scalars["lost_avg_planets_owned"]),
-            "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
-            "lost_avg_planets_lost": float(rollout_scalars["lost_avg_planets_lost"]),
-            "won_avg_planets_taken": float(rollout_scalars["won_avg_planets_taken"]),
-            "lost_avg_planets_taken": float(rollout_scalars["lost_avg_planets_taken"]),
-            "won_avg_garrisoned_ships_per_planet": float(rollout_scalars["won_avg_garrisoned_ships_per_planet"]),
-            "lost_avg_garrisoned_ships_per_planet": float(rollout_scalars["lost_avg_garrisoned_ships_per_planet"]),
-            "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
-            "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
-            "won_avg_production_diff": float(rollout_scalars["won_avg_production_diff"]),
-            "lost_avg_production_diff": float(rollout_scalars["lost_avg_production_diff"]),
-            "won_avg_launch_fleet_speed": float(rollout_scalars["won_avg_launch_fleet_speed"]),
-            "lost_avg_launch_fleet_speed": float(rollout_scalars["lost_avg_launch_fleet_speed"]),
-            "opponent_composition": {
-                "latest": float(rollout_scalars["opponent_current_slots"]),
-                "random": float(rollout_scalars["opponent_random_slots"]),
-                "historical": float(rollout_scalars["opponent_snapshot_slots"]),
-            },
-            "curriculum_phase_id": curriculum.current_phase_id(),
-            "curriculum_phase_events": list(phase_events),
-        }
-        phase_events = []
-        transition = curriculum.update(
-            update,
-            {
-                "win_rate_2p": win_rate_2p,
-                "first_place_rate_4p": first_place_rate_4p,
-                "survival_time": survival_time,
-                "score_share": score_share,
-                "kl_stability": float(record.get("approx_kl", 0.0)),
-            },
-        )
-        if transition is not None:
-            phase_events.append(transition)
-        append_jsonl(log_path, record)
-        telemetry.log(record, step=update)
-        if update % cfg.log_every == 0:
-            print(
-                f"update={update} steps={total_env_steps} episodes={completed_episodes} "
-                f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
-                f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
-                f"entropy={record['entropy']:.3f}"
-            )
-        if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
-            checkpoint_path = save_jax_checkpoint(
-                run_dir,
-                update,
-                train_state,
-                cfg,
-                key=key,
-                total_env_steps=total_env_steps,
-                completed_episodes=completed_episodes,
-            )
+    def handle_checkpoint_results(results: list[CheckpointResult]) -> None:
+        for result in results:
+            event_record = {
+                "event": "checkpoint_result",
+                "update": result.update,
+                "checkpoint_status": result.status,
+                "checkpoint_final": result.final,
+                "checkpoint_reason": result.reason,
+                "checkpoint_error": result.error,
+            }
+            append_jsonl(log_path, event_record)
+            telemetry.log(event_record, step=result.update)
+            if result.status == "failed":
+                checkpoint_failures.append(result)
+                continue
+            if not result.committed or result.numbered_path is None:
+                continue
+
+            protected_paths = protected_artifact_paths()
+            protected_paths.add(result.numbered_path)
+            if result.latest_path is not None:
+                protected_paths.add(result.latest_path)
+            if result.final:
+                protected_paths.add(result.numbered_path)
+            if artifact_cfg.replay_async or artifact_cfg.docker_validation_async:
+                _queue_optional_jobs_if_due(
+                    cfg,
+                    update=result.update,
+                    checkpoint_path=result.numbered_path,
+                    log_path=log_path,
+                    queue_dir=artifact_queue_dir,
+                    queue_replay=artifact_cfg.replay_async,
+                    queue_docker_validation=artifact_cfg.docker_validation_async,
+                )
+                protected_paths.update(
+                    protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir))
+                )
+
             retention = cfg.checkpoint_retention
             pruning = prune_checkpoints(
                 run_dir,
@@ -541,27 +403,371 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 best_metric_mode=retention.best_metric_mode,
                 min_update_for_pruning=retention.min_update_for_pruning,
                 dry_run_pruning=retention.dry_run_pruning,
+                protected_paths=protected_paths,
             )
             action_label = "would prune" if pruning.dry_run else "pruned"
             print(
                 f"checkpoint retention: {action_label} {len(pruning.deleted)} files, "
                 f"reclaimed_bytes={pruning.reclaimed_bytes}"
             )
-            telemetry.log_checkpoint(checkpoint_path, update=update)
-            replay_meta_path = maybe_write_jax_checkpoint_replay(
-                cfg,
-                update=update,
-                checkpoint_path=checkpoint_path,
-                log_path=log_path,
-            )
-            if replay_meta_path is not None:
-                telemetry.log_artifact(
-                    replay_meta_path,
-                    name=f"replay-meta-u{update}",
-                    artifact_type="replay_metadata",
+            telemetry.log_checkpoint(result.numbered_path, update=result.update)
+            if not artifact_cfg.replay_async:
+                replay_meta_path = maybe_write_jax_checkpoint_replay(
+                    cfg,
+                    update=result.update,
+                    checkpoint_path=result.numbered_path,
+                    log_path=log_path,
                 )
+                if replay_meta_path is not None:
+                    telemetry.log_artifact(
+                        replay_meta_path,
+                        name=f"replay-meta-u{result.update}",
+                        artifact_type="replay_metadata",
+                    )
 
-    telemetry.finish()
+    completed_training = False
+    close_error: Exception | None = None
+    try:
+        for update in range(start_update, cfg.ppo.total_updates + 1):
+            if checkpoint_pipeline is not None:
+                handle_checkpoint_results(checkpoint_pipeline.drain_results())
+            update_start = time.perf_counter()
+            reseed_events: list[dict[str, object]] = []
+            rollout_start = time.perf_counter()
+            transitions_by_group: list[JaxTransitionBatch] = []
+            rollout_metrics_by_group: list[dict[str, jax.Array]] = []
+            next_groups: list[JaxRolloutGroup] = []
+            should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
+            if should_reseed:
+                reseed_event = seed_scheduler.reseed(update, reseed_reason)
+                key = jax.random.PRNGKey(reseed_event.new_seed)
+                reseed_events.append(
+                    {
+                        "update": reseed_event.update,
+                        "old_seed": reseed_event.old_seed,
+                        "new_seed": reseed_event.new_seed,
+                        "reason": reseed_event.reason,
+                        "policy": reseed_event.policy,
+                    }
+                )
+            curriculum.apply(cfg)
+            active_indices = _active_group_indices(
+                rollout_groups, curriculum.current_format_weights()
+            )
+            key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
+            for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
+                group = rollout_groups[group_idx]
+                (
+                    _next_rollout_key,
+                    env_state,
+                    turn_batch,
+                    transitions,
+                    rollout_metrics,
+                ) = group.collect_fn(
+                    rollout_key,
+                    group.env_state,
+                    group.turn_batch,
+                    train_state,
+                    jnp.asarray(update, dtype=jnp.int32),
+                )
+                next_groups.append(
+                    _replace_rollout_group_state(group, env_state, turn_batch)
+                )
+                transitions_by_group.append(transitions)
+                rollout_metrics_by_group.append(rollout_metrics)
+            merged_groups = list(rollout_groups)
+            for group_idx, updated_group in zip(active_indices, next_groups, strict=True):
+                merged_groups[group_idx] = updated_group
+            rollout_groups = merged_groups
+            transitions = concatenate_transition_batches(transitions_by_group)
+            rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
+            rollout_scalar_keys = (
+                "samples",
+                "env_steps",
+                "episode_done",
+                "avg_reward",
+                "episode_reward_sum",
+                "episodes_2p",
+                "episodes_4p",
+                "wins_2p",
+                "first_places_4p",
+                "placement_4p_sum",
+                "survival_time_sum",
+                "score_share_sum",
+                "decision_count",
+                "noop_count",
+                "friendly_target_count",
+                "enemy_target_count",
+                "neutral_target_count",
+                "overall_win_rate",
+                "noop_percent",
+                "friendly_target_percent",
+                "enemy_target_percent",
+                "neutral_target_percent",
+                "opponent_current_slots",
+                "opponent_random_slots",
+                "opponent_snapshot_slots",
+                "won_non_noop_actions_per_step",
+                "lost_non_noop_actions_per_step",
+                "won_avg_fleet_launch_size",
+                "lost_avg_fleet_launch_size",
+                "won_avg_planets_owned",
+                "lost_avg_planets_owned",
+                "won_avg_planets_lost",
+                "lost_avg_planets_lost",
+                "won_avg_planets_taken",
+                "lost_avg_planets_taken",
+                "won_avg_garrisoned_ships_per_planet",
+                "lost_avg_garrisoned_ships_per_planet",
+                "won_avg_planet_diff",
+                "lost_avg_planet_diff",
+                "won_avg_production_diff",
+                "lost_avg_production_diff",
+                "won_avg_launch_fleet_speed",
+                "lost_avg_launch_fleet_speed",
+                cfg.plateau_metric,
+            )
+            rollout_scalar_values = jnp.asarray(
+                [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
+                dtype=jnp.float32,
+            )
+            # Intentional sync boundary: transfer only compact rollout scalars once so
+            # rollout timing reflects completed device work without materializing trees.
+            rollout_scalars_host = jax.device_get(rollout_scalar_values)
+            rollout_scalars = dict(
+                zip(rollout_scalar_keys, rollout_scalars_host.tolist(), strict=True)
+            )
+            rollout_samples = float(rollout_scalars["samples"])
+            rollout_seconds = time.perf_counter() - rollout_start
+    
+            ppo_start = time.perf_counter()
+            metrics_accum: dict[str, jax.Array] | None = None
+            for _ in range(cfg.ppo.epochs):
+                train_state, update_metrics = update_fn(train_state, transitions)
+                metrics_accum = (
+                    update_metrics
+                    if metrics_accum is None
+                    else jax.tree.map(jnp.add, metrics_accum, update_metrics)
+                )
+            assert metrics_accum is not None
+            metrics = jax.tree.map(
+                lambda x: x / float(max(cfg.ppo.epochs, 1)), metrics_accum
+            )
+            metric_names = tuple(metrics.keys())
+            metric_values = jnp.asarray([metrics[name] for name in metric_names])
+            # Intentional sync boundary: perform a single compact host transfer for
+            # PPO scalars and keep logging values identical.
+            metric_values_host = jax.device_get(metric_values)
+            metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
+            ppo_seconds = time.perf_counter() - ppo_start
+            update_seconds = time.perf_counter() - update_start
+            env_steps = int(rollout_scalars["env_steps"])
+            episodes = int(rollout_scalars["episode_done"])
+            episodes_2p = float(rollout_scalars["episodes_2p"])
+            episodes_4p = float(rollout_scalars["episodes_4p"])
+            episode_count = float(rollout_scalars["episode_done"])
+            win_rate_2p = (
+                float(rollout_scalars["wins_2p"]) / episodes_2p
+                if episodes_2p
+                else 0.0
+            )
+            first_place_rate_4p = (
+                float(rollout_scalars["first_places_4p"]) / episodes_4p
+                if episodes_4p
+                else 0.0
+            )
+            average_placement_4p = (
+                float(rollout_scalars["placement_4p_sum"]) / episodes_4p
+                if episodes_4p
+                else 0.0
+            )
+            survival_time = (
+                float(rollout_scalars["survival_time_sum"]) / episode_count
+                if episode_count
+                else 0.0
+            )
+            score_share = (
+                float(rollout_scalars["score_share_sum"]) / episode_count
+                if episode_count
+                else 0.0
+            )
+            average_reward = float(rollout_scalars["avg_reward"])
+            average_episode_reward = (
+                float(rollout_scalars["episode_reward_sum"]) / episode_count if episode_count else 0.0
+            )
+            overall_win_rate = (
+                (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
+                / episode_count
+                if episode_count
+                else 0.0
+            )
+            decision_count = float(rollout_scalars["decision_count"])
+            noop_percent = (
+                (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            friendly_target_percent = (
+                (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            enemy_target_percent = (
+                (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            neutral_target_percent = (
+                (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
+                if decision_count
+                else 0.0
+            )
+            total_env_steps += env_steps
+            completed_episodes += episodes
+            seed_scheduler.update_metric(float(rollout_scalars[cfg.plateau_metric]))
+            record: dict[str, object] = {
+                "update": update,
+                "total_env_steps": total_env_steps,
+                "completed_episodes": completed_episodes,
+                "samples": int(rollout_samples),
+                "win_rate_2p": win_rate_2p,
+                "first_place_rate_4p": first_place_rate_4p,
+                "average_placement_4p": average_placement_4p,
+                "overall_win_rate": overall_win_rate,
+                "average_reward": average_reward,
+                "average_episode_reward": average_episode_reward,
+                "noop_percent": noop_percent,
+                "friendly_target_percent": friendly_target_percent,
+                "enemy_target_percent": enemy_target_percent,
+                "neutral_target_percent": neutral_target_percent,
+                "survival_time": survival_time,
+                "score_share": score_share,
+                "update_seconds": update_seconds,
+                "elapsed_seconds": time.perf_counter() - train_start_time,
+                "rollout_seconds": rollout_seconds,
+                "ppo_seconds": ppo_seconds,
+                "env_steps_per_sec": env_steps / max(update_seconds, 1e-9),
+                "rollout_env_steps_per_sec": env_steps / max(rollout_seconds, 1e-9),
+                "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
+                "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
+                "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
+                "seed_scheduler_plateau_metric": cfg.plateau_metric,
+                "reseed_events": reseed_events,
+                **{name: float(value) for name, value in metrics_host.items()},
+                "won_non_noop_actions_per_step": float(rollout_scalars["won_non_noop_actions_per_step"]),
+                "lost_non_noop_actions_per_step": float(rollout_scalars["lost_non_noop_actions_per_step"]),
+                "won_avg_fleet_launch_size": float(rollout_scalars["won_avg_fleet_launch_size"]),
+                "lost_avg_fleet_launch_size": float(rollout_scalars["lost_avg_fleet_launch_size"]),
+                "won_avg_planets_owned": float(rollout_scalars["won_avg_planets_owned"]),
+                "lost_avg_planets_owned": float(rollout_scalars["lost_avg_planets_owned"]),
+                "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
+                "lost_avg_planets_lost": float(rollout_scalars["lost_avg_planets_lost"]),
+                "won_avg_planets_taken": float(rollout_scalars["won_avg_planets_taken"]),
+                "lost_avg_planets_taken": float(rollout_scalars["lost_avg_planets_taken"]),
+                "won_avg_garrisoned_ships_per_planet": float(rollout_scalars["won_avg_garrisoned_ships_per_planet"]),
+                "lost_avg_garrisoned_ships_per_planet": float(rollout_scalars["lost_avg_garrisoned_ships_per_planet"]),
+                "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
+                "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
+                "won_avg_production_diff": float(rollout_scalars["won_avg_production_diff"]),
+                "lost_avg_production_diff": float(rollout_scalars["lost_avg_production_diff"]),
+                "won_avg_launch_fleet_speed": float(rollout_scalars["won_avg_launch_fleet_speed"]),
+                "lost_avg_launch_fleet_speed": float(rollout_scalars["lost_avg_launch_fleet_speed"]),
+                "opponent_composition": {
+                    "latest": float(rollout_scalars["opponent_current_slots"]),
+                    "random": float(rollout_scalars["opponent_random_slots"]),
+                    "historical": float(rollout_scalars["opponent_snapshot_slots"]),
+                },
+                "curriculum_phase_id": curriculum.current_phase_id(),
+                "curriculum_phase_events": list(phase_events),
+            }
+            phase_events = []
+            transition = curriculum.update(
+                update,
+                {
+                    "win_rate_2p": win_rate_2p,
+                    "first_place_rate_4p": first_place_rate_4p,
+                    "survival_time": survival_time,
+                    "score_share": score_share,
+                    "kl_stability": float(record.get("approx_kl", 0.0)),
+                },
+            )
+            if transition is not None:
+                phase_events.append(transition)
+            append_jsonl(log_path, record)
+            telemetry.log(record, step=update)
+            if update % cfg.log_every == 0:
+                print(
+                    f"update={update} steps={total_env_steps} episodes={completed_episodes} "
+                    f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
+                    f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
+                    f"entropy={record['entropy']:.3f}"
+                )
+            if update % cfg.checkpoint_every == 0 or update == cfg.ppo.total_updates:
+                is_final = update == cfg.ppo.total_updates
+                if checkpoint_pipeline is None:
+                    checkpoint_path = save_jax_checkpoint(
+                        run_dir,
+                        update,
+                        train_state,
+                        cfg,
+                        key=key,
+                        total_env_steps=total_env_steps,
+                        completed_episodes=completed_episodes,
+                    )
+                    handle_checkpoint_results(
+                        [
+                            CheckpointResult(
+                                job_id=f"sync-{update}",
+                                update=update,
+                                status="committed",
+                                numbered_path=checkpoint_path,
+                                latest_path=run_dir / "jax_ckpt_last.pkl",
+                                final=is_final,
+                            )
+                        ]
+                    )
+                else:
+                    job = CheckpointJob(
+                        update=update,
+                        run_dir=run_dir,
+                        build_payload=_checkpoint_payload_builder(
+                            train_state,
+                            cfg,
+                            key=key,
+                            update=update,
+                            total_env_steps=total_env_steps,
+                            completed_episodes=completed_episodes,
+                        ),
+                        final=is_final,
+                    )
+                    handle_checkpoint_results(checkpoint_pipeline.submit_checkpoint(job))
+    
+        completed_training = True
+    finally:
+        if checkpoint_pipeline is not None:
+            timeout_seconds = (
+                artifact_cfg.final_flush_timeout_seconds
+                if completed_training
+                else artifact_cfg.exception_flush_timeout_seconds
+            )
+            try:
+                handle_checkpoint_results(
+                    checkpoint_pipeline.close(timeout_seconds=timeout_seconds)
+                )
+            except Exception as exc:
+                if close_error is None:
+                    close_error = exc
+        telemetry.finish()
+    if close_error is not None:
+        raise ArtifactPipelineError(
+            f"artifact pipeline shutdown failed: {close_error}"
+        ) from close_error
+    if checkpoint_failures and artifact_cfg.fail_training_on_checkpoint_error:
+        first_failure = checkpoint_failures[0]
+        raise ArtifactPipelineError(
+            f"checkpoint worker failed at update {first_failure.update}: "
+            f"{first_failure.error or first_failure.reason or first_failure.status}"
+        )
 
 
 def append_jsonl(path: Path, record: dict[str, object]) -> None:
@@ -628,23 +834,12 @@ def save_jax_checkpoint(
     completed_episodes: int,
 ) -> Path:
     """Persist the latest and update-numbered JAX checkpoint payloads."""
-
-    import pickle
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "update": update,
-        "params": jax.device_get(train_state.params),
-        "opt_state": jax.device_get(train_state.opt_state),
-        "rng_key": jax.device_get(key),
-        "config": cfg,
-        "feature_metadata": feature_metadata(cfg.env),
-        "total_env_steps": total_env_steps,
-        "completed_episodes": completed_episodes,
-    }
-    with (run_dir / "jax_ckpt_last.pkl").open("wb") as file:
-        pickle.dump(payload, file)
-    update_path = run_dir / f"jax_ckpt_{update:06d}.pkl"
-    with update_path.open("wb") as file:
-        pickle.dump(payload, file)
-    return update_path
+    payload = _checkpoint_payload_builder(
+        train_state,
+        cfg,
+        key=key,
+        update=update,
+        total_env_steps=total_env_steps,
+        completed_episodes=completed_episodes,
+    )()
+    return commit_checkpoint_payload(run_dir, update, payload)

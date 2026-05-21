@@ -49,6 +49,21 @@ ppo:
   update_chunk_rows_max: null
   rollout_microbatch_envs: null
   enable_gradient_checkpointing: true
+artifact_pipeline:
+  enabled: true
+  checkpoint_queue_size: 1
+  checkpoint_timeout_seconds: 300.0
+  final_flush_timeout_seconds: 900.0
+  interrupt_flush_timeout_seconds: 60.0
+  exception_flush_timeout_seconds: 60.0
+  latest_lag_warning_updates: 1
+  coalesce_intermediate_checkpoints: true
+  replay_async: true
+  docker_validation_async: false
+  ledger_enabled: true
+  queue_dir: artifact_jobs
+  fail_training_on_checkpoint_error: true
+  fail_training_on_optional_job_error: false
 reseed_every_updates: 0
 reseed_on_plateau: false
 plateau_metric: episode_reward_mean

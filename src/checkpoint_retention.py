@@ -62,6 +62,7 @@ def prune_checkpoints(
     best_metric_mode: MetricMode,
     min_update_for_pruning: int,
     dry_run_pruning: bool,
+    protected_paths: set[Path] | None = None,
 ) -> RetentionDecision:
     """Prune unprotected checkpoints within ``run_dir`` based on retention policy."""
 
@@ -70,7 +71,10 @@ def prune_checkpoints(
         key=lambda p: _parse_update(p) or -1,
     )
     updates = {p: _parse_update(p) for p in files}
-    protected: set[Path] = set()
+    protected: set[Path] = {p.resolve() for p in (protected_paths or set())}
+    latest_path = run_dir / "jax_ckpt_last.pkl"
+    if latest_path.exists():
+        protected.add(latest_path.resolve())
 
     sorted_updates = sorted([u for u in updates.values() if u is not None])
     if keep_last_n > 0:
@@ -101,11 +105,11 @@ def prune_checkpoints(
 
     for path in files:
         update = updates[path]
-        if update is None or update < min_update_for_pruning or path in protected:
+        resolved = path.resolve()
+        if update is None or update < min_update_for_pruning or resolved in protected:
             kept.append(path)
             continue
 
-        resolved = path.resolve()
         try:
             resolved.relative_to(run_dir_resolved)
         except ValueError:

@@ -72,7 +72,18 @@ uv run python -m src.train \
 
 - Training uses the JAX environment, JAX policy, and JAX PPO implementation.
 - Checkpoints are `jax_ckpt_*.pkl` / `jax_ckpt_last.pkl`.
+- Checkpoint serialization runs through the async artifact pipeline by default; final and latest checkpoints are flushed before a successful training exit.
 - Keep architecture- and shape-compatible presets when resuming checkpoints.
+
+## Async artifact jobs
+
+Training writes replay and optional Docker validation jobs under each run's `artifact_jobs/` directory instead of rendering them inline. Process queued jobs with:
+
+```bash
+uv run python scripts/run_artifact_worker.py artifacts/<run>/artifact_jobs --once
+```
+
+Set `artifact_pipeline.replay_async=false` to restore inline replay generation, or `artifact_pipeline.enabled=false` to use synchronous checkpoint writes. Docker validation jobs are off by default; enable them with `artifact_pipeline.docker_validation_async=true`.
 
 ## Kaggle submission validation
 

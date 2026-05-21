@@ -116,6 +116,24 @@ class CheckpointRetentionConfig:
 
 
 @dataclass(slots=True)
+class ArtifactPipelineConfig:
+    enabled: bool = True
+    checkpoint_queue_size: int = 1
+    checkpoint_timeout_seconds: float = 300.0
+    final_flush_timeout_seconds: float = 900.0
+    interrupt_flush_timeout_seconds: float = 60.0
+    exception_flush_timeout_seconds: float = 60.0
+    latest_lag_warning_updates: int = 1
+    coalesce_intermediate_checkpoints: bool = True
+    replay_async: bool = True
+    docker_validation_async: bool = False
+    ledger_enabled: bool = True
+    queue_dir: str = "artifact_jobs"
+    fail_training_on_checkpoint_error: bool = True
+    fail_training_on_optional_job_error: bool = False
+
+
+@dataclass(slots=True)
 class TrainConfig:
     seed: int = 42
     run_name: str = "orbit_wars_template_ppo"
@@ -141,6 +159,9 @@ class TrainConfig:
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     checkpoint_retention: CheckpointRetentionConfig = field(
         default_factory=CheckpointRetentionConfig
+    )
+    artifact_pipeline: ArtifactPipelineConfig = field(
+        default_factory=ArtifactPipelineConfig
     )
     reseed_every_updates: int = 0
     reseed_on_plateau: bool = False
