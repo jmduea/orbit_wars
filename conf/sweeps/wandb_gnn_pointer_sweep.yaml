@@ -17,20 +17,6 @@ parameters:
     value: enabled
   opponent_mix:
     value: self_play_curriculum
-  env.candidate_count:
-    values: [4, 8, 12]
-  env.ship_bucket_count:
-    values: [4, 6, 8, 10]
-  env.max_fleets:
-    values: [256, 512, 1024]
-  env.reward_capture_planet:
-    value: 0
-  env.reward_ship_delta:
-    value: 0
-  env.reward_production_delta:
-    value: 0
-  env.early_terminal_reward_shaping_enabled:
-    value: true
   env.feature_history_steps:
     values: [1, 5, 10]
   ppo.total_updates:
@@ -54,9 +40,9 @@ parameters:
   model.hidden_size:
     values: [128, 192, 224, 256]
   model.max_moves_k:
-    values: [5, 10, 20]
+    values: [2, 5, 10, 20]
   model.gnn_k_neighbors:
-    values: [8, 12, 24]
+    values: [4, 8, 12, 24]
   model.gnn_message_passing_layers:
     values: [1, 2, 3, 4]
   model.normalize_observations:

@@ -9,9 +9,9 @@ defaults:
   - _self_
 
 seed: 42
-run_name: orbit_wars_template_ppo
+run_name: orbit_wars_ppo
 device: auto
-save_dir: artifacts/rl_template
+save_dir: artifacts/
 checkpoint_every: 100
 log_every: 5
 opponent: self
@@ -25,14 +25,14 @@ env:
   max_fleets: 256
   player_count: 2
   max_ships: 400.0
-  reward_capture_planet: 0.1
+  reward_capture_planet: 0.0
   reward_ship_delta: 0.0
-  reward_production_delta: 0.01
+  reward_production_delta: 0.00
   reward_terminal_scale: 1.0
-  early_terminal_reward_shaping_enabled: true
+  early_terminal_reward_shaping_enabled: false
   early_terminal_reward_shaping_horizon: 500
   terminal_reward_mode: binary_win
-  feature_history_steps: 30
+  feature_history_steps: 10
 ppo:
   rollout_steps: 250
   num_envs: 16
