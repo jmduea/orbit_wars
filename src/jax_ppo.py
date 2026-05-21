@@ -30,7 +30,7 @@ from .jax_env import (
     fleet_speed,
 )
 from .jax_features import JaxTurnBatch, encode_turn
-from .jax_policy import action_log_prob_and_entropy, sample_actions
+from .jax_policy import action_log_prob_and_entropy
 from .opponent_pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
@@ -39,6 +39,13 @@ from .opponent_pool import (
     OpponentRegistry,
     OpponentRegistryConfig,
     sample_opponent_type_ids_jax,
+)
+from .trajectory_shield import (
+    apply_trajectory_shield_to_turn_batch,
+    conservative_decision_mask,
+    default_ship_bucket_mask,
+    mask_policy_output_for_shield,
+    sample_shielded_policy_actions,
 )
 
 
@@ -109,6 +116,7 @@ class JaxTransitionBatch(NamedTuple):
     candidate_features: jax.Array
     global_features: jax.Array
     candidate_mask: jax.Array
+    ship_bucket_mask: jax.Array
     decision_mask: jax.Array
     target_index: jax.Array
     ship_bucket: jax.Array
@@ -251,6 +259,7 @@ def build_random_action_from_batch(
     key: jax.Array,
     batch: JaxTurnBatch,
     cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
 ) -> JaxAction:
     """Sample a JAX-native random opponent action for each environment."""
 
@@ -258,7 +267,17 @@ def build_random_action_from_batch(
     planet_count = batch.self_features.shape[1]
     key_target, key_bucket = jax.random.split(key)
     flat_mask = batch.candidate_mask.reshape(-1, cfg.env.candidate_count)
-    real_candidate = flat_mask & (
+    flat_bucket_mask = (
+        default_ship_bucket_mask(flat_mask, cfg.env.ship_bucket_count)
+        if ship_bucket_mask is None
+        else ship_bucket_mask.reshape(
+            -1, cfg.env.candidate_count, cfg.env.ship_bucket_count
+        )
+    )
+    real_bucket_mask = flat_bucket_mask & (
+        jnp.arange(cfg.env.ship_bucket_count, dtype=jnp.int32)[None, None, :] > 0
+    )
+    real_candidate = flat_mask & real_bucket_mask.any(axis=-1) & (
         jnp.arange(cfg.env.candidate_count, dtype=jnp.int32)[None, :] > 0
     )
     has_target = real_candidate.any(axis=-1)
@@ -268,27 +287,43 @@ def build_random_action_from_batch(
         jax.random.categorical(key_target, target_logits, axis=-1),
         jnp.zeros((env_count * planet_count,), dtype=jnp.int32),
     )
-    bucket = jax.random.randint(
-        key_bucket,
-        (env_count * planet_count,),
-        minval=1,
-        maxval=max(cfg.env.ship_bucket_count, 2),
-        dtype=jnp.int32,
-    )
+    selected_bucket_mask = jnp.take_along_axis(
+        flat_bucket_mask,
+        target[:, None, None].repeat(cfg.env.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_logits = jnp.where(selected_bucket_mask, 0.0, jnp.finfo(jnp.float32).min)
+    bucket = jax.random.categorical(key_bucket, bucket_logits, axis=-1)
     bucket = jnp.where(has_target, bucket, jnp.zeros_like(bucket))
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
-def build_sniper_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> JaxAction:
+def build_sniper_action_from_batch(
+    batch: JaxTurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
     """JAX-compatible scripted sniper: use nearest candidate slot aggressively."""
 
-    real_candidate_mask = batch.candidate_mask & (
+    bucket_mask = (
+        default_ship_bucket_mask(batch.candidate_mask, cfg.env.ship_bucket_count)
+        if ship_bucket_mask is None
+        else ship_bucket_mask
+    )
+    nonzero_bucket_mask = bucket_mask[..., 1:].any(axis=-1)
+    real_candidate_mask = batch.candidate_mask & nonzero_bucket_mask & (
         jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :] > 0
     )
     nearest_slot = jnp.argmax(real_candidate_mask.astype(jnp.int32), axis=-1)
     has_target = real_candidate_mask.any(axis=-1)
     target = jnp.where(has_target, nearest_slot, 0).reshape(-1)
-    bucket = jnp.full_like(target, max(cfg.env.ship_bucket_count - 1, 1))
+    selected_bucket_mask = jnp.take_along_axis(
+        bucket_mask.reshape(-1, cfg.env.candidate_count, cfg.env.ship_bucket_count),
+        target[:, None, None].repeat(cfg.env.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_ids = jnp.arange(cfg.env.ship_bucket_count, dtype=jnp.int32)
+    bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
     bucket = jnp.where(has_target.reshape(-1), bucket, 0)
     return build_action_from_batch(batch, target, bucket, cfg)
 
@@ -310,6 +345,7 @@ def _sample_policy_action_with_params(
     cfg: TrainConfig,
     *,
     deterministic: bool,
+    ship_bucket_mask: jax.Array | None = None,
 ) -> JaxAction:
     """Sample a fixed-size action buffer from a JAX policy parameter set."""
 
@@ -325,9 +361,12 @@ def _sample_policy_action_with_params(
         rng=key,
         deterministic=deterministic,
     )
-    target, bucket, _log_prob, _entropy = sample_actions(
-        key, output, deterministic=deterministic
+    output = mask_policy_output_for_shield(
+        output, flat_mask, cfg.env.ship_bucket_count, ship_bucket_mask
     )
+    sample = sample_shielded_policy_actions(key, output, deterministic=deterministic)
+    target = sample.target_index
+    bucket = sample.ship_bucket
     return build_action_from_batch(batch, target, bucket, cfg)
 
 
@@ -339,6 +378,7 @@ def _sample_policy_action(
     cfg: TrainConfig,
     *,
     deterministic: bool,
+    ship_bucket_mask: jax.Array | None = None,
 ) -> JaxAction:
     """Sample a fixed-size action buffer from the trainable JAX policy."""
 
@@ -349,6 +389,7 @@ def _sample_policy_action(
         policy,
         cfg,
         deterministic=deterministic,
+        ship_bucket_mask=ship_bucket_mask,
     )
 
 
@@ -401,6 +442,10 @@ def collect_rollout_jax(
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache = carry
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
+        shielded = jax.vmap(
+            lambda game, turn: apply_trajectory_shield_to_turn_batch(game, turn, cfg.env)
+        )(state.game, batch)
+        batch = shielded.batch
         flat_self, flat_candidate, flat_global, flat_mask, flat_decision = (
             flatten_batch(batch)
         )
@@ -413,13 +458,28 @@ def collect_rollout_jax(
             rng=learner_key,
             deterministic=False,
         )
-        target, bucket, log_prob, _entropy = sample_actions(
-            learner_key, output, deterministic=False
+        output = mask_policy_output_for_shield(
+            output,
+            flat_mask,
+            cfg.env.ship_bucket_count,
+            shielded.ship_bucket_mask,
         )
+        sample = sample_shielded_policy_actions(learner_key, output, deterministic=False)
+        target = sample.target_index
+        bucket = sample.ship_bucket
+        log_prob = sample.log_prob
         learner_action = build_action_from_batch(batch, target, bucket, cfg)
 
         if cfg.env.player_count == 2:
-            opp_batch = opp_batch_cache
+            opp_game = state.game._replace(
+                player=(1 - state.learner_player).astype(jnp.int32)
+            )
+            opp_shielded = jax.vmap(
+                lambda game, turn: apply_trajectory_shield_to_turn_batch(
+                    game, turn, cfg.env
+                )
+            )(opp_game, opp_batch_cache)
+            opp_batch = opp_shielded.batch
             if cfg.opponent == "self":
                 opponent_action = _sample_policy_action(
                     opp_key,
@@ -428,10 +488,11 @@ def collect_rollout_jax(
                     policy,
                     cfg,
                     deterministic=cfg.self_play_deterministic,
+                    ship_bucket_mask=opp_shielded.ship_bucket_mask,
                 )
             elif cfg.opponent == "random":
                 opponent_action = build_random_action_from_batch(
-                    opp_key, opp_batch, cfg
+                    opp_key, opp_batch, cfg, opp_shielded.ship_bucket_mask
                 )
             else:
                 raise ValueError(
@@ -479,6 +540,13 @@ def collect_rollout_jax(
             )
             for player_id in range(cfg.env.player_count):
                 player_batch = jax.tree.map(lambda x: x[player_id], player_batches)
+                player_game = jax.tree.map(lambda x: x[player_id], player_games)
+                player_shielded = jax.vmap(
+                    lambda game, turn: apply_trajectory_shield_to_turn_batch(
+                        game, turn, cfg.env
+                    )
+                )(player_game, player_batch)
+                player_batch = player_shielded.batch
                 player_key = jax.random.fold_in(opp_key, player_id)
                 slot_type = opponent_type_ids[:, player_id]
                 if cfg.opponent == "self":
@@ -494,14 +562,18 @@ def collect_rollout_jax(
                         policy,
                         cfg,
                         deterministic=cfg.self_play_deterministic,
+                        ship_bucket_mask=player_shielded.ship_bucket_mask,
                     )
                     historical_action = current_action
                     random_action = build_random_action_from_batch(
                         jax.random.fold_in(player_key, cfg.env.player_count),
                         player_batch,
                         cfg,
+                        player_shielded.ship_bucket_mask,
                     )
-                    scripted_action = build_sniper_action_from_batch(player_batch, cfg)
+                    scripted_action = build_sniper_action_from_batch(
+                        player_batch, cfg, player_shielded.ship_bucket_mask
+                    )
                     noop_action = build_noop_action_from_batch(player_batch, cfg)
                     use_latest = slot_type == OPPONENT_LATEST
                     use_historical = slot_type == OPPONENT_HISTORICAL
@@ -519,7 +591,7 @@ def collect_rollout_jax(
                     opponent_action = _select_env_action(use_noop, noop_action, action)
                 elif cfg.opponent == "random":
                     opponent_action = build_random_action_from_batch(
-                        player_key, player_batch, cfg
+                        player_key, player_batch, cfg, player_shielded.ship_bucket_mask
                     )
                 else:
                     raise ValueError(
@@ -583,9 +655,9 @@ def collect_rollout_jax(
             "candidate_features": batch.candidate_features,
             "global_features": batch.global_features,
             "candidate_mask": batch.candidate_mask,
-            "decision_mask": jnp.broadcast_to(
-                flat_decision.reshape(batch.decision_mask.shape)[..., None],
-                batch.decision_mask.shape + (target.shape[-1],),
+            "ship_bucket_mask": shielded.ship_bucket_mask,
+            "decision_mask": conservative_decision_mask(
+                flat_decision.reshape(batch.decision_mask.shape), target.shape[-1]
             ),
             "target_index": target.reshape(
                 batch.decision_mask.shape + (target.shape[-1],)
@@ -603,6 +675,15 @@ def collect_rollout_jax(
             "terminal_placement": result.terminal_placement,
             "terminal_score_share": result.terminal_score_share,
             "terminal_survival_time": result.terminal_survival_time,
+            "trajectory_shield_blocked_count": shielded.diagnostics.blocked_count,
+            "trajectory_shield_blocked_sun_count": shielded.diagnostics.blocked_sun_count,
+            "trajectory_shield_blocked_bounds_count": shielded.diagnostics.blocked_bounds_count,
+            "trajectory_shield_blocked_unintended_hit_count": shielded.diagnostics.blocked_unintended_hit_count,
+            "trajectory_shield_blocked_horizon_count": shielded.diagnostics.blocked_horizon_count,
+            "trajectory_shield_fallback_noop_count": shielded.diagnostics.fallback_noop_count,
+            "trajectory_shield_legal_non_noop_count": shielded.diagnostics.legal_non_noop_count,
+            "trajectory_shield_original_non_noop_count": shielded.diagnostics.original_non_noop_count,
+            "trajectory_shield_legal_non_noop_rate": shielded.diagnostics.legal_non_noop_rate,
         }
         return (key, next_state, next_batch, next_opp_batch_cache), transition
 
@@ -632,6 +713,7 @@ def collect_rollout_jax(
         candidate_features=data["candidate_features"],
         global_features=data["global_features"],
         candidate_mask=data["candidate_mask"],
+        ship_bucket_mask=data["ship_bucket_mask"],
         decision_mask=data["decision_mask"],
         target_index=data["target_index"],
         ship_bucket=data["ship_bucket"],
@@ -806,6 +888,30 @@ def _rollout_diagnostics(
             0.0,
         ),
         "only_noop_fraction": only_noop_fraction,
+        "trajectory_shield_blocked_count": data["trajectory_shield_blocked_count"].sum(),
+        "trajectory_shield_blocked_sun_count": data["trajectory_shield_blocked_sun_count"].sum(),
+        "trajectory_shield_blocked_bounds_count": data["trajectory_shield_blocked_bounds_count"].sum(),
+        "trajectory_shield_blocked_unintended_hit_count": data[
+            "trajectory_shield_blocked_unintended_hit_count"
+        ].sum(),
+        "trajectory_shield_blocked_horizon_count": data[
+            "trajectory_shield_blocked_horizon_count"
+        ].sum(),
+        "trajectory_shield_fallback_noop_count": data[
+            "trajectory_shield_fallback_noop_count"
+        ].sum(),
+        "trajectory_shield_legal_non_noop_count": data[
+            "trajectory_shield_legal_non_noop_count"
+        ].sum(),
+        "trajectory_shield_original_non_noop_count": data[
+            "trajectory_shield_original_non_noop_count"
+        ].sum(),
+        "trajectory_shield_legal_non_noop_rate": jnp.where(
+            data["trajectory_shield_original_non_noop_count"].sum() > 0.0,
+            data["trajectory_shield_legal_non_noop_count"].sum()
+            / data["trajectory_shield_original_non_noop_count"].sum(),
+            0.0,
+        ),
         "episode_done": episode_done,
         "avg_reward": reward_mean,
         "episode_reward_sum": episode_reward_sum,
@@ -1025,6 +1131,9 @@ def ppo_update_jax(
     )
     global_features = batch.global_features.reshape(-1, global_feature_dim(cfg.env))
     candidate_mask = batch.candidate_mask.reshape(-1, cfg.env.candidate_count)
+    ship_bucket_mask = batch.ship_bucket_mask.reshape(
+        -1, cfg.env.candidate_count, cfg.env.ship_bucket_count
+    )
     target = batch.target_index.reshape(-1, sequence_k)
     bucket = batch.ship_bucket.reshape(-1, sequence_k)
     old_log_prob = batch.log_prob.reshape(-1, sequence_k)
@@ -1059,6 +1168,9 @@ def ppo_update_jax(
         "candidate_mask": _reshape_minibatches(
             candidate_mask, minibatch_count, minibatch_size, False
         ),
+        "ship_bucket_mask": _reshape_minibatches(
+            ship_bucket_mask, minibatch_count, minibatch_size, False
+        ),
         "target": _reshape_minibatches(target, minibatch_count, minibatch_size, 0),
         "bucket": _reshape_minibatches(bucket, minibatch_count, minibatch_size, 0),
         "old_log_prob": _reshape_minibatches(
@@ -1081,6 +1193,12 @@ def ppo_update_jax(
                 minibatch["global_features"],
                 minibatch["candidate_mask"],
                 target_sequence=minibatch["target"],
+            )
+            output = mask_policy_output_for_shield(
+                output,
+                minibatch["candidate_mask"],
+                cfg.env.ship_bucket_count,
+                minibatch["ship_bucket_mask"],
             )
             new_log_prob, entropy = action_log_prob_and_entropy(
                 output, minibatch["target"], minibatch["bucket"]

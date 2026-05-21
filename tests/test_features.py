@@ -12,7 +12,7 @@ from src.features import (
     real_candidate_slots,
     self_feature_dim,
 )
-from src.game_types import GameState, PlanetState
+from src.game_types import GameState, PlanetState, parse_observation
 
 
 def planet(pid: int, owner: int, x: float, y: float) -> PlanetState:
@@ -94,3 +94,25 @@ def test_owner_relative_features_are_fixed_size_and_player_relative() -> None:
     )
     np.testing.assert_allclose(global_features[20:24], np.ones(4))
     np.testing.assert_allclose(global_features[24], 1.0)
+
+
+def test_parse_observation_preserves_rotation_fields_with_backward_compatible_defaults() -> None:
+    parsed = parse_observation(
+        {
+            "step": 7,
+            "player": 1,
+            "angular_velocity": 0.125,
+            "planets": [[0, 1, 12.0, 13.0, 2.5, 20, 3]],
+            "initial_planets": [[0, -1, 10.0, 11.0, 2.5, 18, 3]],
+            "fleets": [],
+        }
+    )
+
+    assert parsed.angular_velocity == 0.125
+    assert parsed.initial_planets[0].x == 10.0
+    assert parsed.initial_planets[0].owner == -1
+
+    legacy = parse_observation({"step": 3, "player": 0, "planets": [], "fleets": []})
+
+    assert legacy.angular_velocity == 0.0
+    assert legacy.initial_planets == []

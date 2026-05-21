@@ -39,6 +39,7 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
     )
     assert "total_loss" in metrics
+    assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
     assert next_train_state.params is not train_state.params
 
 
@@ -245,6 +246,37 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     assert float(rollout_metrics["episode_done"]) == cfg.ppo.num_envs
     assert jax.numpy.array_equal(env_state.episode_count, expected_episode_counts)
     assert jax.numpy.array_equal(env_state.learner_player, expected_players)
+
+
+def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_masks_followup_steps():
+    cfg = TrainConfig()
+    cfg.model.architecture = "gnn_pointer"
+    cfg.model.max_moves_k = 3
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.env.candidate_count = 4
+    cfg.env.max_fleets = 16
+    cfg.ppo.num_envs = 2
+    cfg.ppo.rollout_steps = 1
+    cfg.opponent = "random"
+
+    reset_keys = jax.random.split(jax.random.PRNGKey(90), cfg.ppo.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.env)
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(91), policy, cfg)
+
+    _key, _env_state, _turn_batch, transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(92), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    assert transitions.decision_mask.shape[-1] == cfg.model.max_moves_k
+    assert not bool(jax.numpy.any(transitions.decision_mask[..., 1:]))
+    assert "trajectory_shield_blocked_count" in rollout_metrics
+    assert "trajectory_shield_fallback_noop_count" in rollout_metrics
+    assert "trajectory_shield_legal_non_noop_count" in rollout_metrics
+    assert "trajectory_shield_original_non_noop_count" in rollout_metrics
+    assert "trajectory_shield_legal_non_noop_rate" in rollout_metrics
+    assert 0.0 <= float(rollout_metrics["trajectory_shield_legal_non_noop_rate"]) <= 1.0
 
 
 def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():

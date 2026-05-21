@@ -13,6 +13,7 @@ from .features import (
 )
 from .game_types import GameState, PlanetState, parse_observation
 from .opponents import OpponentPolicy
+from .trajectory_shield import filter_moves_with_trajectory_shield
 
 
 @dataclass(slots=True)
@@ -122,9 +123,21 @@ class OrbitWarsEnv:
             raise RuntimeError("Call reset() before step().")
         player_count = self.cfg.env.player_count
         joint_action: list[list[list[float | int]]] = [[] for _ in range(player_count)]
-        joint_action[self.learner_player] = player_action
+        learner_state = self.previous_player_state or parse_observation(self.last_obs)
+        joint_action[self.learner_player] = filter_moves_with_trajectory_shield(
+            player_action,
+            learner_state,
+            self.cfg.env,
+        )
         for player, opponent in self.active_opponents.items():
-            joint_action[player] = opponent.act(self.last_opponent_obs[player])
+            opponent_state = self.previous_opponent_states.get(player) or parse_observation(
+                self.last_opponent_obs[player]
+            )
+            joint_action[player] = filter_moves_with_trajectory_shield(
+                opponent.act(self.last_opponent_obs[player]),
+                opponent_state,
+                self.cfg.env,
+            )
 
         states = self.env.step(joint_action)
         player_state = states[self.learner_player]

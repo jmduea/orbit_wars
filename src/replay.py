@@ -12,6 +12,10 @@ from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
 from .jax_policy import build_jax_policy
 from .opponents import build_opponent
+from .trajectory_shield import (
+    is_trajectory_safe_for_launch,
+    mask_policy_output_for_shield,
+)
 
 
 def _ensure_target_sequence(values: jax.Array) -> jax.Array:
@@ -69,6 +73,11 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
             jnp.asarray(batch.global_features),
             jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
         )
+        outputs = mask_policy_output_for_shield(
+            outputs,
+            jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
+            cfg.env.ship_bucket_count,
+        )
         target_logits = _ensure_target_sequence(outputs.target_logits)
         ship_logits = _ensure_ship_sequence(outputs.ship_logits)
         target_indices = jax.device_get(jnp.argmax(target_logits, axis=-1))
@@ -100,10 +109,19 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
                 )
                 if ships <= 0:
                     continue
+                target_id = int(context.candidate_ids[target_idx])
+                angle = float(context.target_angles[target_idx])
+                if not is_trajectory_safe_for_launch(
+                    batch.state,
+                    int(context.source_id),
+                    target_id,
+                    angle,
+                    ships,
+                    cfg.env,
+                ):
+                    continue
                 remaining_ships = max(0, remaining_ships - ships)
-                moves.append(
-                    [context.source_id, float(context.target_angles[target_idx]), ships]
-                )
+                moves.append([context.source_id, angle, ships])
         return moves
 
     return act

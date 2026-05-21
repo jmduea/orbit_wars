@@ -67,6 +67,18 @@ def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:
+    env = cfg.env
+    if int(env.feature_history_steps) <= 0:
+        raise ValueError("env.feature_history_steps must be a positive integer.")
+    if env.trajectory_shield_hit_mode not in {"selected_target", "non_friendly"}:
+        raise ValueError(
+            "env.trajectory_shield_hit_mode must be 'selected_target' or 'non_friendly'."
+        )
+    if int(env.trajectory_shield_horizon) <= 0:
+        raise ValueError("env.trajectory_shield_horizon must be a positive integer.")
+    if float(env.trajectory_shield_epsilon) < 0.0:
+        raise ValueError("env.trajectory_shield_epsilon must be non-negative.")
+
     ppo = cfg.ppo
     if int(ppo.update_chunk_rows_min) <= 0:
         raise ValueError("ppo.update_chunk_rows_min must be a positive integer.")

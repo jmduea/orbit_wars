@@ -28,6 +28,7 @@ RUNTIME_FILES = (
     "features.py",
     "game_types.py",
     "jax_policy.py",
+    "trajectory_shield.py",
 )
 TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax_train")
 
@@ -360,6 +361,10 @@ class EnvConfig:
     early_terminal_reward_shaping_horizon: int = 500
     terminal_reward_mode: str = "binary_win"
     feature_history_steps: int = 1
+    trajectory_shield_enabled: bool = True
+    trajectory_shield_hit_mode: str = "selected_target"
+    trajectory_shield_horizon: int = 500
+    trajectory_shield_epsilon: float = 1e-6
 
 
 @dataclass(slots=True)
@@ -412,6 +417,7 @@ from src.constants import MAX_PLANETS
 from src.features import FeatureHistoryBuffer, encode_turn
 from src.feature_registry import candidate_feature_dim, global_feature_dim, self_feature_dim
 from src.jax_policy import build_jax_policy
+from src.trajectory_shield import is_trajectory_safe_for_launch, mask_policy_output_for_shield
 
 
 _ROOT = Path(__file__).resolve().parent
@@ -476,6 +482,7 @@ def agent(obs: Any) -> list[list[float | int]]:
         global_features,
         candidate_mask,
     )
+    outputs = mask_policy_output_for_shield(outputs, candidate_mask, int(cfg.env.ship_bucket_count))
     target_logits = _ensure_sequence(outputs.target_logits)
     ship_logits = _ensure_ship_sequence(outputs.ship_logits)
     target_indices = jax.device_get(jnp.argmax(target_logits, axis=-1))
@@ -503,8 +510,19 @@ def agent(obs: Any) -> list[list[float | int]]:
             ships = _ship_count_for_bucket(remaining_ships, bucket_idx, int(cfg.env.ship_bucket_count))
             if ships <= 0:
                 continue
+            target_id = int(context.candidate_ids[target_idx])
+            angle = float(context.target_angles[target_idx])
+            if not is_trajectory_safe_for_launch(
+                batch.state,
+                int(context.source_id),
+                target_id,
+                angle,
+                int(ships),
+                cfg.env,
+            ):
+                continue
             remaining_ships = max(0, remaining_ships - ships)
-            moves.append([int(context.source_id), float(context.target_angles[target_idx]), int(ships)])
+            moves.append([int(context.source_id), angle, int(ships)])
     state["history"].append(batch.state_snapshot if hasattr(batch, "state_snapshot") else _snapshot_from_batch(batch))
     return moves
 

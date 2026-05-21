@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -33,6 +33,8 @@ class GameState:
     player: int
     planets: list[PlanetState]
     fleets: list[FleetState]
+    angular_velocity: float = 0.0
+    initial_planets: list[PlanetState] = field(default_factory=list)
 
 
 def parse_observation(observation: Any) -> GameState:
@@ -41,18 +43,22 @@ def parse_observation(observation: Any) -> GameState:
             return observation.get(key, default)
         return getattr(observation, key, default)
 
-    planets = [
-        PlanetState(
-            id=int(row[0]),
-            owner=int(row[1]),
-            x=float(row[2]),
-            y=float(row[3]),
-            radius=float(row[4]),
-            ships=int(row[5]),
-            production=int(row[6]),
-        )
-        for row in obs_get("planets", [])
-    ]
+    def parse_planets(rows: Any) -> list[PlanetState]:
+        return [
+            PlanetState(
+                id=int(row[0]),
+                owner=int(row[1]),
+                x=float(row[2]),
+                y=float(row[3]),
+                radius=float(row[4]),
+                ships=int(row[5]),
+                production=int(row[6]),
+            )
+            for row in rows
+        ]
+
+    planets = parse_planets(obs_get("planets", []))
+    initial_planets = parse_planets(obs_get("initial_planets", obs_get("planets", [])))
     fleets = [
         FleetState(
             id=int(row[0]),
@@ -70,4 +76,6 @@ def parse_observation(observation: Any) -> GameState:
         player=int(obs_get("player", 0)),
         planets=planets,
         fleets=fleets,
+        angular_velocity=float(obs_get("angular_velocity", 0.0)),
+        initial_planets=initial_planets,
     )

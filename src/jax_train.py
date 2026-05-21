@@ -536,6 +536,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             rollout_groups = merged_groups
             transitions = concatenate_transition_batches(transitions_by_group)
             rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
+            rollout_metrics = dict(rollout_metrics)
+            shield_original_count = rollout_metrics.get(
+                "trajectory_shield_original_non_noop_count", 0.0
+            )
+            shield_legal_count = rollout_metrics.get(
+                "trajectory_shield_legal_non_noop_count", 0.0
+            )
+            rollout_metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
+                shield_original_count > 0.0,
+                shield_legal_count / shield_original_count,
+                0.0,
+            )
             rollout_scalar_keys = (
                 "samples",
                 "env_steps",
@@ -554,6 +566,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "friendly_target_count",
                 "enemy_target_count",
                 "neutral_target_count",
+                "trajectory_shield_blocked_count",
+                "trajectory_shield_blocked_sun_count",
+                "trajectory_shield_blocked_bounds_count",
+                "trajectory_shield_blocked_unintended_hit_count",
+                "trajectory_shield_blocked_horizon_count",
+                "trajectory_shield_fallback_noop_count",
+                "trajectory_shield_legal_non_noop_count",
+                "trajectory_shield_original_non_noop_count",
+                "trajectory_shield_legal_non_noop_rate",
                 "overall_win_rate",
                 "noop_percent",
                 "friendly_target_percent",
@@ -695,6 +716,27 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "friendly_target_percent": friendly_target_percent,
                 "enemy_target_percent": enemy_target_percent,
                 "neutral_target_percent": neutral_target_percent,
+                "trajectory_shield_blocked_count": float(
+                    rollout_scalars["trajectory_shield_blocked_count"]
+                ),
+                "trajectory_shield_blocked_sun_count": float(
+                    rollout_scalars["trajectory_shield_blocked_sun_count"]
+                ),
+                "trajectory_shield_blocked_bounds_count": float(
+                    rollout_scalars["trajectory_shield_blocked_bounds_count"]
+                ),
+                "trajectory_shield_blocked_unintended_hit_count": float(
+                    rollout_scalars["trajectory_shield_blocked_unintended_hit_count"]
+                ),
+                "trajectory_shield_blocked_horizon_count": float(
+                    rollout_scalars["trajectory_shield_blocked_horizon_count"]
+                ),
+                "trajectory_shield_fallback_noop_count": float(
+                    rollout_scalars["trajectory_shield_fallback_noop_count"]
+                ),
+                "trajectory_shield_legal_non_noop_rate": float(
+                    rollout_scalars["trajectory_shield_legal_non_noop_rate"]
+                ),
                 "survival_time": survival_time,
                 "score_share": score_share,
                 "update_seconds": update_seconds,

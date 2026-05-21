@@ -37,6 +37,10 @@ def _fake_config() -> SimpleNamespace:
             early_terminal_reward_shaping_horizon=500,
             terminal_reward_mode="binary_win",
             feature_history_steps=1,
+            trajectory_shield_enabled=True,
+            trajectory_shield_hit_mode="selected_target",
+            trajectory_shield_horizon=500,
+            trajectory_shield_epsilon=1e-6,
         ),
         model=SimpleNamespace(
             architecture="gnn_pointer",
@@ -122,6 +126,7 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
     assert "manifest.json" in names
     assert "src/__init__.py" in names
     assert "src/jax_policy.py" in names
+    assert "src/trajectory_shield.py" in names
     assert str(checkpoint.parent) not in manifest_text
     assert "source_checkpoint_sha256" in manifest_text
 

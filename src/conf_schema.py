@@ -22,6 +22,10 @@ class EnvConfig:
     early_terminal_reward_shaping_horizon: int = 500
     terminal_reward_mode: str = "binary_win"
     feature_history_steps: int = 1
+    trajectory_shield_enabled: bool = True
+    trajectory_shield_hit_mode: str = "selected_target"
+    trajectory_shield_horizon: int = 500
+    trajectory_shield_epsilon: float = 1e-6
 
 
 @dataclass(slots=True)

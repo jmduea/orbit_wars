@@ -32,6 +32,7 @@ from .constants import (
     SUN_RADIUS,
 )
 from .game_types import GameState, PlanetState, parse_observation
+from .trajectory_shield import conservative_target_is_safe
 
 
 def real_candidate_slots(candidate_count: int) -> int:
@@ -286,23 +287,23 @@ def build_candidates(
     others = [planet for planet in state.planets if planet.id != src.id]
     ordered = sorted(others, key=lambda planet: (distance(src, planet), planet.id))
 
-    unblocked: list[PlanetState] = []
-    blocked: list[PlanetState] = []
+    safe_targets: list[PlanetState] = []
+    unsafe_targets: list[PlanetState] = []
     for tgt in ordered:
         angle = math.atan2(tgt.y - src.y, tgt.x - src.x)
-        if shot_crosses_sun(src, angle, tgt):
-            blocked.append(tgt)
+        if conservative_target_is_safe(
+            state, src.id, tgt.id, angle, int(src.ships), env_cfg
+        ):
+            safe_targets.append(tgt)
         else:
-            unblocked.append(tgt)
+            unsafe_targets.append(tgt)
 
-    selected = unblocked[:real_slots]
+    selected = safe_targets[:real_slots]
     if len(selected) < real_slots:
-        selected.extend(blocked[: real_slots - len(selected)])
+        selected.extend(unsafe_targets[: real_slots - len(selected)])
 
-    # Fallback pass: if every selected candidate is blocked but there exists any
-    # unblocked target globally, force one unblocked target into the candidate set.
-    if selected and unblocked and all(tgt in blocked for tgt in selected):
-        selected[-1] = unblocked[0]
+    if selected and safe_targets and all(tgt in unsafe_targets for tgt in selected):
+        selected[-1] = safe_targets[0]
 
     return selected
 
@@ -464,7 +465,9 @@ def build_candidate_features(
             dtype=np.float32,
         )
         ship_counts[idx] = max(0, int(src.ships))
-        candidate_mask[idx] = not crosses_sun
+        candidate_mask[idx] = conservative_target_is_safe(
+            state, src.id, tgt.id, angle, int(src.ships), env_cfg
+        )
         candidate_ids[idx] = tgt.id
         target_angles[idx] = angle
 

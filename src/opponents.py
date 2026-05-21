@@ -13,12 +13,18 @@ import jax.numpy as jnp
 from .config import TrainConfig
 from .features import encode_turn, ship_count_for_bucket
 from .jax_policy import build_jax_policy
-from .jax_policy import sample_actions as sample_jax_actions
 from .normalization import ObservationNormalizer
+from .trajectory_shield import (
+    filter_moves_with_trajectory_shield,
+    is_trajectory_safe_for_launch,
+    mask_policy_output_for_shield,
+    sample_shielded_policy_actions,
+)
 
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]
 )
+DEFAULT_RUNTIME_ENV = TrainConfig().env
 
 
 class OpponentPolicy(Protocol):
@@ -28,6 +34,7 @@ class OpponentPolicy(Protocol):
 class SniperOpponent:
     def act(self, observation: Any) -> list[list[float | int]]:
         moves: list[list[float | int]] = []
+        batch = encode_turn(observation, DEFAULT_RUNTIME_ENV, env_index=0)
         player = obs_get(observation, "player", 0)
         raw_planets = obs_get(observation, "planets", [])
         planets = [Planet(*planet) for planet in raw_planets]
@@ -44,6 +51,15 @@ class SniperOpponent:
             if source.ships < ships_needed:
                 continue
             angle = math.atan2(nearest.y - source.y, nearest.x - source.x)
+            if not is_trajectory_safe_for_launch(
+                batch.state,
+                int(source.id),
+                int(nearest.id),
+                angle,
+                ships_needed,
+                DEFAULT_RUNTIME_ENV,
+            ):
+                continue
             moves.append([source.id, angle, ships_needed])
         return moves
 
@@ -59,7 +75,10 @@ class KaggleRandomOpponent:
             "player": obs_get(observation, "player", 0),
             "planets": list(obs_get(observation, "planets", [])),
         }
-        return list(self._agent(payload))
+        state = encode_turn(observation, DEFAULT_RUNTIME_ENV, env_index=0).state
+        return filter_moves_with_trajectory_shield(
+            list(self._agent(payload)), state, DEFAULT_RUNTIME_ENV
+        )
 
 
 class SelfPlayOpponent:
@@ -101,30 +120,51 @@ class SelfPlayOpponent:
             jnp.asarray(policy_batch.global_features),
             jnp.asarray(policy_batch.candidate_mask).astype(bool),
         )
+        outputs = mask_policy_output_for_shield(
+            outputs,
+            jnp.asarray(policy_batch.candidate_mask).astype(bool),
+            self.cfg.env.ship_bucket_count,
+        )
         self.rng, step_key = jax.random.split(self.rng)
-        target_indices, ship_buckets, _logp, _entropy = sample_jax_actions(
+        sampled = sample_shielded_policy_actions(
             step_key, outputs, deterministic=self.deterministic
         )
+        target_indices = sampled.target_index
+        ship_buckets = sampled.ship_bucket
         target_indices = jax.device_get(target_indices)
         ship_buckets = jax.device_get(ship_buckets)
         moves: list[list[float | int]] = []
         for row_idx, context in enumerate(batch.contexts):
-            target_idx = int(target_indices[row_idx])
-            bucket_idx = int(ship_buckets[row_idx])
-            if target_idx == 0 or bucket_idx == 0:
-                continue
-            if target_idx >= len(context.candidate_ids):
-                continue
-            if not context.candidate_mask[target_idx]:
-                continue
-            ships = ship_count_for_bucket(
-                context.source_ships, bucket_idx, self.cfg.env.ship_bucket_count
-            )
-            if ships <= 0:
-                continue
-            moves.append(
-                [context.source_id, float(context.target_angles[target_idx]), ships]
-            )
+            remaining_ships = int(context.source_ships)
+            for step_idx in range(target_indices.shape[1]):
+                if len(moves) >= int(self.cfg.env.max_fleets):
+                    break
+                target_idx = int(target_indices[row_idx, step_idx])
+                bucket_idx = int(ship_buckets[row_idx, step_idx])
+                if target_idx == 0 or bucket_idx == 0:
+                    continue
+                if target_idx >= len(context.candidate_ids):
+                    continue
+                if not context.candidate_mask[target_idx]:
+                    continue
+                ships = ship_count_for_bucket(
+                    remaining_ships, bucket_idx, self.cfg.env.ship_bucket_count
+                )
+                if ships <= 0:
+                    continue
+                target_id = int(context.candidate_ids[target_idx])
+                angle = float(context.target_angles[target_idx])
+                if not is_trajectory_safe_for_launch(
+                    batch.state,
+                    int(context.source_id),
+                    target_id,
+                    angle,
+                    ships,
+                    self.cfg.env,
+                ):
+                    continue
+                remaining_ships = max(0, remaining_ships - ships)
+                moves.append([context.source_id, angle, ships])
         return moves
 
 

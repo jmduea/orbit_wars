@@ -27,6 +27,10 @@ env:
   early_terminal_reward_shaping_horizon: 500
   terminal_reward_mode: binary_win
   feature_history_steps: 1
+  trajectory_shield_enabled: true
+  trajectory_shield_hit_mode: selected_target
+  trajectory_shield_horizon: 500
+  trajectory_shield_epsilon: 1.0e-06
 model:
   architecture: gnn_pointer
   hidden_size: 128
