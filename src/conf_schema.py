@@ -121,13 +121,11 @@ class TrainConfig:
     checkpoint_every: int = 10
     log_every: int = 1
     opponent: str = "random"
-    env_backend: str = "jax"
-    rl_backend: str = "jax"
     self_play_update_interval: int = 10
     self_play_deterministic: bool = False
     self_play_enabled: bool = False
-    self_play_pool_size: int = 5
-    self_play_snapshot_interval: int = 25
+    self_play_pool_size: int = 0
+    self_play_snapshot_interval: int = 0
     self_play_latest_probability: float = 0.5
     multi_opponent_mode: str = "mixed"
     alternate_player_sides: bool = True

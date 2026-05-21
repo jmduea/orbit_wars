@@ -1,3 +1,5 @@
+# @package _global_
+
 defaults:
   - jax_training
   - override /training_format: mix_2p_4p_16env

@@ -31,8 +31,6 @@ parameters:
     values: [true, false]
   env.player_count:
     values: [2, 4]
-  env.max_planets:
-    values: [32, 48, 64]
   env.max_fleets:
     values: [256, 512, 1024]
   env.candidate_count:

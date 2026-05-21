@@ -1,9 +1,9 @@
+# @package _global_
+
 defaults:
   - attention_training
-  - override /backend: default
-  - /training_format: jax_schedule_4p
+  - override /training_format: jax_schedule_4p
 
 env:
-  max_planets: 48
   max_fleets: 256
 ppo:

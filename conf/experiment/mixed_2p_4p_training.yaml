@@ -1,6 +1,8 @@
+# @package _global_
+
 defaults:
   - full_training
-  - /training_format: mix_2p_4p_4env
+  - override /training_format: mix_2p_4p_4env
 
 run_name: orbit_wars_ppo_mixed_2p_4p
 save_dir: artifacts/mixed_2p_4p_training

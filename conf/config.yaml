@@ -1,11 +1,11 @@
 defaults:
-  - backend: default
   - model: entity_transformer_700k
   - training_format: mix_2p_4p_8env
   - opponent_mix: self_play_curriculum
   - replay: enabled
   - checkpoint_retention: default
   - telemetry: default
+  - experiment: null
   - _self_
 
 seed: 42

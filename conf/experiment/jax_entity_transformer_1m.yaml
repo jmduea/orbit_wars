@@ -1,3 +1,5 @@
+# @package _global_
+
 defaults:
   - jax_mixed_2p_4p_training
   - override /model: entity_transformer_1m

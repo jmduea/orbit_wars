@@ -1,3 +1,5 @@
+# @package _global_
+
 defaults:
   - jax_training
   - override /opponent_mix: self_play_curriculum
