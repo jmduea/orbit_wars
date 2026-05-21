@@ -18,11 +18,12 @@ from src.constants import (
     MAX_FLEET_SPEED,
     MAX_PLANETS,
     MAX_STEPS,
+    PLANET_LAUNCH_RADIUS_OFFSET,
+    SUN_RADIUS,
     TOTAL_COMETS,
 )
 
 from .config import EnvConfig
-from .features import PLANET_LAUNCH_RADIUS_OFFSET, SUN_RADIUS
 from .jax_features import (
     JaxFeatureHistory,
     JaxTurnBatch,

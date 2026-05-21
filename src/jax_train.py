@@ -229,8 +229,6 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         cfg,
         {
             "backend": "jax",
-            "env_backend": cfg.env_backend,
-            "rl_backend": cfg.rl_backend,
             "seed": cfg.seed,
         },
     )

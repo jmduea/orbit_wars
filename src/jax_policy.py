@@ -420,7 +420,7 @@ class JaxPlanetPolicy(nn.Module):
 
 
 class JaxAttentionPlanetPolicy(nn.Module):
-    """Flax attention/transformer policy matching the Torch attention interface."""
+    """Flax attention/transformer policy for fixed-shape JAX feature batches."""
 
     candidate_count: int
     ship_bucket_count: int
@@ -578,7 +578,7 @@ def build_jax_policy(
     """Construct a JAX policy module for the requested architecture.
 
     ``architecture='transformer'`` is accepted as an alias for the attention
-    implementation to match the Torch policy builder.
+    implementation.
     """
     hidden = cfg.model.hidden_size
     buckets = cfg.env.ship_bucket_count

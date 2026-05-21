@@ -72,8 +72,7 @@ def encode_turn(
 ) -> JaxTurnBatch:
     """Encode a JAX game state into fixed-shape policy inputs.
 
-    The encoder mirrors the Torch/Python feature schema while avoiding dynamic
-    lists. Candidate slot ``0`` is reserved for no-op and real targets are sorted
+    Candidate slot ``0`` is reserved for no-op and real targets are sorted
     into the remaining candidate slots using a JAX-friendly distance key.
     """
 

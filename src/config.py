@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +7,6 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from .conf_schema import (
-    EnvConfig,
     TrainConfig,
     register_config_schemas,
 )
@@ -35,37 +33,21 @@ def load_hydra_train_config(path: str | Path) -> TrainConfig:
     return cfg
 
 
+def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfig:
+    """Compose the repository root Hydra config with optional overrides."""
+
+    config_dir = Path(__file__).resolve().parents[1] / "conf"
+    register_config_schemas()
+    with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
+        composed = compose(config_name="config", overrides=overrides or [])
+    return train_config_from_omegaconf(composed)
+
+
 def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
     """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
 
     _validate_no_legacy_format_conflicts(cfg_raw)
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
-    cfg: TrainConfig = OmegaConf.to_object(merged)
-    cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
-    _validate_train_config(cfg)
-    return cfg
-
-
-def load_train_config(path: str | Path) -> TrainConfig:
-    """Temporary compatibility adapter; use ``load_hydra_train_config`` directly."""
-
-    warnings.warn(
-        "load_train_config() is deprecated; use Hydra-based load_hydra_train_config().",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return load_hydra_train_config(path)
-
-
-def train_config_from_dict(data: dict[str, Any]) -> TrainConfig:
-    """Temporary compatibility adapter for dictionary-based config loading."""
-
-    warnings.warn(
-        "train_config_from_dict() is deprecated; switch entry points to Hydra compose.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), data)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
     _validate_train_config(cfg)

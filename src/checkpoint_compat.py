@@ -6,7 +6,7 @@ from typing import Mapping
 import numpy as np
 
 from .config import EnvConfig
-from .features import (
+from .feature_registry import (
     candidate_feature_dim,
     feature_history_steps,
     global_feature_dim,

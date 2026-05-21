@@ -11,13 +11,15 @@ import optax
 from src.conf_schema import EnvConfig
 from src.constants import MAX_FLEET_SPEED, MAX_PLANETS, MAX_PRODUCTION
 from src.feature_registry import (
+    candidate_feature_dim,
     candidate_feature_schema,
+    global_feature_dim,
     global_feature_schema,
+    self_feature_dim,
     self_feature_schema,
 )
 
 from .config import TrainConfig
-from .features import candidate_feature_dim, global_feature_dim, self_feature_dim
 from .jax_env import (
     JaxAction,
     JaxEnvState,
