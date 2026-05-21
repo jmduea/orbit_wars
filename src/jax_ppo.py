@@ -518,7 +518,9 @@ def _sample_shielded_sequence_with_params(
     flat_self, flat_candidate, flat_global, flat_mask, flat_decision = flatten_batch(
         batch
     )
-    flat_player_count = jnp.full((flat_mask.shape[0],), cfg.env.player_count, dtype=jnp.int32)
+    flat_player_count = jnp.full(
+        (flat_mask.shape[0],), cfg.env.player_count, dtype=jnp.int32
+    )
     probe_output = policy.apply(
         params,
         flat_self,
@@ -1398,9 +1400,8 @@ def _rollout_diagnostics(
             0.0,
         ),
         "episode_done": episode_done,
-        "avg_reward": reward_mean,
-        "episode_reward_sum": episode_reward_sum,
-        "avg_episode_reward": jnp.where(
+        "average_reward": reward_mean,
+        "episode_reward_mean": jnp.where(
             episode_done > 0.0, episode_reward_sum / episode_done, 0.0
         ),
         "episodes_2p": episodes_2p,
@@ -1704,6 +1705,10 @@ def ppo_update_jax(
             new_log_prob, entropy = action_log_prob_and_entropy(
                 output, minibatch["target"], minibatch["bucket"]
             )
+            approx_kl = masked_mean(
+                minibatch["old_log_prob"] - new_log_prob,
+                minibatch["mask"],
+            )
             ratio = jnp.exp(new_log_prob - minibatch["old_log_prob"])
             policy_loss = -masked_mean(
                 jnp.minimum(
@@ -1726,6 +1731,7 @@ def ppo_update_jax(
                 "policy_loss": policy_loss,
                 "value_loss": value_loss,
                 "entropy": entropy_loss,
+                "approx_kl": approx_kl,
                 "loss": loss,
                 "sample_count": minibatch["mask"].sum(),
             }

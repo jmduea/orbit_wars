@@ -12,6 +12,10 @@ from .conf_schema import (
     TrainConfig,
     register_config_schemas,
 )
+from .metric_registry import (
+    CURRICULUM_PROMOTION_METRIC_NAMES,
+    validate_scalar_update_metric_name,
+)
 
 _CURRICULUM_FAMILIES = {
     "latest",
@@ -21,18 +25,6 @@ _CURRICULUM_FAMILIES = {
     "nearest_sniper",
     "turtle",
     "opportunistic",
-}
-
-_PROMOTION_METRICS = {
-    "overall_win_rate",
-    "win_rate_2p",
-    "first_place_rate_4p",
-    "average_reward",
-    "average_episode_reward",
-    "survival_time",
-    "score_share",
-    "approx_kl",
-    "episode_reward_mean",
 }
 
 __all__ = [
@@ -89,6 +81,15 @@ def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:
+    _validate_registered_update_metric_name(
+        cfg.checkpoint_retention.best_metric_name,
+        field_name="checkpoint_retention.best_metric_name",
+    )
+    _validate_registered_update_metric_name(
+        cfg.plateau_metric,
+        field_name="plateau_metric",
+    )
+
     env = cfg.env
     if int(env.feature_history_steps) <= 0:
         raise ValueError("env.feature_history_steps must be a positive integer.")
@@ -103,9 +104,7 @@ def _validate_train_config(cfg: TrainConfig) -> None:
 
     value_head = cfg.model.value_head.strip().lower()
     if value_head not in {"shared", "format_routed"}:
-        raise ValueError(
-            "model.value_head must be 'shared' or 'format_routed'."
-        )
+        raise ValueError("model.value_head must be 'shared' or 'format_routed'.")
 
     ppo = cfg.ppo
     if int(ppo.update_chunk_rows_min) <= 0:
@@ -280,10 +279,10 @@ def _validate_curriculum_config(cfg: TrainConfig) -> None:
                     f"curriculum.stages[{index}].promote_if must be a mapping."
                 )
             metric = str(promote_if.get("metric", "")).strip()
-            if metric not in _PROMOTION_METRICS:
+            if metric not in CURRICULUM_PROMOTION_METRIC_NAMES:
                 raise ValueError(
                     f"curriculum.stages[{index}].promote_if.metric must be one of "
-                    f"{', '.join(sorted(_PROMOTION_METRICS))}."
+                    f"{', '.join(sorted(CURRICULUM_PROMOTION_METRIC_NAMES))}."
                 )
             if str(promote_if.get("op", ">=")).strip() not in {">=", ">", "<=", "<"}:
                 raise ValueError(
@@ -321,6 +320,20 @@ def _validate_no_legacy_format_conflicts(cfg_raw: Any) -> None:
             "ppo.num_envs_2p/ppo.num_envs_4p are deprecated; configure per-format env counts "
             "via training_format.rollout_groups[*].num_envs only."
         )
+
+
+def _validate_registered_update_metric_name(name: str, *, field_name: str) -> None:
+    metric_name = str(name or "").strip()
+    if not metric_name:
+        raise ValueError(
+            f"{field_name} must be a non-empty registered telemetry metric."
+        )
+    try:
+        validate_scalar_update_metric_name(metric_name)
+    except (KeyError, ValueError) as exc:
+        raise ValueError(
+            f"{field_name} must be a registered canonical scalar telemetry metric, got {metric_name!r}."
+        ) from exc
 
 
 def _parse_seed_set(raw: object) -> list[int]:

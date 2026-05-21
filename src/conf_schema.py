@@ -89,6 +89,25 @@ class CurriculumConfig:
 
 
 @dataclass(slots=True)
+class MetricGroupsConfig:
+    core_progress: bool = True
+    losses: bool = True
+    timing: bool = True
+    curriculum: bool = True
+    opponent_composition: bool = False
+    action_decision: bool = False
+    game_state: bool = False
+    trajectory_shield_debug: bool = False
+    historical_pool: bool = False
+    events: bool = True
+
+
+@dataclass(slots=True)
+class TelemetryConfig:
+    metric_groups: MetricGroupsConfig = field(default_factory=MetricGroupsConfig)
+
+
+@dataclass(slots=True)
 class WandBConfig:
     enabled: bool = False
     project: str | None = None
@@ -186,6 +205,7 @@ class TrainConfig:
     training_format: TrainingFormatConfig = field(default_factory=TrainingFormatConfig)
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     opponent_mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
+    telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     wandb: WandBConfig = field(default_factory=WandBConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     checkpoint_retention: CheckpointRetentionConfig = field(

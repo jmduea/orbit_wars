@@ -6,6 +6,7 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
+from .metric_registry import CURRICULUM_PROMOTION_METRIC_NAMES
 from .opponent_pool import (
     OPPONENT_FAMILY_COUNT,
     OPPONENT_FAMILY_IDS,
@@ -13,18 +14,7 @@ from .opponent_pool import (
     OPPONENT_LATEST,
 )
 
-
-METRIC_KEYS = (
-    "overall_win_rate",
-    "win_rate_2p",
-    "first_place_rate_4p",
-    "average_reward",
-    "average_episode_reward",
-    "survival_time",
-    "score_share",
-    "approx_kl",
-    "episode_reward_mean",
-)
+METRIC_KEYS = tuple(sorted(CURRICULUM_PROMOTION_METRIC_NAMES))
 
 
 class StageView(NamedTuple):

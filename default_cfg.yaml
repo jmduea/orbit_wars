@@ -82,6 +82,18 @@ opponent_mix:
     noop: 0.0
   temperature: 1.0
   curriculum: []
+telemetry:
+  metric_groups:
+    core_progress: true
+    losses: true
+    timing: true
+    curriculum: true
+    opponent_composition: false
+    action_decision: false
+    game_state: false
+    trajectory_shield_debug: false
+    historical_pool: false
+    events: true
 wandb:
   enabled: false
   project: null

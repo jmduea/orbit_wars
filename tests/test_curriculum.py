@@ -1,9 +1,14 @@
-import jax
 import json
+
+import jax
 import pytest
 from omegaconf import OmegaConf
 
-from src.config import TrainConfig, compose_hydra_train_config, train_config_from_omegaconf
+from src.config import (
+    TrainConfig,
+    compose_hydra_train_config,
+    train_config_from_omegaconf,
+)
 from src.curriculum import CurriculumController
 from src.jax_env import batched_reset
 from src.jax_policy import build_jax_policy

@@ -1,4 +1,17 @@
 # @package _global_
+telemetry:
+  metric_groups:
+    core_progress: true
+    losses: true
+    timing: true
+    curriculum: true
+    opponent_composition: false
+    action_decision: false
+    game_state: false
+    trajectory_shield_debug: false
+    historical_pool: false
+    events: true
+
 wandb:
   enabled: true
   project: orbit_wars
