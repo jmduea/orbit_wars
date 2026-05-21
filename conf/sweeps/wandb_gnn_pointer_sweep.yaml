@@ -22,17 +22,17 @@ parameters:
   env.ship_bucket_count:
     values: [4, 6, 8, 10]
   env.max_fleets:
-    values: [512, 1024]
+    values: [256, 512, 1024]
   env.reward_capture_planet:
-    values: [0.0, 0.005, 0.01]
+    value: 0
   env.reward_ship_delta:
-    values: [0.0, 0.005, 0.01]
+    value: 0
   env.reward_production_delta:
-    values: [0.0, 0.01, 0.02]
+    value: 0
   env.early_terminal_reward_shaping_enabled:
-    values: [true, false]
+    value: true
   env.feature_history_steps:
-    values: [1, 5, 10, 20]
+    values: [1, 5, 10]
   ppo.total_updates:
     value: 100
   ppo.rollout_steps:
@@ -54,12 +54,12 @@ parameters:
   model.hidden_size:
     values: [128, 192, 224, 256]
   model.max_moves_k:
-    values: [2, 3, 4, 5]
+    values: [5, 10, 20]
   model.gnn_k_neighbors:
-    values: [3, 5, 8, 12]
+    values: [8, 12, 24]
   model.gnn_message_passing_layers:
     values: [1, 2, 3, 4]
   model.normalize_observations:
     value: true
   model.obs_norm_clip:
-    values: [5.0, 10.0, 20.0]
+    values: [10.0, 20.0]
