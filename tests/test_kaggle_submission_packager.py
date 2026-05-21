@@ -13,10 +13,10 @@ from scripts.validate_kaggle_docker_submission import (
     IN_CONTAINER_VALIDATOR,
     MAIN_TEMPLATE,
     ValidationError,
+    _to_plain_data,
     build_submission_package,
     export_runtime_artifact,
     validate_tarball_layout,
-    _to_plain_data,
 )
 from src.conf_schema import TrainConfig
 

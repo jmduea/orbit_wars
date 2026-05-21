@@ -14,7 +14,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.artifact_pipeline import load_optional_jobs, load_pending_optional_jobs  # noqa: E402
+from src.artifact_pipeline import (  # noqa: E402
+    load_optional_jobs,
+    load_pending_optional_jobs,
+)
 from src.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
 
 

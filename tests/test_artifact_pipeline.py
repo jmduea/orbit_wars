@@ -219,8 +219,8 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
 
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
-    from src.config import TrainConfig
     from src import jax_train
+    from src.config import TrainConfig
 
     launched: dict[str, object] = {}
 
