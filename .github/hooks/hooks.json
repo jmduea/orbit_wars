@@ -6,6 +6,12 @@
         "type": "command",
         "bash": ".github/hooks/pre-tool-use.sh",
         "powershell": ".github/hooks/pre-tool-use.ps1"
+      },
+      {
+        "type": "command",
+        "command": "rtk hook copilot",
+        "cwd": ".",
+        "timeout": 5
       }
     ],
     "postToolUse": [

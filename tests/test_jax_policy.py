@@ -1,21 +1,19 @@
-import pytest
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
+import pytest
 
 # Import your composable system modules here
 from src.jax_policy import (
+    AutoregressivePointerDecoder,
     ComposablePlanetPolicy,
+    GNNBackboneEncoder,
+    JaxPolicyOutput,
     MLPBackboneEncoder,
     TransformerBackboneEncoder,
-    GNNBackboneEncoder,
-    AutoregressivePointerDecoder,
-    JaxPolicyOutput,
 )
 
 # Define standard test hyper-parameters matching your Orbit Wars environment setup
 BATCH_SIZE = 2
-MAX_PLANETS = 10
 CANDIDATE_COUNT = 6
 SHIP_BUCKET_COUNT = 5
 MAX_MOVES_K = 3
@@ -34,14 +32,14 @@ def mock_inputs():
 
     # Construct random input arrays
     k1, k2, k3 = jax.random.split(key, 3)
-    self_features = jax.random.normal(k1, (BATCH_SIZE, MAX_PLANETS, self_dim))
+    self_features = jax.random.normal(k1, (BATCH_SIZE, self_dim))
     candidate_features = jax.random.normal(
-        k2, (BATCH_SIZE, MAX_PLANETS, CANDIDATE_COUNT, cand_dim)
+        k2, (BATCH_SIZE, CANDIDATE_COUNT, cand_dim)
     )
-    global_features = jax.random.normal(k3, (BATCH_SIZE, MAX_PLANETS, global_dim))
+    global_features = jax.random.normal(k3, (BATCH_SIZE, global_dim))
 
-    # Ensure all elements are active initially via boolean masks
-    candidate_mask = jnp.ones((BATCH_SIZE, MAX_PLANETS, CANDIDATE_COUNT), dtype=bool)
+    # Ensure all candidate slots are active for each flattened decision row.
+    candidate_mask = jnp.ones((BATCH_SIZE, CANDIDATE_COUNT), dtype=bool)
 
     return {
         "self_features": self_features,
@@ -136,8 +134,10 @@ def test_deterministic_decoding_reproducibility(mock_inputs):
     out2 = policy.apply(params, **mock_inputs, deterministic=True)
 
     # Ensure target choices and values are completely stable
-    jnp.testing.assert_array_equal(out1.target_logits, out2.target_logits)
-    jnp.testing.assert_array_equal(out1.ship_logits, out2.ship_logits)
+    assert isinstance(out1, JaxPolicyOutput)
+    assert isinstance(out2, JaxPolicyOutput)
+    assert jnp.array_equal(out1.target_logits, out2.target_logits)
+    assert jnp.array_equal(out1.ship_logits, out2.ship_logits)
 
 
 def test_teacher_forcing_alignment(mock_inputs):
@@ -168,4 +168,5 @@ def test_teacher_forcing_alignment(mock_inputs):
     output = policy.apply(params, **mock_inputs, target_sequence=mock_target_sequence)
 
     # Confirm structural sizes align correctly back out to standard evaluation layouts
+    assert isinstance(output, JaxPolicyOutput)
     assert output.target_logits.shape == (BATCH_SIZE, MAX_MOVES_K, CANDIDATE_COUNT)

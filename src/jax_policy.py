@@ -261,6 +261,8 @@ class AutoregressivePointerDecoder(nn.Module):
         decoder_cell = nn.GRUCell(features=self.hidden_size, name="dec_gru")
         query_dense = nn.Dense(self.hidden_size, name="ptr_q")
         key_dense = nn.Dense(self.hidden_size, name="ptr_k")
+        ship_dense = nn.Dense(self.hidden_size, name="ship_dense_step")
+        ship_out = nn.Dense(self.ship_bucket_count, name="ship_out_step")
 
         init_decoder_state = nn.Dense(self.hidden_size, name="init_dec_state")(
             encoder_out.context_query
@@ -278,12 +280,12 @@ class AutoregressivePointerDecoder(nn.Module):
         current_rng = rng
 
         for step_idx in range(self.max_moves_k):
-            current_state, _ = decoder_cell(current_input_emb, current_state)
+            current_state, _ = decoder_cell(current_state, current_input_emb)
 
             q = query_dense(current_state)[:, None, :]
             k = key_dense(encoder_out.attended_candidates)
 
-            step_target_logits = jnp.einsum("b1h,bch->bc", q, k).squeeze(1) / jnp.sqrt(
+            step_target_logits = jnp.einsum("b1h,bch->bc", q, k) / jnp.sqrt(
                 self.hidden_size
             )
             step_target_logits = jnp.where(
@@ -297,9 +299,7 @@ class AutoregressivePointerDecoder(nn.Module):
             ship_input = jnp.concatenate(
                 [expanded_state, encoder_out.attended_candidates], axis=-1
             )
-            step_ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out_step")(
-                nn.relu(nn.Dense(self.hidden_size, name="ship_dense_step")(ship_input))
-            )
+            step_ship_logits = ship_out(nn.relu(ship_dense(ship_input)))
             all_ship_logits.append(step_ship_logits)
 
             # FIXED: Branching safely handles explicit deterministic exploitation modes
