@@ -66,24 +66,18 @@ Use `resume_checkpoint=<path>` in Hydra form:
 ```bash
 uv run python -m src.train \
   experiment=attention_training \
-  resume_checkpoint=/artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_000050.pt
-```
-
-```bash
-uv run python -m src.train \
-  experiment=jax_training \
-  resume_checkpoint=/artifacts/jax_training/orbit_wars_ppo_jax_training/jax_ckpt_000050.pkl
+  resume_checkpoint=/artifacts/attention_training/orbit_wars_ppo_attention_training/jax_ckpt_000050.pkl
 ```
 
 Behavior details:
 
 - `ppo.total_updates` is the absolute final update target.
 - Resuming from update `N` continues at `N+1`.
-- Keep architecture- and backend-compatible configs when resuming.
+- Keep architecture- and shape-compatible configs when resuming.
 
 ## 4) Backend notes (JAX-only)
 
-- Setup: `env_backend=jax`, `rl_backend=jax`
+- Training uses the JAX environment, JAX policy, and JAX PPO implementation.
 - Checkpoints: `jax_ckpt_last.pkl`, `jax_ckpt_*.pkl`
 - Use JAX-compatible experiment presets (for example `jax_training`, `jax_mixed_2p_4p_training`, `jax_entity_transformer_*`, `attention_training`, `full_training`).
 - Do not change shape-defining settings between save and resume/eval unless intentionally starting a fresh run.

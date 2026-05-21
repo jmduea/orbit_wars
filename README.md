@@ -63,21 +63,16 @@ Resume with `resume_checkpoint=<path>` (Hydra override form):
 ```bash
 uv run python -m src.train \
   experiment=attention_training \
-  resume_checkpoint=/artifacts/attention_training/orbit_wars_ppo_attention_training/ckpt_000050.pt
-```
-
-```bash
-uv run python -m src.train \
-  experiment=jax_training \
-  resume_checkpoint=/artifacts/jax_training/orbit_wars_ppo_jax_training/jax_ckpt_000050.pkl
+   resume_checkpoint=/artifacts/attention_training/orbit_wars_ppo_attention_training/jax_ckpt_000050.pkl
 ```
 
 `ppo.total_updates` is interpreted as the **final target update number**. If you resume from update 50 and set `ppo.total_updates=2000`, training continues at update 51 and stops after update 2000.
 
-## Backend notes (Torch vs JAX)
+## Backend Notes
 
-- JAX path: `env_backend=jax`, `rl_backend=jax`, checkpoints `jax_ckpt_*.pkl` / `jax_ckpt_last.pkl`.
-- Keep JAX-compatible presets when resuming checkpoints.
+- Training uses the JAX environment, JAX policy, and JAX PPO implementation.
+- Checkpoints are `jax_ckpt_*.pkl` / `jax_ckpt_last.pkl`.
+- Keep architecture- and shape-compatible presets when resuming checkpoints.
 
 ## Multirun basics
 

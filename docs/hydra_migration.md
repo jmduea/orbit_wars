@@ -10,9 +10,9 @@ Use Hydra overrides directly in scripts/automation. Example:
 
 ## Compatibility timeline
 
-- **Current state**: legacy `--config` parsing is still recognized as a compatibility path, but Hydra-native `experiment=...` is the primary interface.
-- **Deprecation window**: `--config` usage is deprecated and should be removed from scripts/automation immediately.
-- **Forward-safe path**: update all local scripts, CI jobs, and docs to Hydra overrides now.
+- **Current state**: legacy `--config` parsing has been removed; Hydra-native `experiment=...` is the supported interface.
+- **Required path**: update all local scripts, CI jobs, and docs to Hydra overrides.
+- **Forward-safe path**: compose from `conf/config.yaml` and select presets with `experiment=<name>`.
 
 ## Troubleshooting common migration errors
 
