@@ -193,7 +193,7 @@ class GNNBackboneEncoder(nn.Module):
     hidden_size: int = 128
     k_neighbors: int = 5
     msg_passing_layers: int = 2
-    target_coords_slice: slice = slice(4, 6)
+    target_coords_span: tuple[int, int] = (4, 6)
 
     def setup(self) -> None:
         if self.k_neighbors < 1:
@@ -221,7 +221,7 @@ class GNNBackboneEncoder(nn.Module):
         )
 
         # 2. Extract current-frame normalized spatial coordinates
-        coords = candidate_features[..., self.target_coords_slice]
+        coords = candidate_features[..., slice(*self.target_coords_span)]
 
         # 3. Pairwise Euclidean distance tracking via implicit broadcasting
         diffs = coords[:, :, None, :] - coords[:, None, :, :]
@@ -623,7 +623,7 @@ def build_jax_policy(
                 hidden_size=hidden,
                 k_neighbors=cfg.model.gnn_k_neighbors,
                 msg_passing_layers=cfg.model.gnn_message_passing_layers,
-                target_coords_slice=target_coords_slice,
+                target_coords_span=(target_coords_slice.start, target_coords_slice.stop),
             ),
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden

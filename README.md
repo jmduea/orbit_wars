@@ -88,6 +88,17 @@ The command builds a Kaggle-style `submission.tar.gz` with root `main.py`, expor
 
 Use `--skip-docker` to build and inspect the package without launching Docker. Failures exit non-zero and identify the phase, such as `dependency_probe_failed`, `package_layout_failed`, `submission_import_failed`, `artifact_load_failed`, `first_action_failed`, `timeout_failed`, `invalid_action_failed`, `episode_failed_2p`, or `episode_failed_4p`.
 
+For a quicker container smoke test, keep the same packaging path but bound the local self-play length:
+
+```bash
+uv run python scripts/validate_kaggle_docker_submission.py \
+   --checkpoint artifacts/<run>/jax_ckpt_last.pkl \
+   --player-count 2 \
+   --episode-steps 20
+```
+
+The default remains `--episode-steps 500`, matching the competition configuration.
+
 ## Multirun basics
 
 Hydra multirun (`-m`) launches one job per override combination:

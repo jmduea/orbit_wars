@@ -73,6 +73,12 @@ def parse_args() -> argparse.Namespace:
         help="Self-play player counts to validate inside Docker.",
     )
     parser.add_argument("--timeout-seconds", type=float, default=1.0)
+    parser.add_argument(
+        "--episode-steps",
+        type=int,
+        default=500,
+        help="Maximum episode steps for Docker self-play validation.",
+    )
     parser.add_argument("--skip-docker", action="store_true")
     parser.add_argument("--keep-staging", action="store_true")
     return parser.parse_args()
@@ -203,6 +209,15 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
         raise ValidationError("docker_unavailable", "docker executable was not found")
     if str(args.docker_image).startswith("-"):
         raise ValidationError("docker_image_invalid", "Docker image must not start with '-'")
+    docker_info = subprocess.run(
+        ["docker", "info", "--format", "{{.ServerVersion}}"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if docker_info.returncode != 0:
+        message = (docker_info.stderr or docker_info.stdout or "docker daemon is not reachable").strip()
+        raise ValidationError("docker_unavailable", message)
     with tempfile.TemporaryDirectory(prefix="orbit-wars-kaggle-docker-") as temp_dir_text:
         temp_dir = Path(temp_dir_text)
         validator_path = temp_dir / "validate_submission.py"
@@ -234,6 +249,8 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
             args.player_count,
             "--timeout-seconds",
             str(args.timeout_seconds),
+            "--episode-steps",
+            str(args.episode_steps),
         ]
         completed = subprocess.run(command, text=True, capture_output=True, check=False)
         if completed.stdout:
@@ -241,6 +258,11 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr)
         if completed.returncode != 0:
+            if completed.returncode == 137:
+                raise ValidationError(
+                    "docker_container_killed",
+                    "docker exited 137; container was killed, commonly by OOM or an external stop",
+                )
             raise ValidationError("docker_validation_failed", f"docker exited {completed.returncode}")
 
 
@@ -361,7 +383,9 @@ import jax
 import jax.numpy as jnp
 
 from src.config import config_from_plain
+from src.constants import MAX_PLANETS
 from src.features import FeatureHistoryBuffer, encode_turn
+from src.feature_registry import candidate_feature_dim, global_feature_dim, self_feature_dim
 from src.jax_policy import build_jax_policy
 
 
@@ -381,6 +405,7 @@ def _load_state():
     cfg = config_from_plain(artifact["config"])
     params = artifact["params"]
     policy = build_jax_policy(cfg)
+    _warm_policy(policy, params, cfg)
     history = FeatureHistoryBuffer(max_steps=int(cfg.env.feature_history_steps))
     manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
     _STATE = {
@@ -394,18 +419,37 @@ def _load_state():
     return _STATE
 
 
+def _warm_policy(policy, params, cfg) -> None:
+    self_features = jnp.zeros((MAX_PLANETS, self_feature_dim(cfg.env)), dtype=jnp.float32)
+    candidate_features = jnp.zeros(
+        (MAX_PLANETS, int(cfg.env.candidate_count), candidate_feature_dim(cfg.env)),
+        dtype=jnp.float32,
+    )
+    global_features = jnp.zeros((MAX_PLANETS, global_feature_dim(cfg.env)), dtype=jnp.float32)
+    candidate_mask = jnp.ones((MAX_PLANETS, int(cfg.env.candidate_count)), dtype=jnp.bool_)
+    outputs = policy.apply(
+        {"params": params},
+        self_features,
+        candidate_features,
+        global_features,
+        candidate_mask,
+    )
+    jax.tree_util.tree_map(lambda value: value.block_until_ready(), outputs)
+
+
 def agent(obs: Any) -> list[list[float | int]]:
     state = _load_state()
     cfg = state["cfg"]
     batch = encode_turn(obs, cfg.env, env_index=0, feature_history=state["history"])
     if batch.self_features.shape[0] == 0:
         return []
+    self_features, candidate_features, global_features, candidate_mask = _padded_policy_inputs(batch)
     outputs = state["policy"].apply(
         {"params": state["params"]},
-        jnp.asarray(batch.self_features),
-        jnp.asarray(batch.candidate_features),
-        jnp.asarray(batch.global_features),
-        jnp.asarray(batch.candidate_mask).astype(jnp.bool_),
+        self_features,
+        candidate_features,
+        global_features,
+        candidate_mask,
     )
     target_logits = _ensure_sequence(outputs.target_logits)
     ship_logits = _ensure_ship_sequence(outputs.ship_logits)
@@ -452,6 +496,24 @@ def _ensure_ship_sequence(values):
     return values
 
 
+def _padded_policy_inputs(batch):
+    row_count = int(batch.self_features.shape[0])
+    if row_count > MAX_PLANETS:
+        raise ValueError(f"Too many policy rows: {row_count} > {MAX_PLANETS}")
+    pad_rows = MAX_PLANETS - row_count
+    self_features = jnp.asarray(batch.self_features)
+    candidate_features = jnp.asarray(batch.candidate_features)
+    global_features = jnp.asarray(batch.global_features)
+    candidate_mask = jnp.asarray(batch.candidate_mask).astype(jnp.bool_)
+    if pad_rows <= 0:
+        return self_features, candidate_features, global_features, candidate_mask
+    self_features = jnp.pad(self_features, ((0, pad_rows), (0, 0)))
+    candidate_features = jnp.pad(candidate_features, ((0, pad_rows), (0, 0), (0, 0)))
+    global_features = jnp.pad(global_features, ((0, pad_rows), (0, 0)))
+    candidate_mask = jnp.pad(candidate_mask, ((0, pad_rows), (0, 0)), constant_values=False)
+    return self_features, candidate_features, global_features, candidate_mask
+
+
 def _ship_count_for_bucket(available_ships: int, bucket: int, bucket_count: int) -> int:
     if available_ships <= 0 or bucket <= 0:
         return 0
@@ -489,12 +551,12 @@ def main() -> int:
             extract_package(args.package, extract_dir)
             module, import_seconds = import_submission(extract_dir)
             artifact_load_seconds = artifact_load_probe(module)
-            first_latency = first_action_probe(module, args.timeout_seconds)
+            first_latency = first_action_probe(module, args.timeout_seconds, args.episode_steps)
             results = []
             player_counts = [2, 4] if args.player_count == "both" else [int(args.player_count)]
             for player_count in player_counts:
                 modules = [import_submission(extract_dir, module_name=f"submission_main_p{idx}_{player_count}")[0] for idx in range(player_count)]
-                results.append(run_episode(modules, player_count, args.seed, args.timeout_seconds))
+                results.append(run_episode(modules, player_count, args.seed, args.timeout_seconds, args.episode_steps))
             print(json.dumps({
                 "ok": True,
                 "phase": "complete",
@@ -517,6 +579,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--player-count", choices=("2", "4", "both"), default="both")
     parser.add_argument("--timeout-seconds", type=float, default=1.0)
+    parser.add_argument("--episode-steps", type=int, default=500)
     return parser.parse_args()
 
 
@@ -598,10 +661,10 @@ def artifact_load_probe(module) -> float:
     return time.perf_counter() - started
 
 
-def first_action_probe(module, timeout_seconds: float) -> float:
+def first_action_probe(module, timeout_seconds: float, episode_steps: int) -> float:
     from kaggle_environments import make
 
-    env = make("orbit_wars", configuration={"seed": 123}, debug=True)
+    env = make("orbit_wars", configuration={"seed": 123, "episodeSteps": episode_steps}, debug=True)
     env.run([lambda obs: [] for _ in range(2)])
     obs = env.steps[0][0].observation
     started = time.perf_counter()
@@ -616,7 +679,7 @@ def first_action_probe(module, timeout_seconds: float) -> float:
     return elapsed
 
 
-def run_episode(modules, player_count: int, seed: int, timeout_seconds: float):
+def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, episode_steps: int):
     from kaggle_environments import make
 
     latencies = []
@@ -635,7 +698,7 @@ def run_episode(modules, player_count: int, seed: int, timeout_seconds: float):
 
     agents = [make_timed_agent(module) for module in modules]
 
-    env = make("orbit_wars", configuration={"seed": seed}, debug=True)
+    env = make("orbit_wars", configuration={"seed": seed, "episodeSteps": episode_steps}, debug=True)
     try:
         env.run(agents)
     except PhaseError:
@@ -653,6 +716,7 @@ def run_episode(modules, player_count: int, seed: int, timeout_seconds: float):
         "rewards": rewards,
         "max_action_seconds": max(latencies) if latencies else 0.0,
         "agent_calls": len(latencies),
+        "episode_steps": episode_steps,
     }
 
 
