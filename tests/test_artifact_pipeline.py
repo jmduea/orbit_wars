@@ -125,6 +125,7 @@ def test_optional_job_file_roundtrip(tmp_path: Path):
     assert len(jobs) == 1
     assert jobs[0]["kind"] == "replay"
     assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+    assert jobs[0]["log_path"] == str(tmp_path / "metrics.jsonl")
 
 
 def test_running_optional_job_protects_checkpoint_from_retention(tmp_path: Path):
@@ -161,6 +162,35 @@ def test_running_optional_job_protects_checkpoint_from_retention(tmp_path: Path)
     assert checkpoint_path.exists()
 
 
+def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
+    from src.config import TrainConfig
+    from src.jax_train import _queue_optional_jobs_if_due
+
+    cfg = TrainConfig()
+    cfg.replay.enabled = True
+    cfg.replay.max_steps = 20
+    checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    job_paths = _queue_optional_jobs_if_due(
+        cfg,
+        update=1,
+        checkpoint_path=checkpoint_path,
+        log_path=tmp_path / "metrics.jsonl",
+        queue_dir=tmp_path / "jobs",
+        queue_replay=True,
+        queue_docker_validation=False,
+    )
+
+    jobs = load_pending_optional_jobs(tmp_path / "jobs")
+    assert len(job_paths) == 1
+    assert len(jobs) == 1
+    assert jobs[0]["kind"] == "replay"
+    assert jobs[0]["backend"] == "docker"
+    assert jobs[0]["episode_steps"] == 20
+    assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+
+
 def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     from src.config import TrainConfig
     from src.jax_train import _queue_optional_jobs_if_due
@@ -186,6 +216,40 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     assert len(jobs) == 1
     assert jobs[0]["kind"] == "docker_validation"
     assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+
+
+def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
+    from src.config import TrainConfig
+    from src import jax_train
+
+    launched: dict[str, object] = {}
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    def fake_popen(command, **kwargs):
+        launched["command"] = command
+        launched["kwargs"] = kwargs
+        return FakeProcess()
+
+    cfg = TrainConfig()
+    cfg.artifact_pipeline.worker_poll_seconds = 0.5
+    cfg.artifact_pipeline.worker_idle_exit_seconds = 1.0
+    monkeypatch.setattr(jax_train.subprocess, "Popen", fake_popen)
+
+    worker_state: dict[str, object] = {}
+    jax_train._start_artifact_worker_if_needed(
+        cfg,
+        queue_dir=tmp_path,
+        worker_state=worker_state,
+    )
+
+    command = launched["command"]
+    assert "scripts/run_artifact_worker.py" in str(command)
+    assert str(tmp_path) in command
+    assert launched["kwargs"]["start_new_session"] is True
+    assert worker_state["process"].poll() is None
 
 
 def test_checkpoint_queue_rejects_invalid_size():

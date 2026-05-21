@@ -16,7 +16,9 @@ from scripts.validate_kaggle_docker_submission import (
     build_submission_package,
     export_runtime_artifact,
     validate_tarball_layout,
+    _to_plain_data,
 )
+from src.conf_schema import TrainConfig
 
 
 def _fake_config() -> SimpleNamespace:
@@ -79,6 +81,17 @@ def test_export_runtime_artifact_strips_training_state(tmp_path: Path) -> None:
     assert "opt_state" not in artifact
     assert "rng_key" not in artifact
     assert artifact["params"]["dense"]["kernel"].shape == (2, 2)
+
+
+def test_plain_data_tolerates_old_pickled_dataclass_missing_new_field() -> None:
+    cfg = TrainConfig()
+    delattr(cfg.artifact_pipeline, "replay_backend")
+
+    data = _to_plain_data(cfg)
+
+    assert "artifact_pipeline" in data
+    assert "replay_backend" not in data["artifact_pipeline"]
+    assert data["model"]["architecture"] == "gnn_pointer"
 
 
 def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None:

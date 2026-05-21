@@ -90,9 +90,16 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         "final_flush_timeout_seconds",
         "interrupt_flush_timeout_seconds",
         "exception_flush_timeout_seconds",
+        "docker_timeout_seconds",
+        "worker_poll_seconds",
+        "worker_idle_exit_seconds",
     ):
         if float(getattr(artifact_pipeline, field_name)) <= 0.0:
             raise ValueError(f"artifact_pipeline.{field_name} must be positive.")
+    if artifact_pipeline.replay_backend not in {"docker", "local"}:
+        raise ValueError("artifact_pipeline.replay_backend must be 'docker' or 'local'.")
+    if artifact_pipeline.docker_player_count not in {"2", "4", "both"}:
+        raise ValueError("artifact_pipeline.docker_player_count must be '2', '4', or 'both'.")
     if int(artifact_pipeline.latest_lag_warning_updates) < 0:
         raise ValueError("artifact_pipeline.latest_lag_warning_updates must be non-negative.")
     if not str(artifact_pipeline.queue_dir).strip():

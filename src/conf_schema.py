@@ -126,7 +126,14 @@ class ArtifactPipelineConfig:
     latest_lag_warning_updates: int = 1
     coalesce_intermediate_checkpoints: bool = True
     replay_async: bool = True
+    replay_backend: str = "docker"
     docker_validation_async: bool = False
+    docker_image: str = "gcr.io/kaggle-images/python-simulations"
+    docker_player_count: str = "both"
+    docker_timeout_seconds: float = 1.0
+    worker_autostart: bool = True
+    worker_poll_seconds: float = 5.0
+    worker_idle_exit_seconds: float = 300.0
     ledger_enabled: bool = True
     queue_dir: str = "artifact_jobs"
     fail_training_on_checkpoint_error: bool = True

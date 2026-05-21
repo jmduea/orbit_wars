@@ -100,7 +100,14 @@ artifact_pipeline:
   latest_lag_warning_updates: 1
   coalesce_intermediate_checkpoints: true
   replay_async: true
+  replay_backend: docker
   docker_validation_async: false
+  docker_image: gcr.io/kaggle-images/python-simulations
+  docker_player_count: both
+  docker_timeout_seconds: 1.0
+  worker_autostart: true
+  worker_poll_seconds: 5.0
+  worker_idle_exit_seconds: 300.0
   ledger_enabled: true
   queue_dir: artifact_jobs
   fail_training_on_checkpoint_error: true

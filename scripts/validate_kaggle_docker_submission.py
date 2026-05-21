@@ -288,7 +288,11 @@ def _require_dict(config: dict[str, Any], key: str) -> dict[str, Any]:
 
 def _to_plain_data(value: Any) -> Any:
     if dataclasses.is_dataclass(value):
-        return {field.name: _to_plain_data(getattr(value, field.name)) for field in dataclasses.fields(value)}
+        return {
+            field.name: _to_plain_data(getattr(value, field.name))
+            for field in dataclasses.fields(value)
+            if hasattr(value, field.name)
+        }
     if isinstance(value, Mapping):
         return {str(key): _to_plain_data(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

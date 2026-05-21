@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
+import sys
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -249,8 +251,14 @@ def _queue_optional_jobs_if_due(
                 update=update,
                 checkpoint_path=checkpoint_path,
                 payload={
+                    "backend": cfg.artifact_pipeline.replay_backend,
                     "log_path": str(log_path),
                     "replay_output_dir": cfg.replay.output_dir,
+                    "docker_image": cfg.artifact_pipeline.docker_image,
+                    "player_count": cfg.artifact_pipeline.docker_player_count,
+                    "timeout_seconds": cfg.artifact_pipeline.docker_timeout_seconds,
+                    "episode_steps": cfg.replay.max_steps,
+                    "seed": cfg.seed + update,
                 },
             )
         )
@@ -261,10 +269,50 @@ def _queue_optional_jobs_if_due(
                 kind="docker_validation",
                 update=update,
                 checkpoint_path=checkpoint_path,
-                payload={"player_count": "both"},
+                payload={
+                    "docker_image": cfg.artifact_pipeline.docker_image,
+                    "player_count": cfg.artifact_pipeline.docker_player_count,
+                    "timeout_seconds": cfg.artifact_pipeline.docker_timeout_seconds,
+                    "episode_steps": cfg.replay.max_steps,
+                    "seed": cfg.seed + update,
+                },
             )
         )
     return job_paths
+
+
+def _start_artifact_worker_if_needed(
+    cfg: TrainConfig,
+    *,
+    queue_dir: Path,
+    worker_state: dict[str, subprocess.Popen[object]],
+) -> None:
+    if not cfg.artifact_pipeline.worker_autostart:
+        return
+    worker = worker_state.get("process")
+    if worker is not None and worker.poll() is None:
+        return
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = queue_dir / "worker.stdout.log"
+    stderr_path = queue_dir / "worker.stderr.log"
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve().parents[1] / "scripts" / "run_artifact_worker.py"),
+        str(queue_dir),
+        "--poll-seconds",
+        str(cfg.artifact_pipeline.worker_poll_seconds),
+        "--idle-exit-seconds",
+        str(cfg.artifact_pipeline.worker_idle_exit_seconds),
+    ]
+    stdout = stdout_path.open("a", encoding="utf-8")
+    stderr = stderr_path.open("a", encoding="utf-8")
+    worker_state["process"] = subprocess.Popen(
+        command,
+        cwd=Path(__file__).resolve().parents[1],
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
 
 
 def _active_group_indices(
@@ -346,6 +394,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         else None
     )
     checkpoint_failures: list[CheckpointResult] = []
+    artifact_worker_state: dict[str, subprocess.Popen[object]] = {}
 
     def protected_artifact_paths() -> set[Path]:
         paths = {run_dir / "jax_ckpt_last.pkl"}
@@ -379,7 +428,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             if result.final:
                 protected_paths.add(result.numbered_path)
             if artifact_cfg.replay_async or artifact_cfg.docker_validation_async:
-                _queue_optional_jobs_if_due(
+                job_paths = _queue_optional_jobs_if_due(
                     cfg,
                     update=result.update,
                     checkpoint_path=result.numbered_path,
@@ -388,6 +437,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     queue_replay=artifact_cfg.replay_async,
                     queue_docker_validation=artifact_cfg.docker_validation_async,
                 )
+                if job_paths:
+                    _start_artifact_worker_if_needed(
+                        cfg,
+                        queue_dir=artifact_queue_dir,
+                        worker_state=artifact_worker_state,
+                    )
                 protected_paths.update(
                     protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir))
                 )

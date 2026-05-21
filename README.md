@@ -77,13 +77,19 @@ uv run python -m src.train \
 
 ## Async artifact jobs
 
-Training writes replay and optional Docker validation jobs under each run's `artifact_jobs/` directory instead of rendering them inline. Process queued jobs with:
+Training writes Docker-backed replay/evaluation jobs under each run's `artifact_jobs/` directory instead of rendering them inline. With the default `artifact_pipeline.replay_backend=docker`, the worker packages the checkpoint as a Kaggle submission and runs evaluation inside `gcr.io/kaggle-images/python-simulations`. Process queued jobs with:
 
 ```bash
 uv run python scripts/run_artifact_worker.py artifacts/<run>/artifact_jobs --once
 ```
 
-Set `artifact_pipeline.replay_async=false` to restore inline replay generation, or `artifact_pipeline.enabled=false` to use synchronous checkpoint writes. Docker validation jobs are off by default; enable them with `artifact_pipeline.docker_validation_async=true`.
+If a worker exits while a job is marked `running`, recover it explicitly:
+
+```bash
+uv run python scripts/run_artifact_worker.py artifacts/<run>/artifact_jobs --once --recover-running
+```
+
+Set `artifact_pipeline.replay_backend=local` for local HTML replay rendering, `artifact_pipeline.replay_async=false` to restore inline local replay generation, or `artifact_pipeline.enabled=false` to use synchronous checkpoint writes. Additional Docker validation jobs are off by default; enable them with `artifact_pipeline.docker_validation_async=true`.
 
 ## Kaggle submission validation
 
