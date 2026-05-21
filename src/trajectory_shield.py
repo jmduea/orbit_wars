@@ -316,6 +316,184 @@ def _acceptability_mask_jax(game, player: jax.Array, target_id: jax.Array, hit_m
     return game.planets.id == target_id
 
 
+def _rotating_planet_mask_jax(game) -> jax.Array:
+    init_dx = game.initial_planets.x - BOARD_CENTER[0]
+    init_dy = game.initial_planets.y - BOARD_CENTER[1]
+    orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
+    return (
+        orbit_radius + game.planets.radius < ROTATION_RADIUS_LIMIT
+    ) & game.planets.active
+
+
+def _fleet_speed_for_ships_jax(ships: jax.Array) -> jax.Array:
+    speed = (
+        1.0
+        + (MAX_FLEET_SPEED - 1.0)
+        * (jnp.log(jnp.maximum(ships, 1.0)) / jnp.log(1000.0)) ** 1.5
+    )
+    return jnp.minimum(speed, MAX_FLEET_SPEED)
+
+
+def _static_pair_fast_path_enabled_jax(
+    game,
+    source_id: jax.Array,
+    target_id: jax.Array,
+    angle: jax.Array,
+) -> jax.Array:
+    rotating = _rotating_planet_mask_jax(game)
+    source_index = jnp.clip(source_id.astype(jnp.int32), 0, MAX_PLANETS - 1)
+    target_index = jnp.clip(target_id.astype(jnp.int32), 0, MAX_PLANETS - 1)
+    source_rotating = jnp.take(rotating, source_index)
+    target_rotating = jnp.take(rotating, target_index)
+    source_x = jnp.take(game.planets.x, source_index)
+    source_y = jnp.take(game.planets.y, source_index)
+    source_radius = jnp.take(game.planets.radius, source_index)
+    target_x = jnp.take(game.planets.x, target_index)
+    target_y = jnp.take(game.planets.y, target_index)
+    start_x = source_x + jnp.cos(angle) * (source_radius + PLANET_LAUNCH_RADIUS_OFFSET)
+    start_y = source_y + jnp.sin(angle) * (source_radius + PLANET_LAUNCH_RADIUS_OFFSET)
+    segment_x = target_x - start_x
+    segment_y = target_y - start_y
+    segment_len_sq = jnp.maximum(segment_x * segment_x + segment_y * segment_y, 1e-6)
+    center_x = jnp.asarray(BOARD_CENTER[0], dtype=jnp.float32)
+    center_y = jnp.asarray(BOARD_CENTER[1], dtype=jnp.float32)
+    projection = (
+        (center_x - start_x) * segment_x + (center_y - start_y) * segment_y
+    ) / segment_len_sq
+    projection = jnp.clip(projection, 0.0, 1.0)
+    closest_x = start_x + projection * segment_x
+    closest_y = start_y + projection * segment_y
+    distance_to_orbit_center = jnp.sqrt(
+        (closest_x - center_x) * (closest_x - center_x)
+        + (closest_y - center_y) * (closest_y - center_y)
+    )
+    init_dx = game.initial_planets.x - center_x
+    init_dy = game.initial_planets.y - center_y
+    orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
+    orbit_band_reaches_segment = (
+        jnp.abs(distance_to_orbit_center - orbit_radius)
+        <= game.planets.radius + PLANET_LAUNCH_RADIUS_OFFSET
+    )
+    dynamic_blocker_possible = jnp.any(
+        rotating
+        & (game.planets.id != source_id)
+        & (game.planets.id != target_id)
+        & orbit_band_reaches_segment
+    )
+    return (~source_rotating) & (~target_rotating) & (~dynamic_blocker_possible)
+
+
+def _static_trajectory_reason_codes_jax(
+    game,
+    source_id: jax.Array,
+    target_id: jax.Array,
+    angle: jax.Array,
+    ships: jax.Array,
+    player: jax.Array,
+    env_cfg: Any,
+) -> jax.Array:
+    epsilon = jnp.asarray(trajectory_shield_epsilon(env_cfg), dtype=jnp.float32)
+    hit_mode = trajectory_shield_hit_mode(env_cfg)
+    source_index = jnp.clip(source_id.astype(jnp.int32), 0, MAX_PLANETS - 1)
+    target_index = jnp.clip(target_id.astype(jnp.int32), 0, MAX_PLANETS - 1)
+    horizon = max(int(getattr(env_cfg, "trajectory_shield_horizon", MAX_STEPS)), 1)
+    remaining_horizon = jnp.minimum(
+        jnp.asarray(horizon, dtype=jnp.float32),
+        jnp.maximum(
+            jnp.asarray(MAX_STEPS, dtype=jnp.float32) - game.step.astype(jnp.float32),
+            0.0,
+        ),
+    )
+    source_x = jnp.take(game.planets.x, source_index)
+    source_y = jnp.take(game.planets.y, source_index)
+    source_radius = jnp.take(game.planets.radius, source_index)
+    target_x = jnp.take(game.planets.x, target_index)
+    target_y = jnp.take(game.planets.y, target_index)
+    start_x = source_x + jnp.cos(angle) * (source_radius + PLANET_LAUNCH_RADIUS_OFFSET)
+    start_y = source_y + jnp.sin(angle) * (source_radius + PLANET_LAUNCH_RADIUS_OFFSET)
+    segment_dx = target_x - start_x
+    segment_dy = target_y - start_y
+    segment_length = jnp.sqrt(segment_dx * segment_dx + segment_dy * segment_dy)
+
+    hit_mask, hit_time = _line_circle_intersection_time_jax(
+        start_x,
+        start_y,
+        target_x,
+        target_y,
+        game.planets.x,
+        game.planets.y,
+        game.planets.radius,
+    )
+    hit_mask = hit_mask & game.planets.active & (game.planets.id != source_id)
+    acceptable_mask = hit_mask & _acceptability_mask_jax(
+        game, player, target_id, hit_mode
+    )
+    unacceptable_mask = hit_mask & (
+        ~_acceptability_mask_jax(game, player, target_id, hit_mode)
+    )
+    inf = jnp.asarray(jnp.inf, dtype=jnp.float32)
+    acceptable_time = jnp.min(jnp.where(acceptable_mask, hit_time, inf))
+    unacceptable_time = jnp.min(jnp.where(unacceptable_mask, hit_time, inf))
+    sun_hit, sun_time = _line_circle_intersection_time_jax(
+        start_x,
+        start_y,
+        target_x,
+        target_y,
+        BOARD_CENTER[0],
+        BOARD_CENTER[1],
+        SUN_RADIUS,
+    )
+    bounds_hit, bounds_time = _bounds_exit_time_jax(
+        start_x, start_y, target_x, target_y
+    )
+
+    max_distance = _fleet_speed_for_ships_jax(ships) * remaining_horizon
+    acceptable_reachable = acceptable_time * segment_length <= max_distance
+    unacceptable_reachable = unacceptable_time * segment_length <= max_distance
+    sun_reachable = (sun_time * segment_length <= max_distance) & sun_hit
+    bounds_reachable = (bounds_time * segment_length <= max_distance) & bounds_hit
+    acceptable_eval = jnp.where(acceptable_reachable, acceptable_time, inf)
+    unacceptable_eval = jnp.where(unacceptable_reachable, unacceptable_time, inf)
+    sun_eval = jnp.where(sun_reachable, sun_time, inf)
+    bounds_eval = jnp.where(bounds_reachable, bounds_time, inf)
+    block_time = jnp.minimum(jnp.minimum(sun_eval, bounds_eval), unacceptable_eval)
+    safe_hit = jnp.isfinite(acceptable_eval) & (acceptable_eval + epsilon < block_time)
+    sun_blocks = (
+        jnp.isfinite(sun_eval) & (~safe_hit) & (sun_eval <= acceptable_eval + epsilon)
+    )
+    bounds_blocks = (
+        jnp.isfinite(bounds_eval)
+        & (~safe_hit)
+        & (~sun_blocks)
+        & (bounds_eval <= acceptable_eval + epsilon)
+    )
+    unintended_blocks = (
+        jnp.isfinite(unacceptable_eval)
+        & (~safe_hit)
+        & (~sun_blocks)
+        & (~bounds_blocks)
+        & (unacceptable_eval <= acceptable_eval + epsilon)
+    )
+    reason_code = jnp.where(
+        sun_blocks,
+        _REASON_TO_CODE[SUN_REASON],
+        jnp.where(
+            bounds_blocks,
+            _REASON_TO_CODE[BOUNDS_REASON],
+            jnp.where(
+                unintended_blocks,
+                _REASON_TO_CODE[UNINTENDED_HIT_REASON],
+                jnp.where(
+                    safe_hit,
+                    _REASON_TO_CODE[SAFE_REASON],
+                    _REASON_TO_CODE[HORIZON_REASON],
+                ),
+            ),
+        ),
+    )
+    return jnp.where(ships <= 0.0, _REASON_TO_CODE[SAFE_REASON], reason_code)
+
+
 def trajectory_shield_reason_for_launch(
     state: GameState,
     source_id: int,
@@ -752,10 +930,7 @@ def _trajectory_reason_code_jax(
     source_x = jnp.take(game.planets.x, source_index)
     source_y = jnp.take(game.planets.y, source_index)
     source_radius = jnp.take(game.planets.radius, source_index)
-    speed = 1.0 + (MAX_FLEET_SPEED - 1.0) * (
-        jnp.log(jnp.maximum(ships, 1.0)) / jnp.log(1000.0)
-    ) ** 1.5
-    speed = jnp.minimum(speed, MAX_FLEET_SPEED)
+    speed = _fleet_speed_for_ships_jax(ships)
 
     def scan_step(carry, offset):
         old_x, old_y, done, reason_code = carry
@@ -902,17 +1077,40 @@ def apply_trajectory_shield_to_turn_batch(
             ship_counts = ship_count_for_bucket_jax(
                 jnp.broadcast_to(source_ships, bucket_ids.shape), bucket_ids, bucket_count
             )
-            reason_codes = jax.vmap(
-                lambda ships: _trajectory_reason_code_jax(
+            static_fast_path_enabled = _static_pair_fast_path_enabled_jax(
+                game, source_id, target_id, angle
+            )
+
+            def evaluate_static(_):
+                return _static_trajectory_reason_codes_jax(
                     game,
                     source_id,
                     target_id,
                     angle,
-                    ships,
+                    ship_counts,
                     game.player,
                     env_cfg,
                 )
-            )(ship_counts)
+
+            def evaluate_dynamic(_):
+                return jax.vmap(
+                    lambda ships: _trajectory_reason_code_jax(
+                        game,
+                        source_id,
+                        target_id,
+                        angle,
+                        ships,
+                        game.player,
+                        env_cfg,
+                    )
+                )(ship_counts)
+
+            reason_codes = jax.lax.cond(
+                static_fast_path_enabled,
+                evaluate_static,
+                evaluate_dynamic,
+                operand=None,
+            )
             bucket_legal = reason_codes == _REASON_TO_CODE[SAFE_REASON]
             bucket_legal = bucket_legal & (ship_counts <= source_ships)
             legal = jnp.any(bucket_legal)

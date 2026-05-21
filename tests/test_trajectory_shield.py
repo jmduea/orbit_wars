@@ -323,6 +323,28 @@ def test_jax_batch_shield_reports_blocked_metrics_for_sun_crossing() -> None:
     assert float(shielded.diagnostics.blocked_sun_count) >= 1.0
 
 
+def test_jax_batch_shield_allows_static_launches_on_mixed_rotating_maps() -> None:
+    cfg = _cfg()
+    planets = [
+        _planet(0, 0, 90.0, 90.0, ships=40),
+        _planet(1, 1, 90.0, 80.0),
+        _planet(2, -1, 50.0, 20.0),
+    ]
+    batch = FakeShieldBatch(
+        candidate_mask=jnp.asarray([[True, True, False, False]], dtype=bool),
+        candidate_ids=jnp.asarray([[-1, 1, -1, -1]], dtype=jnp.int32),
+        target_angles=jnp.asarray([[0.0, -math.pi / 2.0, 0.0, 0.0]], dtype=jnp.float32),
+        source_ids=jnp.asarray([0], dtype=jnp.int32),
+        source_ships=jnp.asarray([40.0], dtype=jnp.float32),
+    )
+
+    shielded = apply_trajectory_shield_to_turn_batch(_jax_game(planets), batch, cfg)
+
+    assert bool(shielded.batch.candidate_mask[0, 1])
+    assert bool(shielded.ship_bucket_mask[0, 1, 1])
+    assert float(shielded.diagnostics.legal_non_noop_rate) == 1.0
+
+
 def test_jax_batch_shield_keeps_target_when_some_ship_buckets_are_safe() -> None:
     cfg = _cfg(trajectory_shield_horizon=1)
     planets = [_planet(0, 0, 20.0, 20.0, ships=1000), _planet(1, 1, 29.0, 20.0)]
