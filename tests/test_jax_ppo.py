@@ -2,7 +2,7 @@ import jax
 import pytest
 
 from src.config import TrainConfig
-from src.constants import MAX_PLANETS
+from src.constants import MAX_PLANETS, MAX_STEPS
 from src.jax_env import batched_reset
 from src.jax_policy import build_jax_policy
 from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
@@ -30,6 +30,7 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     assert transitions.self_features.shape[:3] == (
         cfg.ppo.rollout_steps,
         cfg.ppo.num_envs,
+        MAX_PLANETS,
     )
     assert (
         float(rollout_metrics["env_steps"]) == cfg.ppo.rollout_steps * cfg.ppo.num_envs
@@ -78,7 +79,6 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
 
     save_jax_checkpoint(
         tmp_path,
-        "roundtrip",
         7,
         train_state,
         cfg,
@@ -87,9 +87,7 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
         completed_episodes=3,
     )
     loaded_state, key, start_update, total_env_steps, completed_episodes = (
-        load_jax_checkpoint(
-            str(tmp_path / "roundtrip" / "jax_ckpt_000007.pkl"), train_state, cfg
-        )
+        load_jax_checkpoint(str(tmp_path / "jax_ckpt_000007.pkl"), train_state, cfg)
     )
 
     assert start_update == 8
@@ -155,8 +153,13 @@ def test_collect_rollout_jax_two_player_static_shapes():
         jax.random.PRNGKey(62), env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert transitions.self_features.shape == (1, 3, 8, transitions.self_features.shape[-1])
-    assert transitions.decision_mask.shape == (1, 3, 8)
+    assert transitions.self_features.shape == (
+        1,
+        3,
+        60,
+        transitions.self_features.shape[-1],
+    )
+    assert transitions.decision_mask.shape == (1, 3, 60)
     assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
     from src.jax_env import assign_learner_players
@@ -199,6 +202,10 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     env_state, turn_batch = assign_learner_players(
         env_state, env_indices, episode_counts, cfg.env, cfg.alternate_player_sides
     )
+    terminal_step = jax.numpy.full(
+        (cfg.ppo.num_envs,), MAX_STEPS - 3, dtype=jax.numpy.int32
+    )
+    env_state = env_state._replace(game=env_state.game._replace(step=terminal_step))
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(31), policy, cfg)
 
