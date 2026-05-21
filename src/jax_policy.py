@@ -407,12 +407,72 @@ class AutoregressivePointerDecoder(nn.Module):
         )
 
 
+class SharedValueHead(nn.Module):
+    """Single critic head shared across all training formats."""
+
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        value_input: jax.Array,
+        player_count: jax.Array | None = None,
+    ) -> jax.Array:
+        del player_count
+        value_hidden = nn.relu(
+            nn.Dense(self.hidden_size, name="shared_value_dense")(value_input)
+        )
+        return nn.Dense(1, name="shared_value_out")(value_hidden).squeeze(-1)
+
+
+class FormatRoutedValueHead(nn.Module):
+    """Select between dedicated 2p and 4p critic heads per batch row."""
+
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        value_input: jax.Array,
+        player_count: jax.Array | None = None,
+    ) -> jax.Array:
+        if player_count is None:
+            raise ValueError(
+                "FormatRoutedValueHead requires an explicit player_count array."
+            )
+
+        player_count = jnp.asarray(player_count, dtype=jnp.int32)
+        if player_count.ndim == 0:
+            player_count = jnp.full(
+                (value_input.shape[0],), player_count, dtype=jnp.int32
+            )
+        else:
+            player_count = player_count.reshape((value_input.shape[0],))
+
+        two_player_hidden = nn.relu(
+            nn.Dense(self.hidden_size, name="two_player_value_dense")(value_input)
+        )
+        two_player_value = nn.Dense(1, name="two_player_value_out")(
+            two_player_hidden
+        ).squeeze(-1)
+
+        four_player_hidden = nn.relu(
+            nn.Dense(self.hidden_size, name="four_player_value_dense")(value_input)
+        )
+        four_player_value = nn.Dense(1, name="four_player_value_out")(
+            four_player_hidden
+        ).squeeze(-1)
+
+        return jnp.where(player_count == 2, two_player_value, four_player_value)
+
+
 # --- Composable Policy Wrapper ---
 class ComposablePlanetPolicy(nn.Module):
     """The master framework container that unifies injected backbones and decoders."""
 
     encoder_module: nn.Module
     decoder_module: nn.Module
+    value_head_module: nn.Module | None = None
     hidden_size: int = 128
 
     @nn.compact
@@ -422,6 +482,7 @@ class ComposablePlanetPolicy(nn.Module):
         candidate_features: jax.Array,
         global_features: jax.Array,
         candidate_mask: jax.Array,
+        player_count: jax.Array | None = None,
         target_sequence: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
@@ -441,11 +502,10 @@ class ComposablePlanetPolicy(nn.Module):
             deterministic=deterministic,
         )
 
-        # Compute state utility value via static centralized Critic Head
-        value_hidden = nn.relu(
-            nn.Dense(self.hidden_size, name="value_dense")(encoder_out.value_input)
-        )
-        value = nn.Dense(1, name="value_out")(value_hidden).squeeze(-1)
+        value_head_module = self.value_head_module
+        if value_head_module is None:
+            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
+        value = value_head_module(encoder_out.value_input, player_count=player_count)
 
         return JaxPolicyOutput(
             target_logits=target_logits,
@@ -460,6 +520,7 @@ class JaxPlanetPolicy(nn.Module):
 
     candidate_count: int
     ship_bucket_count: int
+    value_head_module: nn.Module | None = None
     hidden_size: int = 128
 
     @nn.compact
@@ -469,6 +530,7 @@ class JaxPlanetPolicy(nn.Module):
         candidate_features: jax.Array,
         global_features: jax.Array,
         candidate_mask: jax.Array,
+        player_count: jax.Array | None = None,
         target_sequence: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
@@ -480,12 +542,14 @@ class JaxPlanetPolicy(nn.Module):
             decoder_module=FeedForwardActionDecoder(
                 ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
             ),
+            value_head_module=self.value_head_module,
             hidden_size=self.hidden_size,
         )(
             self_features,
             candidate_features,
             global_features,
             candidate_mask,
+            player_count=player_count,
             target_sequence=target_sequence,
             rng=rng,
             deterministic=deterministic,
@@ -497,6 +561,7 @@ class JaxAttentionPlanetPolicy(nn.Module):
 
     candidate_count: int
     ship_bucket_count: int
+    value_head_module: nn.Module | None = None
     hidden_size: int = 128
     attention_heads: int = 4
     enable_gradient_checkpointing: bool = False
@@ -517,6 +582,7 @@ class JaxAttentionPlanetPolicy(nn.Module):
         candidate_features: jax.Array,
         global_features: jax.Array,
         candidate_mask: jax.Array,
+        player_count: jax.Array | None = None,
         target_sequence: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
@@ -532,12 +598,14 @@ class JaxAttentionPlanetPolicy(nn.Module):
             decoder_module=FeedForwardActionDecoder(
                 ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
             ),
+            value_head_module=self.value_head_module,
             hidden_size=self.hidden_size,
         )(
             self_features,
             candidate_features,
             global_features,
             candidate_mask.astype(bool),
+            player_count=player_count,
             target_sequence=target_sequence,
             rng=rng,
             deterministic=deterministic,
@@ -569,6 +637,19 @@ def masked_mean(values: jax.Array, mask: jax.Array) -> jax.Array:
     count = jnp.maximum(weights.sum(axis=1), 1.0)
     return total / count
 
+
+def build_value_head(cfg: TrainConfig) -> nn.Module:
+    """Construct the configured critic head module."""
+
+    normalized_value_head = cfg.model.value_head.strip().lower()
+    if normalized_value_head == "shared":
+        return SharedValueHead(hidden_size=cfg.model.hidden_size)
+    if normalized_value_head == "format_routed":
+        return FormatRoutedValueHead(hidden_size=cfg.model.hidden_size)
+    raise ValueError(
+        f"Unsupported value head '{cfg.model.value_head}'. Expected 'shared' or 'format_routed'."
+    )
+
 def build_jax_policy(
     cfg: TrainConfig,
 ) -> nn.Module:
@@ -581,18 +662,21 @@ def build_jax_policy(
     buckets = cfg.env.ship_bucket_count
     attention_heads = cfg.model.attention_heads
     k_steps = cfg.model.max_moves_k
+    value_head_module = build_value_head(cfg)
     target_coords_slice = candidate_feature_schema(cfg.env).slice("target_coords")
     normalized_architecture = cfg.model.architecture.strip().lower()
     if normalized_architecture == "mlp":
         return JaxPlanetPolicy(
             candidate_count=cfg.env.candidate_count,
             ship_bucket_count=cfg.env.ship_bucket_count,
+            value_head_module=value_head_module,
             hidden_size=cfg.model.hidden_size,
         )
     elif normalized_architecture in {"attention", "transformer"}:
         return JaxAttentionPlanetPolicy(
             candidate_count=cfg.env.candidate_count,
             ship_bucket_count=cfg.env.ship_bucket_count,
+            value_head_module=value_head_module,
             hidden_size=cfg.model.hidden_size,
             attention_heads=cfg.model.attention_heads,
             enable_gradient_checkpointing=cfg.ppo.enable_gradient_checkpointing,
@@ -603,6 +687,7 @@ def build_jax_policy(
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            value_head_module=value_head_module,
             hidden_size=hidden,
         )
     elif normalized_architecture == "transformer_pointer":
@@ -615,6 +700,7 @@ def build_jax_policy(
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            value_head_module=value_head_module,
             hidden_size=hidden,
         )
     elif normalized_architecture == "gnn_pointer":
@@ -628,6 +714,7 @@ def build_jax_policy(
             decoder_module=AutoregressivePointerDecoder(
                 ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
             ),
+            value_head_module=value_head_module,
             hidden_size=hidden,
         )
     else:

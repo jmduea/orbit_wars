@@ -356,6 +356,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
     combined = concatenate_transition_batches(transitions_by_group)
 
     assert [group.cfg.env.player_count for group in groups] == [2, 4]
+    assert set(jax.numpy.unique(combined.player_count).tolist()) == {2, 4}
     assert combined.self_features.shape[:3] == (
         cfg.ppo.rollout_steps,
         4,
@@ -407,6 +408,7 @@ def test_ppo_update_jax_accepts_four_player_rollout_transitions():
     cfg.env.player_count = 4
     cfg.env.max_fleets = 16
     cfg.env.candidate_count = 4
+    cfg.model.value_head = "format_routed"
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     cfg.ppo.num_envs = 2

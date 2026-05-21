@@ -1,3 +1,4 @@
+import flax
 import jax
 import jax.numpy as jnp
 import pytest
@@ -8,9 +9,12 @@ from src.config import TrainConfig
 from src.jax_policy import (
     AutoregressivePointerDecoder,
     ComposablePlanetPolicy,
+    FeedForwardActionDecoder,
+    FormatRoutedValueHead,
     GNNBackboneEncoder,
     JaxPolicyOutput,
     MLPBackboneEncoder,
+    SharedValueHead,
     TransformerBackboneEncoder,
     build_jax_policy,
 )
@@ -186,3 +190,54 @@ def test_teacher_forcing_alignment(mock_inputs):
     # Confirm structural sizes align correctly back out to standard evaluation layouts
     assert isinstance(output, JaxPolicyOutput)
     assert output.target_logits.shape == (BATCH_SIZE, MAX_MOVES_K, CANDIDATE_COUNT)
+
+
+def test_shared_value_head_ignores_optional_player_count(mock_inputs):
+    encoder = MLPBackboneEncoder(hidden_size=HIDDEN_SIZE)
+    decoder = FeedForwardActionDecoder(
+        ship_bucket_count=SHIP_BUCKET_COUNT,
+        hidden_size=HIDDEN_SIZE,
+    )
+    policy = ComposablePlanetPolicy(
+        encoder_module=encoder,
+        decoder_module=decoder,
+        value_head_module=SharedValueHead(hidden_size=HIDDEN_SIZE),
+        hidden_size=HIDDEN_SIZE,
+    )
+
+    params = policy.init(
+        jax.random.PRNGKey(3),
+        mock_inputs["self_features"],
+        mock_inputs["candidate_features"],
+        mock_inputs["global_features"],
+        mock_inputs["candidate_mask"],
+    )
+
+    without_player_count = policy.apply(params, **mock_inputs, deterministic=True)
+    with_player_count = policy.apply(
+        params,
+        **mock_inputs,
+        player_count=jnp.full((BATCH_SIZE,), 4, dtype=jnp.int32),
+        deterministic=True,
+    )
+
+    assert without_player_count.value.shape == (BATCH_SIZE,)
+    assert jnp.allclose(without_player_count.value, with_player_count.value)
+
+
+def test_format_routed_value_head_routes_same_observation_by_player_count():
+    value_head = FormatRoutedValueHead(hidden_size=HIDDEN_SIZE)
+    value_input = jnp.ones((2, HIDDEN_SIZE), dtype=jnp.float32)
+    player_count = jnp.array([2, 4], dtype=jnp.int32)
+
+    params = value_head.init(jax.random.PRNGKey(4), value_input, player_count)
+    mutable_params = flax.core.unfreeze(params)
+    mutable_params["params"]["four_player_value_out"]["bias"] = (
+        mutable_params["params"]["four_player_value_out"]["bias"] + 1.0
+    )
+    params = flax.core.freeze(mutable_params)
+
+    values = value_head.apply(params, value_input, player_count)
+
+    assert values.shape == (2,)
+    assert values[0] != values[1]

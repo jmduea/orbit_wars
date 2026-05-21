@@ -101,6 +101,12 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     if float(env.trajectory_shield_epsilon) < 0.0:
         raise ValueError("env.trajectory_shield_epsilon must be non-negative.")
 
+    value_head = cfg.model.value_head.strip().lower()
+    if value_head not in {"shared", "format_routed"}:
+        raise ValueError(
+            "model.value_head must be 'shared' or 'format_routed'."
+        )
+
     ppo = cfg.ppo
     if int(ppo.update_chunk_rows_min) <= 0:
         raise ValueError("ppo.update_chunk_rows_min must be a positive integer.")

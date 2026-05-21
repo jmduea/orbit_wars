@@ -118,6 +118,7 @@ class JaxTransitionBatch(NamedTuple):
     candidate_features: jax.Array
     global_features: jax.Array
     candidate_mask: jax.Array
+    player_count: jax.Array
     ship_bucket_mask: jax.Array
     decision_mask: jax.Array
     target_index: jax.Array
@@ -145,7 +146,15 @@ def init_train_state(key: jax.Array, policy: object, cfg: TrainConfig) -> JaxTra
     )
     dummy_global = jnp.zeros((1, global_feature_dim(cfg.env)), dtype=jnp.float32)
     dummy_mask = jnp.ones((1, cfg.env.candidate_count), dtype=bool)
-    params = policy.init(key, dummy_self, dummy_candidate, dummy_global, dummy_mask)
+    dummy_player_count = jnp.full((1,), cfg.env.player_count, dtype=jnp.int32)
+    params = policy.init(
+        key,
+        dummy_self,
+        dummy_candidate,
+        dummy_global,
+        dummy_mask,
+        player_count=dummy_player_count,
+    )
     optimizer = optax.chain(
         optax.clip_by_global_norm(cfg.ppo.max_grad_norm), optax.adam(cfg.ppo.lr)
     )
@@ -509,12 +518,14 @@ def _sample_shielded_sequence_with_params(
     flat_self, flat_candidate, flat_global, flat_mask, flat_decision = flatten_batch(
         batch
     )
+    flat_player_count = jnp.full((flat_mask.shape[0],), cfg.env.player_count, dtype=jnp.int32)
     probe_output = policy.apply(
         params,
         flat_self,
         flat_candidate,
         flat_global,
         flat_mask,
+        player_count=flat_player_count,
         rng=key,
         deterministic=deterministic,
     )
@@ -547,6 +558,7 @@ def _sample_shielded_sequence_with_params(
             flat_candidate,
             flat_global,
             flat_mask,
+            player_count=flat_player_count,
             target_sequence=target_sequence,
             rng=jax.random.fold_in(key, step_idx),
             deterministic=deterministic,
@@ -1101,6 +1113,9 @@ def collect_rollout_jax(
             "candidate_features": batch.candidate_features,
             "global_features": batch.global_features,
             "candidate_mask": batch.candidate_mask,
+            "player_count": jnp.full(
+                batch.decision_mask.shape, cfg.env.player_count, dtype=jnp.int32
+            ),
             "ship_bucket_mask": sample.ship_bucket_mask.reshape(
                 batch.decision_mask.shape
                 + (target.shape[-1], cfg.env.candidate_count, cfg.env.ship_bucket_count)
@@ -1176,6 +1191,7 @@ def collect_rollout_jax(
         candidate_features=data["candidate_features"],
         global_features=data["global_features"],
         candidate_mask=data["candidate_mask"],
+        player_count=data["player_count"],
         ship_bucket_mask=data["ship_bucket_mask"],
         decision_mask=data["decision_mask"],
         target_index=data["target_index"],
@@ -1611,6 +1627,7 @@ def ppo_update_jax(
     )
     global_features = batch.global_features.reshape(-1, global_feature_dim(cfg.env))
     candidate_mask = batch.candidate_mask.reshape(-1, cfg.env.candidate_count)
+    player_count = batch.player_count.reshape(-1)
     ship_bucket_mask = batch.ship_bucket_mask.reshape(
         -1, sequence_k, cfg.env.candidate_count, cfg.env.ship_bucket_count
     )
@@ -1648,6 +1665,9 @@ def ppo_update_jax(
         "candidate_mask": _reshape_minibatches(
             candidate_mask, minibatch_count, minibatch_size, False
         ),
+        "player_count": _reshape_minibatches(
+            player_count, minibatch_count, minibatch_size, 0
+        ),
         "ship_bucket_mask": _reshape_minibatches(
             ship_bucket_mask, minibatch_count, minibatch_size, False
         ),
@@ -1672,6 +1692,7 @@ def ppo_update_jax(
                 minibatch["candidate_features"],
                 minibatch["global_features"],
                 minibatch["candidate_mask"],
+                player_count=minibatch["player_count"],
                 target_sequence=minibatch["target"],
             )
             output = mask_policy_output_for_shield(

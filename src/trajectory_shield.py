@@ -826,12 +826,14 @@ def select_runtime_shielded_policy_actions(
     global_features = batch.global_features if global_features is None else global_features
     candidate_mask = batch.candidate_mask if candidate_mask is None else candidate_mask
     candidate_mask_array = jnp.asarray(candidate_mask).astype(bool)
+    player_count = jnp.full((candidate_mask_array.shape[0],), env_cfg.player_count, dtype=jnp.int32)
     probe_output = policy.apply(
         variables,
         jnp.asarray(self_features),
         jnp.asarray(candidate_features),
         jnp.asarray(global_features),
         candidate_mask_array,
+        player_count=player_count,
     )
     target_logits = ensure_policy_sequence(probe_output.target_logits)
     sequence_k = int(target_logits.shape[1])
@@ -848,6 +850,7 @@ def select_runtime_shielded_policy_actions(
             jnp.asarray(candidate_features),
             jnp.asarray(global_features),
             candidate_mask_array,
+            player_count=player_count,
             target_sequence=target_sequence,
             rng=jax.random.fold_in(key, step_idx),
             deterministic=deterministic,

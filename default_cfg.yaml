@@ -33,6 +33,7 @@ env:
   trajectory_shield_epsilon: 1.0e-06
 model:
   architecture: gnn_pointer
+  value_head: shared
   hidden_size: 128
   attention_heads: 4
   max_moves_k: 3

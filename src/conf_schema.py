@@ -33,6 +33,7 @@ class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
     architecture: str = "gnn_pointer"
+    value_head: str = "shared"
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
