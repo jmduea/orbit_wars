@@ -1,8 +1,9 @@
 from __future__ import annotations
-from src.constants import MAX_STEPS
 
 from dataclasses import dataclass
 from typing import Any
+
+from src.constants import MAX_STEPS
 
 from .config import RewardConfig, TaskConfig, TrainConfig
 from .features import (

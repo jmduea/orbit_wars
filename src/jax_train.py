@@ -23,8 +23,8 @@ from .artifact_pipeline import (
 from .checkpoint_compat import (
     feature_metadata,
     load_checkpoint_payload,
-    validate_checkpoint_feature_compatibility,
     validate_checkpoint_config_compatibility,
+    validate_checkpoint_feature_compatibility,
 )
 from .checkpoint_retention import prune_checkpoints
 from .config import TrainConfig

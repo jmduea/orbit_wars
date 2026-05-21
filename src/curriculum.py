@@ -13,7 +13,6 @@ from .opponent_pool import (
     OPPONENT_LATEST,
 )
 
-
 METRIC_KEYS = (
     "overall_win_rate",
     "win_rate_2p",
