@@ -1,86 +1,129 @@
 defaults:
   - model: gnn_pointer
-  - training_format: mix_2p_4p_8env
+  - task: default
+  - reward: terminal_only
+  - training: default
+  - format: mix_2p_4p_8env
   - curriculum: self_play_staged
-  - opponent_mix: self_play_curriculum
-  - replay: enabled
-  - checkpoint_retention: default
+  - opponents: self_play_curriculum
   - telemetry: default
-  - experiment: null
+  - artifacts: default
   - _self_
 
 seed: 42
 run_name: orbit_wars_ppo
 device: auto
-save_dir: artifacts/
-checkpoint_every: 100
-log_every: 5
-opponent: self
-self_play_update_interval: 10
-self_play_deterministic: false
-multi_opponent_mode: mixed
-alternate_player_sides: true
-env:
-  candidate_count: 8
-  ship_bucket_count: 8
-  max_fleets: 256
-  player_count: 2
-  max_ships: 400.0
-  reward_capture_planet: 0.0
-  reward_ship_delta: 0.0
-  reward_production_delta: 0.00
-  reward_terminal_scale: 1.0
-  early_terminal_reward_shaping_enabled: false
-  early_terminal_reward_shaping_horizon: 500
-  terminal_reward_mode: binary_win
-  feature_history_steps: 10
-  trajectory_shield_enabled: true
-  trajectory_shield_hit_mode: selected_target
-  trajectory_shield_horizon: 100
-  trajectory_shield_epsilon: 1.0e-06
-ppo:
-  rollout_steps: 250
-  num_envs: 16
-  total_updates: 500
-  epochs: 4
-  minibatch_size: 512
-  gamma: 0.99
-  clip_coef: 0.2
-  ent_coef: 0.005
-  vf_coef: 0.5
-  lr: 0.0003
-  max_grad_norm: 0.5
-  update_chunk_rows_min: 4096
-  update_chunk_rows_max: null
-  rollout_microbatch_envs: null
-  enable_gradient_checkpointing: true
-artifact_pipeline:
-  enabled: true
-  checkpoint_queue_size: 1
-  checkpoint_timeout_seconds: 300.0
-  final_flush_timeout_seconds: 900.0
-  interrupt_flush_timeout_seconds: 60.0
-  exception_flush_timeout_seconds: 60.0
-  latest_lag_warning_updates: 1
-  coalesce_intermediate_checkpoints: true
-  replay_async: true
-  replay_backend: docker
-  docker_validation_async: false
-  docker_image: gcr.io/kaggle-images/python-simulations
-  docker_player_count: both
-  docker_timeout_seconds: 1.0
-  worker_autostart: true
-  worker_poll_seconds: 5.0
-  worker_idle_exit_seconds: 300.0
-  ledger_enabled: true
-  queue_dir: artifact_jobs
-  fail_training_on_checkpoint_error: true
-  fail_training_on_optional_job_error: false
-reseed_every_updates: 0
-reseed_on_plateau: false
-plateau_metric: episode_reward_mean
-plateau_window: 10
-plateau_delta: 0.0
 heldout_eval_seed_set: []
 print_resolved_config: false
 resume_checkpoint: null
+
+# Legacy override anchors. Defaults come from responsibility groups above, but
+# keeping these mappings present lets existing overrides such as ppo.lr=... and
+# env.candidate_count=... continue to parse during the migration.
+env:
+  candidate_count: null
+  ship_bucket_count: null
+  max_fleets: null
+  player_count: null
+  max_ships: null
+  reward_capture_planet: null
+  reward_ship_delta: null
+  reward_production_delta: null
+  reward_terminal_scale: null
+  early_terminal_reward_shaping_enabled: null
+  early_terminal_reward_shaping_horizon: null
+  terminal_reward_mode: null
+  feature_history_steps: null
+  trajectory_shield_enabled: null
+  trajectory_shield_hit_mode: null
+  trajectory_shield_horizon: null
+  trajectory_shield_epsilon: null
+ppo:
+  rollout_steps: null
+  num_envs: null
+  total_updates: null
+  epochs: null
+  minibatch_size: null
+  gamma: null
+  clip_coef: null
+  ent_coef: null
+  vf_coef: null
+  lr: null
+  max_grad_norm: null
+  update_chunk_rows_min: null
+  update_chunk_rows_max: null
+  rollout_microbatch_envs: null
+  enable_gradient_checkpointing: null
+training_format:
+  format_schedule: null
+  format_mix: null
+  rollout_groups: null
+  phases: null
+opponent_mix:
+  weights:
+    latest: null
+    historical: null
+    nearest_sniper: null
+    turtle: null
+    opportunistic: null
+    random: null
+    noop: null
+  temperature: null
+  curriculum: null
+wandb:
+  enabled: null
+  project: null
+  entity: null
+  group: null
+  tags: null
+  log_artifacts: null
+  log_model_every: null
+  watch_model: null
+artifact_pipeline:
+  enabled: null
+  checkpoint_queue_size: null
+  checkpoint_timeout_seconds: null
+  final_flush_timeout_seconds: null
+  interrupt_flush_timeout_seconds: null
+  exception_flush_timeout_seconds: null
+  latest_lag_warning_updates: null
+  coalesce_intermediate_checkpoints: null
+  replay_async: null
+  replay_backend: null
+  docker_validation_async: null
+  docker_image: null
+  docker_player_count: null
+  docker_timeout_seconds: null
+  worker_autostart: null
+  worker_poll_seconds: null
+  worker_idle_exit_seconds: null
+  ledger_enabled: null
+  queue_dir: null
+  fail_training_on_checkpoint_error: null
+  fail_training_on_optional_job_error: null
+replay:
+  enabled: null
+  every_n_checkpoints: null
+  opponent: null
+  seed_policy: null
+  max_steps: null
+  output_dir: null
+checkpoint_retention:
+  keep_last_n: null
+  keep_every_n_updates: null
+  keep_best_k_by_metric: null
+  best_metric_name: null
+  best_metric_mode: null
+  min_update_for_pruning: null
+  dry_run_pruning: null
+save_dir: null
+checkpoint_every: null
+opponent: null
+self_play_enabled: null
+self_play_update_interval: null
+self_play_deterministic: null
+self_play_pool_size: null
+self_play_snapshot_interval: null
+self_play_latest_probability: null
+multi_opponent_mode: null
+alternate_player_sides: null

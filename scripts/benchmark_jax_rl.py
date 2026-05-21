@@ -21,7 +21,12 @@ def parse_args() -> argparse.Namespace:
     """Parse command-line options for end-to-end JAX RL benchmarking."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--experiment", type=str, default="attention_training")
+    parser.add_argument(
+        "--overrides",
+        nargs="*",
+        default=["model=attention"],
+        help="Hydra overrides for the benchmark config, such as model=attention training.total_updates=10.",
+    )
     parser.add_argument("--num-envs", type=int, default=None)
     parser.add_argument("--rollout-steps", type=int, default=None)
     parser.add_argument("--updates", type=int, default=5)
@@ -47,7 +52,7 @@ def main() -> None:
     from src.jax_policy import build_jax_policy
     from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
 
-    cfg = deepcopy(compose_hydra_train_config([f"experiment={args.experiment}"]))
+    cfg = deepcopy(compose_hydra_train_config(list(args.overrides)))
     if args.num_envs is not None:
         cfg.ppo.num_envs = args.num_envs
     if args.rollout_steps is not None:

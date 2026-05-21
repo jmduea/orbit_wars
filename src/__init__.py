@@ -1,11 +1,9 @@
 from .config import (
     TrainConfig,
-    default_train_config_path,
-    load_hydra_train_config,
+    compose_hydra_train_config,
 )
 
 __all__ = [
     "TrainConfig",
-    "default_train_config_path",
-    "load_hydra_train_config",
+    "compose_hydra_train_config",
 ]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -32,52 +33,279 @@ __all__ = [
     "ArtifactPipelineConfig",
     "TrainConfig",
     "compose_hydra_train_config",
-    "default_train_config_path",
-    "load_hydra_train_config",
     "train_config_from_omegaconf",
 ]
-
-
-def default_train_config_path() -> Path:
-    """Return the repository's default training YAML path."""
-
-    return Path(__file__).resolve().parents[1] / "default_cfg.yaml"
-
-
-def load_hydra_train_config(path: str | Path) -> TrainConfig:
-    """Load training config through Hydra + structured schema validation."""
-
-    config_path = Path(path).resolve()
-    register_config_schemas()
-    with initialize_config_dir(version_base="1.3", config_dir=str(config_path.parent)):
-        composed = compose(config_name=config_path.stem)
-    _validate_no_legacy_format_conflicts(composed)
-    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), composed)
-    cfg: TrainConfig = OmegaConf.to_object(merged)
-    cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
-    _validate_train_config(cfg)
-    return cfg
 
 
 def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfig:
     """Compose the repository root Hydra config with optional overrides."""
 
     config_dir = Path(__file__).resolve().parents[1] / "conf"
+    override_list = overrides or []
     register_config_schemas()
     with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
-        composed = compose(config_name="config", overrides=overrides or [])
-    return train_config_from_omegaconf(composed)
+        composed = compose(config_name="config", overrides=override_list)
+    return train_config_from_omegaconf(composed, overrides=override_list)
 
 
-def train_config_from_omegaconf(cfg_raw: Any) -> TrainConfig:
+def train_config_from_omegaconf(
+    cfg_raw: Any, overrides: list[str] | None = None
+) -> TrainConfig:
     """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
 
-    _validate_no_legacy_format_conflicts(cfg_raw)
-    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
+    _validate_responsibility_override_conflicts(overrides or _active_hydra_overrides())
+    cfg_normalized = _normalize_responsibility_config(cfg_raw)
+    _validate_no_legacy_format_conflicts(cfg_normalized)
+    merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_normalized)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
     _validate_train_config(cfg)
     return cfg
+
+
+_PPO_FIELDS = {
+    "rollout_steps",
+    "num_envs",
+    "total_updates",
+    "epochs",
+    "minibatch_size",
+    "update_chunk_rows_min",
+    "update_chunk_rows_max",
+    "rollout_microbatch_envs",
+    "enable_gradient_checkpointing",
+    "gamma",
+    "clip_coef",
+    "ent_coef",
+    "vf_coef",
+    "lr",
+    "max_grad_norm",
+}
+
+_TOP_LEVEL_TRAINING_FIELDS = {
+    "reseed_every_updates",
+    "reseed_on_plateau",
+    "plateau_metric",
+    "plateau_window",
+    "plateau_delta",
+}
+
+_RESPONSIBILITY_OVERRIDE_CONFLICTS = {
+    "task": (
+        "env.candidate_count",
+        "env.ship_bucket_count",
+        "env.max_fleets",
+        "env.player_count",
+        "env.max_ships",
+        "env.feature_history_steps",
+        "env.trajectory_shield_",
+    ),
+    "reward": ("env.reward_", "env.terminal_reward_mode", "env.early_terminal_reward_shaping_"),
+    "training": ("ppo.", "reseed_", "plateau_"),
+    "format": ("training_format.",),
+    "opponents": (
+        "opponent",
+        "multi_opponent_mode",
+        "alternate_player_sides",
+        "self_play_",
+        "opponent_mix.",
+    ),
+    "telemetry.wandb": ("wandb.",),
+    "artifacts": ("artifact_pipeline.", "replay.", "checkpoint_retention.", "save_dir", "checkpoint_every"),
+}
+
+
+def _active_hydra_overrides() -> list[str]:
+    try:
+        from hydra.core.hydra_config import HydraConfig
+    except ImportError:
+        return []
+    if not HydraConfig.initialized():
+        return []
+    overrides = getattr(HydraConfig.get(), "overrides", None)
+    task_overrides = getattr(overrides, "task", None) if overrides is not None else None
+    return [str(override) for override in task_overrides or []]
+
+
+def _validate_responsibility_override_conflicts(overrides: list[str]) -> None:
+    normalized = [_override_key(override) for override in overrides]
+    for new_prefix, old_prefixes in _RESPONSIBILITY_OVERRIDE_CONFLICTS.items():
+        has_new = any(
+            key == new_prefix or key.startswith(f"{new_prefix}.") for key in normalized
+        )
+        if not has_new:
+            continue
+        old_hit = next(
+            (
+                key
+                for key in normalized
+                if not (key == new_prefix or key.startswith(f"{new_prefix}."))
+                and any(key.startswith(old_prefix) for old_prefix in old_prefixes)
+            ),
+            None,
+        )
+        if old_hit is not None:
+            raise ValueError(
+                f"Conflicting config overrides: use either {new_prefix} or legacy {old_hit}, not both."
+            )
+
+
+def _override_key(override: str) -> str:
+    text = override.lstrip("+")
+    for separator in ("=", "~"):
+        if separator in text:
+            return text.split(separator, maxsplit=1)[0]
+    return text
+
+
+def _normalize_responsibility_config(cfg_raw: Any) -> Any:
+    raw = OmegaConf.to_container(cfg_raw, resolve=False) if cfg_raw is not None else {}
+    if not isinstance(raw, dict):
+        return cfg_raw
+
+    normalized = deepcopy(raw)
+    task = normalized.pop("task", None)
+    if isinstance(task, dict):
+        _merge_runtime_section(normalized, "env", task)
+
+    reward = normalized.pop("reward", None)
+    if isinstance(reward, dict):
+        _merge_runtime_section(normalized, "env", reward)
+
+    training = normalized.pop("training", None)
+    if isinstance(training, dict):
+        ppo_values = {
+            key: value for key, value in training.items() if key in _PPO_FIELDS
+        }
+        top_level_values = {
+            key: value
+            for key, value in training.items()
+            if key in _TOP_LEVEL_TRAINING_FIELDS
+        }
+        if ppo_values:
+            _merge_runtime_section(normalized, "ppo", ppo_values)
+        for key, value in top_level_values.items():
+            _set_runtime_value(normalized, key, value)
+
+    training_format = normalized.pop("format", None)
+    if isinstance(training_format, dict):
+        _merge_runtime_section(normalized, "training_format", training_format)
+
+    opponents = normalized.pop("opponents", None)
+    if isinstance(opponents, dict):
+        _normalize_opponents_config(normalized, opponents)
+
+    telemetry = normalized.get("telemetry")
+    if isinstance(telemetry, dict) and isinstance(telemetry.get("wandb"), dict):
+        wandb = telemetry.pop("wandb")
+        _merge_runtime_section(normalized, "wandb", wandb)
+
+    artifacts = normalized.pop("artifacts", None)
+    if isinstance(artifacts, dict):
+        _normalize_artifacts_config(normalized, artifacts)
+
+    _drop_none_values(normalized)
+    return OmegaConf.create(normalized)
+
+
+def _normalize_opponents_config(normalized: dict[str, Any], opponents: dict[str, Any]) -> None:
+    mode = opponents.get("mode")
+    if isinstance(mode, dict):
+        for source_key, target_key in (
+            ("opponent", "opponent"),
+            ("multi_opponent_mode", "multi_opponent_mode"),
+            ("alternate_player_sides", "alternate_player_sides"),
+        ):
+            if source_key in mode:
+                _set_runtime_value(normalized, target_key, mode[source_key])
+
+    self_play = opponents.get("self_play")
+    if isinstance(self_play, dict):
+        for source_key, target_key in (
+            ("enabled", "self_play_enabled"),
+            ("update_interval", "self_play_update_interval"),
+            ("deterministic", "self_play_deterministic"),
+        ):
+            if source_key in self_play:
+                _set_runtime_value(normalized, target_key, self_play[source_key])
+
+    mix = opponents.get("mix")
+    if isinstance(mix, dict):
+        opponent_mix: dict[str, Any] = {}
+        if isinstance(mix.get("weights"), dict):
+            opponent_mix["weights"] = mix["weights"]
+        if "temperature" in mix:
+            opponent_mix["temperature"] = mix["temperature"]
+        if "curriculum" in mix:
+            opponent_mix["curriculum"] = mix["curriculum"]
+        if opponent_mix:
+            _merge_runtime_section(normalized, "opponent_mix", opponent_mix)
+
+    snapshot = opponents.get("snapshot")
+    if isinstance(snapshot, dict):
+        if "pool_size" in snapshot:
+            _set_runtime_value(normalized, "self_play_pool_size", snapshot["pool_size"])
+        if "interval_updates" in snapshot:
+            _set_runtime_value(
+                normalized,
+                "self_play_snapshot_interval", snapshot["interval_updates"]
+            )
+        curriculum_snapshot = {
+            key: value
+            for key, value in snapshot.items()
+            if key in {"pool_size", "interval_updates", "deterministic", "selection", "fallback"}
+        }
+        if curriculum_snapshot:
+            curriculum = normalized.setdefault("curriculum", {})
+            if isinstance(curriculum, dict):
+                _merge_runtime_section(curriculum, "snapshot", curriculum_snapshot)
+
+
+def _normalize_artifacts_config(normalized: dict[str, Any], artifacts: dict[str, Any]) -> None:
+    for key in ("save_dir", "checkpoint_every"):
+        if key in artifacts:
+            _set_runtime_value(normalized, key, artifacts[key])
+    for key in ("artifact_pipeline", "replay", "checkpoint_retention"):
+        value = artifacts.get(key)
+        if isinstance(value, dict):
+            _merge_runtime_section(normalized, key, value)
+
+
+def _merge_runtime_section(
+    normalized: dict[str, Any], section_name: str, source: dict[str, Any]
+) -> None:
+    existing = normalized.get(section_name)
+    if isinstance(existing, dict):
+        merged = deepcopy(source)
+        _deep_update(merged, existing)
+        normalized[section_name] = merged
+    elif existing is None:
+        normalized[section_name] = deepcopy(source)
+
+
+def _set_runtime_value(normalized: dict[str, Any], key: str, value: Any) -> None:
+    if key not in normalized or normalized[key] is None:
+        normalized[key] = deepcopy(value)
+
+
+def _deep_update(base: dict[str, Any], overlay: dict[str, Any]) -> None:
+    for key, value in overlay.items():
+        if value is None:
+            continue
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            _deep_update(base[key], value)
+        else:
+            base[key] = value
+
+
+def _drop_none_values(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    for key in list(value):
+        item = value[key]
+        if item is None:
+            del value[key]
+        elif isinstance(item, dict):
+            _drop_none_values(item)
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:

@@ -1,0 +1,27 @@
+program: -m
+method: bayes
+metric:
+  name: overall_win_rate
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  telemetry.wandb.group:
+    value: task_complexity
+  telemetry.wandb.tags:
+    value: [task, complexity]
+  model:
+    value: attention
+  training.total_updates:
+    value: 250
+  task.candidate_count:
+    values: [4, 8, 12, 16]
+  task.ship_bucket_count:
+    values: [4, 8, 12, 16]
+  task.feature_history_steps:
+    values: [5, 10, 20]

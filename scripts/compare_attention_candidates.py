@@ -2,16 +2,36 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-from hydra import compose, initialize_config_dir
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-DEFAULT_EXPERIMENTS = (
-    "attention_training",
-    "attention_candidates_16",
-    "attention_candidates_24",
-)
+from src.config import compose_hydra_train_config
+
+DEFAULT_CONFIGS: dict[str, list[str]] = {
+    "attention_candidates_8": [
+        "model=attention",
+        "task.candidate_count=8",
+        "run_name=attention_candidates_8",
+        "artifacts.save_dir=artifacts/attention_candidates_8",
+    ],
+    "attention_candidates_16": [
+        "model=attention",
+        "task.candidate_count=16",
+        "run_name=attention_candidates_16",
+        "artifacts.save_dir=artifacts/attention_candidates_16",
+    ],
+    "attention_candidates_24": [
+        "model=attention",
+        "task.candidate_count=24",
+        "run_name=attention_candidates_24",
+        "artifacts.save_dir=artifacts/attention_candidates_24",
+    ],
+}
 DEFAULT_COLUMNS = (
     "config",
     "seed",
@@ -33,11 +53,17 @@ DEFAULT_COLUMNS = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare attention candidate-count runs. Compose Hydra experiments to train "
+            "Compare attention candidate-count runs. Compose Hydra group overrides to train "
             "8/16/24-candidate runs with the same seed, then summarize their JSONL logs."
         )
     )
-    parser.add_argument("--experiments", nargs="+", default=list(DEFAULT_EXPERIMENTS), help="Experiment names to compare.")
+    parser.add_argument(
+        "--configs",
+        nargs="+",
+        default=list(DEFAULT_CONFIGS),
+        choices=sorted(DEFAULT_CONFIGS),
+        help="Named group-based configs to compare.",
+    )
     parser.add_argument("--log-dir", default="artifacts/rl_template/logs", help="Directory containing run_name.jsonl logs.")
     parser.add_argument(
         "--print-commands",
@@ -47,13 +73,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_config(experiment: str) -> dict[str, Any]:
-    conf_dir = Path("conf").resolve()
-    with initialize_config_dir(version_base=None, config_dir=str(conf_dir)):
-        cfg = compose(config_name="config", overrides=[f"+experiment={experiment}"])
-    data = dict(cfg)
-    data.pop("experiment", None)
-    return data
+def load_config(config_name: str) -> dict[str, Any]:
+    cfg = compose_hydra_train_config(DEFAULT_CONFIGS[config_name])
+    return {
+        "seed": cfg.seed,
+        "env": {"candidate_count": cfg.env.candidate_count},
+        "run_name": cfg.run_name,
+    }
 
 
 def latest_jsonl_record(path: Path) -> dict[str, Any] | None:
@@ -67,13 +93,13 @@ def latest_jsonl_record(path: Path) -> dict[str, Any] | None:
     return json.loads(last_line) if last_line else None
 
 
-def row_for_config(experiment: str, log_dir: Path) -> dict[str, Any]:
-    cfg = load_config(experiment)
+def row_for_config(config_name: str, log_dir: Path) -> dict[str, Any]:
+    cfg = load_config(config_name)
     env_cfg = cfg.get("env", {}) if isinstance(cfg.get("env", {}), dict) else {}
     candidate_count = int(env_cfg.get("candidate_count", 8))
-    run_name = str(cfg.get("run_name", experiment))
+    run_name = str(cfg.get("run_name", config_name))
     row: dict[str, Any] = {
-        "config": experiment,
+        "config": config_name,
         "seed": cfg.get("seed", ""),
         "candidate_count": candidate_count,
         "real_target_slots": max(0, candidate_count - 1),
@@ -106,12 +132,13 @@ def print_table(rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     args = parse_args()
-    experiments = list(args.experiments)
+    configs = list(args.configs)
     if args.print_commands:
-        for experiment in experiments:
-            print(f"uv run python -m src.train experiment={experiment}")
+        for config_name in configs:
+            overrides = " ".join(DEFAULT_CONFIGS[config_name])
+            print(f"uv run python -m src.train {overrides}")
         print()
-    rows = [row_for_config(experiment, Path(args.log_dir)) for experiment in experiments]
+    rows = [row_for_config(config_name, Path(args.log_dir)) for config_name in configs]
     print_table(rows)
 
 

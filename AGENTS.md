@@ -3,26 +3,23 @@
 ## Repository Shape
 
 - Python 3.12 reinforcement-learning project managed with `uv`; dependencies live in `pyproject.toml`.
-- Canonical training entrypoint is Hydra-first: `uv run python -m src.train experiment=<name>`.
+- Canonical training entrypoint is Hydra-first: `uv run python -m src.train` with responsibility-group overrides.
 - The runtime source is under `src/`; tests are under `tests/`; operational docs are under `docs/`.
-- Hydra config is the source of truth under `conf/`. Experiment presets live in `conf/experiment/`, model profiles in `conf/model/`, opponent profiles in `conf/opponent_mix/`, and rollout/curriculum formats in `conf/training_format/`.
+- Hydra config is the source of truth under `conf/`. Responsibility groups include `model/`, `task/`, `reward/`, `training/`, `format/`, `opponents/`, `curriculum/`, `telemetry/`, and `artifacts/`.
 - `mcp-server/` is a separate TypeScript Node project for the OMG MCP workflow server. Treat it as its own package with its own `package.json`, `tsconfig.json`, `src/`, and `test/` tree.
 
 ## Core Commands
 
 - Install/sync Python dependencies: `uv sync --group dev`
 - Run all Python tests: `uv run --group dev pytest`
-- Regenerate the canonical default config: `uv run python scripts/generate_default_cfg.py`
-- Check the generated default config without rewriting: `uv run python scripts/generate_default_cfg.py --check`
-- Run training with Hydra: `uv run python -m src.train experiment=attention_training`
-- Print resolved training config without training: `uv run python -m src.train print_resolved_config=true +experiment=jax_training`
+- Run training with Hydra: `uv run python -m src.train model=attention training.total_updates=1000`
+- Print resolved training config without training: `uv run python -m src.train print_resolved_config=true`
 - Build MCP server: from `mcp-server/`, run `npm run build`
 - Test MCP server: from `mcp-server/`, run `npm test`
 
 ## Python Subsystems
 
 - `src/conf_schema.py` defines structured dataclass config defaults. When adding or renaming config fields, update this first.
-- `default_cfg.yaml` is generated from `TrainConfig`; do not hand-edit it unless intentionally changing generated output. Run the generator afterward.
 - `src/config.py` composes and validates Hydra configs. It rejects legacy conflicts such as `ppo.rollout_groups`, `ppo.phases`, `ppo.num_envs_2p`, and `ppo.num_envs_4p`.
 - `src/train.py` is a thin Hydra entrypoint that converts OmegaConf to `TrainConfig` and delegates to `src/jax_train.py`.
 - `src/jax_train.py`, `src/jax_env.py`, `src/jax_features.py`, `src/jax_policy.py`, and `src/jax_ppo.py` are the JAX training path. Be careful with shape-defining config such as player count, candidate count, feature history, ship buckets, and model dimensions because these affect JIT compilation and checkpoint compatibility.
@@ -33,14 +30,14 @@
 ## Hydra And Experiment Rules
 
 - Prefer editing `conf/` over adding ad hoc config files elsewhere. The old `configs/` layout is intentionally gone.
-- Select experiments with `experiment=<name>` from `conf/experiment/*.yaml`.
+- Select config by responsibility group. Prefer `model=...`, `task.*`, `reward.*`, `training.*`, `format=...`, `opponents=...`, `curriculum=...`, `telemetry.*`, and `artifacts.*`.
 - Use normal Hydra assignment for existing keys, such as `ppo.total_updates=2000`; use `+key=value` only for intentionally absent dynamic keys.
-- Opponent behavior should usually be selected via `opponent_mix=<profile>`. Avoid sweeping profile-owned fields like `self_play_enabled`, `self_play_pool_size`, `self_play_snapshot_interval`, and opponent curriculum internals unless deliberately editing the profile.
+- Opponent behavior should usually be selected via `opponents=<profile>`. Avoid sweeping profile-owned fields like `self_play_enabled`, `self_play_pool_size`, `self_play_snapshot_interval`, and opponent curriculum internals unless deliberately editing the profile.
 - Mixed 2p/4p JAX training uses `training_format.rollout_groups` and curriculum phases. Do not reintroduce deprecated `ppo.*` rollout group knobs.
 
 ## Testing Expectations
 
-- For config/schema/default changes, run `uv run python scripts/generate_default_cfg.py --check` and the focused config tests in `tests/test_configs.py` and `tests/test_default_cfg_template.py`.
+- For config/schema changes, run `uv run --group dev pytest tests/test_config_consolidation.py tests/test_curriculum.py tests/test_telemetry.py`.
 - For environment, feature, or reward changes, run the relevant `tests/test_env.py`, `tests/test_features.py`, `tests/test_feature_history.py`, `tests/test_jax_env.py`, and `tests/test_jax_env_parity.py` coverage.
 - For policy/PPO changes, run `tests/test_jax_policy.py` and `tests/test_jax_ppo.py`.
 - For evaluation script changes, run `tests/test_evaluate.py`.
