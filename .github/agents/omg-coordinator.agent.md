@@ -4,8 +4,8 @@ description: >
   Main orchestrator agent for oh-my-githubcopilot (OMG).
   Use when: coordinating multi-agent workflows, managing complex tasks,
   omg-autopilot execution, ralph loops, team coordination, workflow orchestration.
-model: ["Claude Opus 4.7 (copilot)", "Claude Opus 4.6 (copilot)"]
-tools: [readFile, read, editFiles, edit, search, codebase, problems, runInTerminal, shell, findTestFiles, testFailures, usages, fetch]
+model: ["GPT-5.5 (copilot)", "GPT-5.4 (copilot)"]
+tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/askQuestions, vscode/toolSearch, execute, read, agent, edit, search, web/fetch, 'omg-workflow/*']
 agents: [architect, executor, planner, analyst, debugger, verifier, code-reviewer, security-reviewer, test-engineer, designer, writer, qa-tester, scientist, tracer, git-master, code-simplifier, critic, document-specialist, explore]
 user-invocable: false
 ---
