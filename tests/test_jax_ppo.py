@@ -305,6 +305,36 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     assert jax.numpy.array_equal(env_state.learner_player, expected_players)
 
 
+def test_collect_rollout_jax_emits_training_scalar_metric_contract():
+    from src.jax_train import _BASE_ROLLOUT_SCALAR_KEYS
+
+    cfg = TrainConfig()
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.model.max_moves_k = 3
+    cfg.task.candidate_count = 4
+    cfg.task.max_fleets = 16
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    cfg.opponents.mode.opponent = "random"
+
+    reset_keys = jax.random.split(jax.random.PRNGKey(40), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(41), policy, cfg)
+
+    _key, _env_state, _turn_batch, _transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(42), env_state, turn_batch, train_state, policy, cfg
+    )
+
+    missing_keys = [
+        key for key in _BASE_ROLLOUT_SCALAR_KEYS if key not in rollout_metrics
+    ]
+    assert missing_keys == []
+    assert "avg_reward" not in _BASE_ROLLOUT_SCALAR_KEYS
+    assert "episode_reward_sum" not in _BASE_ROLLOUT_SCALAR_KEYS
+
+
 def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks():
     cfg = TrainConfig()
     cfg.model.architecture = "gnn_pointer"
