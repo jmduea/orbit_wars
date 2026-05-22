@@ -61,14 +61,76 @@ def _hydra_job_num() -> int | None:
 
 
 def compose_run_name(cfg: TrainConfig) -> str:
-    """Compose a display run name from experiment, seed, time, and Hydra job."""
+    """Compose a display run name from the fields most likely to differ."""
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    hydra_job = ""
+    parts = [
+        _run_name_component(str(cfg.model.architecture)),
+        _format_run_name_component(cfg),
+        _opponent_run_name_component(cfg),
+        f"u{int(cfg.training.total_updates)}",
+        f"env{_run_name_env_count(cfg)}",
+        f"s{int(cfg.seed)}",
+    ]
     job_num = _hydra_job_num()
     if job_num is not None:
-        hydra_job = f"-job{job_num:04d}"
-    return f"{cfg.run_name}-s{int(cfg.seed)}-{timestamp}{hydra_job}"
+        parts.append(f"job{job_num:04d}")
+    parts.append(timestamp)
+    return "-".join(parts)
+
+
+def _format_run_name_component(cfg: TrainConfig) -> str:
+    player_counts = _rollout_player_counts(cfg)
+    if len(player_counts) > 1:
+        return "mix" + "p".join(str(count) for count in player_counts) + "p"
+    return f"{player_counts[0]}p"
+
+
+def _opponent_run_name_component(cfg: TrainConfig) -> str:
+    if bool(cfg.opponents.self_play.enabled):
+        return "selfplay"
+    weights = cfg.opponents.mix.weights
+    active_weights = {
+        str(name): float(weight)
+        for name, weight in weights.items()
+        if float(weight) > 0.0
+    }
+    if active_weights:
+        opponent = max(active_weights, key=active_weights.get)
+    else:
+        opponent = str(cfg.opponents.mode.opponent)
+    return _run_name_component(opponent)
+
+
+def _run_name_env_count(cfg: TrainConfig) -> int:
+    groups = cfg.format.rollout_groups
+    if groups:
+        return sum(int(group.get("num_envs", 0)) for group in groups)
+    return int(cfg.training.num_envs)
+
+
+def _rollout_player_counts(cfg: TrainConfig) -> list[int]:
+    groups = cfg.format.rollout_groups
+    if groups:
+        return sorted(
+            {int(group.get("player_count", cfg.task.player_count)) for group in groups}
+        )
+    if cfg.format.format_mix:
+        return sorted(
+            {
+                int(entry.get("player_count", cfg.task.player_count))
+                for entry in cfg.format.format_mix
+            }
+        )
+    return [int(cfg.task.player_count)]
+
+
+def _run_name_component(value: str) -> str:
+    component = value.strip().lower().replace(" ", "")
+    return (
+        "".join(char if char.isalnum() or char in "_." else "" for char in component)
+        or "unknown"
+    )
 
 
 def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
@@ -78,11 +140,10 @@ def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
     output_root = Path(cfg.output.root)
     campaign_slug = str(cfg.output.campaign)
     run_id = _effective_run_id(cfg)
-    run_name = cfg.run_name
+    run_name = compose_run_name(cfg)
     if output_dir is not None:
         run_dir = output_dir
         run_id = run_dir.name
-        run_name = compose_run_name(cfg)
         campaign_dir = (
             run_dir.parents[1] if run_dir.parent.name == "runs" else run_dir.parent
         )
@@ -109,8 +170,12 @@ def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
         queue_dir=queue_dir,
         evaluations_dir=evaluations_dir,
         wandb_dir=run_dir / cfg.output.wandb_dir,
-        wandb_artifact_dir=_cache_path(output_root, Path(cfg.output.cache_dir), cfg.output.wandb_artifact_dir),
-        wandb_data_dir=_cache_path(output_root, Path(cfg.output.cache_dir), cfg.output.wandb_data_dir),
+        wandb_artifact_dir=_cache_path(
+            output_root, Path(cfg.output.cache_dir), cfg.output.wandb_artifact_dir
+        ),
+        wandb_data_dir=_cache_path(
+            output_root, Path(cfg.output.cache_dir), cfg.output.wandb_data_dir
+        ),
         indexes_dir=indexes_dir,
         retention_class=str(cfg.output.retention_class),
         model_compatibility_family=str(cfg.model.architecture),
