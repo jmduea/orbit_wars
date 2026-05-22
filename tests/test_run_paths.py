@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.config import TrainConfig
 from src import run_paths
+from src.config import TrainConfig
 from src.run_paths import resolve_run_paths, write_run_manifests
 
 
