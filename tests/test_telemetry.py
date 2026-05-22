@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,26 @@ from src.checkpoint_retention import prune_checkpoints
 from src.conf_schema import TrainConfig
 from src.config import compose_hydra_train_config, train_config_from_omegaconf
 from src.metric_registry import filter_event_record, filter_update_record
+from src.telemetry import TelemetryLogger
+
+
+class _FakeWandbRun:
+    def __init__(self) -> None:
+        self.config = {}
+
+    def finish(self) -> None:
+        pass
+
+
+class _FakeWandb:
+    def __init__(self) -> None:
+        self.logs: list[tuple[dict[str, object], int | None]] = []
+
+    def init(self, **_kwargs: object) -> _FakeWandbRun:
+        return _FakeWandbRun()
+
+    def log(self, record: dict[str, object], step: int | None = None) -> None:
+        self.logs.append((record, step))
 
 
 def test_hydra_config_supports_metric_group_overrides():
@@ -24,6 +45,35 @@ def test_hydra_config_supports_metric_group_overrides():
     assert cfg.telemetry.metric_groups.trajectory_shield_debug is True
     assert cfg.telemetry.metric_groups.losses is False
     assert cfg.telemetry.metric_groups.core_progress is True
+
+
+def test_wandb_logging_uses_requested_steps_when_monotonic(monkeypatch):
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    cfg = TrainConfig()
+    cfg.telemetry.wandb.enabled = True
+
+    logger = TelemetryLogger(cfg)
+    logger.log({"update": 1, "overall_win_rate": 0.0}, step=1)
+    logger.log({"update": 2, "overall_win_rate": 0.5}, step=2)
+
+    assert [step for _record, step in fake_wandb.logs] == [1, 2]
+
+
+def test_wandb_logging_advances_delayed_steps(monkeypatch):
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    cfg = TrainConfig()
+    cfg.telemetry.wandb.enabled = True
+
+    logger = TelemetryLogger(cfg)
+    logger.log({"update": 100, "overall_win_rate": 0.0}, step=100)
+    logger.log({"update": 101, "overall_win_rate": 0.5}, step=101)
+    logger.log({"event": "checkpoint_result", "update": 100}, step=100)
+    logger.log({"update": 102, "overall_win_rate": 0.75}, step=102)
+
+    assert [step for _record, step in fake_wandb.logs] == [100, 101, 102, 102]
+    assert fake_wandb.logs[-2][0]["update"] == 100
 
 
 def test_invalid_plateau_metric_is_rejected():

@@ -16,6 +16,7 @@ class TelemetryLogger:
         self._wandb = None
         self._enabled = bool(cfg.telemetry.wandb.enabled)
         self._log_model_every = max(int(cfg.telemetry.wandb.log_model_every), 1)
+        self._last_wandb_step: int | None = None
         self._init(run_metadata or {})
 
     def _init(self, run_metadata: dict[str, Any]) -> None:
@@ -70,7 +71,18 @@ class TelemetryLogger:
     def log(self, record: dict[str, Any], *, step: int | None = None) -> None:
         if not self.active:
             return
-        self._wandb.log(self._flatten(record), step=step)
+        wandb_step = self._next_wandb_step(step)
+        self._wandb.log(self._flatten(record), step=wandb_step)
+
+    def _next_wandb_step(self, requested_step: int | None) -> int | None:
+        if requested_step is None:
+            return None
+        requested_step = int(requested_step)
+        if self._last_wandb_step is None or requested_step >= self._last_wandb_step:
+            self._last_wandb_step = requested_step
+            return requested_step
+        self._last_wandb_step += 1
+        return self._last_wandb_step
 
     def log_artifact(self, path: str | Path, *, name: str, artifact_type: str) -> None:
         if not self.active or not self._cfg.telemetry.wandb.log_artifacts:
