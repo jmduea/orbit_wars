@@ -29,6 +29,7 @@ Configuration is organized by responsibility:
 | `curriculum` | Stage progression and stage-local opponent-family weights. |
 | `telemetry` | Metric groups and W&B logging metadata. |
 | `artifacts` | Checkpoints, retention, replay generation, and artifact pipeline behavior. |
+| `output` | Campaign/run layout, manifests, retention class, and local cache paths. |
 
 Examples:
 
@@ -52,6 +53,18 @@ uv run python -m src.train -m \
 ```
 
 W&B sweep templates live in `conf/sweeps/wandb/` and are split by campaign intent: capacity, budget, reward, task complexity, curriculum, and throughput.
+
+## Outputs
+
+New training runs use a campaign-oriented output layout:
+
+```text
+outputs/campaigns/<campaign>/runs/<run_id>/
+```
+
+Set `output.campaign=<slug>` to group related runs by experimental question. Each run envelope keeps Hydra's `.hydra/` snapshot, `manifest.json`, logs, checkpoints, queue state, and evaluation artifacts together. W&B generated files are routed into the run envelope, while W&B artifact/data caches live under `outputs/cache/`.
+
+Existing top-level `outputs/YYYY-MM-DD/`, `wandb/`, and `artifacts/` data may still exist from legacy runs, but they are not the canonical layout for new runs.
 
 ## Resume
 

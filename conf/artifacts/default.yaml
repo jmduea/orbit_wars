@@ -1,4 +1,4 @@
-save_dir: artifacts/
+save_dir: outputs/
 checkpoint_every: 100
 artifact_pipeline:
   enabled: true
@@ -19,7 +19,8 @@ artifact_pipeline:
   worker_poll_seconds: 5.0
   worker_idle_exit_seconds: 300.0
   ledger_enabled: true
-  queue_dir: artifact_jobs
+  queue_dir: queue/optional_jobs
+  result_dir: evaluations
   fail_training_on_checkpoint_error: true
   fail_training_on_optional_job_error: false
 replay:

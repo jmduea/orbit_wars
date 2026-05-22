@@ -50,14 +50,24 @@ uv run python -m src.train -m \
   task.candidate_count=8,16
 ```
 
-Keep output directories readable when running larger campaigns:
+Runs are stored under a campaign-oriented output root by default:
+
+```text
+outputs/campaigns/<campaign>/runs/<run_id>/
+```
+
+The default campaign is `scratch`. Set `output.campaign=<slug>` for named experimental questions or comparison frames, such as `capacity`, `baseline-stage2`, or `submission-candidate-eval`. Each run envelope contains Hydra's `.hydra/` snapshot, `manifest.json`, `logs/`, `checkpoints/`, queue state, and evaluation outputs. Model architecture remains manifest/W&B metadata rather than the physical directory root.
+
+For larger campaigns, prefer setting the campaign rather than overriding Hydra's output directories directly:
 
 ```bash
 uv run python -m src.train -m \
   model=attention,entity_transformer_700k \
-  hydra.sweep.dir=multirun/capacity \
-  hydra.sweep.subdir='${hydra.job.num}_${model}'
+  training.total_updates=250,500 \
+  output.campaign=capacity
 ```
+
+Generated W&B run files are routed into the run envelope. W&B artifact download and staging caches are routed under `outputs/cache/`, so top-level `wandb/` and `artifacts/` are legacy/local leftovers rather than canonical locations for new training runs.
 
 ## W&B Sweeps
 

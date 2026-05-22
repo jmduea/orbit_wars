@@ -211,20 +211,34 @@ class ArtifactPipelineConfig:
     worker_poll_seconds: float = 5.0
     worker_idle_exit_seconds: float = 300.0
     ledger_enabled: bool = True
-    queue_dir: str = "artifact_jobs"
+    queue_dir: str = "queue/optional_jobs"
+    result_dir: str = "evaluations"
     fail_training_on_checkpoint_error: bool = True
     fail_training_on_optional_job_error: bool = False
 
 
 @dataclass(slots=True)
 class ArtifactsConfig:
-    save_dir: str = "artifacts/rl_template"
+    save_dir: str = "outputs"
     checkpoint_every: int = 10
     artifact_pipeline: ArtifactPipelineConfig = field(default_factory=ArtifactPipelineConfig)
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     checkpoint_retention: CheckpointRetentionConfig = field(
         default_factory=CheckpointRetentionConfig
     )
+
+
+@dataclass(slots=True)
+class OutputConfig:
+    root: str = "outputs"
+    campaign: str = "scratch"
+    run_id: str = "${orbit_run_id:${seed}}"
+    retention_class: str = "compact"
+    indexes_dir: str = "indexes"
+    cache_dir: str = "cache"
+    wandb_dir: str = "cache/wandb"
+    wandb_artifact_dir: str = "cache/wandb-artifacts"
+    wandb_data_dir: str = "cache/wandb-data"
 
 
 @dataclass(slots=True)
@@ -241,6 +255,7 @@ class TrainConfig:
     opponents: OpponentsConfig = field(default_factory=OpponentsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None

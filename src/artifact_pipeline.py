@@ -358,9 +358,13 @@ def write_optional_job(
     update: int,
     checkpoint_path: Path,
     payload: Mapping[str, object],
+    result_root: Path | None = None,
 ) -> Path:
     queue_dir.mkdir(parents=True, exist_ok=True)
     job_id = uuid.uuid4().hex
+    result_dir = None
+    if result_root is not None:
+        result_dir = result_root / f"{kind}_u{update:06d}_{job_id}"
     path = queue_dir / f"{kind}_u{update:06d}_{job_id}.json"
     record = {
         "job_id": job_id,
@@ -371,6 +375,10 @@ def write_optional_job(
         "created_at_unix": time.time(),
         **dict(payload),
     }
+    if result_dir is not None:
+        record["result_root"] = str(result_root)
+        record["result_dir"] = str(result_dir)
+        record["result_manifest_path"] = str(result_dir / "manifest.json")
     tmp_path = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
     tmp_path.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
     tmp_path.replace(path)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,56 @@ _CURRICULUM_FAMILIES = {
     "opportunistic",
 }
 
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_SAFE_RELATIVE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/]*$")
+_RUN_ID_CACHE: dict[int, str] = {}
+
+
+def register_runtime_resolvers() -> None:
+    """Register OmegaConf resolvers needed before Hydra computes output dirs."""
+
+    if not OmegaConf.has_resolver("orbit_run_id"):
+        OmegaConf.register_new_resolver("orbit_run_id", _orbit_run_id, use_cache=True)
+    if not OmegaConf.has_resolver("orbit_slug"):
+        OmegaConf.register_new_resolver("orbit_slug", _orbit_slug, use_cache=False)
+    if not OmegaConf.has_resolver("orbit_safe_rel"):
+        OmegaConf.register_new_resolver("orbit_safe_rel", _orbit_safe_rel, use_cache=False)
+
+
+def _orbit_run_id(seed: object = 42) -> str:
+    import uuid
+    from datetime import datetime, timezone
+
+    seed_int = int(seed)
+    if seed_int in _RUN_ID_CACHE:
+        return _RUN_ID_CACHE[seed_int]
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    suffix = uuid.uuid4().hex[:8]
+    run_id = f"{timestamp}-s{seed_int}-{suffix}"
+    _RUN_ID_CACHE[seed_int] = run_id
+    return run_id
+
+
+def _orbit_slug(value: object) -> str:
+    raw = str(value).strip()
+    if not _SLUG_RE.match(raw):
+        raise ValueError(f"unsafe output slug: {raw!r}")
+    return raw
+
+
+def _orbit_safe_rel(value: object) -> str:
+    raw = str(value).strip()
+    path = Path(raw)
+    if (
+        not raw
+        or path.is_absolute()
+        or ".." in path.parts
+        or not _SAFE_RELATIVE_RE.match(raw)
+    ):
+        raise ValueError(f"unsafe relative output path: {raw!r}")
+    return raw
+
+
 __all__ = [
     "ArtifactsConfig",
     "RewardConfig",
@@ -36,6 +87,7 @@ __all__ = [
     "TrainingConfig",
     "TrainConfig",
     "compose_hydra_train_config",
+    "register_runtime_resolvers",
     "train_config_from_omegaconf",
 ]
 
@@ -45,6 +97,7 @@ def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfi
 
     config_dir = Path(__file__).resolve().parents[1] / "conf"
     override_list = overrides or []
+    register_runtime_resolvers()
     register_config_schemas()
     with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
         composed = compose(config_name="config", overrides=override_list)
@@ -56,6 +109,7 @@ def train_config_from_omegaconf(
 ) -> TrainConfig:
     """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
 
+    register_runtime_resolvers()
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
@@ -128,6 +182,25 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         raise ValueError("artifacts.artifact_pipeline.queue_dir must be a non-empty relative path.")
     if Path(artifact_pipeline.queue_dir).is_absolute():
         raise ValueError("artifacts.artifact_pipeline.queue_dir must be relative to the run directory.")
+    _validate_relative_path_fragment(
+        str(artifact_pipeline.queue_dir),
+        field_name="artifacts.artifact_pipeline.queue_dir",
+    )
+
+    if not str(artifact_pipeline.result_dir).strip():
+        raise ValueError(
+            "artifacts.artifact_pipeline.result_dir must be a non-empty relative path."
+        )
+    if Path(artifact_pipeline.result_dir).is_absolute():
+        raise ValueError(
+            "artifacts.artifact_pipeline.result_dir must be relative to the run directory."
+        )
+    _validate_relative_path_fragment(
+        str(artifact_pipeline.result_dir),
+        field_name="artifacts.artifact_pipeline.result_dir",
+    )
+
+    _validate_output_config(cfg)
 
     _validate_curriculum_config(cfg)
 
@@ -155,6 +228,54 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
             )
+
+
+def _validate_output_config(cfg: TrainConfig) -> None:
+    output = cfg.output
+    if not str(output.root).strip():
+        raise ValueError("output.root must be non-empty.")
+    if Path(output.root).is_absolute():
+        raise ValueError("output.root must be relative to the workspace by default.")
+    if ".." in Path(output.root).parts:
+        raise ValueError("output.root must not contain '..'.")
+    if not _SLUG_RE.match(str(output.campaign)):
+        raise ValueError(
+            "output.campaign must be a non-empty slug using letters, numbers, '.', '_', or '-'."
+        )
+    if not str(output.run_id).strip():
+        raise ValueError("output.run_id must be non-empty.")
+    if not _SLUG_RE.match(str(output.run_id)):
+        raise ValueError(
+            "output.run_id must be a non-empty slug using letters, numbers, '.', '_', or '-'."
+        )
+    if not _SLUG_RE.match(str(output.retention_class)):
+        raise ValueError(
+            "output.retention_class must be a non-empty slug using letters, numbers, '.', '_', or '-'."
+        )
+    for field_name in (
+        "indexes_dir",
+        "cache_dir",
+        "wandb_dir",
+        "wandb_artifact_dir",
+        "wandb_data_dir",
+    ):
+        value = str(getattr(output, field_name)).strip()
+        if not value:
+            raise ValueError(f"output.{field_name} must be non-empty.")
+        if Path(value).is_absolute():
+            raise ValueError(
+                f"output.{field_name} must be relative to output.root or the run directory."
+            )
+        if ".." in Path(value).parts:
+            raise ValueError(f"output.{field_name} must not contain '..'.")
+
+
+def _validate_relative_path_fragment(value: str, *, field_name: str) -> None:
+    path = Path(value)
+    if path.is_absolute():
+        raise ValueError(f"{field_name} must be relative to the run directory.")
+    if ".." in path.parts:
+        raise ValueError(f"{field_name} must not contain '..'.")
 
 
 def _validate_curriculum_config(cfg: TrainConfig) -> None:

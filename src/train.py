@@ -5,8 +5,10 @@ import json
 from hydra import main as hydra_main
 from omegaconf import DictConfig, OmegaConf
 
-from .config import train_config_from_omegaconf
+from .config import register_runtime_resolvers, train_config_from_omegaconf
 from .jax_train import run_jax_training
+
+register_runtime_resolvers()
 
 
 @hydra_main(version_base="1.3", config_path="../conf", config_name="config")

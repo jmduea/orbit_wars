@@ -129,6 +129,24 @@ def test_optional_job_file_roundtrip(tmp_path: Path):
     assert jobs[0]["log_path"] == str(tmp_path / "metrics.jsonl")
 
 
+def test_optional_job_records_result_paths_when_result_root_is_provided(tmp_path: Path):
+    checkpoint_path = tmp_path / "jax_ckpt_000009.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    job_path = write_optional_job(
+        tmp_path / "queue" / "optional_jobs",
+        kind="docker_validation",
+        update=9,
+        checkpoint_path=checkpoint_path,
+        payload={"log_path": str(tmp_path / "metrics.jsonl")},
+        result_root=tmp_path / "evaluations",
+    )
+
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    assert Path(job["result_dir"]).parent == tmp_path / "evaluations"
+    assert job["result_manifest_path"] == str(Path(job["result_dir"]) / "manifest.json")
+
+
 def test_running_optional_job_protects_checkpoint_from_retention(tmp_path: Path):
     log_path = tmp_path / "metrics.jsonl"
     log_path.write_text("", encoding="utf-8")
@@ -179,6 +197,7 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
         checkpoint_path=checkpoint_path,
         log_path=tmp_path / "metrics.jsonl",
         queue_dir=tmp_path / "jobs",
+        result_root=tmp_path / "evaluations",
         queue_replay=True,
         queue_docker_validation=False,
     )
@@ -190,6 +209,7 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
     assert jobs[0]["backend"] == "docker"
     assert jobs[0]["episode_steps"] == 20
     assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+    assert Path(jobs[0]["result_dir"]).parent == tmp_path / "evaluations"
 
 
 def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
@@ -208,6 +228,7 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
         checkpoint_path=checkpoint_path,
         log_path=tmp_path / "metrics.jsonl",
         queue_dir=tmp_path / "jobs",
+        result_root=tmp_path / "evaluations",
         queue_replay=False,
         queue_docker_validation=True,
     )
@@ -217,6 +238,7 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     assert len(jobs) == 1
     assert jobs[0]["kind"] == "docker_validation"
     assert jobs[0]["checkpoint_path"] == str(checkpoint_path)
+    assert Path(jobs[0]["result_dir"]).parent == tmp_path / "evaluations"
 
 
 def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
@@ -230,6 +252,7 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
         update=1,
         checkpoint_path=checkpoint_path,
         payload={"backend": "docker", "log_path": str(tmp_path / "metrics.jsonl")},
+        result_root=tmp_path / "evaluations",
     )
     job = load_pending_optional_jobs(tmp_path / "jobs")[0]
 
@@ -247,8 +270,95 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
     status = json.loads(job_path.read_text(encoding="utf-8"))
     assert status["status"] == "completed"
     assert status["backend"] == "docker"
+    assert Path(status["output_dir"]).parent == Path(status["result_dir"])
+    assert Path(status["result_manifest_path"]).exists()
     assert len(status["replay_html_paths"]) == 1
     assert status["replay_html_paths"][0].endswith("replay_u000001_2p.html")
+
+
+def test_local_replay_worker_writes_to_result_dir(tmp_path: Path, monkeypatch):
+    from scripts import run_artifact_worker
+    from src.config import TrainConfig
+
+    checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+    job_path = write_optional_job(
+        tmp_path / "jobs",
+        kind="replay",
+        update=1,
+        checkpoint_path=checkpoint_path,
+        payload={"backend": "local", "log_path": str(tmp_path / "metrics.jsonl")},
+        result_root=tmp_path / "evaluations",
+    )
+    job = load_pending_optional_jobs(tmp_path / "jobs")[0]
+
+    monkeypatch.setattr(run_artifact_worker, "_load_checkpoint_config", lambda _path: TrainConfig())
+
+    captured: dict[str, Path | None] = {}
+
+    def fake_replay(cfg, *, update, checkpoint_path, log_path, output_dir=None):
+        captured["output_dir"] = output_dir
+        output_dir.mkdir(parents=True)
+        metadata_path = output_dir / "replay.json"
+        metadata_path.write_text("{}", encoding="utf-8")
+        return metadata_path
+
+    monkeypatch.setattr(run_artifact_worker, "maybe_write_jax_checkpoint_replay", fake_replay)
+
+    run_artifact_worker._run_replay_job(job)
+
+    status = json.loads(job_path.read_text(encoding="utf-8"))
+    assert captured["output_dir"] == Path(status["result_dir"]) / "replay"
+    assert Path(status["result_manifest_path"]).exists()
+    assert status["metadata_path"] == str(Path(status["result_dir"]) / "replay" / "replay.json")
+
+
+def test_worker_rejects_result_dir_escape(tmp_path: Path):
+    from scripts import run_artifact_worker
+
+    job_file = tmp_path / "jobs" / "job.json"
+    job_file.parent.mkdir()
+    job = {"job_id": "bad", "kind": "replay", "update": 1, "result_dir": str(tmp_path / "elsewhere")}
+
+    with pytest.raises(ValueError, match="escapes"):
+        run_artifact_worker._job_result_dir(job, job_file)
+
+
+def test_worker_rejects_unsafe_legacy_job_id(tmp_path: Path):
+    from scripts import run_artifact_worker
+
+    job_file = tmp_path / "run" / "queue" / "optional_jobs" / "job.json"
+    job_file.parent.mkdir(parents=True)
+    job = {"job_id": "x/../../escape", "kind": "replay", "update": 1}
+
+    with pytest.raises(ValueError, match="unsafe job_id"):
+        run_artifact_worker._job_result_dir(job, job_file)
+
+
+def test_worker_accepts_custom_result_root_from_trusted_worker_option(
+    tmp_path: Path, monkeypatch
+):
+    from scripts import run_artifact_worker
+
+    job_file = tmp_path / "custom_queue" / "job.json"
+    job_file.parent.mkdir()
+    trusted_root = tmp_path / "custom_evaluations"
+    job = {
+        "job_id": "ok",
+        "kind": "replay",
+        "update": 1,
+        "result_root": str(tmp_path / "custom_evaluations"),
+        "result_dir": str(trusted_root / "replay_u000001_ok"),
+    }
+
+    monkeypatch.setattr(
+        run_artifact_worker._trusted_result_root,
+        "explicit",
+        trusted_root,
+        raising=False,
+    )
+
+    assert run_artifact_worker._job_result_dir(job, job_file) == Path(job["result_dir"])
 
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):

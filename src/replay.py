@@ -112,6 +112,7 @@ def maybe_write_jax_checkpoint_replay(
     update: int,
     checkpoint_path: Path,
     log_path: Path,
+    output_dir: Path | None = None,
 ) -> Path | None:
     if not cfg.artifacts.replay.enabled:
         return None
@@ -123,7 +124,7 @@ def maybe_write_jax_checkpoint_replay(
     from kaggle_environments import make
 
     run_dir = checkpoint_path.parent
-    replay_dir = run_dir / cfg.artifacts.replay.output_dir
+    replay_dir = output_dir or run_dir / cfg.artifacts.replay.output_dir
     replay_dir.mkdir(parents=True, exist_ok=True)
     seed = _seed_for_update(cfg, update)
     learner_act = _build_jax_policy_actions(cfg, checkpoint_path)

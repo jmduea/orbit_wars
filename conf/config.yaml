@@ -16,3 +16,21 @@ device: auto
 heldout_eval_seed_set: []
 print_resolved_config: false
 resume_checkpoint: null
+
+output:
+  root: outputs
+  campaign: scratch
+  run_id: ${orbit_run_id:${seed}}
+  retention_class: compact
+  indexes_dir: indexes
+  cache_dir: cache
+  wandb_dir: cache/wandb
+  wandb_artifact_dir: cache/wandb-artifacts
+  wandb_data_dir: cache/wandb-data
+
+hydra:
+  run:
+    dir: ${orbit_safe_rel:${output.root}}/campaigns/${orbit_slug:${output.campaign}}/runs/${orbit_slug:${output.run_id}}
+  sweep:
+    dir: ${orbit_safe_rel:${output.root}}/campaigns/${orbit_slug:${output.campaign}}
+    subdir: runs/${hydra.job.num}_${orbit_slug:${output.run_id}}

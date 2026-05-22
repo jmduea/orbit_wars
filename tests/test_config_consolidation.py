@@ -20,6 +20,10 @@ def test_root_config_composes_from_responsibility_groups() -> None:
     assert cfg.opponents.self_play.enabled is True
     assert cfg.opponents.snapshot.pool_size == 5
     assert cfg.artifacts.artifact_pipeline.enabled is True
+    assert cfg.output.root == "outputs"
+    assert cfg.output.campaign == "scratch"
+    assert cfg.artifacts.artifact_pipeline.queue_dir == "queue/optional_jobs"
+    assert cfg.artifacts.artifact_pipeline.result_dir == "evaluations"
     assert not hasattr(cfg, "env")
     assert not hasattr(cfg, "ppo")
     assert not hasattr(cfg, "save_dir")
@@ -67,6 +71,31 @@ def test_compare_script_default_configs_compose() -> None:
         assert cfg.model.architecture == "attention"
         assert cfg.task.candidate_count in {8, 16, 24}
 
+
+def test_output_campaign_slug_is_validated() -> None:
+    with pytest.raises(ValueError, match="output.campaign"):
+        compose_hydra_train_config(["output.campaign='bad campaign'"])
+
+
+def test_output_paths_must_be_relative() -> None:
+    with pytest.raises(ValueError, match="output.wandb_dir"):
+        compose_hydra_train_config(["output.wandb_dir=/tmp/wandb"])
+
+    
+    
+@pytest.mark.parametrize(
+    "override",
+    [
+        "output.run_id=../escape",
+        "output.root=../outputs",
+        "output.wandb_dir=../wandb",
+        "artifacts.artifact_pipeline.queue_dir=../jobs",
+        "artifacts.artifact_pipeline.result_dir=../evals",
+    ],
+)
+def test_output_paths_reject_traversal(override: str) -> None:
+    with pytest.raises(ValueError, match="\.\.|run_id"):
+        compose_hydra_train_config([override])
 
 def test_wandb_sweep_campaign_samples_compose() -> None:
     sweep_dir = Path("conf/sweeps/wandb")

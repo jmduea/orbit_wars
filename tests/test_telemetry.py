@@ -25,8 +25,10 @@ class _FakeWandbRun:
 class _FakeWandb:
     def __init__(self) -> None:
         self.logs: list[tuple[dict[str, object], int | None]] = []
+        self.init_kwargs: dict[str, object] = {}
 
-    def init(self, **_kwargs: object) -> _FakeWandbRun:
+    def init(self, **kwargs: object) -> _FakeWandbRun:
+        self.init_kwargs = kwargs
         return _FakeWandbRun()
 
     def log(self, record: dict[str, object], step: int | None = None) -> None:
@@ -74,6 +76,33 @@ def test_wandb_logging_advances_delayed_steps(monkeypatch):
 
     assert [step for _record, step in fake_wandb.logs] == [100, 101, 102, 102]
     assert fake_wandb.logs[-2][0]["update"] == 100
+
+
+def test_wandb_local_paths_are_configured_before_init(tmp_path: Path, monkeypatch):
+    fake_wandb = _FakeWandb()
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+    monkeypatch.delenv("WANDB_DIR", raising=False)
+    monkeypatch.delenv("WANDB_ARTIFACT_DIR", raising=False)
+    monkeypatch.delenv("WANDB_DATA_DIR", raising=False)
+    cfg = TrainConfig()
+    cfg.telemetry.wandb.enabled = True
+    wandb_dir = tmp_path / "run" / "cache" / "wandb"
+    artifact_dir = tmp_path / "cache" / "wandb-artifacts"
+    data_dir = tmp_path / "cache" / "wandb-data"
+
+    TelemetryLogger(
+        cfg,
+        {
+            "wandb_dir": str(wandb_dir),
+            "wandb_artifact_dir": str(artifact_dir),
+            "wandb_data_dir": str(data_dir),
+        },
+    )
+
+    assert fake_wandb.init_kwargs["dir"] == str(wandb_dir)
+    assert wandb_dir.exists()
+    assert artifact_dir.exists()
+    assert data_dir.exists()
 
 
 def test_invalid_plateau_metric_is_rejected():

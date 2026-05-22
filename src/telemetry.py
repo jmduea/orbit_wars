@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,18 @@ class TelemetryLogger:
     def _init(self, run_metadata: dict[str, Any]) -> None:
         if not self._enabled:
             return
+        wandb_dir = run_metadata.get("wandb_dir")
+        wandb_artifact_dir = run_metadata.get("wandb_artifact_dir")
+        wandb_data_dir = run_metadata.get("wandb_data_dir")
+        if wandb_dir:
+            Path(str(wandb_dir)).mkdir(parents=True, exist_ok=True)
+            os.environ["WANDB_DIR"] = str(wandb_dir)
+        if wandb_artifact_dir:
+            Path(str(wandb_artifact_dir)).mkdir(parents=True, exist_ok=True)
+            os.environ["WANDB_ARTIFACT_DIR"] = str(wandb_artifact_dir)
+        if wandb_data_dir:
+            Path(str(wandb_data_dir)).mkdir(parents=True, exist_ok=True)
+            os.environ["WANDB_DATA_DIR"] = str(wandb_data_dir)
         try:
             import wandb  # type: ignore
         except ImportError:
@@ -37,6 +50,7 @@ class TelemetryLogger:
             config={},
             reinit=True,
             job_type=str(run_metadata.get("job_type", "train")),
+            dir=str(wandb_dir) if wandb_dir else None,
         )
         if self._run is not None:
             resolved_cfg = self._flatten(asdict(self._cfg))

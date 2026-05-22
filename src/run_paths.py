@@ -1,10 +1,36 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import json
+import os
+import subprocess
+import uuid
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Mapping
 
 from .config import TrainConfig
+
+
+@dataclass(slots=True)
+class RunContext:
+    run_id: str
+    campaign_slug: str
+    run_dir: Path
+    manifest_path: Path
+    campaign_dir: Path
+    campaign_manifest_path: Path
+    logs_dir: Path
+    log_path: Path
+    checkpoints_dir: Path
+    queue_dir: Path
+    evaluations_dir: Path
+    wandb_dir: Path
+    wandb_artifact_dir: Path
+    wandb_data_dir: Path
+    indexes_dir: Path
+    retention_class: str
+    model_compatibility_family: str
 
 
 def _hydra_runtime_output_dir() -> Path | None:
@@ -21,41 +47,193 @@ def _hydra_runtime_output_dir() -> Path | None:
     return Path(str(output_dir))
 
 
-def compose_run_name(cfg: TrainConfig) -> str:
-    """Compose a collision-resistant run name from experiment + seed + time."""
-
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    experiment = cfg.run_name
-    hydra_job = ""
+def _hydra_job_num() -> int | None:
     try:
         from hydra.core.hydra_config import HydraConfig
 
-        if HydraConfig.initialized():
-            cfg_hydra = HydraConfig.get()
-            choices = getattr(cfg_hydra.runtime, "choices", {}) or {}
-            experiment = str(choices.get("experiment") or cfg.run_name)
-            job = getattr(cfg_hydra, "job", None)
-            job_num = getattr(job, "num", None) if job is not None else None
-            if job_num is not None:
-                hydra_job = f"-job{int(job_num):04d}"
+        if not HydraConfig.initialized():
+            return None
+        job = getattr(HydraConfig.get(), "job", None)
+        job_num = getattr(job, "num", None) if job is not None else None
+        return None if job_num is None else int(job_num)
     except Exception:
-        pass
-    return f"{experiment}-s{int(cfg.seed)}-{ts}{hydra_job}"
+        return None
 
 
-def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, Path, Path, Path]:
-    """Resolve unified run paths rooted in Hydra runtime output_dir when present."""
+def compose_run_name(cfg: TrainConfig) -> str:
+    """Compose a display run name from experiment, seed, time, and Hydra job."""
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    hydra_job = ""
+    job_num = _hydra_job_num()
+    if job_num is not None:
+        hydra_job = f"-job{job_num:04d}"
+    return f"{cfg.run_name}-s{int(cfg.seed)}-{timestamp}{hydra_job}"
+
+
+def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
+    """Resolve the canonical run context rooted at Hydra's output directory."""
 
     output_dir = _hydra_runtime_output_dir()
+    output_root = Path(cfg.output.root)
+    campaign_slug = str(cfg.output.campaign)
+    run_id = _effective_run_id(cfg)
     run_name = cfg.run_name
     if output_dir is not None:
+        run_dir = output_dir
+        run_id = run_dir.name
         run_name = compose_run_name(cfg)
-        save_dir = output_dir / "checkpoints"
-        logs_dir = output_dir / "logs"
+        campaign_dir = (
+            run_dir.parents[1] if run_dir.parent.name == "runs" else run_dir.parent
+        )
     else:
-        save_dir = Path(cfg.artifacts.save_dir)
-        logs_dir = save_dir / "logs"
-    run_dir = save_dir / run_name
-    log_path = logs_dir / f"{run_name}.jsonl"
-    artifacts = replace(cfg.artifacts, save_dir=str(save_dir))
-    return replace(cfg, run_name=run_name, artifacts=artifacts), run_dir, log_path, save_dir
+        campaign_dir = output_root / "campaigns" / campaign_slug
+        run_dir = campaign_dir / "runs" / run_id
+
+    checkpoints_dir = run_dir / "checkpoints"
+    logs_dir = run_dir / "logs"
+    queue_dir = run_dir / cfg.artifacts.artifact_pipeline.queue_dir
+    evaluations_dir = run_dir / cfg.artifacts.artifact_pipeline.result_dir
+    indexes_dir = output_root / cfg.output.indexes_dir
+    cache_dir = output_root / cfg.output.cache_dir
+    context = RunContext(
+        run_id=run_id,
+        campaign_slug=campaign_slug,
+        run_dir=run_dir,
+        manifest_path=run_dir / "manifest.json",
+        campaign_dir=campaign_dir,
+        campaign_manifest_path=campaign_dir / "campaign_manifest.json",
+        logs_dir=logs_dir,
+        log_path=logs_dir / f"{run_name}_jax.jsonl",
+        checkpoints_dir=checkpoints_dir,
+        queue_dir=queue_dir,
+        evaluations_dir=evaluations_dir,
+        wandb_dir=run_dir / cfg.output.wandb_dir,
+        wandb_artifact_dir=_cache_path(output_root, Path(cfg.output.cache_dir), cfg.output.wandb_artifact_dir),
+        wandb_data_dir=_cache_path(output_root, Path(cfg.output.cache_dir), cfg.output.wandb_data_dir),
+        indexes_dir=indexes_dir,
+        retention_class=str(cfg.output.retention_class),
+        model_compatibility_family=str(cfg.model.architecture),
+    )
+    artifacts = replace(cfg.artifacts, save_dir=str(checkpoints_dir))
+    output = replace(cfg.output, run_id=run_id)
+    return replace(cfg, run_name=run_name, artifacts=artifacts, output=output), context
+
+
+def write_run_manifests(
+    cfg: TrainConfig, context: RunContext, metadata: Mapping[str, object]
+) -> None:
+    created_at = datetime.now(timezone.utc).isoformat()
+    run_manifest = {
+        "run_id": context.run_id,
+        "campaign": context.campaign_slug,
+        "run_name": cfg.run_name,
+        "job_type": metadata.get("job_type", "train"),
+        "model_compatibility_family": context.model_compatibility_family,
+        "seed": int(cfg.seed),
+        "retention_class": context.retention_class,
+        "hydra_output_dir": str(context.run_dir),
+        "resolved_config_path": str(context.run_dir / ".hydra" / "config.yaml"),
+        "hydra_overrides_path": str(context.run_dir / ".hydra" / "overrides.yaml"),
+        "paths": {
+            "logs_dir": str(context.logs_dir),
+            "log_path": str(context.log_path),
+            "checkpoints_dir": str(context.checkpoints_dir),
+            "queue_dir": str(context.queue_dir),
+            "evaluations_dir": str(context.evaluations_dir),
+            "wandb_dir": str(context.wandb_dir),
+            "wandb_artifact_dir": str(context.wandb_artifact_dir),
+            "wandb_data_dir": str(context.wandb_data_dir),
+        },
+        "wandb": {
+            "project": cfg.telemetry.wandb.project,
+            "entity": cfg.telemetry.wandb.entity,
+            "group": cfg.telemetry.wandb.group,
+            "tags": list(cfg.telemetry.wandb.tags),
+        },
+        "git": _git_identity(),
+        "created_at": created_at,
+        "produced_artifacts": [],
+        **dict(metadata),
+    }
+    campaign_manifest = {
+        "campaign": context.campaign_slug,
+        "campaign_dir": str(context.campaign_dir),
+        "updated_at": created_at,
+        "default_retention_class": context.retention_class,
+        "current_best_metric": cfg.artifacts.checkpoint_retention.best_metric_name,
+    }
+    atomic_write_json(context.manifest_path, run_manifest)
+    atomic_write_json(context.campaign_manifest_path, campaign_manifest)
+    append_jsonl_atomic(
+        context.indexes_dir / "runs.jsonl",
+        {
+            "run_id": context.run_id,
+            "campaign": context.campaign_slug,
+            "run_dir": str(context.run_dir),
+            "created_at": created_at,
+        },
+    )
+
+
+def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp_path.write_text(
+            json.dumps(dict(payload), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+        _fsync_dir(path.parent)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def append_jsonl_atomic(path: Path, record: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(dict(record), sort_keys=True) + "\n")
+        file.flush()
+        os.fsync(file.fileno())
+
+
+def _effective_run_id(cfg: TrainConfig) -> str:
+    run_id = str(cfg.output.run_id).strip()
+    if run_id and "${" not in run_id:
+        return run_id
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{timestamp}-s{int(cfg.seed)}-{uuid.uuid4().hex[:8]}"
+
+
+def _cache_path(output_root: Path, cache_dir: Path, value: str) -> Path:
+    path = Path(value)
+    if path.parts and path.parts[0] == cache_dir.name:
+        return output_root / path
+    return output_root / cache_dir / path
+
+
+def _git_identity() -> dict[str, object]:
+    repo = Path(__file__).resolve().parents[1]
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+        ).strip()
+        dirty = bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain"], cwd=repo, text=True
+            ).strip()
+        )
+        return {"commit": commit, "dirty": dirty}
+    except Exception:
+        return {"commit": None, "dirty": None}
+
+
+def _fsync_dir(path: Path) -> None:
+    if os.name != "posix":
+        return
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)

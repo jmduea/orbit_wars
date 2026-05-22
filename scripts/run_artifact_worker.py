@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -13,15 +14,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.artifact_pipeline import (  # noqa: E402
-    load_optional_jobs,
-    load_pending_optional_jobs,
-)
+from src.artifact_pipeline import load_optional_jobs, load_pending_optional_jobs  # noqa: E402
 from src.checkpoint_compat import (  # noqa: E402
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
 from src.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
+from src.run_paths import atomic_write_json  # noqa: E402
 
 
 def _load_checkpoint_config(checkpoint_path: Path) -> Any:
@@ -50,6 +49,7 @@ def _run_replay_job(job: dict[str, object]) -> None:
     job_file = Path(str(job["job_file"]))
     checkpoint_path = Path(str(job["checkpoint_path"]))
     log_path = Path(str(job["log_path"]))
+    result_dir = _job_result_dir(job, job_file)
     cfg = _load_checkpoint_config(checkpoint_path)
     artifact_cfg = cfg.artifacts.artifact_pipeline
     backend = str(job.get("backend", getattr(artifact_cfg, "replay_backend", "docker")))
@@ -68,10 +68,26 @@ def _run_replay_job(job: dict[str, object]) -> None:
         update=int(job["update"]),
         checkpoint_path=checkpoint_path,
         log_path=log_path,
+        output_dir=result_dir / "replay",
+    )
+    manifest_path = _job_manifest_path(job, result_dir)
+    atomic_write_json(
+        manifest_path,
+        {
+            "job_id": job["job_id"],
+            "kind": job.get("kind"),
+            "update": job["update"],
+            "checkpoint_path": str(checkpoint_path),
+            "metadata_path": str(metadata_path) if metadata_path is not None else None,
+            "output_dir": str(result_dir / "replay"),
+            "status": "completed",
+        },
     )
     _write_status(
         job_file,
         "completed",
+        result_dir=str(result_dir),
+        result_manifest_path=str(manifest_path),
         metadata_path=str(metadata_path) if metadata_path is not None else None,
     )
 
@@ -79,7 +95,8 @@ def _run_replay_job(job: dict[str, object]) -> None:
 def _run_docker_validation_job(job: dict[str, object]) -> None:
     job_file = Path(str(job["job_file"]))
     checkpoint_path = Path(str(job["checkpoint_path"]))
-    output_dir = job_file.parent / f"docker_u{int(job['update']):06d}_{job['job_id']}"
+    result_dir = _job_result_dir(job, job_file)
+    output_dir = result_dir / "docker_validation"
     command = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "validate_kaggle_docker_submission.py"),
@@ -114,10 +131,25 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
             f"see {output_dir / 'stderr.log'}"
         )
     replay_html_paths = sorted(str(path) for path in (output_dir / "replays").glob("*.html"))
+    manifest_path = _job_manifest_path(job, result_dir)
+    atomic_write_json(
+        manifest_path,
+        {
+            "job_id": job["job_id"],
+            "kind": job.get("kind"),
+            "update": job["update"],
+            "checkpoint_path": str(checkpoint_path),
+            "output_dir": str(output_dir),
+            "replay_html_paths": replay_html_paths,
+            "status": "completed",
+        },
+    )
     _write_status(
         job_file,
         "completed",
         backend="docker",
+        result_dir=str(result_dir),
+        result_manifest_path=str(manifest_path),
         output_dir=str(output_dir),
         stdout_path=str(output_dir / "stdout.log"),
         stderr_path=str(output_dir / "stderr.log"),
@@ -125,11 +157,48 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
     )
 
 
+def _job_result_dir(
+    job: dict[str, object],
+    job_file: Path,
+) -> Path:
+    trusted_root = _trusted_result_root(job, job_file)
+    raw_result_dir = job.get("result_dir")
+    if raw_result_dir is None:
+        job_id = str(job["job_id"])
+        if not re.fullmatch(r"[A-Fa-f0-9]{32}", job_id):
+            raise ValueError(f"unsafe job_id: {job_id!r}")
+        kind = str(job.get("kind", "job"))
+        result_dir = trusted_root / f"{kind}_u{int(job['update']):06d}_{job_id}"
+    else:
+        result_dir = Path(str(raw_result_dir))
+    if not result_dir.resolve().is_relative_to(trusted_root.resolve()):
+        raise ValueError(f"job result_dir escapes evaluations directory: {result_dir}")
+    return result_dir
+
+
+def _job_manifest_path(job: dict[str, object], result_dir: Path) -> Path:
+    manifest_path = Path(str(job.get("result_manifest_path") or result_dir / "manifest.json"))
+    if not manifest_path.resolve().is_relative_to(result_dir.resolve()):
+        raise ValueError(f"job result_manifest_path escapes result directory: {manifest_path}")
+    return manifest_path
+
+
+def _trusted_result_root(job: dict[str, object], job_file: Path) -> Path:
+    explicit = getattr(_trusted_result_root, "explicit", None)
+    if explicit is not None:
+        return Path(str(explicit))
+    queue_dir = job_file.parent
+    if queue_dir.name == "optional_jobs" and queue_dir.parent.name == "queue":
+        return queue_dir.parent.parent / "evaluations"
+    return queue_dir.parent / "evaluations"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run queued Orbit Wars replay and Docker artifact jobs."
     )
     parser.add_argument("queue_dir", type=Path, help="Run-local artifact job directory")
+    parser.add_argument("--result-root", type=Path, default=None, help="Trusted result artifact root")
     parser.add_argument("--once", action="store_true", help="Process current queue once")
     parser.add_argument("--poll-seconds", type=float, default=5.0)
     parser.add_argument(
@@ -144,6 +213,8 @@ def main() -> int:
         help="Also process jobs left in running status by a dead worker.",
     )
     args = parser.parse_args()
+    if args.result_root is not None:
+        setattr(_trusted_result_root, "explicit", args.result_root)
 
     last_work_time = time.monotonic()
     while True:
@@ -156,6 +227,8 @@ def main() -> int:
             last_work_time = time.monotonic()
         for job in jobs:
             job_file = Path(str(job["job_file"]))
+            if args.result_root is not None:
+                job["_trusted_result_root"] = str(args.result_root)
             try:
                 _write_status(job_file, "running")
                 if job.get("kind") == "replay":

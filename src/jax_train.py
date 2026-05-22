@@ -34,7 +34,7 @@ from .jax_device import (
     ensure_cuda_jax_if_nvidia_present,
 )
 from .replay import maybe_write_jax_checkpoint_replay
-from .run_paths import resolve_run_paths
+from .run_paths import resolve_run_paths, write_run_manifests
 from .seed_scheduler import SeedScheduleConfig, SeedScheduler
 from .telemetry import build_telemetry
 
@@ -346,6 +346,7 @@ def _queue_optional_jobs_if_due(
     checkpoint_path: Path,
     log_path: Path,
     queue_dir: Path,
+    result_root: Path | None = None,
     queue_replay: bool,
     queue_docker_validation: bool,
 ) -> list[Path]:
@@ -367,6 +368,7 @@ def _queue_optional_jobs_if_due(
                     "episode_steps": cfg.artifacts.replay.max_steps,
                     "seed": cfg.seed + update,
                 },
+                result_root=result_root,
             )
         )
     if queue_docker_validation:
@@ -383,6 +385,7 @@ def _queue_optional_jobs_if_due(
                     "episode_steps": cfg.artifacts.replay.max_steps,
                     "seed": cfg.seed + update,
                 },
+                result_root=result_root,
             )
         )
     return job_paths
@@ -392,6 +395,7 @@ def _start_artifact_worker_if_needed(
     cfg: TrainConfig,
     *,
     queue_dir: Path,
+    result_root: Path | None = None,
     worker_state: dict[str, subprocess.Popen[object]],
 ) -> None:
     if not cfg.artifacts.artifact_pipeline.worker_autostart:
@@ -411,6 +415,8 @@ def _start_artifact_worker_if_needed(
         "--idle-exit-seconds",
         str(cfg.artifacts.artifact_pipeline.worker_idle_exit_seconds),
     ]
+    if result_root is not None:
+        command.extend(["--result-root", str(result_root)])
     stdout = stdout_path.open("a", encoding="utf-8")
     stderr = stderr_path.open("a", encoding="utf-8")
     worker_state["process"] = subprocess.Popen(
@@ -552,13 +558,33 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     update_fn = jax.jit(
         lambda ts, transitions: ppo_update_jax(ts, policy, transitions, cfg)
     )
-    cfg, run_dir, log_path, _save_dir = resolve_run_paths(cfg)
-    log_path = log_path.with_name(f"{cfg.run_name}_jax.jsonl")
+    cfg, run_context = resolve_run_paths(cfg)
+    run_dir = run_context.checkpoints_dir
+    log_path = run_context.log_path
+    write_run_manifests(
+        cfg,
+        run_context,
+        {
+            "backend": "jax",
+            "job_type": "train",
+            "wandb_dir": str(run_context.wandb_dir),
+            "wandb_artifact_dir": str(run_context.wandb_artifact_dir),
+            "wandb_data_dir": str(run_context.wandb_data_dir),
+        },
+    )
     telemetry = build_telemetry(
         cfg,
         {
             "backend": "jax",
             "seed": cfg.seed,
+            "job_type": "train",
+            "campaign": run_context.campaign_slug,
+            "run_id": run_context.run_id,
+            "model_compatibility_family": run_context.model_compatibility_family,
+            "retention_class": run_context.retention_class,
+            "wandb_dir": str(run_context.wandb_dir),
+            "wandb_artifact_dir": str(run_context.wandb_artifact_dir),
+            "wandb_data_dir": str(run_context.wandb_data_dir),
         },
     )
     seed_scheduler = SeedScheduler(
@@ -583,12 +609,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
     artifact_cfg = cfg.artifacts.artifact_pipeline
-    artifact_queue_dir = run_dir / artifact_cfg.queue_dir
+    artifact_queue_dir = run_context.queue_dir
     checkpoint_pipeline = (
         AsyncArtifactPipeline(
             checkpoint_queue_size=artifact_cfg.checkpoint_queue_size,
             coalesce_intermediate_checkpoints=artifact_cfg.coalesce_intermediate_checkpoints,
-            ledger_path=(run_dir / "artifact_pipeline.jsonl")
+            ledger_path=(run_context.logs_dir / "artifact_pipeline.jsonl")
             if artifact_cfg.ledger_enabled
             else None,
         )
@@ -636,6 +662,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     checkpoint_path=result.numbered_path,
                     log_path=log_path,
                     queue_dir=artifact_queue_dir,
+                    result_root=run_context.evaluations_dir,
                     queue_replay=artifact_cfg.replay_async,
                     queue_docker_validation=artifact_cfg.docker_validation_async,
                 )
@@ -643,6 +670,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     _start_artifact_worker_if_needed(
                         cfg,
                         queue_dir=artifact_queue_dir,
+                        result_root=run_context.evaluations_dir,
                         worker_state=artifact_worker_state,
                     )
                 protected_paths.update(
