@@ -93,6 +93,22 @@ def test_wandb_sweep_campaign_samples_compose() -> None:
             assert cfg.telemetry.wandb.tags
 
 
+def test_baseline_sweep_scaffolding_is_discoverable() -> None:
+    expected = {
+        "baseline_stage1_comfort.yaml",
+        "baseline_stage2_stability.yaml",
+        "baseline_sentinels.yaml",
+    }
+    sweep_dir = Path("conf/sweeps/wandb")
+    assert expected <= {path.name for path in sweep_dir.glob("*.yaml")}
+
+    baseline_docs = Path("docs/baseline_sweep.md").read_text()
+    experiment_docs = Path("docs/experiments.md").read_text()
+    for filename in expected:
+        assert filename in baseline_docs
+        assert filename in experiment_docs
+
+
 def _hydra_value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"

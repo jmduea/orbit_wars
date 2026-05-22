@@ -64,6 +64,9 @@ uv run python -m src.train -m \
 Executable W&B sweep templates live in `conf/sweeps/wandb/`:
 
 - `capacity.yaml`
+- `baseline_stage1_comfort.yaml`
+- `baseline_stage2_stability.yaml`
+- `baseline_sentinels.yaml`
 - `budget.yaml`
 - `reward.yaml`
 - `task_complexity.yaml`
@@ -71,6 +74,8 @@ Executable W&B sweep templates live in `conf/sweeps/wandb/`:
 - `throughput.yaml`
 
 Each template sets `telemetry.wandb.group` and `telemetry.wandb.tags` so run tables carry campaign intent.
+
+Use [Workstation-Friendly Baseline Sweep](baseline_sweep.md) when selecting a default comparison baseline that balances performance, throughput, stability, and active workstation comfort. The first promoted baseline is recorded in [Workstation-Friendly Baseline Sweep Results](baseline_sweep_results.md).
 
 ## Config Source
 

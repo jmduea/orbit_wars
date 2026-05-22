@@ -1,0 +1,39 @@
+program: -m
+method: grid
+metric:
+  name: samples_per_sec
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  telemetry.wandb.group:
+    value: baseline_stage1_comfort
+  telemetry.wandb.tags:
+    value: [baseline, comfort, throughput]
+  model:
+    value: attention
+  format:
+    value: mix_2p_4p_8env
+  training.total_updates:
+    value: 3
+  training.rollout_steps:
+    values: [16, 32]
+  training.minibatch_size:
+    values: [128, 256]
+  training.rollout_microbatch_envs:
+    value: 4
+  training.update_chunk_rows_min:
+    value: 1024
+  training.update_chunk_rows_max:
+    value: 2048
+  artifacts.checkpoint_every:
+    value: 1000
+  artifacts.artifact_pipeline.enabled:
+    value: false
+  artifacts.replay.enabled:
+    value: false

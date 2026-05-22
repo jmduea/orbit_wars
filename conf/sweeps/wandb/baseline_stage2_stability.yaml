@@ -1,0 +1,45 @@
+program: -m
+method: grid
+metric:
+  name: overall_win_rate
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  telemetry.wandb.group:
+    value: baseline_stage2_stability
+  telemetry.wandb.tags:
+    value: [baseline, stability, seeds]
+  seed:
+    values: [101, 202, 303]
+  model:
+    value: attention
+  format:
+    value: mix_2p_4p_8env
+  training.total_updates:
+    value: 25
+  training.rollout_steps:
+    value: 32
+  training.minibatch_size:
+    value: 256
+  training.rollout_microbatch_envs:
+    value: 4
+  training.update_chunk_rows_min:
+    value: 1024
+  training.update_chunk_rows_max:
+    value: 2048
+  training.lr:
+    value: 0.0003
+  training.ent_coef:
+    value: 0.005
+  artifacts.checkpoint_every:
+    value: 1000
+  artifacts.artifact_pipeline.enabled:
+    value: false
+  artifacts.replay.enabled:
+    value: false
