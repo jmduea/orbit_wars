@@ -815,6 +815,7 @@ def collect_rollout_jax(
     stage_view: StageView | None = None,
     historical_params_pool: dict | None = None,
     update: int = 0,
+    env_index_offset: int = 0,
 ) -> tuple[
     jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]
 ]:
@@ -826,7 +827,9 @@ def collect_rollout_jax(
     returns PPO transitions plus rollout metrics.
     """
 
-    env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32)
+    env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32) + int(
+        env_index_offset
+    )
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
 
     def scan_step(carry, _):
@@ -1355,6 +1358,23 @@ def _rollout_diagnostics(
     neutral_target_count = (target_ownership[..., 0] * row_mask).sum()
     friendly_target_count = (target_ownership[..., 1] * row_mask).sum()
     enemy_target_count = (target_ownership[..., 2] * row_mask).sum()
+    garrisoned_ships_per_planet = my_garrison_ships / jnp.maximum(my_planets, 1.0)
+    won_planets_owned_total = (my_planets[..., None] * win_row_mask).sum()
+    lost_planets_owned_total = (my_planets[..., None] * loss_row_mask).sum()
+    won_planets_lost_total = (planets_lost_step[..., None] * win_row_mask).sum()
+    lost_planets_lost_total = (planets_lost_step[..., None] * loss_row_mask).sum()
+    won_planets_taken_total = (planets_taken_step[..., None] * win_row_mask).sum()
+    lost_planets_taken_total = (planets_taken_step[..., None] * loss_row_mask).sum()
+    won_garrisoned_ships_per_planet_total = (
+        garrisoned_ships_per_planet[..., None] * win_row_mask
+    ).sum()
+    lost_garrisoned_ships_per_planet_total = (
+        garrisoned_ships_per_planet[..., None] * loss_row_mask
+    ).sum()
+    won_planet_diff_total = (planet_diff[..., None] * win_row_mask).sum()
+    lost_planet_diff_total = (planet_diff[..., None] * loss_row_mask).sum()
+    won_production_diff_total = (production_diff[..., None] * win_row_mask).sum()
+    lost_production_diff_total = (production_diff[..., None] * loss_row_mask).sum()
 
     metrics = {
         "env_steps": jnp.array(
@@ -1363,6 +1383,7 @@ def _rollout_diagnostics(
         "samples": transitions.decision_mask.astype(jnp.float32).sum(),
         "valid_non_noop_targets_sum": valid_non_noop_targets_sum,
         "valid_non_noop_target_rows": valid_non_noop_target_rows,
+        "only_noop_rows": only_noop_rows,
         "valid_non_noop_targets_per_row": jnp.where(
             valid_non_noop_target_rows > 0.0,
             valid_non_noop_targets_sum / valid_non_noop_target_rows,
@@ -1400,6 +1421,24 @@ def _rollout_diagnostics(
             0.0,
         ),
         "episode_done": episode_done,
+        "win_episode_rows": win_episode_rows,
+        "loss_episode_rows": loss_episode_rows,
+        "non_noop_count": non_noop_count,
+        "launched_ship_count": launched_ship_count,
+        "launched_ship_total": launched_ship_total,
+        "launched_ship_speed_total": launched_ship_speed_total,
+        "won_planets_owned_total": won_planets_owned_total,
+        "lost_planets_owned_total": lost_planets_owned_total,
+        "won_planets_lost_total": won_planets_lost_total,
+        "lost_planets_lost_total": lost_planets_lost_total,
+        "won_planets_taken_total": won_planets_taken_total,
+        "lost_planets_taken_total": lost_planets_taken_total,
+        "won_garrisoned_ships_per_planet_total": won_garrisoned_ships_per_planet_total,
+        "lost_garrisoned_ships_per_planet_total": lost_garrisoned_ships_per_planet_total,
+        "won_planet_diff_total": won_planet_diff_total,
+        "lost_planet_diff_total": lost_planet_diff_total,
+        "won_production_diff_total": won_production_diff_total,
+        "lost_production_diff_total": lost_production_diff_total,
         "average_reward": reward_mean,
         "episode_reward_mean": jnp.where(
             episode_done > 0.0, episode_reward_sum / episode_done, 0.0
@@ -1482,70 +1521,62 @@ def _rollout_diagnostics(
         ),
         "won_avg_planets_owned": jnp.where(
             win_episode_rows > 0.0,
-            (my_planets[..., None] * win_row_mask).sum() / win_episode_rows,
+            won_planets_owned_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_owned": jnp.where(
             loss_episode_rows > 0.0,
-            (my_planets[..., None] * loss_row_mask).sum() / loss_episode_rows,
+            lost_planets_owned_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_planets_lost": jnp.where(
             win_episode_rows > 0.0,
-            (planets_lost_step[..., None] * win_row_mask).sum() / win_episode_rows,
+            won_planets_lost_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_lost": jnp.where(
             loss_episode_rows > 0.0,
-            (planets_lost_step[..., None] * loss_row_mask).sum() / loss_episode_rows,
+            lost_planets_lost_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_planets_taken": jnp.where(
             win_episode_rows > 0.0,
-            (planets_taken_step[..., None] * win_row_mask).sum() / win_episode_rows,
+            won_planets_taken_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_planets_taken": jnp.where(
             loss_episode_rows > 0.0,
-            (planets_taken_step[..., None] * loss_row_mask).sum() / loss_episode_rows,
+            lost_planets_taken_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_garrisoned_ships_per_planet": jnp.where(
             win_episode_rows > 0.0,
-            (
-                ((my_garrison_ships / jnp.maximum(my_planets, 1.0))[..., None])
-                * win_row_mask
-            ).sum()
-            / win_episode_rows,
+            won_garrisoned_ships_per_planet_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_garrisoned_ships_per_planet": jnp.where(
             loss_episode_rows > 0.0,
-            (
-                ((my_garrison_ships / jnp.maximum(my_planets, 1.0))[..., None])
-                * loss_row_mask
-            ).sum()
-            / loss_episode_rows,
+            lost_garrisoned_ships_per_planet_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_planet_diff": jnp.where(
             win_episode_rows > 0.0,
-            (planet_diff[..., None] * win_row_mask).sum() / win_episode_rows,
+            won_planet_diff_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_planet_diff": jnp.where(
             loss_episode_rows > 0.0,
-            (planet_diff[..., None] * loss_row_mask).sum() / loss_episode_rows,
+            lost_planet_diff_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_production_diff": jnp.where(
             win_episode_rows > 0.0,
-            (production_diff[..., None] * win_row_mask).sum() / win_episode_rows,
+            won_production_diff_total / win_episode_rows,
             0.0,
         ),
         "lost_avg_production_diff": jnp.where(
             loss_episode_rows > 0.0,
-            (production_diff[..., None] * loss_row_mask).sum() / loss_episode_rows,
+            lost_production_diff_total / loss_episode_rows,
             0.0,
         ),
         "won_avg_launch_fleet_speed": jnp.where(

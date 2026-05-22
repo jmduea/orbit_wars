@@ -1,18 +1,20 @@
 # Workstation-Friendly Baseline Sweep
 
-This workflow finds a default Orbit Wars training baseline that is useful for later comparisons without making active workstation use miserable. It favors Pareto-balanced configs: credible performance, good throughput, stable repeated seeds, and smooth foreground use.
+This workflow finds a default Orbit Wars training baseline that is useful for later comparisons while recording how far the workstation can be pushed before foreground use becomes unpleasant. It favors Pareto-balanced configs: credible performance, good throughput, stable repeated seeds, and measured foreground comfort.
 
 ## Sweep Files
 
-- `conf/sweeps/wandb/baseline_stage1_comfort.yaml` screens conservative rollout shapes for throughput and workstation comfort.
+- `conf/sweeps/wandb/baseline_stage1_comfort.yaml` maps aggressive throughput upper bounds across all models while recording workstation comfort.
 - `conf/sweeps/wandb/baseline_stage2_stability.yaml` validates a chosen Stage 1 finalist across fixed seeds.
 - `conf/sweeps/wandb/baseline_sentinels.yaml` runs a small interaction smoke check after a baseline is chosen.
 
 ## Stage 1: Comfort Filter
 
-Stage 1 is intentionally cheap. It controls load with the `format` group because mixed rollout configs define their own rollout-group environment counts. Do not assume `training.num_envs` changes active parallelism when `format.rollout_groups` is populated.
+Stage 1 is an aggressive throughput and comfort upper-bound map. It controls load with the `format` group because mixed rollout configs define their own rollout-group environment counts. Do not assume `training.num_envs` changes active parallelism when `format.rollout_groups` is populated.
 
-The default Stage 1 template starts with `format=mix_2p_4p_8env`, `training.total_updates=3`, and rollout lengths `16` and `32`. A one-update smoke with `rollout_steps=64` took several minutes on the current workstation, so larger Stage 1 settings should be treated as follow-up probes rather than the first comfort screen.
+The default Stage 1 template now covers every model choice, both mixed 2p/4p rollout formats, rollout lengths `64`, `128`, and `250`, minibatch sizes `256`, `512`, and `1024`, and rollout microbatch sizes `4` and `8`. This is a 216-run grid before W&B agent limits or manual stopping. A one-update smoke with `rollout_steps=64` previously took several minutes on the current workstation, so launch this sweep with limited agents and stop configurations that fail the comfort gate badly.
+
+Because `training.total_updates=3`, `samples_per_sec` includes first-run JIT and compilation effects. Treat Stage 1 as an interactive upper-bound and first-run-cost screen, not a pure steady-state throughput benchmark.
 
 Launch the sweep:
 

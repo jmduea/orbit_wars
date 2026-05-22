@@ -9,6 +9,7 @@ from src.constants import MAX_PLANETS, MAX_STEPS
 from src.jax_env import batched_reset
 from src.jax_policy import build_jax_policy
 from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+from src.jax_train import _sum_metric_dicts, init_rollout_groups
 
 
 @pytest.mark.parametrize(
@@ -44,6 +45,120 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     assert "total_loss" in metrics
     assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
     assert next_train_state.params is not train_state.params
+
+
+def test_rollout_microbatching_preserves_full_environment_axis():
+    cfg = TrainConfig()
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.training.num_envs = 4
+    cfg.training.rollout_steps = 1
+    cfg.training.rollout_microbatch_envs = 2
+    cfg.opponents.mode.opponent = "random"
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(21), policy, cfg)
+    _key, groups = init_rollout_groups(jax.random.PRNGKey(22), cfg, policy)
+    group = groups[0]
+
+    _key, env_state, turn_batch, transitions, rollout_metrics = group.collect_fn(
+        jax.random.PRNGKey(23),
+        group.env_state,
+        group.turn_batch,
+        train_state,
+    )
+
+    assert env_state.game.step.shape == (cfg.training.num_envs,)
+    assert turn_batch.self_features.shape[:2] == (cfg.training.num_envs, MAX_PLANETS)
+    assert transitions.self_features.shape[:3] == (
+        cfg.training.rollout_steps,
+        cfg.training.num_envs,
+        MAX_PLANETS,
+    )
+    assert (
+        float(rollout_metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
+    )
+
+
+def test_rollout_microbatching_requires_even_environment_division():
+    cfg = TrainConfig()
+    cfg.training.num_envs = 3
+    cfg.training.rollout_microbatch_envs = 2
+    policy = build_jax_policy(cfg=cfg)
+
+    with pytest.raises(ValueError, match="evenly divide"):
+        init_rollout_groups(jax.random.PRNGKey(24), cfg, policy)
+
+
+def test_rollout_metric_aggregation_recomputes_rate_metrics():
+    first_chunk = _metric_chunk(
+        episodes_2p=2.0,
+        wins_2p=1.0,
+        episodes_4p=2.0,
+        first_places_4p=1.0,
+        placement_4p_sum=4.0,
+    )
+    second_chunk = _metric_chunk(
+        episodes_2p=2.0,
+        wins_2p=2.0,
+        episodes_4p=2.0,
+        first_places_4p=1.0,
+        placement_4p_sum=6.0,
+    )
+
+    metrics = _sum_metric_dicts([first_chunk, second_chunk])
+
+    assert float(metrics["win_rate_2p"]) == pytest.approx(0.75)
+    assert float(metrics["first_place_rate_4p"]) == pytest.approx(0.5)
+    assert float(metrics["average_placement_4p"]) == pytest.approx(2.5)
+
+
+def _metric_chunk(**overrides: float) -> dict[str, jax.Array]:
+    values = {
+        "env_steps": 1.0,
+        "average_reward": 0.0,
+        "episode_done": 0.0,
+        "episode_reward_mean": 0.0,
+        "valid_non_noop_targets_sum": 0.0,
+        "valid_non_noop_target_rows": 0.0,
+        "only_noop_rows": 0.0,
+        "trajectory_shield_original_non_noop_count": 0.0,
+        "trajectory_shield_legal_non_noop_count": 0.0,
+        "wins_2p": 0.0,
+        "episodes_2p": 0.0,
+        "first_places_4p": 0.0,
+        "episodes_4p": 0.0,
+        "placement_4p_sum": 0.0,
+        "decision_count": 0.0,
+        "noop_count": 0.0,
+        "friendly_target_count": 0.0,
+        "enemy_target_count": 0.0,
+        "neutral_target_count": 0.0,
+        "survival_time_sum": 0.0,
+        "score_share_sum": 0.0,
+        "win_episode_rows": 0.0,
+        "loss_episode_rows": 0.0,
+        "non_noop_count": 0.0,
+        "launched_ship_count": 0.0,
+        "launched_ship_total": 0.0,
+        "launched_ship_speed_total": 0.0,
+        "won_planets_owned_total": 0.0,
+        "lost_planets_owned_total": 0.0,
+        "won_planets_lost_total": 0.0,
+        "lost_planets_lost_total": 0.0,
+        "won_planets_taken_total": 0.0,
+        "lost_planets_taken_total": 0.0,
+        "won_garrisoned_ships_per_planet_total": 0.0,
+        "lost_garrisoned_ships_per_planet_total": 0.0,
+        "won_planet_diff_total": 0.0,
+        "lost_planet_diff_total": 0.0,
+        "won_production_diff_total": 0.0,
+        "lost_production_diff_total": 0.0,
+    }
+    values.update(overrides)
+    values["episode_done"] = values["episodes_2p"] + values["episodes_4p"]
+    return {key: jax.numpy.asarray(value) for key, value in values.items()}
 
 
 def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():

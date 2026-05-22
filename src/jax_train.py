@@ -205,6 +205,7 @@ def _init_rollout_group(
     group_cfg = _copy_config_for_rollout_group(
         cfg, player_count=player_count, num_envs=num_envs
     )
+    microbatch_envs = _resolve_rollout_microbatch_envs(group_cfg)
     reset_keys = jax.random.split(key, group_cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
     env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
@@ -226,13 +227,26 @@ def _init_rollout_group(
         historical_params_pool=None,
         update_idx=jnp.asarray(0, dtype=jnp.int32),
     ):
-        return collect_rollout_jax(
+        if microbatch_envs >= group_cfg.training.num_envs:
+            return collect_rollout_jax(
+                rollout_key,
+                state,
+                batch,
+                ts,
+                policy,
+                group_cfg,
+                stage_view=stage_view,
+                historical_params_pool=historical_params_pool,
+                update=update_idx,
+            )
+        return _collect_rollout_microbatched(
             rollout_key,
             state,
             batch,
             ts,
             policy,
             group_cfg,
+            microbatch_envs=microbatch_envs,
             stage_view=stage_view,
             historical_params_pool=historical_params_pool,
             update=update_idx,
@@ -245,6 +259,282 @@ def _init_rollout_group(
         env_state=env_state,
         turn_batch=turn_batch,
         collect_fn=collect_fn,
+    )
+
+
+def _resolve_rollout_microbatch_envs(cfg: TrainConfig) -> int:
+    env_count = int(cfg.training.num_envs)
+    microbatch_envs = cfg.training.rollout_microbatch_envs
+    if microbatch_envs is None:
+        return env_count
+    microbatch_envs = int(microbatch_envs)
+    if microbatch_envs > env_count:
+        raise ValueError(
+            "training.rollout_microbatch_envs must be <= each rollout group's num_envs."
+        )
+    if env_count % microbatch_envs != 0:
+        raise ValueError(
+            "training.rollout_microbatch_envs must evenly divide each rollout group's num_envs."
+        )
+    return microbatch_envs
+
+
+def _slice_env_axis(tree: object, *, start: int, size: int, env_count: int) -> object:
+    def slice_leaf(value):
+        if isinstance(value, jax.Array) and value.ndim > 0 and value.shape[0] == env_count:
+            return value[start : start + size]
+        return value
+
+    return jax.tree.map(slice_leaf, tree)
+
+
+def _concat_env_axis(trees: list[object]) -> object:
+    if len(trees) == 1:
+        return trees[0]
+    return jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=0), *trees)
+
+
+def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str, jax.Array]:
+    if len(metrics_by_chunk) == 1:
+        return metrics_by_chunk[0]
+    metrics = jax.tree.map(
+        lambda *xs: jnp.stack(xs).sum(axis=0), *metrics_by_chunk
+    )
+    reward_weight = jnp.maximum(metrics["env_steps"], 1.0)
+    metrics["average_reward"] = (
+        jnp.stack(
+            [chunk["average_reward"] * chunk["env_steps"] for chunk in metrics_by_chunk]
+        ).sum()
+        / reward_weight
+    )
+    metrics["episode_reward_mean"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        jnp.stack(
+            [
+                chunk["episode_reward_mean"] * chunk["episode_done"]
+                for chunk in metrics_by_chunk
+            ]
+        ).sum()
+        / metrics["episode_done"],
+        0.0,
+    )
+    metrics["valid_non_noop_targets_per_row"] = jnp.where(
+        metrics["valid_non_noop_target_rows"] > 0.0,
+        metrics["valid_non_noop_targets_sum"] / metrics["valid_non_noop_target_rows"],
+        0.0,
+    )
+    metrics["only_noop_fraction"] = jnp.where(
+        metrics["valid_non_noop_target_rows"] > 0.0,
+        metrics["only_noop_rows"] / metrics["valid_non_noop_target_rows"],
+        0.0,
+    )
+    metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
+        metrics["trajectory_shield_original_non_noop_count"] > 0.0,
+        metrics["trajectory_shield_legal_non_noop_count"]
+        / metrics["trajectory_shield_original_non_noop_count"],
+        0.0,
+    )
+    metrics["overall_win_rate"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
+        0.0,
+    )
+    metrics["win_rate_2p"] = jnp.where(
+        metrics["episodes_2p"] > 0.0,
+        metrics["wins_2p"] / metrics["episodes_2p"],
+        0.0,
+    )
+    metrics["first_place_rate_4p"] = jnp.where(
+        metrics["episodes_4p"] > 0.0,
+        metrics["first_places_4p"] / metrics["episodes_4p"],
+        0.0,
+    )
+    metrics["average_placement_4p"] = jnp.where(
+        metrics["episodes_4p"] > 0.0,
+        metrics["placement_4p_sum"] / metrics["episodes_4p"],
+        0.0,
+    )
+    metrics["noop_percent"] = jnp.where(
+        metrics["decision_count"] > 0.0,
+        (metrics["noop_count"] / metrics["decision_count"]) * 100.0,
+        0.0,
+    )
+    metrics["friendly_target_percent"] = jnp.where(
+        metrics["decision_count"] > 0.0,
+        (metrics["friendly_target_count"] / metrics["decision_count"]) * 100.0,
+        0.0,
+    )
+    metrics["enemy_target_percent"] = jnp.where(
+        metrics["decision_count"] > 0.0,
+        (metrics["enemy_target_count"] / metrics["decision_count"]) * 100.0,
+        0.0,
+    )
+    metrics["neutral_target_percent"] = jnp.where(
+        metrics["decision_count"] > 0.0,
+        (metrics["neutral_target_count"] / metrics["decision_count"]) * 100.0,
+        0.0,
+    )
+    metrics["survival_time"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        metrics["survival_time_sum"] / metrics["episode_done"],
+        0.0,
+    )
+    metrics["score_share"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        metrics["score_share_sum"] / metrics["episode_done"],
+        0.0,
+    )
+    metrics["won_non_noop_actions_per_step"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["non_noop_count"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_non_noop_actions_per_step"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["non_noop_count"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_fleet_launch_size"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["launched_ship_total"] / jnp.maximum(metrics["launched_ship_count"], 1.0),
+        0.0,
+    )
+    metrics["lost_avg_fleet_launch_size"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["launched_ship_total"] / jnp.maximum(metrics["launched_ship_count"], 1.0),
+        0.0,
+    )
+    metrics["won_avg_planets_owned"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_planets_owned_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_planets_owned"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_planets_owned_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_planets_lost"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_planets_lost_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_planets_lost"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_planets_lost_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_planets_taken"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_planets_taken_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_planets_taken"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_planets_taken_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_garrisoned_ships_per_planet"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_garrisoned_ships_per_planet_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_garrisoned_ships_per_planet"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_garrisoned_ships_per_planet_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_planet_diff"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_planet_diff_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_planet_diff"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_planet_diff_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_production_diff"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["won_production_diff_total"] / metrics["win_episode_rows"],
+        0.0,
+    )
+    metrics["lost_avg_production_diff"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["lost_production_diff_total"] / metrics["loss_episode_rows"],
+        0.0,
+    )
+    metrics["won_avg_launch_fleet_speed"] = jnp.where(
+        metrics["win_episode_rows"] > 0.0,
+        metrics["launched_ship_speed_total"]
+        / jnp.maximum(metrics["launched_ship_count"], 1.0),
+        0.0,
+    )
+    metrics["lost_avg_launch_fleet_speed"] = jnp.where(
+        metrics["loss_episode_rows"] > 0.0,
+        metrics["launched_ship_speed_total"]
+        / jnp.maximum(metrics["launched_ship_count"], 1.0),
+        0.0,
+    )
+    return metrics
+
+
+def _collect_rollout_microbatched(
+    rollout_key: jax.Array,
+    state: JaxEnvState,
+    batch: JaxTurnBatch,
+    train_state: object,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    microbatch_envs: int,
+    stage_view=None,
+    historical_params_pool=None,
+    update=jnp.asarray(0, dtype=jnp.int32),
+) -> tuple[jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
+    env_count = int(cfg.training.num_envs)
+    chunk_count = env_count // int(microbatch_envs)
+    key, *chunk_keys = jax.random.split(rollout_key, chunk_count + 1)
+    states: list[JaxEnvState] = []
+    batches: list[JaxTurnBatch] = []
+    transitions: list[JaxTransitionBatch] = []
+    metrics: list[dict[str, jax.Array]] = []
+    for chunk_index, chunk_key in enumerate(chunk_keys):
+        start = chunk_index * int(microbatch_envs)
+        chunk_state = _slice_env_axis(
+            state, start=start, size=int(microbatch_envs), env_count=env_count
+        )
+        chunk_batch = _slice_env_axis(
+            batch, start=start, size=int(microbatch_envs), env_count=env_count
+        )
+        (
+            _next_chunk_key,
+            next_state,
+            next_batch,
+            chunk_transitions,
+            chunk_metrics,
+        ) = collect_rollout_jax(
+            chunk_key,
+            chunk_state,
+            chunk_batch,
+            train_state,
+            policy,
+            cfg,
+            stage_view=stage_view,
+            historical_params_pool=historical_params_pool,
+            update=update,
+            env_index_offset=start,
+        )
+        states.append(next_state)
+        batches.append(next_batch)
+        transitions.append(chunk_transitions)
+        metrics.append(chunk_metrics)
+    return (
+        key,
+        _concat_env_axis(states),
+        _concat_env_axis(batches),
+        concatenate_transition_batches(transitions),
+        _sum_metric_dicts(metrics),
     )
 
 
@@ -772,8 +1062,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 merged_groups[group_idx] = updated_group
             rollout_groups = merged_groups
             transitions = concatenate_transition_batches(transitions_by_group)
-            rollout_metrics = jax.tree.map(lambda *xs: sum(xs), *rollout_metrics_by_group)
-            rollout_metrics = dict(rollout_metrics)
+            rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
             shield_original_count = rollout_metrics.get(
                 "trajectory_shield_original_non_noop_count", 0.0
             )
