@@ -104,6 +104,22 @@ def test_enabled_metric_names_include_dynamic_retention_and_plateau_metrics():
     assert "total_loss" in names
 
 
+def test_per_format_loss_metrics_are_registered_as_losses():
+    names = enabled_metric_names(
+        _metric_groups(losses=True),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+
+    for suffix in ("2p", "4p"):
+        assert f"policy_loss_{suffix}" in names
+        assert f"value_loss_{suffix}" in names
+        assert f"entropy_{suffix}" in names
+        assert f"approx_kl_{suffix}" in names
+        assert f"total_loss_{suffix}" in names
+        assert f"loss_sample_count_{suffix}" in names
+
+
 def test_repo_sweep_metrics_are_registered_and_enabled_by_default():
     sweep_dir = Path(__file__).resolve().parents[1] / "conf" / "sweeps"
     metric_names = set(KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES)

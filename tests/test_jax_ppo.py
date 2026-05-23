@@ -43,6 +43,9 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
         float(rollout_metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
     )
     assert "total_loss" in metrics
+    assert "total_loss_2p" in metrics
+    assert float(metrics["loss_sample_count_2p"]) > 0.0
+    assert float(metrics["loss_sample_count_4p"]) == 0.0
     assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
     assert next_train_state.params is not train_state.params
 
@@ -600,4 +603,7 @@ def test_ppo_update_jax_accepts_four_player_rollout_transitions():
     next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert "total_loss" in metrics
+    assert "total_loss_4p" in metrics
+    assert float(metrics["loss_sample_count_2p"]) == 0.0
+    assert float(metrics["loss_sample_count_4p"]) > 0.0
     assert next_train_state.params is not train_state.params
