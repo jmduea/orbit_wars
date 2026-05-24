@@ -3,8 +3,8 @@ defaults:
   - task: default
   - reward: terminal_only
   - training: default
-  - format: mix_2p_4p_8env
-  - curriculum: self_play_staged
+  - format: 2p_32env
+  - curriculum: default
   - opponents: self_play_curriculum
   - telemetry: default
   - artifacts: default
