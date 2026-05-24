@@ -49,6 +49,12 @@
 - Tests import compiled files from `mcp-server/dist/`, so run `npm run build` before `npm test` after TypeScript edits.
 - Utility functions in `mcp-server/src/utils.ts` intentionally guard JSON parsing, file size, symlink reads/writes, and mode names. Preserve those safety checks when extending tools.
 
+## Codex OMG Workflow Bridge
+
+- `.github/` remains the OMG source catalog for Copilot instructions, skills, agents, prompts, and hooks.
+- Codex discovers the mirrored project skills in `.agents/skills/`, custom agents in `.codex/agents/`, hooks in `.codex/hooks.json`, and the OMG MCP server from `.codex/config.toml`.
+- The deep-interview → ralplan → omg-autopilot path depends on `mcp-server/dist/` being current; after TypeScript MCP edits, run `npm run build` in `mcp-server/` before relying on the workflow.
+
 ## Generated And Local Artifacts
 
 - Ignore local training outputs and telemetry when making code changes: `outputs/`, `wandb/`, `artifacts/`, and Hydra run directories are runtime artifacts.

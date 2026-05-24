@@ -1,0 +1,11 @@
+personality = "friendly"
+
+[features]
+codex_hooks = true
+
+[mcp_servers.omg-workflow]
+command = "npm"
+args = ["--prefix", "mcp-server", "run", "start", "--silent"]
+cwd = "/home/jmduea/projects/orbit_wars"
+env = { WORKSPACE_ROOT = "/home/jmduea/projects/orbit_wars" }
+
