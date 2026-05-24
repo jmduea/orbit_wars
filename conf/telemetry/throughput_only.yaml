@@ -1,0 +1,21 @@
+metric_groups:
+  core_progress: false
+  losses: false
+  timing: true
+  curriculum: false
+  opponent_composition: false
+  action_decision: false
+  game_state: false
+  trajectory_shield_debug: false
+  historical_pool: false
+  events: true
+
+wandb:
+  enabled: true
+  project: orbit_wars
+  entity: jmduea-jdueadev
+  group: throughput
+  tags: [throughput, runtime]
+  log_artifacts: false
+  log_model_every: 100
+  watch_model: false
