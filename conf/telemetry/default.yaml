@@ -1,8 +1,8 @@
 metric_groups:
   core_progress: true
   losses: true
-  timing: true
-  curriculum: true
+  timing: false
+  curriculum: false
   opponent_composition: false
   action_decision: false
   game_state: false

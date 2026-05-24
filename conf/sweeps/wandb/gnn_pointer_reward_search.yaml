@@ -1,0 +1,56 @@
+program: -m
+method: bayes
+run_cap: 48
+metric:
+  name: average_episode_reward
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  output.campaign:
+    value: gnn_pointer_reward_search
+  telemetry.wandb.group:
+    value: gnn_pointer_reward_search
+  telemetry.wandb.tags:
+    value: [gnn_pointer, reward, search, bayes]
+  model:
+    value: gnn_pointer
+  format:
+    value: mix_2p_4p_16env
+  training.total_updates:
+    value: 80
+  training.rollout_steps:
+    value: 64
+  training.minibatch_size:
+    value: 256
+  training.rollout_microbatch_envs:
+    value: 8
+  training.update_chunk_rows_min:
+    value: 256
+  training.update_chunk_rows_max:
+    value: 2048
+  training.lr:
+    values: [0.0001, 0.0003, 0.0006]
+  training.ent_coef:
+    values: [0.001, 0.005, 0.01]
+  training.clip_coef:
+    values: [0.1, 0.2]
+  model.hidden_size:
+    values: [192, 224, 256]
+  model.max_moves_k:
+    values: [1, 2, 3]
+  model.gnn_k_neighbors:
+    values: [3, 5, 7]
+  model.gnn_message_passing_layers:
+    values: [1, 2, 3]
+  artifacts.checkpoint_every:
+    value: 1000
+  artifacts.artifact_pipeline.enabled:
+    value: false
+  artifacts.replay.enabled:
+    value: false

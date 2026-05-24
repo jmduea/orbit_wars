@@ -211,6 +211,66 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Decision samples processed per second during PPO optimization.",
     ),
     _metric(
+        "rollout_seconds_2p",
+        "timing",
+        "Wall-clock seconds spent collecting 2-player rollout groups.",
+    ),
+    _metric(
+        "rollout_seconds_4p",
+        "timing",
+        "Wall-clock seconds spent collecting 4-player rollout groups.",
+    ),
+    _metric(
+        "env_steps_per_sec_2p",
+        "timing",
+        "2-player environment steps processed per second over the full update.",
+    ),
+    _metric(
+        "env_steps_per_sec_4p",
+        "timing",
+        "4-player environment steps processed per second over the full update.",
+    ),
+    _metric(
+        "rollout_env_steps_per_sec_2p",
+        "timing",
+        "2-player environment steps processed per second during 2-player rollout collection.",
+    ),
+    _metric(
+        "rollout_env_steps_per_sec_4p",
+        "timing",
+        "4-player environment steps processed per second during 4-player rollout collection.",
+    ),
+    _metric(
+        "samples_per_sec_2p",
+        "timing",
+        "2-player learner decision samples processed per second over the full update.",
+    ),
+    _metric(
+        "samples_per_sec_4p",
+        "timing",
+        "4-player learner decision samples processed per second over the full update.",
+    ),
+    _metric(
+        "rollout_samples_per_sec_2p",
+        "timing",
+        "2-player learner decision samples processed per second during 2-player rollout collection.",
+    ),
+    _metric(
+        "rollout_samples_per_sec_4p",
+        "timing",
+        "4-player learner decision samples processed per second during 4-player rollout collection.",
+    ),
+    _metric(
+        "update_time_rollout_fraction",
+        "timing",
+        "Fraction of update wall time spent collecting rollouts.",
+    ),
+    _metric(
+        "update_time_ppo_fraction",
+        "timing",
+        "Fraction of update wall time spent in PPO optimization.",
+    ),
+    _metric(
         "seed_scheduler_policy",
         "curriculum",
         "Seed scheduling policy selected for the next update.",

@@ -6,5 +6,5 @@ max_ships: 400.0
 feature_history_steps: 10
 trajectory_shield_enabled: true
 trajectory_shield_hit_mode: selected_target
-trajectory_shield_horizon: 100
+trajectory_shield_horizon: 20
 trajectory_shield_epsilon: 1.0e-06

@@ -265,6 +265,10 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.telemetry.wandb.enabled = False
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
+    cfg.format.rollout_groups = [
+        {"name": "two_player", "player_count": 2, "num_envs": 1},
+        {"name": "four_player", "player_count": 4, "num_envs": 1},
+    ]
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 1
@@ -272,6 +276,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.training.total_updates = 1
     cfg.training.epochs = 1
     cfg.training.minibatch_size = 32
+    cfg.training.rollout_microbatch_envs = 1
     cfg.artifacts.checkpoint_every = 100
 
     run_jax_training(cfg)
@@ -283,3 +288,19 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
 
     assert any(event.get("event") == "curriculum_stage_promoted" for event in events)
     assert any(event.get("event") == "historical_snapshot_added" for event in events)
+    for key in (
+        "rollout_seconds_2p",
+        "rollout_seconds_4p",
+        "env_steps_per_sec_2p",
+        "env_steps_per_sec_4p",
+        "rollout_env_steps_per_sec_2p",
+        "rollout_env_steps_per_sec_4p",
+        "samples_per_sec_2p",
+        "samples_per_sec_4p",
+        "rollout_samples_per_sec_2p",
+        "rollout_samples_per_sec_4p",
+        "update_time_rollout_fraction",
+        "update_time_ppo_fraction",
+    ):
+        assert isinstance(update_record[key], float)
+        assert update_record[key] >= 0.0

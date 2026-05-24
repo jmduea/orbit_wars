@@ -479,6 +479,37 @@ def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str,
     return metrics
 
 
+def _empty_per_format_rollout_stats() -> dict[int, dict[str, float]]:
+    return {
+        2: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
+        4: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
+    }
+
+
+def _build_per_format_timing_metrics(
+    format_stats: dict[int, dict[str, float]],
+    *,
+    update_seconds: float,
+    rollout_seconds: float,
+    ppo_seconds: float,
+) -> dict[str, float]:
+    metrics = {
+        "update_time_rollout_fraction": rollout_seconds / max(update_seconds, 1e-9),
+        "update_time_ppo_fraction": ppo_seconds / max(update_seconds, 1e-9),
+    }
+    for player_count, suffix in ((2, "2p"), (4, "4p")):
+        stats = format_stats.get(player_count, {})
+        seconds = float(stats.get("seconds", 0.0))
+        env_steps = float(stats.get("env_steps", 0.0))
+        samples = float(stats.get("samples", 0.0))
+        metrics[f"rollout_seconds_{suffix}"] = seconds
+        metrics[f"env_steps_per_sec_{suffix}"] = env_steps / max(update_seconds, 1e-9)
+        metrics[f"rollout_env_steps_per_sec_{suffix}"] = env_steps / max(seconds, 1e-9)
+        metrics[f"samples_per_sec_{suffix}"] = samples / max(update_seconds, 1e-9)
+        metrics[f"rollout_samples_per_sec_{suffix}"] = samples / max(seconds, 1e-9)
+    return metrics
+
+
 def _collect_rollout_microbatched(
     rollout_key: jax.Array,
     state: JaxEnvState,
@@ -1011,6 +1042,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             rollout_start = time.perf_counter()
             transitions_by_group: list[JaxTransitionBatch] = []
             rollout_metrics_by_group: list[dict[str, jax.Array]] = []
+            format_rollout_stats = _empty_per_format_rollout_stats()
             next_groups: list[JaxRolloutGroup] = []
             should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
             if should_reseed:
@@ -1037,6 +1069,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
             for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
                 group = rollout_groups[group_idx]
+                group_rollout_start = time.perf_counter()
                 (
                     _next_rollout_key,
                     env_state,
@@ -1052,6 +1085,17 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     historical_pool.params,
                     jnp.asarray(update, dtype=jnp.int32),
                 )
+                group_env_steps, group_samples = jax.device_get(
+                    jnp.asarray(
+                        [rollout_metrics["env_steps"], rollout_metrics["samples"]],
+                        dtype=jnp.float32,
+                    )
+                ).tolist()
+                group_seconds = time.perf_counter() - group_rollout_start
+                stats = format_rollout_stats[int(group.cfg.task.player_count)]
+                stats["seconds"] += group_seconds
+                stats["env_steps"] += float(group_env_steps)
+                stats["samples"] += float(group_samples)
                 next_groups.append(
                     _replace_rollout_group_state(group, env_state, turn_batch)
                 )
@@ -1112,6 +1156,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
             ppo_seconds = time.perf_counter() - ppo_start
             update_seconds = time.perf_counter() - update_start
+            per_format_timing_metrics = _build_per_format_timing_metrics(
+                format_rollout_stats,
+                update_seconds=update_seconds,
+                rollout_seconds=rollout_seconds,
+                ppo_seconds=ppo_seconds,
+            )
             env_steps = int(rollout_scalars["env_steps"])
             episodes = int(rollout_scalars["episode_done"])
             episodes_2p = float(rollout_scalars["episodes_2p"])
@@ -1253,6 +1303,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "rollout_env_steps_per_sec": env_steps / max(rollout_seconds, 1e-9),
                 "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
                 "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
+                **per_format_timing_metrics,
                 "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
                 "seed_scheduler_plateau_metric": cfg.training.plateau_metric,
                 "reseed_events": reseed_events,

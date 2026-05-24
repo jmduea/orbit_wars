@@ -1,12 +1,12 @@
 enabled: true
 stages:
   - id: bootstrap_random
-    min_updates: 100
+    min_updates: 1000
     cooldown_updates: 0
     promote_if:
       metric: overall_win_rate
       op: ">="
-      value: 0.55
+      value: 0.90
       window_updates: 5
     opponent_families:
       latest: 0.0
@@ -17,7 +17,7 @@ stages:
       turtle: 0.0
       opportunistic: 0.0
   - id: mixed_exploiters
-    min_updates: 100
+    min_updates: 1000
     cooldown_updates: 10
     promote_if:
       metric: overall_win_rate

@@ -120,6 +120,32 @@ def test_per_format_loss_metrics_are_registered_as_losses():
         assert f"loss_sample_count_{suffix}" in names
 
 
+def test_per_format_timing_metrics_are_registered_as_timing():
+    expected_names = {
+        "rollout_seconds_2p",
+        "rollout_seconds_4p",
+        "env_steps_per_sec_2p",
+        "env_steps_per_sec_4p",
+        "rollout_env_steps_per_sec_2p",
+        "rollout_env_steps_per_sec_4p",
+        "samples_per_sec_2p",
+        "samples_per_sec_4p",
+        "rollout_samples_per_sec_2p",
+        "rollout_samples_per_sec_4p",
+        "update_time_rollout_fraction",
+        "update_time_ppo_fraction",
+    }
+    names = enabled_metric_names(
+        _metric_groups(timing=True),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+
+    for name in expected_names:
+        assert metric_definition(name).group == "timing"
+        assert name in names
+
+
 def test_repo_sweep_metrics_are_registered_and_enabled_by_default():
     sweep_dir = Path(__file__).resolve().parents[1] / "conf" / "sweeps"
     metric_names = set(KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES)

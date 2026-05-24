@@ -81,11 +81,26 @@ Executable W&B sweep templates live in `conf/sweeps/wandb/`:
 - `reward.yaml`
 - `task_complexity.yaml`
 - `curriculum.yaml`
+- `gnn_pointer_reward_search.yaml`
+- `gnn_pointer_reward_validate.yaml`
 - `throughput.yaml`
 
 Each template sets `telemetry.wandb.group` and `telemetry.wandb.tags` so run tables carry campaign intent.
 
 Use [Workstation-Friendly Baseline Sweep](baseline_sweep.md) when selecting a default comparison baseline that balances performance, throughput, stability, and active workstation comfort. The first promoted baseline is recorded in [Workstation-Friendly Baseline Sweep Results](baseline_sweep_results.md).
+
+### gnn_pointer Reward Search
+
+Use `gnn_pointer_reward_search.yaml` to tune the gnn-pointer policy for `episode_reward_mean`, the canonical logged metric for average episodic reward. It uses the recent gnn-pointer throughput anchor from W&B run `de94yuob`: `format=mix_2p_4p_8env`, `training.rollout_steps=64`, `training.minibatch_size=256`, and `training.rollout_microbatch_envs=8`.
+
+Launch the search:
+
+```bash
+wandb sweep conf/sweeps/wandb/gnn_pointer_reward_search.yaml
+wandb agent <entity>/<project>/<sweep_id>
+```
+
+Rank search runs by the final-window `episode_reward_mean`, require enough completed episodes for the result to carry signal, and reject runs with NaN losses, unstable policy-health metrics, or clearly pathological `approx_kl`. Validate the top 4 configs plus the default gnn-pointer control with `gnn_pointer_reward_validate.yaml`; before launching validation, edit its fixed hyperparameter values to match each finalist config and keep `seed.values` as the repeated-seed axis.
 
 ## Config Source
 
