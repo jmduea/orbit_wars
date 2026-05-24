@@ -4,9 +4,9 @@ import json
 import re
 from pathlib import Path
 
-from src import run_paths
+from src.artifacts import run_paths
 from src.config import TrainConfig
-from src.run_paths import compose_run_name, resolve_run_paths, write_run_manifests
+from src.artifacts.run_paths import compose_run_name, resolve_run_paths, write_run_manifests
 
 
 RUN_NAME_TIMESTAMP_RE = r"\d{8}T\d{6}Z"

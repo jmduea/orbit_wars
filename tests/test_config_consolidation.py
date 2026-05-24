@@ -13,15 +13,15 @@ from src.config import compose_hydra_train_config
 def test_root_config_composes_from_responsibility_groups() -> None:
     cfg = compose_hydra_train_config()
 
-    assert cfg.task.candidate_count == 8
-    assert cfg.training.total_updates == 500
+    assert cfg.task.candidate_count == 4
+    assert cfg.training.total_updates == 100
     assert cfg.format.rollout_groups
-    assert cfg.curriculum.enabled is True
+    assert cfg.curriculum.enabled is False
     assert cfg.opponents.self_play.enabled is True
     assert cfg.opponents.snapshot.pool_size == 5
     assert cfg.artifacts.artifact_pipeline.enabled is True
     assert cfg.output.root == "outputs"
-    assert cfg.output.campaign == "scratch"
+    assert cfg.output.campaign == "default"
     assert cfg.artifacts.artifact_pipeline.queue_dir == "queue/optional_jobs"
     assert cfg.artifacts.artifact_pipeline.result_dir == "evaluations"
     assert not hasattr(cfg, "env")

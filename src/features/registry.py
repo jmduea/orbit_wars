@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Sequence
 
-from src.conf_schema import TaskConfig
-from src.constants import (
+from src.config.schema import TaskConfig
+from src.game.constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,

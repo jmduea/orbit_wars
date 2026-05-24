@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import RewardConfig, TaskConfig
-from src.constants import MAX_PLANETS
-from src.jax_env import (
+from src.game.constants import MAX_PLANETS
+from src.jax.env import (
     BOARD_CENTER,
     JaxAction,
     JaxEnvState,

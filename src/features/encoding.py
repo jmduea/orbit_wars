@@ -7,15 +7,15 @@ from typing import Any
 
 import numpy as np
 
-from src.feature_registry import (
+from src.features.registry import (
     candidate_feature_dim,
     feature_history_steps,
     global_feature_dim,
     self_feature_dim,
 )
 
-from .config import TaskConfig
-from .constants import (
+from src.config import TaskConfig
+from src.game.constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,
@@ -31,8 +31,8 @@ from .constants import (
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
 )
-from .game_types import GameState, PlanetState, parse_observation
-from .trajectory_shield import any_ship_bucket_is_safe
+from src.game.types import GameState, PlanetState, parse_observation
+from src.game.trajectory_shield import any_ship_bucket_is_safe
 
 
 def real_candidate_slots(candidate_count: int) -> int:

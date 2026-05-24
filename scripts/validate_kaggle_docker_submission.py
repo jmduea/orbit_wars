@@ -23,14 +23,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 RUNTIME_FILES = (
-    "constants.py",
-    "feature_registry.py",
-    "features.py",
-    "game_types.py",
-    "jax_policy.py",
-    "trajectory_shield.py",
+    "features/__init__.py",
+    "features/encoding.py",
+    "features/registry.py",
+    "game/__init__.py",
+    "game/constants.py",
+    "game/trajectory_shield.py",
+    "game/types.py",
+    "jax/__init__.py",
+    "jax/policy.py",
 )
-TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax_train")
+TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax.train")
 
 
 class ValidationError(RuntimeError):
@@ -182,12 +185,16 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
 
     package_dir = staging_dir / "src"
     package_dir.mkdir()
-    (package_dir / "__init__.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
-    (package_dir / "config.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
-    (package_dir / "conf_schema.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
+    (package_dir / "__init__.py").write_text("from .config import TrainConfig\n", encoding="utf-8")
+    config_dir = package_dir / "config"
+    config_dir.mkdir()
+    (config_dir / "__init__.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
+    (config_dir / "schema.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
     repo_src = Path(__file__).resolve().parents[1] / "src"
     for filename in RUNTIME_FILES:
-        shutil.copy2(repo_src / filename, package_dir / filename)
+        destination = package_dir / filename
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repo_src / filename, destination)
 
 
 def create_tarball(staging_dir: Path, package_path: Path) -> None:
@@ -421,11 +428,11 @@ import jax
 import jax.numpy as jnp
 
 from src.config import config_from_plain
-from src.constants import MAX_PLANETS
+from src.game.constants import MAX_PLANETS
 from src.features import FeatureHistoryBuffer, encode_turn
-from src.feature_registry import candidate_feature_dim, global_feature_dim, self_feature_dim
-from src.jax_policy import build_jax_policy
-from src.trajectory_shield import is_trajectory_safe_for_launch, select_runtime_shielded_policy_actions
+from src.features.registry import candidate_feature_dim, global_feature_dim, self_feature_dim
+from src.jax.policy import build_jax_policy
+from src.game.trajectory_shield import is_trajectory_safe_for_launch, select_runtime_shielded_policy_actions
 
 
 _ROOT = Path(__file__).resolve().parent

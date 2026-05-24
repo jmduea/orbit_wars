@@ -40,7 +40,7 @@ class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
     architecture: str = "gnn_pointer"
-    value_head: str = "shared"
+    value_head: str = "shared"  # format_routed for 2p/4p routing
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
@@ -221,7 +221,9 @@ class ArtifactPipelineConfig:
 class ArtifactsConfig:
     save_dir: str = "outputs"
     checkpoint_every: int = 10
-    artifact_pipeline: ArtifactPipelineConfig = field(default_factory=ArtifactPipelineConfig)
+    artifact_pipeline: ArtifactPipelineConfig = field(
+        default_factory=ArtifactPipelineConfig
+    )
     replay: ReplayConfig = field(default_factory=ReplayConfig)
     checkpoint_retention: CheckpointRetentionConfig = field(
         default_factory=CheckpointRetentionConfig

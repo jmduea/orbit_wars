@@ -6,7 +6,7 @@ from hydra import main as hydra_main
 from omegaconf import DictConfig, OmegaConf
 
 from .config import register_runtime_resolvers, train_config_from_omegaconf
-from .jax_train import run_jax_training
+from .jax.train import run_jax_training
 
 register_runtime_resolvers()
 

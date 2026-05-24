@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .artifact_pipeline import (
+from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
     CheckpointJob,
@@ -20,23 +20,23 @@ from .artifact_pipeline import (
     protected_paths_from_jobs,
     write_optional_job,
 )
-from .checkpoint_compat import (
+from src.artifacts.checkpoint_compat import (
     feature_metadata,
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
     validate_checkpoint_feature_compatibility,
 )
-from .checkpoint_retention import prune_checkpoints
-from .config import TrainConfig
-from .curriculum import CurriculumController
-from .jax_device import (
+from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.config import TrainConfig
+from src.training.curriculum import CurriculumController
+from .device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
 )
-from .replay import maybe_write_jax_checkpoint_replay
-from .run_paths import resolve_run_paths, write_run_manifests
-from .seed_scheduler import SeedScheduleConfig, SeedScheduler
-from .telemetry import build_telemetry
+from src.artifacts.replay import maybe_write_jax_checkpoint_replay
+from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
+from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+from src.telemetry import build_telemetry
 
 configure_jax_platform_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
@@ -44,10 +44,10 @@ logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 
-from .jax_env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
-from .jax_features import JaxTurnBatch  # noqa: E402
-from .jax_policy import build_jax_policy  # noqa: E402
-from .jax_ppo import (  # noqa: E402
+from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
+from .features import JaxTurnBatch  # noqa: E402
+from .policy import build_jax_policy  # noqa: E402
+from .ppo import (  # noqa: E402
     JaxTransitionBatch,
     collect_rollout_jax,
     concatenate_transition_batches,

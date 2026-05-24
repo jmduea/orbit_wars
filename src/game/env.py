@@ -3,17 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.constants import MAX_STEPS
+from src.game.constants import MAX_STEPS
 
-from .config import RewardConfig, TaskConfig, TrainConfig
-from .features import (
+from src.config import RewardConfig, TaskConfig, TrainConfig
+from src.features import (
     FeatureHistoryBuffer,
     TurnBatch,
     build_feature_snapshot,
     encode_turn,
 )
-from .game_types import GameState, PlanetState, parse_observation
-from .opponents import OpponentPolicy
+from .types import GameState, PlanetState, parse_observation
+from src.opponents import OpponentPolicy
 from .trajectory_shield import filter_moves_with_trajectory_shield
 
 

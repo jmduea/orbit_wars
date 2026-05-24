@@ -14,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.config import compose_hydra_train_config  # noqa: E402
-from src.jax_device import ensure_cuda_jax_if_nvidia_present  # noqa: E402
+from src.jax.device import ensure_cuda_jax_if_nvidia_present  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,9 +48,9 @@ def main() -> None:
 
     import jax
 
-    from src.jax_env import batched_reset
-    from src.jax_policy import build_jax_policy
-    from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+    from src.jax.env import batched_reset
+    from src.jax.policy import build_jax_policy
+    from src.jax.ppo import collect_rollout_jax, init_train_state, ppo_update_jax
 
     cfg = deepcopy(compose_hydra_train_config(list(args.overrides)))
     if args.num_envs is not None:

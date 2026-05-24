@@ -16,8 +16,8 @@ from .constants import (
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
 )
-from .game_types import GameState, PlanetState
-from .jax_policy import (
+from .types import GameState, PlanetState
+from src.jax.policy import (
     JaxPolicyOutput,
     action_log_prob_and_entropy,
     ensure_policy_sequence,

@@ -10,11 +10,11 @@ from .checkpoint_compat import (
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
-from .config import TrainConfig
-from .features import encode_turn, ship_count_for_bucket
-from .jax_policy import build_jax_policy
-from .opponents import build_opponent
-from .trajectory_shield import (
+from src.config import TrainConfig
+from src.features import encode_turn, ship_count_for_bucket
+from src.jax.policy import build_jax_policy
+from src.opponents import build_opponent
+from src.game.trajectory_shield import (
     is_trajectory_safe_for_launch,
     select_runtime_shielded_policy_actions,
 )

@@ -9,10 +9,10 @@ from src.config import (
     compose_hydra_train_config,
     train_config_from_omegaconf,
 )
-from src.curriculum import CurriculumController
-from src.jax_env import batched_reset
-from src.jax_policy import build_jax_policy
-from src.jax_ppo import collect_rollout_jax, init_train_state
+from src.training.curriculum import CurriculumController
+from src.jax.env import batched_reset
+from src.jax.policy import build_jax_policy
+from src.jax.ppo import collect_rollout_jax, init_train_state
 
 
 def _curriculum_config(stages):
@@ -29,8 +29,8 @@ def _curriculum_config(stages):
 def test_default_hydra_config_uses_new_curriculum_surface():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
-    assert cfg.curriculum.enabled
-    assert cfg.curriculum.stages
+    assert cfg.curriculum.enabled is False
+    assert cfg.curriculum.stages == []
     assert cfg.opponents.snapshot.pool_size == 5
 
 
@@ -92,16 +92,14 @@ def test_recent_biased_snapshot_selection_prefers_newer_updates():
 
 
 def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
-    from src.jax_train import (
+    from src.jax.train import (
         _add_historical_snapshot,
         _checkpoint_payload_builder,
         _init_historical_snapshot_pool,
         _restore_historical_snapshot_pool,
     )
 
-    cfg = _curriculum_config(
-        [{"id": "latest", "opponent_families": {"latest": 1.0}}]
-    )
+    cfg = _curriculum_config([{"id": "latest", "opponent_families": {"latest": 1.0}}])
     cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
@@ -133,7 +131,7 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
 
 
 def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():
-    from src.jax_train import _checkpoint_payload_builder
+    from src.jax.train import _checkpoint_payload_builder
 
     cfg = _curriculum_config(
         [
@@ -164,9 +162,7 @@ def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():
 
 
 def test_two_player_rollout_reports_sampled_random_family_slots():
-    cfg = _curriculum_config(
-        [{"id": "random", "opponent_families": {"random": 1.0}}]
-    )
+    cfg = _curriculum_config([{"id": "random", "opponent_families": {"random": 1.0}}])
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -198,6 +194,77 @@ def test_two_player_rollout_reports_sampled_random_family_slots():
     assert float(metrics["opponent_slots_total"]) == 2.0
     assert float(metrics["opponent_slots_random"]) == 2.0
     assert float(metrics["opponent_slots_latest"]) == 0.0
+
+
+def test_four_player_rollout_reports_single_random_family_slots():
+    cfg = _curriculum_config([{"id": "random", "opponent_families": {"random": 1.0}}])
+    cfg.task.player_count = 4
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    reset_keys = jax.random.split(jax.random.PRNGKey(120), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(121), policy, cfg)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    stage_view = controller.stage_view(
+        1,
+        snapshot_ids=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+        snapshot_valid_mask=jax.numpy.zeros((2,), dtype=bool),
+        snapshot_updates=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+    )
+
+    _key, _env_state, _turn_batch, _transitions, metrics = collect_rollout_jax(
+        jax.random.PRNGKey(122),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        stage_view=stage_view,
+    )
+
+    assert float(metrics["opponent_slots_total"]) == 6.0
+    assert float(metrics["opponent_slots_random"]) == 6.0
+    assert float(metrics["opponent_slots_latest"]) == 0.0
+
+
+def test_two_player_rollout_reports_single_latest_family_slots():
+    cfg = _curriculum_config([{"id": "latest", "opponent_families": {"latest": 1.0}}])
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    reset_keys = jax.random.split(jax.random.PRNGKey(130), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(131), policy, cfg)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    stage_view = controller.stage_view(
+        1,
+        snapshot_ids=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+        snapshot_valid_mask=jax.numpy.zeros((2,), dtype=bool),
+        snapshot_updates=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+    )
+
+    _key, _env_state, _turn_batch, _transitions, metrics = collect_rollout_jax(
+        jax.random.PRNGKey(132),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        stage_view=stage_view,
+    )
+
+    assert float(metrics["opponent_slots_total"]) == 2.0
+    assert float(metrics["opponent_slots_latest"]) == 2.0
+    assert float(metrics["opponent_slots_random"]) == 0.0
 
 
 def test_historical_family_falls_back_to_latest_when_pool_empty():
@@ -238,7 +305,7 @@ def test_historical_family_falls_back_to_latest_when_pool_empty():
 
 
 def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypatch):
-    from src.jax_train import run_jax_training
+    from src.jax.train import run_jax_training
 
     monkeypatch.setenv("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA", "1")
 
@@ -259,6 +326,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
         ]
     )
     cfg.run_name = "curriculum_events"
+    cfg.output.root = str(tmp_path)
     cfg.artifacts.save_dir = str(tmp_path)
     cfg.artifacts.artifact_pipeline.enabled = False
     cfg.artifacts.replay.enabled = False
@@ -281,8 +349,10 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
 
     run_jax_training(cfg)
 
-    log_path = tmp_path / "logs" / "curriculum_events_jax.jsonl"
-    records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    log_path = next(tmp_path.glob("campaigns/*/runs/*/logs/*_jax.jsonl"))
+    records = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
     update_record = next(record for record in records if record.get("update") == 1)
     events = update_record["curriculum_phase_events"]
 

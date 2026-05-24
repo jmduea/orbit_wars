@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .config import TrainConfig
+from src.config import TrainConfig
 
 
 class TelemetryLogger:

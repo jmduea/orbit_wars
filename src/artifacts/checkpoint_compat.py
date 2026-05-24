@@ -5,8 +5,8 @@ from typing import Mapping
 
 import numpy as np
 
-from .config import TaskConfig, TrainConfig
-from .feature_registry import (
+from src.config import TaskConfig, TrainConfig
+from src.features.registry import (
     candidate_feature_dim,
     feature_history_steps,
     global_feature_dim,

@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 
 from src.features import TurnBatch
-from src.game_types import GameState
-from src.normalization import ObservationNormalizer
+from src.game.types import GameState
+from src.features.normalization import ObservationNormalizer
 
 
 def _batch(scale: float) -> TurnBatch:

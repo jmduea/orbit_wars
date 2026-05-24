@@ -13,7 +13,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from src.constants import (
+from src.game.constants import (
     BOARD_SIZE,
     MAX_FLEET_SPEED,
     MAX_PLANETS,
@@ -23,8 +23,8 @@ from src.constants import (
     TOTAL_COMETS,
 )
 
-from .config import RewardConfig, TaskConfig
-from .jax_features import (
+from src.config import RewardConfig, TaskConfig
+from .features import (
     JaxFeatureHistory,
     JaxTurnBatch,
     append_feature_history,

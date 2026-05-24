@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from .features import TurnBatch
+from .encoding import TurnBatch
 
 
 @dataclass(slots=True)

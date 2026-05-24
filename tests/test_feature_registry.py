@@ -1,11 +1,11 @@
 import pytest
 
-from src.constants import (
+from src.game.constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,
 )
-from src.feature_registry import (
+from src.features.registry import (
     CANDIDATE_FEATURE_SCHEMA,
     GLOBAL_FEATURE_SCHEMA,
     SELF_FEATURE_SCHEMA,

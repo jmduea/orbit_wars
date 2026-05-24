@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import yaml
 
-from src.conf_schema import TrainConfig
-from src.metric_registry import (
+from src.config.schema import TrainConfig
+from src.telemetry.metric_registry import (
     DEFAULT_ENABLED_GROUPS,
     KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES,
     METRIC_DEFINITIONS,

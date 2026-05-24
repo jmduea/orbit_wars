@@ -1,4 +1,4 @@
-from src.jax_train import _build_per_format_timing_metrics
+from src.jax.train import _build_per_format_timing_metrics
 
 
 def test_build_per_format_timing_metrics_is_deterministic():

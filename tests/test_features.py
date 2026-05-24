@@ -1,7 +1,7 @@
 import numpy as np
 
 from src.config import TaskConfig
-from src.constants import MAX_PLANETS
+from src.game.constants import MAX_PLANETS
 from src.features import (
     build_candidate_features,
     build_candidates,
@@ -12,7 +12,7 @@ from src.features import (
     real_candidate_slots,
     self_feature_dim,
 )
-from src.game_types import GameState, PlanetState, parse_observation
+from src.game.types import GameState, PlanetState, parse_observation
 
 
 def planet(pid: int, owner: int, x: float, y: float) -> PlanetState:

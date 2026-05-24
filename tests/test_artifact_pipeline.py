@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.artifact_pipeline import (
+from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointJob,
     commit_checkpoint_payload,
@@ -16,7 +16,7 @@ from src.artifact_pipeline import (
     protected_paths_from_jobs,
     write_optional_job,
 )
-from src.checkpoint_retention import prune_checkpoints
+from src.artifacts.checkpoint_retention import prune_checkpoints
 
 
 def _payload(update: int) -> dict[str, object]:
@@ -183,7 +183,7 @@ def test_running_optional_job_protects_checkpoint_from_retention(tmp_path: Path)
 
 def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
     from src.config import TrainConfig
-    from src.jax_train import _queue_optional_jobs_if_due
+    from src.jax.train import _queue_optional_jobs_if_due
 
     cfg = TrainConfig()
     cfg.artifacts.replay.enabled = True
@@ -214,7 +214,7 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
 
 def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     from src.config import TrainConfig
-    from src.jax_train import _queue_optional_jobs_if_due
+    from src.jax.train import _queue_optional_jobs_if_due
 
     cfg = TrainConfig()
     cfg.artifacts.replay.enabled = False
@@ -362,7 +362,7 @@ def test_worker_accepts_custom_result_root_from_trusted_worker_option(
 
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
-    from src import jax_train
+    from src.jax import train as jax_train
     from src.config import TrainConfig
 
     launched: dict[str, object] = {}

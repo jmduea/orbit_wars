@@ -6,11 +6,11 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from src import replay
+from src.artifacts import replay
 from src.config import TrainConfig
 from src.features import DecisionContext, TurnBatch
-from src.game_types import GameState
-from src.jax_policy import JaxPolicyOutput
+from src.game.types import GameState
+from src.jax.policy import JaxPolicyOutput
 
 
 class _FakePolicy:

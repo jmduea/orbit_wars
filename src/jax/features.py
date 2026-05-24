@@ -7,10 +7,10 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from src.feature_registry import CANDIDATE_FEATURE_SCHEMA, GLOBAL_FEATURE_SCHEMA
+from src.features.registry import CANDIDATE_FEATURE_SCHEMA, GLOBAL_FEATURE_SCHEMA
 
-from .config import TaskConfig
-from .constants import (
+from src.config import TaskConfig
+from src.game.constants import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_GLOBAL_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,

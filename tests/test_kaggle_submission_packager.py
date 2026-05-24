@@ -18,7 +18,7 @@ from scripts.validate_kaggle_docker_submission import (
     export_runtime_artifact,
     validate_tarball_layout,
 )
-from src.conf_schema import TrainConfig
+from src.config.schema import TrainConfig
 
 
 def _fake_config() -> SimpleNamespace:
@@ -127,8 +127,8 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
     assert "runtime_artifact.pkl" in names
     assert "manifest.json" in names
     assert "src/__init__.py" in names
-    assert "src/jax_policy.py" in names
-    assert "src/trajectory_shield.py" in names
+    assert "src/jax/policy.py" in names
+    assert "src/game/trajectory_shield.py" in names
     assert str(checkpoint.parent) not in manifest_text
     assert "source_checkpoint_sha256" in manifest_text
 

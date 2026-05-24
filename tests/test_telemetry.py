@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from omegaconf import OmegaConf
 
-from src.checkpoint_retention import prune_checkpoints
-from src.conf_schema import TrainConfig
+from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.config.schema import TrainConfig
 from src.config import compose_hydra_train_config, train_config_from_omegaconf
-from src.metric_registry import filter_event_record, filter_update_record
+from src.telemetry.metric_registry import filter_event_record, filter_update_record
 from src.telemetry import TelemetryLogger
 
 

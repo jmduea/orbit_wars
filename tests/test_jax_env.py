@@ -3,14 +3,14 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import RewardConfig, TaskConfig
-from src.constants import MAX_PLANETS
+from src.game.constants import MAX_PLANETS
 from src.features import (
     NO_OP_CANDIDATE_INDEX,
     candidate_feature_dim,
     global_feature_dim,
     self_feature_dim,
 )
-from src.jax_env import (
+from src.jax.env import (
     JaxAction,
     JaxFleetState,
     JaxGameState,
@@ -22,7 +22,7 @@ from src.jax_env import (
     reset,
     step,
 )
-from src.jax_features import encode_turn
+from src.jax.features import encode_turn
 
 
 def test_jax_reset_is_deterministic_for_identical_key():

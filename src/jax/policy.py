@@ -6,8 +6,8 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from src import TrainConfig
-from src.feature_registry import candidate_feature_schema
+from src.config import TrainConfig
+from src.features.registry import candidate_feature_schema
 
 
 # --- Contracts ---

@@ -6,7 +6,7 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from .opponent_pool import (
+from src.opponents.pool import (
     OPPONENT_FAMILY_COUNT,
     OPPONENT_FAMILY_IDS,
     OPPONENT_FAMILY_NAMES,

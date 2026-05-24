@@ -10,11 +10,11 @@ from typing import Any, Protocol
 import jax
 import jax.numpy as jnp
 
-from .config import TrainConfig
-from .features import encode_turn, ship_count_for_bucket
-from .jax_policy import build_jax_policy
-from .normalization import ObservationNormalizer
-from .trajectory_shield import (
+from src.config import TrainConfig
+from src.features import encode_turn, ship_count_for_bucket
+from src.jax.policy import build_jax_policy
+from src.features.normalization import ObservationNormalizer
+from src.game.trajectory_shield import (
     filter_moves_with_trajectory_shield,
     is_trajectory_safe_for_launch,
     select_runtime_shielded_policy_actions,

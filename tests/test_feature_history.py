@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import TaskConfig
-from src.constants import MAX_PLANETS
+from src.game.constants import MAX_PLANETS
 from src.features import (
     BASE_CANDIDATE_FEATURE_DIM,
     BASE_SELF_FEATURE_DIM,
@@ -12,10 +12,10 @@ from src.features import (
     encode_turn,
     self_feature_dim,
 )
-from src.game_types import GameState, PlanetState
-from src.jax_env import JaxFleetState, JaxGameState, JaxPlanetState, max_fleets
-from src.jax_features import append_feature_history, empty_feature_history
-from src.jax_features import encode_turn as encode_jax_turn
+from src.game.types import GameState, PlanetState
+from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, max_fleets
+from src.jax.features import append_feature_history, empty_feature_history
+from src.jax.features import encode_turn as encode_jax_turn
 
 
 def _state(step: int, ships: int) -> GameState:

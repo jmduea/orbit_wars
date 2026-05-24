@@ -5,11 +5,11 @@ import jax
 import pytest
 
 from src.config import TrainConfig
-from src.constants import MAX_PLANETS, MAX_STEPS
-from src.jax_env import batched_reset
-from src.jax_policy import build_jax_policy
-from src.jax_ppo import collect_rollout_jax, init_train_state, ppo_update_jax
-from src.jax_train import _sum_metric_dicts, init_rollout_groups
+from src.game.constants import MAX_PLANETS, MAX_STEPS
+from src.jax.env import batched_reset
+from src.jax.policy import build_jax_policy
+from src.jax.ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+from src.jax.train import _sum_metric_dicts, init_rollout_groups
 
 
 @pytest.mark.parametrize(
@@ -165,7 +165,7 @@ def _metric_chunk(**overrides: float) -> dict[str, jax.Array]:
 
 
 def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
-    from src.jax_ppo import build_action_from_batch, build_random_action_from_batch
+    from src.jax.ppo import build_action_from_batch, build_random_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 4
@@ -191,7 +191,7 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
 
 
 def test_jax_action_builder_emits_multiple_launch_slots_per_source():
-    from src.jax_ppo import build_action_from_batch
+    from src.jax.ppo import build_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 32
@@ -211,7 +211,7 @@ def test_jax_action_builder_emits_multiple_launch_slots_per_source():
 
 
 def test_jax_action_builder_invalid_step_does_not_consume_later_ships():
-    from src.jax_ppo import build_action_from_batch
+    from src.jax.ppo import build_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = MAX_PLANETS * 2
@@ -239,7 +239,7 @@ def test_jax_action_builder_invalid_step_does_not_consume_later_ships():
 
 
 def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
-    from src.jax_train import load_jax_checkpoint, save_jax_checkpoint
+    from src.jax.train import load_jax_checkpoint, save_jax_checkpoint
 
     cfg = TrainConfig()
     cfg.task.candidate_count = 4
@@ -272,7 +272,7 @@ def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
 
 
 def test_jax_checkpoint_rejects_legacy_config_payload(tmp_path):
-    from src.jax_train import load_jax_checkpoint
+    from src.jax.train import load_jax_checkpoint
 
     cfg = TrainConfig()
     cfg.task.candidate_count = 4
@@ -364,7 +364,7 @@ def test_collect_rollout_jax_two_player_static_shapes():
     assert transitions.decision_mask.shape == (1, 3, 60, cfg.model.max_moves_k)
     assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
-    from src.jax_env import assign_learner_players
+    from src.jax.env import assign_learner_players
 
     cfg = TrainConfig()
     cfg.task.player_count = 4
@@ -386,7 +386,7 @@ def test_assign_learner_players_uses_env_index_and_episode_count():
 
 
 def test_collect_rollout_jax_rotates_learner_after_reset_done():
-    from src.jax_env import assign_learner_players
+    from src.jax.env import assign_learner_players
 
     cfg = TrainConfig()
     cfg.task.player_count = 4
@@ -424,7 +424,7 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
 
 
 def test_collect_rollout_jax_emits_training_scalar_metric_contract():
-    from src.jax_train import _BASE_ROLLOUT_SCALAR_KEYS
+    from src.jax.train import _BASE_ROLLOUT_SCALAR_KEYS
 
     cfg = TrainConfig()
     cfg.model.hidden_size = 16
@@ -492,8 +492,8 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
 
 
 def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
-    from src.jax_ppo import concatenate_transition_batches
-    from src.jax_train import init_rollout_groups
+    from src.jax.ppo import concatenate_transition_batches
+    from src.jax.train import init_rollout_groups
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 16
@@ -548,7 +548,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
 
 
 def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
-    from src.jax_env import assign_learner_players
+    from src.jax.env import assign_learner_players
 
     cfg = TrainConfig()
     cfg.task.player_count = 4

@@ -7,7 +7,7 @@ from typing import Any
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from .conf_schema import (
+from .schema import (
     ArtifactsConfig,
     RewardConfig,
     TaskConfig,
@@ -15,7 +15,7 @@ from .conf_schema import (
     TrainingConfig,
     register_config_schemas,
 )
-from .metric_registry import (
+from src.telemetry.metric_registry import (
     CURRICULUM_PROMOTION_METRIC_NAMES,
     validate_scalar_update_metric_name,
 )
@@ -95,13 +95,19 @@ __all__ = [
 def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfig:
     """Compose the repository root Hydra config with optional overrides."""
 
-    config_dir = Path(__file__).resolve().parents[1] / "conf"
+    config_dir = Path(__file__).resolve().parents[2] / "conf"
     override_list = overrides or []
     register_runtime_resolvers()
     register_config_schemas()
     with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
         composed = compose(config_name="config", overrides=override_list)
     return train_config_from_omegaconf(composed, overrides=override_list)
+
+
+def config_from_plain(data: dict[str, Any]) -> TrainConfig:
+    """Build a TrainConfig from a plain nested mapping."""
+
+    return train_config_from_omegaconf(OmegaConf.create(data))
 
 
 def train_config_from_omegaconf(

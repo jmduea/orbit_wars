@@ -5,12 +5,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.config import TaskConfig
-from src.constants import MAX_PLANETS
+from src.game.constants import MAX_PLANETS
 from src.features import encode_turn
-from src.game_types import GameState, PlanetState
-from src.jax_env import JaxFleetState, JaxGameState, JaxPlanetState
-from src.jax_policy import JaxPolicyOutput
-from src.trajectory_shield import (
+from src.game.types import GameState, PlanetState
+from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
+from src.jax.policy import JaxPolicyOutput
+from src.game.trajectory_shield import (
     apply_trajectory_shield_to_turn_batch,
     mask_policy_output_for_shield,
     select_runtime_shielded_policy_actions,

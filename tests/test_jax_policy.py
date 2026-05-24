@@ -6,7 +6,7 @@ import pytest
 from src.config import TrainConfig
 
 # Import your composable system modules here
-from src.jax_policy import (
+from src.jax.policy import (
     AutoregressivePointerDecoder,
     ComposablePlanetPolicy,
     FeedForwardActionDecoder,

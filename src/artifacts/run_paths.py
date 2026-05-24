@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping
 
-from .config import TrainConfig
+from src.config import TrainConfig
 
 
 @dataclass(slots=True)

@@ -14,16 +14,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.artifact_pipeline import (  # noqa: E402
+from src.artifacts.pipeline import (  # noqa: E402
     load_optional_jobs,
     load_pending_optional_jobs,
 )
-from src.checkpoint_compat import (  # noqa: E402
+from src.artifacts.checkpoint_compat import (  # noqa: E402
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
-from src.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
-from src.run_paths import atomic_write_json  # noqa: E402
+from src.artifacts.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
+from src.artifacts.run_paths import atomic_write_json  # noqa: E402
 
 
 def _load_checkpoint_config(checkpoint_path: Path) -> Any:
