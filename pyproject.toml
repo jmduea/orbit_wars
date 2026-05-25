@@ -24,6 +24,17 @@ testpaths = [
     "tests"
 ]
 
+[tool.ty.environment]
+root = ["."]
+python-version = "3.12"
+
+[tool.pyright]
+include = ["src", "tests", "scripts"]
+extraPaths = ["."]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
 [dependency-groups]
 dev = [
     "ruff>=0.15.13",

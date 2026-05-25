@@ -1,4 +1,4 @@
-from .config import (
+from src.config import (
     TrainConfig,
     compose_hydra_train_config,
 )
