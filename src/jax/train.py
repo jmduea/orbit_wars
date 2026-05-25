@@ -281,10 +281,16 @@ def _resolve_rollout_microbatch_envs(cfg: TrainConfig) -> int:
     return microbatch_envs
 
 
-def _slice_env_axis(tree: object, *, start: int, size: int, env_count: int) -> object:
+def _slice_env_axis(
+    tree: object, *, start: int | jax.Array, size: int, env_count: int
+) -> object:
+    """Slice the leading env axis; ``start`` may be traced under ``lax.map``."""
+
+    start_index = jnp.asarray(start, dtype=jnp.int32)
+
     def slice_leaf(value):
         if isinstance(value, jax.Array) and value.ndim > 0 and value.shape[0] == env_count:
-            return value[start : start + size]
+            return jax.lax.dynamic_slice_in_dim(value, start_index, size, axis=0)
         return value
 
     return jax.tree.map(slice_leaf, tree)
@@ -563,14 +569,28 @@ def _collect_rollout_microbatched(
         collect_chunk, chunk_indices
     )
 
-    def reshape_chunk_axis(leaf):
+    def reshape_env_leading_chunk_axis(leaf):
         if isinstance(leaf, jax.Array) and leaf.ndim > 0:
             return leaf.reshape((env_count,) + leaf.shape[2:])
         return leaf
 
-    merged_states = jax.tree.map(reshape_chunk_axis, chunk_states)
-    merged_batches = jax.tree.map(reshape_chunk_axis, chunk_batches)
-    merged_transitions = jax.tree.map(reshape_chunk_axis, chunk_transitions)
+    def merge_transition_chunk_axis(leaf):
+        if (
+            isinstance(leaf, jax.Array)
+            and leaf.ndim >= 3
+            and leaf.shape[0] == chunk_count
+            and leaf.shape[2] == micro
+        ):
+            rollout_steps_dim = int(leaf.shape[1])
+            rest_shape = leaf.shape[3:]
+            return leaf.transpose(1, 0, 2, *range(3, leaf.ndim)).reshape(
+                (rollout_steps_dim, env_count, *rest_shape)
+            )
+        return reshape_env_leading_chunk_axis(leaf)
+
+    merged_states = jax.tree.map(reshape_env_leading_chunk_axis, chunk_states)
+    merged_batches = jax.tree.map(reshape_env_leading_chunk_axis, chunk_batches)
+    merged_transitions = jax.tree.map(merge_transition_chunk_axis, chunk_transitions)
 
     def merge_metrics_scan(acc, chunk_index):
         chunk_metric = jax.tree.map(
@@ -579,7 +599,7 @@ def _collect_rollout_microbatched(
             ),
             chunk_metrics,
         )
-        return _sum_metric_dicts([acc, chunk_metric])
+        return _sum_metric_dicts([acc, chunk_metric]), None
 
     merged_metrics = jax.tree.map(
         lambda x: jax.lax.dynamic_index_in_dim(x, 0, axis=0, keepdims=False),

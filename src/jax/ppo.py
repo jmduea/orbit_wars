@@ -1284,7 +1284,7 @@ def collect_rollout_jax(
     stage_view: StageView | None = None,
     historical_params_pool: dict | None = None,
     update: int = 0,
-    env_index_offset: int = 0,
+    env_index_offset: int | jax.Array = 0,
 ) -> tuple[
     jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]
 ]:
@@ -1296,8 +1296,8 @@ def collect_rollout_jax(
     returns PPO transitions plus rollout metrics.
     """
 
-    env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32) + int(
-        env_index_offset
+    env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32) + jnp.asarray(
+        env_index_offset, dtype=jnp.int32
     )
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
 
