@@ -234,3 +234,6 @@ __marimo__/
 .cursor/agents/knowledge-graph-guide.md
 .cursor/agents/project-scanner.md
 .cursor/agents/tour-builder.md
+
+# OMG ephemeral session state (updated by hooks during agent sessions)
+.omg/state/
