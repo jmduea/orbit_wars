@@ -41,7 +41,9 @@
 **Exit criteria (all required):**
 
 - [ ] **ADR-001 Action space:** joint pointer index = flat edge list per env `(src_idx, tgt_idx)`; NO_OP token; legality mask rules (active, owned source, ≠self, sun-cross, shield); file touch list.
-- [ ] **Schema lock:** P, E, G field tables with dims, normalization, and total float budget (target: ≤200 floats/decision at default H=1, K=4).
+- [x] **ADR-003 Ship feature scale:** rename `max_ships` → `ship_feature_scale`; document vs fleet-speed `1000` literal and `MAX_FLEET_SPEED`.
+- [x] **ADR-004 Symmetry frame:** `θ_ref` = sun → unweighted centroid of owned planets (2p/4p); see `docs/feature-encoding-v2-symmetry.md`.
+- [ ] **Schema lock:** P, E, G field tables with dims, encoding formulas (`S`, learner frame), and total float budget (target: ≤200 floats/decision at default H=1, K=4).
 - [ ] **Edge representation ADR:** top-K per source vs dense; K default = `task.candidate_count - 1` for ablation continuity.
 - [ ] **v1 baseline table:** win rate, `rollout_env_steps_per_sec` (2p/4p), shield rates at promoted config (≥1 seed, document command).
 - [ ] **Submission audit:** `scripts/validate_kaggle_docker_submission.py` + packager paths; confirm game API accepts planet-id targets.
@@ -50,8 +52,8 @@
   - Throughput: v2 rollout env steps/sec ≥ **85%** of v1 on 4p smoke
   - Shield: `trajectory_shield_legal_non_noop_rate` within **±5pp** of v1
   - Evidence: **≥3 seeds**, 2p and 4p stages, **500+ updates** smoke / 2000+ for cutover recommendation
-- [ ] **Config sketch:** `task.encoding_version=v1|v2`, `conf/model/gnn_pointer_v2.yaml`
-- [ ] **Checkpoint metadata v2:** `schema_version: 2`, `planet_feature_dim`, `edge_feature_dim`, `global_feature_dim`, `edge_layout`
+- [ ] **Config sketch:** `task.encoding_version=v1|v2`, `task.ship_feature_scale`, `conf/model/gnn_pointer_v2.yaml`
+- [ ] **Checkpoint metadata v2:** `schema_version: 2`, `planet_feature_dim`, `edge_feature_dim`, `global_feature_dim`, `ship_feature_scale`, `edge_layout`
 - [ ] **Dependency gate:** `jax-ppo-split` status = complete OR explicit merge freeze on `rollout/`, `ppo_update.py`, `opponents/jax_actions/`
 
 **Deliverables:** `docs/feature-encoding-v2.md` (schema draft), ADR in plan appendix.

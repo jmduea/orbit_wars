@@ -2,7 +2,8 @@
 
 **Status:** Phase 0 contract draft  
 **Plan:** `.omg/plans/ralplan-feature-encoding-v2.md`  
-**ADR:** ADR-001 (action space), ADR-002 (edge layout) below
+**ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame) below  
+**Symmetry exploration:** `docs/feature-encoding-v2-symmetry.md`
 
 ## Overview
 
@@ -95,47 +96,129 @@ Flat pointer logits: reshape `(MAX_PLANETS * K + 1,)` with NO_OP at end, masked.
 
 ---
 
+## ADR-003: Ship Feature Scale (`task.ship_feature_scale`)
+
+### Decision
+
+Rename v1's misleading `task.max_ships` to **`task.ship_feature_scale`** in v2 config and documentation.
+
+This knob is an **encoder normalization denominator only**. It does not cap planet ships, fleet launches, or simulation behavior.
+
+### What it does
+
+Express ship-related raw counts as fractions for the policy network:
+
+| Feature kind | Formula | Typical range |
+|--------------|---------|---------------|
+| Garrison / target ships | `min(ships, ship_feature_scale) / ship_feature_scale` | `[0, 1]` |
+| Fleet pressure, outgoing ships | `raw_ship_count / ship_feature_scale` | often `[0, 1]`, can exceed 1 if counts are large |
+| Ship deltas | `(ships_now - ships_prev) / ship_feature_scale` | roughly `[-1, 1]`, can exceed if swings are large |
+| Global ship/fleet aggregates | `total_ships / (MAX_PLANETS * ship_feature_scale)` | `[0, ~1]` |
+
+Config path: **`task.ship_feature_scale`** (Hydra), read by the v2 JAX encoder as `env_cfg.ship_feature_scale`.
+
+**Default:** `1000.0` — chosen to align *conceptually* with the game's fleet-speed reference point (see below), not because the sim reads this config.
+
+### What it is NOT (do not confuse)
+
+| Concept | Where it lives | Role |
+|---------|----------------|------|
+| **`ship_feature_scale`** | `task.*` config | Feature encoding + telemetry denormalization |
+| **Fleet speed reference `1000`** | Hardcoded in `fleet_speed()` | `log(ships) / log(1000)` — at 1000 ships the speed curve saturates toward `MAX_FLEET_SPEED` |
+| **`MAX_FLEET_SPEED = 6.0`** | `src/game/constants.py` | Max fleet movement speed in game units per step |
+| **Planet ship cap** | *(none via this config)* | Planets can hold more ships than `ship_feature_scale`; garrison features clip at 1.0 |
+
+Fleet speed is computed in `src/jax/env.py` and `src/game/trajectory_shield.py` using a **literal `1000.0`**, not `task.max_ships`. Changing `ship_feature_scale` must **not** change gameplay.
+
+### v1 migration
+
+| v1 | v2 |
+|----|-----|
+| `task.max_ships` | `task.ship_feature_scale` |
+
+While v1 and v2 run side-by-side:
+
+- v1 encoder keeps reading `task.max_ships` (unchanged until v1 removal).
+- v2 encoder reads `task.ship_feature_scale`.
+- Hydra may expose both during transition, or a single alias that maps to both fields for matched ablations.
+
+When documenting feature tables below, **`/ ship_feature_scale`** means divide by this config value using the formulas in the table footnotes.
+
+---
+
+## ADR-004: Symmetry — Learner-Centric Frame
+
+### Decision
+
+Canonicalize spatial features in a **sun-centered frame rotated by the learner reference angle** `θ_ref`:
+
+```
+θ_ref = atan2(cy - 50, cx - 50)
+(cx, cy) = unweighted mean (x, y) of active planets owned by the learner
+```
+
+Same rule for 2p and 4p. See `docs/feature-encoding-v2-symmetry.md` for edge cases and decode.
+
+### Encoding
+
+| Where | Fields |
+|-------|--------|
+| **Planet** | `r` (sun distance / `BOARD_SIZE`), `θ` (canonical angle) — **no absolute x,y** |
+| **Edge** | `delta_x`, `delta_y`, `distance` in learner frame (`/ BOARD_SIZE`) |
+| **Global** | add `angular_velocity` (normalized) |
+| **Decode** | `angle_abs = angle_canonical + θ_ref` for submission API |
+
+Layers A (owner-relative) + B (frame) + C (edge-primary geometry) are **in scope** for v2 v1.
+
+---
+
 ## Schema v2 (Draft — dims TBD Phase 0 lock)
 
 ### Planet features (P — target ~12–14)
 
-| Field | Dim | Normalization |
-|-------|-----|---------------|
+Scale: `S = task.ship_feature_scale`. Frame: ADR-004 (`r`, `θ` learner-canonical).
+
+| Field | Dim | Encoding |
+|-------|-----|----------|
 | active | 1 | 0/1 |
-| x, y | 2 | / BOARD_SIZE |
-| radius | 1 | / 5.0 |
-| ships | 1 | / max_ships |
-| production | 1 | / MAX_PRODUCTION |
+| orbit_radius | 1 | `hypot(x-50, y-50) / BOARD_SIZE` (sun-centered) |
+| orbit_angle | 1 | `wrap(atan2(y-50, x-50) - θ_ref) / π` |
+| radius | 1 | `/ 5.0` |
+| ships | 1 | `min(ships, S) / S` |
+| production | 1 | `/ MAX_PRODUCTION` |
 | rotating_flag | 1 | 0/1 |
 | owner_slot | 4 | relative one-hot (4p) |
-| incoming_friendly_pressure | 1 | / max_ships |
-| incoming_enemy_pressure | 1 | / max_ships |
-| outgoing_friendly_ships | 1 | / max_ships |
-| ship_delta | 1 | / max_ships |
+| incoming_friendly_pressure | 1 | `pressure / S` |
+| incoming_enemy_pressure | 1 | `pressure / S` |
+| outgoing_friendly_ships | 1 | `outgoing / S` |
+| ship_delta | 1 | `(ships - ships_prev) / S` |
 
 ### Edge features (E — target ~10–12)
 
-| Field | Dim | Normalization |
-|-------|-----|---------------|
-| delta_x, delta_y | 2 | / BOARD_SIZE |
-| distance | 1 | / BOARD_SIZE |
+Distances/deltas in **learner frame** (ADR-004), then scaled.
+
+| Field | Dim | Encoding |
+|-------|-----|----------|
+| delta_x, delta_y | 2 | learner-frame `/ BOARD_SIZE` |
+| distance | 1 | learner-frame `/ BOARD_SIZE` |
 | sun_crossing | 1 | 0/1 |
-| target_ships | 1 | / max_ships |
-| target_production | 1 | / MAX_PRODUCTION |
+| target_ships | 1 | `min(ships, S) / S` |
+| target_production | 1 | `/ MAX_PRODUCTION` |
 | target_owner_slot | 4 | relative one-hot |
-| turns_to_arrival | 1 | / MAX_STEPS |
-| target_incoming_friendly | 1 | / max_ships |
-| target_incoming_enemy | 1 | / max_ships |
-| target_ship_delta | 1 | / max_ships |
+| turns_to_arrival | 1 | `distance / MAX_FLEET_SPEED / MAX_STEPS` |
+| target_incoming_friendly | 1 | `pressure / S` |
+| target_incoming_enemy | 1 | `pressure / S` |
+| target_ship_delta | 1 | `(ships - ships_prev) / S` |
 | owner_changed | 1 | 0/1 |
 
 ### Global features (G — target ~45, evolved from v1 global-only)
 
-Retain v1 global group semantics without duplicating into planet rows:
+Retain v1 global group semantics without duplicating into planet rows. Ship/fleet totals use `MAX_PLANETS * S` as denominator where v1 used `MAX_PLANETS * max_ships`.
 
 - step_fraction, planet/ship/fleet fractions
 - owner-relative counts/ships/fleets/production (4 slots)
 - active_owner_mask, player_count
+- **angular_velocity** (normalized; Kaggle obs field, useful for rotating planets)
 - delta slots (ships, planets, fleets, production)
 
 ### Dim budget (default H=1, K=3, P≈13, E≈12, G≈45)
@@ -161,6 +244,7 @@ feature_metadata:
   planet_feature_dim: <P>
   edge_feature_dim: <E>
   global_feature_dim: <G>
+  ship_feature_scale: <S>          # recorded for checkpoint/debug; must match task config
   edge_layout: top_k_per_source
   edge_k: <K>
   feature_history_steps: <H>
@@ -173,8 +257,10 @@ v1 checkpoints rejected when `encoding_version=v2` training loads v1 weights.
 ## Config (sketch)
 
 ```yaml
-# conf/task/default.yaml (future)
-encoding_version: v1   # v1 | v2
+# conf/task/default.yaml (future v2 fields)
+encoding_version: v1              # v1 | v2
+ship_feature_scale: 1000.0        # v2 encoder normalization only (ADR-003)
+# max_ships: 1000.0               # v1 only — alias during side-by-side or remove after v1 deprecation
 
 # conf/model/gnn_pointer_v2.yaml (future)
 architecture: gnn_pointer_v2
@@ -210,6 +296,7 @@ architecture: gnn_pointer_v2
 
 | v1 | v2 |
 |----|-----|
+| `task.max_ships` | `task.ship_feature_scale` (ADR-003; encoding only) |
 | self_features per source | planet row (owned) |
 | candidate_features per slot | edge_features[src, k] |
 | global_features (broadcast) | global_features (once) |
@@ -221,7 +308,8 @@ architecture: gnn_pointer_v2
 ## Phase 0 exit checklist
 
 - [x] ADR-001 action space drafted
-- [x] ADR-002 edge layout (Option A top-K)
+- [x] ADR-003 ship feature scale (`ship_feature_scale` vs fleet speed)
+- [x] ADR-004 symmetry frame (`θ_ref` = sun → owned-planet centroid)
 - [x] Schema draft tables
 - [x] Submission audit
 - [x] Cutover numeric gates documented

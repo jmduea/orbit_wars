@@ -38,3 +38,11 @@ See ralplan: `.omg/plans/ralplan-feature-encoding-v2.md`
 ## Pointer
 
 Joint `(source, target)` over valid edges + NO_OP. See `docs/feature-encoding-v2-pointer.md`.
+
+## Ship feature scale (ADR-003)
+
+v2 renames v1's `task.max_ships` → **`task.ship_feature_scale`**: encoder normalization only, default `1000.0`. Not the fleet-speed cap (that uses hardcoded `log(1000)` in `fleet_speed()` and `MAX_FLEET_SPEED = 6.0`). See `docs/feature-encoding-v2.md` ADR-003.
+
+## Symmetry & canonicalization (ADR-004)
+
+Learner frame: **`θ_ref`** = angle from sun to **unweighted centroid of owned planets** (same 2p/4p). Planets use sun-polar `r, θ`; edges carry learner-frame geometry; decode adds `θ_ref` back for absolute launch angles. Details: `docs/feature-encoding-v2-symmetry.md`.
