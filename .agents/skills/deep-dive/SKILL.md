@@ -27,7 +27,8 @@ Orchestrates a 2-stage pipeline: first investigate WHY something happened (trace
 
 ### Phase 1: Initialize
 1. Parse problem, detect brownfield/greenfield
-2. Generate 3 trace lane hypotheses (code-path, config/env, measurement/artifact)
+2. Call `omg_workflow_manifest_list(active_only=true)` before reading `.omg/specs/` or `.omg/plans/`
+3. Generate 3 trace lane hypotheses (code-path, config/env, measurement/artifact)
 
 ### Phase 2: Lane Confirmation
 Present hypotheses to user for confirmation (1 round).
@@ -52,3 +53,4 @@ Same options as deep-interview: ralplan → omg-autopilot (recommended), omg-aut
 
 ## Output
 Spec saved to `.omg/specs/deep-dive-{slug}.md` with additional "Trace Findings" section.
+Register/update lifecycle via `omg_workflow_manifest_register` / `omg_workflow_manifest_update` (trace entry + spec entry).

@@ -10,6 +10,7 @@ import { registerCheckpointTools } from "./checkpoint-tools.js";
 import { registerModelRouter } from "./model-router.js";
 import { registerBridgeTools } from "./bridge/tools.js";
 import { registerUltragoalTools } from "./ultragoal-tools.js";
+import { registerWorkflowManifestTools } from "./workflow-manifest-tools.js";
 
 const server = new McpServer({
   name: "omg-workflow",
@@ -25,6 +26,7 @@ registerCheckpointTools(server);
 registerModelRouter(server);
 registerBridgeTools(server);
 registerUltragoalTools(server);
+registerWorkflowManifestTools(server);
 
 // Start server
 async function main() {

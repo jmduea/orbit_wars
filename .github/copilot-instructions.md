@@ -206,6 +206,8 @@ Scope-risk: narrow
 State files are stored in `.omg/` directory:
 - `.omg/state/` - Workflow state files
 - `.omg/plans/` - Work plans
+- `.omg/specs/` - Interview and deep-dive specs
+- `.omg/workflow-manifest.json` - Canonical spec/plan lifecycle registry for coding agents
 - `.omg/prd.json` - PRD for Ralph workflows
 - `.omg/project-memory.json` - Project memory
 - `.omg/ultragoal/` - Durable ultragoal ledger and checkpoints
@@ -221,6 +223,7 @@ When the OMG MCP server is available, use these tools:
 - `omg_checkpoint` / `omg_restore_checkpoint` / `omg_context_status` - Session checkpoint and context pressure management
 - `omg_detect_external_session` / `omg_import_external_session` / `omg_compare_checkpoints` - Cross-tool session bridge (Claude Code / OMC → OMG)
 - `omg_ultragoal_create` / `omg_ultragoal_status` / `omg_ultragoal_checkpoint` / `omg_ultragoal_complete` - Durable goal tracking with fail-closed checkpoint evidence
+- `omg_workflow_manifest_list` / `omg_workflow_manifest_get` / `omg_workflow_manifest_register` / `omg_workflow_manifest_update` / `omg_workflow_manifest_validate` - Spec/plan lifecycle registry (use `active_only=true` before brownfield scans)
 
 ## Context Pressure & Checkpoint Protocol
 The post-tool-use hook tracks cumulative tool I/O bytes as a proxy for context window usage.

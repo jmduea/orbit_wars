@@ -69,8 +69,9 @@ vscode_askQuestions([{
 ### Phase 1: Initialize
 1. Parse the user's idea
 2. Detect brownfield vs greenfield (use @explore to check codebase)
-3. For brownfield: map relevant codebase areas
-4. Initialize ambiguity score at 100%
+3. **Workflow manifest gate (mandatory):** call `omg_workflow_manifest_list` with `active_only=true` before reading `.omg/specs/` or `.omg/plans/`. Only those entries are active backlog.
+4. For brownfield: map relevant codebase areas. Completed manifest entries may be read for context but must **not** be reported as incomplete because of stale markdown `Status:` lines or unchecked workflow-gate checkboxes.
+5. Initialize ambiguity score at 100%
 
 ### Phase 2: Interview Loop
 Repeat until ambiguity <= 20% or user exits early:
@@ -96,7 +97,9 @@ Repeat until ambiguity <= 20% or user exits early:
 - Round 8+: **Ontologist** - find the essence (if ambiguity > 30%)
 
 ### Phase 4: Crystallize Spec
-When ambiguity <= threshold, generate spec to `.omg/specs/deep-interview-{slug}.md`:
+When ambiguity <= threshold:
+1. Register the spec in `.omg/workflow-manifest.json` via `omg_workflow_manifest_register` (`status=draft`) unless the entry already exists.
+2. Generate spec to `.omg/specs/deep-interview-{slug}.md`:
 - Goal, Constraints, Non-Goals, Acceptance Criteria
 - Assumptions Exposed & Resolved
 - Ontology (Key Entities) with convergence tracking
@@ -107,6 +110,7 @@ When ambiguity <= threshold, generate spec to `.omg/specs/deep-interview-{slug}.
   question: "Review the crystallized spec. Ready to proceed?"
   options: [Approve & continue, Revise specific sections, Add more constraints, Restart interview]
   ```
+3. On user approval: `omg_workflow_manifest_update(id=<slug>, status=approved)`.
 
 ### Phase 5: Execution Bridge
 **HOOK: Present execution options** via `vscode_askQuestions`:
@@ -127,6 +131,8 @@ options: [
 - **Use `vscode_askQuestions` for user-facing questions** when available; in CLI, present numbered markdown options
 - Target the WEAKEST clarity dimension each round
 - Gather codebase facts via @explore BEFORE asking user
+- **Before brownfield scans of `.omg/specs/` or `.omg/plans/`, call `omg_workflow_manifest_list(active_only=true)`**
+- **Treat `.omg/workflow-manifest.json` as lifecycle truth; ignore stale markdown status/checkboxes on completed entries**
 - Score ambiguity after every answer
 - Do not proceed until ambiguity <= threshold (default 20%)
 - Hard cap at 20 rounds, soft warning at 10

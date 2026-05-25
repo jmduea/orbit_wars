@@ -28,7 +28,8 @@ If `vscode_askQuestions` is NOT available (e.g., Copilot CLI), present numbered 
 | `--deliberate` pre-mortem | Present risk scenarios for user prioritization |
 
 ## Workflow
-1. **@planner** creates initial plan with RALPLAN-DR summary:
+1. Resolve the target spec via `omg_workflow_manifest_get` or user-provided path; confirm it is active (not `complete`).
+2. **@planner** creates initial plan with RALPLAN-DR summary:
    - Principles (3-5)
    - Decision Drivers (top 3)
    - Viable Options (>=2) with pros/cons
@@ -59,7 +60,9 @@ If `vscode_askQuestions` is NOT available (e.g., Copilot CLI), present numbered 
    ```
 5. **Loop** until critic approves (max 5 iterations)
 6. Final plan includes ADR (Decision, Drivers, Alternatives, Why chosen, Consequences)
-7. **HOOK: Final approval** via `vscode_askQuestions`:
+7. Save plan to `.omg/plans/{name}.md` and register it with `omg_workflow_manifest_register` (`kind=plan`, `status=planned`, `spec_id=<slug>`).
+8. Update linked spec: `omg_workflow_manifest_update(id=<spec-slug>, status=planned, plan_id=<plan-id>)`.
+9. **HOOK: Final approval** via `vscode_askQuestions`:
    ```
    header: "ralplan-approval"
    question: "Consensus reached after [N] iterations. Execute?"
@@ -85,3 +88,5 @@ Vague execution requests (e.g., "ralph improve the app") are redirected through 
 
 ## After Approval
 - Execute via `/team` (parallel agents, recommended) or `/ralph` (sequential with verification)
+- On execution start: set linked manifest entries to `executing`
+- On verified completion: set linked manifest entries to `complete` with evidence via `omg_workflow_manifest_update`

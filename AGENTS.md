@@ -61,4 +61,5 @@
 
 - Ignore local training outputs and telemetry when making code changes: `outputs/`, `wandb/`, `artifacts/`, and Hydra run directories are runtime artifacts.
 - `.omg/`, `.omc/`, and `.understand-anything/` may contain workflow or analysis state. Do not delete or rewrite them unless the task explicitly targets those systems.
+- Spec/plan lifecycle truth lives in `.omg/workflow-manifest.json`. Before treating `.omg/specs/` or `.omg/plans/` markdown as backlog, call `omg_workflow_manifest_list(active_only=true)` or run `uv run python scripts/omg_workflow_manifest.py active`.
 - Keep future guidance concise and repository-specific. Prefer adding facts here only when they affect how agents safely edit, test, or run this repo.

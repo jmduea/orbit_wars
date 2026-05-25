@@ -21,6 +21,14 @@ import {
   getUltragoalLedgerPath,
   getUltragoalStatus,
 } from "../dist/ultragoal-tools.js";
+import {
+  getWorkflowManifestEntry,
+  listWorkflowManifestEntries,
+  readWorkflowManifest,
+  registerWorkflowManifestEntry,
+  updateWorkflowManifestEntry,
+  validateWorkflowManifest,
+} from "../dist/workflow-manifest-tools.js";
 
 // ──────────────────────────────────────────────
 // utils.ts tests
@@ -233,5 +241,97 @@ describe("ultragoal helpers", () => {
 
     assert.throws(() => createUltragoalGoal("should fail"), /Malformed ultragoal ledger/);
     assert.equal(fs.readFileSync(ledgerPath, "utf-8"), before);
+  });
+});
+
+// ──────────────────────────────────────────────
+// workflow-manifest-tools.ts tests
+// ──────────────────────────────────────────────
+
+describe("workflow manifest helpers", () => {
+  let tmpDir;
+  let previousWorkspaceRoot;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "omg-manifest-test-"));
+    previousWorkspaceRoot = process.env.WORKSPACE_ROOT;
+    process.env.WORKSPACE_ROOT = tmpDir;
+    fs.mkdirSync(path.join(tmpDir, ".omg", "specs"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".omg", "specs", "deep-interview-demo.md"),
+      "# Demo Spec\n",
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, ".omg", "workflow-manifest.json"),
+      JSON.stringify(
+        {
+          schema_version: 1,
+          entries: [
+            {
+              id: "demo",
+              kind: "spec",
+              path: ".omg/specs/deep-interview-demo.md",
+              workflow: "deep-interview",
+              status: "approved",
+              title: "Demo spec",
+            },
+          ],
+        },
+        null,
+        2
+      ),
+      "utf-8"
+    );
+  });
+
+  after(() => {
+    if (previousWorkspaceRoot === undefined) {
+      delete process.env.WORKSPACE_ROOT;
+    } else {
+      process.env.WORKSPACE_ROOT = previousWorkspaceRoot;
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("lists active entries only", () => {
+    const active = listWorkflowManifestEntries({ activeOnly: true });
+    assert.equal(active.length, 1);
+    assert.equal(active[0].id, "demo");
+  });
+
+  it("updates status to complete with auto completed_at", () => {
+    const updated = updateWorkflowManifestEntry("demo", {
+      status: "complete",
+      evidence: "tests passed",
+    });
+    assert.equal(updated.status, "complete");
+    assert.ok(updated.completed_at);
+    assert.equal(getWorkflowManifestEntry("demo")?.status, "complete");
+  });
+
+  it("registers a new manifest entry", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, ".omg", "specs", "deep-interview-new.md"),
+      "# New Spec\n",
+      "utf-8"
+    );
+    const entry = registerWorkflowManifestEntry({
+      id: "new-spec",
+      kind: "spec",
+      path: ".omg/specs/deep-interview-new.md",
+      workflow: "deep-interview",
+      status: "draft",
+      title: "New spec",
+    });
+    assert.equal(entry.id, "new-spec");
+    assert.equal(readWorkflowManifest().entries.length, 2);
+  });
+
+  it("validates manifest paths and links", () => {
+    const result = validateWorkflowManifest();
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.missing_paths, []);
+    assert.deepEqual(result.broken_links, []);
   });
 });

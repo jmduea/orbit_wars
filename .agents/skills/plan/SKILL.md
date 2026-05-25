@@ -36,7 +36,8 @@ If `vscode_askQuestions` is NOT available (e.g., Copilot CLI), present numbered 
 
 ## Interview Mode (broad/vague requests)
 1. Classify request: broad triggers interview
-2. **HOOK: Ask ONE focused question via `vscode_askQuestions`** for preferences, scope, constraints
+2. Call `omg_workflow_manifest_list(active_only=true)` before reading existing `.omg/plans/` or `.omg/specs/`
+3. **HOOK: Ask ONE focused question via `vscode_askQuestions`** for preferences, scope, constraints
    - Provide 3-5 contextual options derived from codebase analysis
    - Always include freeform input (`allowFreeformInput: true`)
 3. Gather codebase facts via @explore BEFORE asking user
@@ -107,3 +108,5 @@ Plans saved to `.omg/plans/`. Include:
 - Implementation Steps (with file references)
 - Risks and Mitigations
 - Verification Steps
+
+Register non-ralplan plans in `.omg/workflow-manifest.json` via `omg_workflow_manifest_register` when the plan is meant for execution tracking.

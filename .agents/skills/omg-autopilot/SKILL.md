@@ -40,8 +40,9 @@ Autopilot is designed to be mostly autonomous, but hooks fire at ambiguity point
 
 ### Phase 0 - Expansion
 Turn the user's idea into a detailed spec.
-- If ralplan consensus plan exists (`.omg/plans/ralplan-*.md`): Skip Phase 0 AND Phase 1 → jump to Phase 2
-- If deep-interview spec exists (`.omg/specs/deep-interview-*.md`): Use pre-validated spec, skip to Phase 1
+- Resolve the target work item via `omg_workflow_manifest_get` / user-provided spec path. Do **not** treat every `deep-interview-*.md` file as the active spec.
+- If an active ralplan entry exists for the target spec (`status` in draft/approved/planned/executing): skip Phase 0 AND Phase 1 → jump to Phase 2
+- If an active deep-interview spec exists for the current task: use that pre-validated spec, skip to Phase 1
 - If input is vague: **HOOK** via `vscode_askQuestions`:
   ```
   header: "autopilot-vague-input"
@@ -121,6 +122,7 @@ Multi-perspective review in parallel.
 
 ### Phase 5 - Cleanup
 Delete all state files on successful completion.
+- Mark linked manifest entries `complete` with evidence via `omg_workflow_manifest_update`
 - Run `/cancel` for clean exit
 
 ## Stop Conditions
