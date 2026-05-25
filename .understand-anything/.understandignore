@@ -8,9 +8,17 @@
 #
 # --- From .gitignore (uncomment to exclude) ---
 
-wandb/
-outputs/
-artifacts/
+.venv/
+.vscode/
+.agents/
+.codex/
+.cursor/
+.github/
+.omg/
+/wandb/
+/outputs/
+/artifacts/
+/mcp-server/
 # *.py[codz]
 # *$py.class
 # *.so

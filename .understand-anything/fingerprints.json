@@ -1,2216 +1,41 @@
 {
   "version": "1.0.0",
-  "gitCommitHash": "4386ff399ae55cedb76a093d11aaa888e156c0b2",
-  "generatedAt": "2026-05-25T02:17:50.986Z",
+  "gitCommitHash": "56ea6829d91bfe7eeee3dc33b66b633165e1a187",
+  "generatedAt": "2026-05-25T02:37:01.145Z",
   "files": {
-    ".agents/skills/ai-slop-cleaner/SKILL.md": {
-      "filePath": ".agents/skills/ai-slop-cleaner/SKILL.md",
-      "contentHash": "430910f1420536ef14281ce09787c291aed6b2589e008e48c9868423da94813d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 45,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ask/SKILL.md": {
-      "filePath": ".agents/skills/ask/SKILL.md",
-      "contentHash": "a4efc0fb85054e555b8b15a168ba547063cb7c4f13e3b2ec0652129aab9b82c8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 23,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/autoresearch/SKILL.md": {
-      "filePath": ".agents/skills/autoresearch/SKILL.md",
-      "contentHash": "e3f544c7c7ae6aa793bbb4c11d41bc359a13fa50d1d78cc356706db70830f0c8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/cancel/SKILL.md": {
-      "filePath": ".agents/skills/cancel/SKILL.md",
-      "contentHash": "6ca7011d9005c252e0b7a0aa5367624b4051662b7ff36d4fcfd2901930e6cd23",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 98,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ccg/SKILL.md": {
-      "filePath": ".agents/skills/ccg/SKILL.md",
-      "contentHash": "6439319f98d52757452ea368b7f53f9f77d0bc0181891e03f91426fb3281bd54",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 101,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/coding-standards/SKILL.md": {
-      "filePath": ".agents/skills/coding-standards/SKILL.md",
-      "contentHash": "669714e3c002a30dbae3728d7878505d87b26e40ddddb46442ffb7aedc22a066",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 145,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/configure-notifications/SKILL.md": {
-      "filePath": ".agents/skills/configure-notifications/SKILL.md",
-      "contentHash": "29ab056d15e885edd0202144a4bb272ed1e105656dead275e0860071842ce1d8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/deep-dive/SKILL.md": {
-      "filePath": ".agents/skills/deep-dive/SKILL.md",
-      "contentHash": "dd58bf0db3cc828b60806b0b3dc049b9b97b4d2b9e34daef50fafbe8dcea551f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 55,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/deep-interview/SKILL.md": {
-      "filePath": ".agents/skills/deep-interview/SKILL.md",
-      "contentHash": "c503016749252614a54bc27ffd3e551b50ee28f85822db72ab7408823b9daf39",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 134,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/deepinit/SKILL.md": {
-      "filePath": ".agents/skills/deepinit/SKILL.md",
-      "contentHash": "fd23fcf5e385b87e85ae1c5cb9eb4c1f04ce94e9c516cb902dfd50eeeb1a1f1d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/external-context/SKILL.md": {
-      "filePath": ".agents/skills/external-context/SKILL.md",
-      "contentHash": "75359a08905ff5e90059fa59056783e2b5d828916048e032d2fcb22c38370b37",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 25,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/hud/SKILL.md": {
-      "filePath": ".agents/skills/hud/SKILL.md",
-      "contentHash": "7b09b60fd7dd303bd7f0b495ccc6741c253847e31133784b268cae1c2fff116e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/omg-autopilot/SKILL.md": {
-      "filePath": ".agents/skills/omg-autopilot/SKILL.md",
-      "contentHash": "cd25c156f2498081f60e2f96280d6b5cac11ec015514c7a405b67c69e7a6fae8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 137,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/plan/SKILL.md": {
-      "filePath": ".agents/skills/plan/SKILL.md",
-      "contentHash": "d673a79f596b653232210ae396b5c06142eb159fbc61f61e705e8608a1b87a6c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 110,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/push-omc/SKILL.md": {
-      "filePath": ".agents/skills/push-omc/SKILL.md",
-      "contentHash": "3377cb5daa69e2678a60636c43199ea52e112d9b3618b7d0f5997e438698663b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 118,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/quick-fix/SKILL.md": {
-      "filePath": ".agents/skills/quick-fix/SKILL.md",
-      "contentHash": "79f7996c7ab80819253ea6a94290727d572190ac42a4bb82edd6ff9c71f2562f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 20,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/quick-plan/SKILL.md": {
-      "filePath": ".agents/skills/quick-plan/SKILL.md",
-      "contentHash": "43172d99a267f37c7b199dd16ac3376cd1feec55a61868f0d7cfa733b2881284",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/quick-review/SKILL.md": {
-      "filePath": ".agents/skills/quick-review/SKILL.md",
-      "contentHash": "55db2ea86eb718a10eb5cc702141bdf46c9192138d09fe528350fcac078bdcc1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ralph/SKILL.md": {
-      "filePath": ".agents/skills/ralph/SKILL.md",
-      "contentHash": "d9b5cc54d8bc20193792f545e6923bc0ffdff9061f93ffb40cb45bf7a845f4b7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 86,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ralplan/SKILL.md": {
-      "filePath": ".agents/skills/ralplan/SKILL.md",
-      "contentHash": "5da41396808982380424404ff839cd54aedf56f3b0392e529ec1002e751b6887",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 88,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/release/SKILL.md": {
-      "filePath": ".agents/skills/release/SKILL.md",
-      "contentHash": "ea015e9ab6f5aff1aa1655307772a52f7f362a3a287103b374e78724be7ceec6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/remember/SKILL.md": {
-      "filePath": ".agents/skills/remember/SKILL.md",
-      "contentHash": "2d89dd3c51e70002299bda1e5fea33fb95b2ee0cd2fa7a1a1a25e73e9387d37e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 89,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/resume-claude/SKILL.md": {
-      "filePath": ".agents/skills/resume-claude/SKILL.md",
-      "contentHash": "45fea99e31f30d44ec67a8bef9c227d3314aaa42f860b50f54b351aecd356aee",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 96,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/review/SKILL.md": {
-      "filePath": ".agents/skills/review/SKILL.md",
-      "contentHash": "85d032958a3e9d7bd76b5ab77ec9c5cc6763d74bf5ed2a132d24b099c134685c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 28,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/sciomc/SKILL.md": {
-      "filePath": ".agents/skills/sciomc/SKILL.md",
-      "contentHash": "e4fbedacd5225a85de24ef92b1948363303305bd61d7ea1b1627688634720213",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/security-scan/SKILL.md": {
-      "filePath": ".agents/skills/security-scan/SKILL.md",
-      "contentHash": "46afd2a17329cf7d900da60ca44fae8b9c099d5f0174f5b8b60f4f006a80ef00",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 132,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/self-improve/SKILL.md": {
-      "filePath": ".agents/skills/self-improve/SKILL.md",
-      "contentHash": "08b963558ec3922dc3d8480c478292a823e7085ba8863529e150512ed264f5c3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 221,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/skill-stocktake/SKILL.md": {
-      "filePath": ".agents/skills/skill-stocktake/SKILL.md",
-      "contentHash": "93c68d119cbff1a8f4c2fe6c82fa3a6d13b2ce8f210c051528c3ee891367c258",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 139,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/skillify/SKILL.md": {
-      "filePath": ".agents/skills/skillify/SKILL.md",
-      "contentHash": "1ad121fc0c96a073429fe838439cec36f167ffccda4988413221bb86e940dc78",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/status/SKILL.md": {
-      "filePath": ".agents/skills/status/SKILL.md",
-      "contentHash": "c63ad13ebfad8ac3931de6b4c48032cf1134b9a1cdba2512b0fe23c26d426d04",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 85,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/tdd/SKILL.md": {
-      "filePath": ".agents/skills/tdd/SKILL.md",
-      "contentHash": "74d5bd64f8c3ffff701a54d5539887c7feb3541220c408c34acc57a9aebe119a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 104,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/team/SKILL.md": {
-      "filePath": ".agents/skills/team/SKILL.md",
-      "contentHash": "00f3e4ccbcb469baa855629f33dd3ed60003ee86a6109595f2499acf9068e59d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 185,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/trace/SKILL.md": {
-      "filePath": ".agents/skills/trace/SKILL.md",
-      "contentHash": "fb21957a1ad769ffcf787c5fe7dd91df688c308a18a5edfbc95e0ba2c80ef938",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 54,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ultragoal/SKILL.md": {
-      "filePath": ".agents/skills/ultragoal/SKILL.md",
-      "contentHash": "b3b3c7ff95dee5fd1d5654dccb2a7f03c9d1a9c2f4bc535bffd6d69bd2fb6c69",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ultraqa/SKILL.md": {
-      "filePath": ".agents/skills/ultraqa/SKILL.md",
-      "contentHash": "fd66033fd8a082cc609012ad30b0943c0c408c4f8968e50afdf9594bd3140f11",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 50,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/ultrawork/SKILL.md": {
-      "filePath": ".agents/skills/ultrawork/SKILL.md",
-      "contentHash": "a99a0e12affe9452615c7866534c4e360f05591daefd4f0e4ba03d5259b230e4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 44,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/verify/SKILL.md": {
-      "filePath": ".agents/skills/verify/SKILL.md",
-      "contentHash": "a20474e601babb74fede7b79539d341241efce26ddacf986f89c82e50df892c3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 37,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/visual-verdict/SKILL.md": {
-      "filePath": ".agents/skills/visual-verdict/SKILL.md",
-      "contentHash": "37095c0067ed0407d26d776d409f9e6cb28b791755bd1632e1d961467c604b78",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/wiki/SKILL.md": {
-      "filePath": ".agents/skills/wiki/SKILL.md",
-      "contentHash": "a1584716a84bc1c3dcc8721f76b83168bd1e331efe0fda83cb4b0768319db8cc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".agents/skills/writer-memory/SKILL.md": {
-      "filePath": ".agents/skills/writer-memory/SKILL.md",
-      "contentHash": "1a47598b85f554337cd34b638ce8efb2f92d6005b082003487b9025de974a660",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/analyst.toml": {
-      "filePath": ".codex/agents/analyst.toml",
-      "contentHash": "6493a27d3340de5bae20284db3ff3c71aafd0fc28ef738d90cefa234d99e89b2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 87,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/architect.toml": {
-      "filePath": ".codex/agents/architect.toml",
-      "contentHash": "13c941292e2a4faa939e5465402596b252bd2eb4973fb8bc537c547ecca720be",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 106,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/code-reviewer.toml": {
-      "filePath": ".codex/agents/code-reviewer.toml",
-      "contentHash": "03a8f1d03c91e05e1fe19ce03a5d8360f46bcd2d7ba3fa5f030dc6c51f19bd5f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 173,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/code-simplifier.toml": {
-      "filePath": ".codex/agents/code-simplifier.toml",
-      "contentHash": "3646d202025e633d4c463ff65f2fe5bb3f88cc59a94b6e94747b782ca6805151",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 144,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/critic.toml": {
-      "filePath": ".codex/agents/critic.toml",
-      "contentHash": "597a395183b074c3c2a0d524a980f1b8e2673fd985e26a95ac50968dcab5f4ae",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 148,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/csharp-reviewer.toml": {
-      "filePath": ".codex/agents/csharp-reviewer.toml",
-      "contentHash": "2224624f03a1613825272486b44383daa9682a6c352ee5fd056fcfe16a35ded1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 154,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/database-reviewer.toml": {
-      "filePath": ".codex/agents/database-reviewer.toml",
-      "contentHash": "b00826fc09b6d907c01ed12158f69ba22b2b6b3d7125f245c123721e8518a8ea",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 136,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/debugger.toml": {
-      "filePath": ".codex/agents/debugger.toml",
-      "contentHash": "06daa94a912926c49f76d7493307a68f24496062e87074f508d6e577fa1ed1fc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 141,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/designer.toml": {
-      "filePath": ".codex/agents/designer.toml",
-      "contentHash": "cfff330ad938b7ec9b8413a1520cc06a66ba6ebe8363f3303d1646a63499682e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 75,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/document-specialist.toml": {
-      "filePath": ".codex/agents/document-specialist.toml",
-      "contentHash": "016e8f4a6dbb2713a40a4b1b0362236c58a6c34ab9110387b8d82b2b4e64f101",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 79,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/executor.toml": {
-      "filePath": ".codex/agents/executor.toml",
-      "contentHash": "51abd73fd40feeeae2850bfa1395e595c24b7a0daec2460d858a4f215472642c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 92,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/explore.toml": {
-      "filePath": ".codex/agents/explore.toml",
-      "contentHash": "6ccf91e964641a9f6b7f98a4462cd5a85d5cb85b5776da784616439dec4d1f03",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/git-master.toml": {
-      "filePath": ".codex/agents/git-master.toml",
-      "contentHash": "6865a13d434cc7928f8f9120890178a0324d6578fbf2de6a7683b4dc6ed833e3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 70,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/go-reviewer.toml": {
-      "filePath": ".codex/agents/go-reviewer.toml",
-      "contentHash": "a31717dcfdc89d228cdbefc2c4422d43a0bdb5bafaf0dce18b87241ca72adf1b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 163,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/java-reviewer.toml": {
-      "filePath": ".codex/agents/java-reviewer.toml",
-      "contentHash": "9948b0b67f839982b970f34bd71218bdd718837151c5fe1f773d5e9a918876e1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 155,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/omg-coordinator.toml": {
-      "filePath": ".codex/agents/omg-coordinator.toml",
-      "contentHash": "37cd26e2d8d9f10cfe12b2c569651b60bfc56067b933a72355aca1b25a4c126e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 116,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/planner.toml": {
-      "filePath": ".codex/agents/planner.toml",
-      "contentHash": "928a403771de2522077ab584ccf108d14ed1b438c4d783e6889704e15a1af9a8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 101,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/python-reviewer.toml": {
-      "filePath": ".codex/agents/python-reviewer.toml",
-      "contentHash": "3a649a603b8a0956ac6fb03be9abe552e9a65f9f11ae9cb292fdbfe22eb835c6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 149,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/qa-tester.toml": {
-      "filePath": ".codex/agents/qa-tester.toml",
-      "contentHash": "cee9d26404224f5d4df485faf80f8ab09e1330c5439036752f806d434cab43c7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 144,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/rust-reviewer.toml": {
-      "filePath": ".codex/agents/rust-reviewer.toml",
-      "contentHash": "75d5674ce6413d75f5caf746ece7b79b57bab4bf103e39a617fcb3b7dff4ab34",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 142,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/scientist.toml": {
-      "filePath": ".codex/agents/scientist.toml",
-      "contentHash": "44b19db7c5035a7a6ca1d7de9fbe64639273b5530ffb827388e7832621ff97e2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 66,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/security-reviewer.toml": {
-      "filePath": ".codex/agents/security-reviewer.toml",
-      "contentHash": "9e26658c421eb4df3eb33f4530e4025f0814b9d4e9e1098defa4907968c1846c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 168,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/swift-reviewer.toml": {
-      "filePath": ".codex/agents/swift-reviewer.toml",
-      "contentHash": "8ee43ff297565a39f97bd3e05d89fe431efec4d5de8c66101cd16b12be7d8c38",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 155,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/test-engineer.toml": {
-      "filePath": ".codex/agents/test-engineer.toml",
-      "contentHash": "eb1a29d6151fda3cab7181e2f29cb4b6297844b207910d6372231c31a015d403",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 153,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/tracer.toml": {
-      "filePath": ".codex/agents/tracer.toml",
-      "contentHash": "fdca16a382c7eda443cb5735131be1bea0c64fbf2aff8f17280ffbd3432e5cd2",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 106,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/typescript-reviewer.toml": {
-      "filePath": ".codex/agents/typescript-reviewer.toml",
-      "contentHash": "c28a54042d4d0e3cce3e4b54c7ea1a103d21b127c32b6614635801a89a10a2fd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 123,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/verifier.toml": {
-      "filePath": ".codex/agents/verifier.toml",
-      "contentHash": "77bc6b3b6feedccb02e488c283d33ce8e7121caa4b224dadee966f7d2181c2d0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 81,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/agents/writer.toml": {
-      "filePath": ".codex/agents/writer.toml",
-      "contentHash": "3b617718c6a0dd73bb25dcdee81ff437fa608a84901b6b740366605d84628253",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 125,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/config.toml": {
-      "filePath": ".codex/config.toml",
-      "contentHash": "3bff5f755b0744d72e115517318d6e6222d5ad404ae99e600177d7d5cd64737c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 12,
-      "hasStructuralAnalysis": true
-    },
-    ".codex/hooks.json": {
-      "filePath": ".codex/hooks.json",
-      "contentHash": "4280ee414b65167890aaf0277842cf2497cf954947c1317ec167291923070df3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 45,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/analyst.md": {
-      "filePath": ".cursor/agents/analyst.md",
-      "contentHash": "507c796934f9ab88eed0af6cdc54464e5bc23707fe9439db1b7fcb863fb3d713",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 90,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/architect.md": {
-      "filePath": ".cursor/agents/architect.md",
-      "contentHash": "014a9201af69dc784f64c7a7213e2176a88d174f5495f3245d148be8c19a19fb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 109,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/code-reviewer.md": {
-      "filePath": ".cursor/agents/code-reviewer.md",
-      "contentHash": "73f6f9a84d200b37714056fdd52476a7e5a46b5b45a4d871c419600452e0ad9a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 176,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/code-simplifier.md": {
-      "filePath": ".cursor/agents/code-simplifier.md",
-      "contentHash": "47a627c6521fd3d1a1324baccbd7d4f3ce888ef660c3fa4358586ff77b23ff09",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/critic.md": {
-      "filePath": ".cursor/agents/critic.md",
-      "contentHash": "591ae773412599d4f84f5a417e76f72343e55641af086ac68cb5f38fc2df59d3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 151,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/csharp-reviewer.md": {
-      "filePath": ".cursor/agents/csharp-reviewer.md",
-      "contentHash": "5a8c9e4e1f1a1cb908c39c87cb8997f327200eb6ed289d855c649e64287c62b1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 157,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/database-reviewer.md": {
-      "filePath": ".cursor/agents/database-reviewer.md",
-      "contentHash": "c441059f7e1d696e3c73cabb8266471cc2df4d24cd8429376fffd31fd09f3f83",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 139,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/debugger.md": {
-      "filePath": ".cursor/agents/debugger.md",
-      "contentHash": "468910f0c9677dcb73a20a342d70518ab54dc86840e836166b941f8e443af58e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 144,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/designer.md": {
-      "filePath": ".cursor/agents/designer.md",
-      "contentHash": "a61cd96e4ccb30e11c7d69e03eaf7682c8ec6fee2ff0c5cf5833dbba108c7ddc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 78,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/document-specialist.md": {
-      "filePath": ".cursor/agents/document-specialist.md",
-      "contentHash": "eddd7947cd8709c035f99db52a4bf544093abe4cf04eb276c5e82ac3881e0d7d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 82,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/executor.md": {
-      "filePath": ".cursor/agents/executor.md",
-      "contentHash": "6e1d175693072902ad760b57d4b2bc4799ea22254df53b4d611258d1aae7b807",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 95,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/explore.md": {
-      "filePath": ".cursor/agents/explore.md",
-      "contentHash": "330fd32d5c131f2319634143496185efce1fa890f4d31a1341eb95b0f5890751",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 84,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/git-master.md": {
-      "filePath": ".cursor/agents/git-master.md",
-      "contentHash": "31e9d229b9fce856ad92f98e4d8089126b43e6a07cc0b82e4bc570a3b5c19ab1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 73,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/go-reviewer.md": {
-      "filePath": ".cursor/agents/go-reviewer.md",
-      "contentHash": "ae8169298f059d61fb756636458124db4d8405dd6b6dd2ce835f701c35ad0f9a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 166,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/java-reviewer.md": {
-      "filePath": ".cursor/agents/java-reviewer.md",
-      "contentHash": "beb5c3213723675134d3067ba55474f468822f13c9b7d4ae0a9b14fd933da3c9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 158,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/omg-coordinator.md": {
-      "filePath": ".cursor/agents/omg-coordinator.md",
-      "contentHash": "f6457907a19e28e64f45aad267aa9b7842e2414efb66c3e2092e7a30ab236313",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 119,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/planner.md": {
-      "filePath": ".cursor/agents/planner.md",
-      "contentHash": "15d6190290a53cee434641b9717cc97ce03ae9b813918cc051fb9be1fa23fecc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 104,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/python-reviewer.md": {
-      "filePath": ".cursor/agents/python-reviewer.md",
-      "contentHash": "8a5014ab9f9bedd97d69599a4d984ad14b4d799d45b7400d7dfc293d40fbcc4e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 152,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/qa-tester.md": {
-      "filePath": ".cursor/agents/qa-tester.md",
-      "contentHash": "6264bae593fc82e492dce0e727f80685035b3045e91cb85186077f9c842619c4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/rust-reviewer.md": {
-      "filePath": ".cursor/agents/rust-reviewer.md",
-      "contentHash": "cd9b6811ddc35628d5740d21e2fd9b15db69d6c82463f7d0a7f03083bae001ce",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 145,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/scientist.md": {
-      "filePath": ".cursor/agents/scientist.md",
-      "contentHash": "cadebaadd087051c84e08933f0d2cd6ffd6b44a7eefc7caa73697699d80eb137",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 69,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/security-reviewer.md": {
-      "filePath": ".cursor/agents/security-reviewer.md",
-      "contentHash": "43b198dcbe7fd28879911d7f0d7901b6c74796e41896365c9d97715813289c11",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 171,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/swift-reviewer.md": {
-      "filePath": ".cursor/agents/swift-reviewer.md",
-      "contentHash": "fd3daed6a087f4c8510abde83fc40de0be65bb40b0bc16d2f8b0e3033f4a4ead",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 158,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/test-engineer.md": {
-      "filePath": ".cursor/agents/test-engineer.md",
-      "contentHash": "d55c2247f47f1782da7163289c32f63a160232906e76cd4afddb058ee58c8034",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 156,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/tracer.md": {
-      "filePath": ".cursor/agents/tracer.md",
-      "contentHash": "049285e51159bcf4de9da5d3e390238c7d4739f4150119c8317f9020dce3cdf7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 109,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/typescript-reviewer.md": {
-      "filePath": ".cursor/agents/typescript-reviewer.md",
-      "contentHash": "9de481ff9815196736813993b121ae61f7b2b64367e04eb832a26c17222229ee",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 126,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/verifier.md": {
-      "filePath": ".cursor/agents/verifier.md",
-      "contentHash": "4eb3d021f39f65e3c3fce92095c44ba7924322c7e2436cb6bb3bbd868468b844",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 84,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/agents/writer.md": {
-      "filePath": ".cursor/agents/writer.md",
-      "contentHash": "758cf4ea857562249c99327970ebbd0b4ae28b28b3f020896a1d2c5d106b0bc3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 128,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/hooks.json": {
-      "filePath": ".cursor/hooks.json",
-      "contentHash": "d798c8828710a30565d3421911f30cce9c329163c06f32f10514f2dcecc2bb94",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 22,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/hooks/cursor-post-tool-use.sh": {
-      "filePath": ".cursor/hooks/cursor-post-tool-use.sh",
-      "contentHash": "28db83b65199845b686a634888435dbdc9c48857f49910f90c5c6586a1db59ce",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 45,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/hooks/cursor-pre-tool-use.sh": {
-      "filePath": ".cursor/hooks/cursor-pre-tool-use.sh",
-      "contentHash": "8415c61b737b8311e073670abdd6f2e7f2d69fcc38bf2efe1eaaaada4b14ff8f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 60,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/hooks/cursor-stop.sh": {
-      "filePath": ".cursor/hooks/cursor-stop.sh",
-      "contentHash": "8cafb667423b82d79adc2351667befb57e6cd4765df826e1553712ff4b13b997",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 37,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/mcp.json": {
-      "filePath": ".cursor/mcp.json",
-      "contentHash": "7eef6280f9f9eefbf18fddcc74219faeb7cd933342e250f94b47d7ebf180f5d1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 14,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/rules/omg-orchestration.mdc": {
-      "filePath": ".cursor/rules/omg-orchestration.mdc",
-      "contentHash": "ae0359e3b2f643fb8e22ceec125deb75b18f58b9103c715771028390fe51eb42",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 295,
-      "hasStructuralAnalysis": false
-    },
-    ".cursor/skills/quick-fix/SKILL.md": {
-      "filePath": ".cursor/skills/quick-fix/SKILL.md",
-      "contentHash": "79f7996c7ab80819253ea6a94290727d572190ac42a4bb82edd6ff9c71f2562f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 20,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/skills/quick-plan/SKILL.md": {
-      "filePath": ".cursor/skills/quick-plan/SKILL.md",
-      "contentHash": "43172d99a267f37c7b199dd16ac3376cd1feec55a61868f0d7cfa733b2881284",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    ".cursor/skills/quick-review/SKILL.md": {
-      "filePath": ".cursor/skills/quick-review/SKILL.md",
-      "contentHash": "55db2ea86eb718a10eb5cc702141bdf46c9192138d09fe528350fcac078bdcc1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/analyst.agent.md": {
-      "filePath": ".github/agents/analyst.agent.md",
-      "contentHash": "928c39ef41ed1aee499e1dbdf7454cf2b241e9af4c05905334767695e5343a5a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 93,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/architect.agent.md": {
-      "filePath": ".github/agents/architect.agent.md",
-      "contentHash": "ca6d0bb69db63f8610ab8fb3e4ca09f10633ef603bb8cd8b94ce63b6050e4169",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 112,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/code-reviewer.agent.md": {
-      "filePath": ".github/agents/code-reviewer.agent.md",
-      "contentHash": "0e88ce9e2126e026ebf77bdbdbb9f8d677d4949c2e39dada18a1ce7c5ca233f1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 178,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/code-simplifier.agent.md": {
-      "filePath": ".github/agents/code-simplifier.agent.md",
-      "contentHash": "365a447054b77fc3278e31f77d104e3b32bec04aade55de8176399232e272462",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 149,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/critic.agent.md": {
-      "filePath": ".github/agents/critic.agent.md",
-      "contentHash": "f06b7729b430888a1b4389eb002e53c911970c21aeacc04dc615bf1e0961328e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 154,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/csharp-reviewer.agent.md": {
-      "filePath": ".github/agents/csharp-reviewer.agent.md",
-      "contentHash": "3cf25c65846e79a5f162e39548956c9e4bff86dd32f20abf0ea041eaa572b41f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 159,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/database-reviewer.agent.md": {
-      "filePath": ".github/agents/database-reviewer.agent.md",
-      "contentHash": "af3496725fc0d22b5f164f85c08984223a17788b000b88902ef5be2b2e4b2ff8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 141,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/debugger.agent.md": {
-      "filePath": ".github/agents/debugger.agent.md",
-      "contentHash": "eb3f2b64c0642477b90a2f2a1b044c17bf9054643369f3c63399912458ad62c6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/designer.agent.md": {
-      "filePath": ".github/agents/designer.agent.md",
-      "contentHash": "ea7603996535eeda353bd4990204cb676b52d87c2e846f32cbeb497572196135",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 80,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/document-specialist.agent.md": {
-      "filePath": ".github/agents/document-specialist.agent.md",
-      "contentHash": "fd281665687f86b9069887aa19516f56224e4a1889cc6fd021067ead02efec13",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 86,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/executor.agent.md": {
-      "filePath": ".github/agents/executor.agent.md",
-      "contentHash": "9d96e1535544c9ff82723fdc6281a2dda02428196a560c4a74bec0f48f2434a5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 98,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/explore.agent.md": {
-      "filePath": ".github/agents/explore.agent.md",
-      "contentHash": "43262b94fa657e7ff91e43c79afcbf91db17387dbb4631a9c9189ea55dd3e134",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 88,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/git-master.agent.md": {
-      "filePath": ".github/agents/git-master.agent.md",
-      "contentHash": "6baf5773b67e6fb114a942dd426a3c5503f725abe07574da25f813a5200e1139",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 75,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/go-reviewer.agent.md": {
-      "filePath": ".github/agents/go-reviewer.agent.md",
-      "contentHash": "c7d30ad227c61b60c0c3d9402447ad08eb85c4226a37703621e6a9dd418a9a96",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 168,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/java-reviewer.agent.md": {
-      "filePath": ".github/agents/java-reviewer.agent.md",
-      "contentHash": "ec9a557ab3300d870265b4f7b5c080158220589c413973e3375cd698442c5657",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 160,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/omg-coordinator.agent.md": {
-      "filePath": ".github/agents/omg-coordinator.agent.md",
-      "contentHash": "c48b3436201dbbe8b5442b6e25b50bb598f374221e8bc810067ca26a0bcc5995",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 122,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/planner.agent.md": {
-      "filePath": ".github/agents/planner.agent.md",
-      "contentHash": "77888509e93f9e2fd98c4c519d4ce71fc0209752d81d75b4ee618a7bd9538a14",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 107,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/python-reviewer.agent.md": {
-      "filePath": ".github/agents/python-reviewer.agent.md",
-      "contentHash": "6b9043683ea6e49579ef28dd5ae52170e08c43c752428cf8b86729746c0fe5e5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 154,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/qa-tester.agent.md": {
-      "filePath": ".github/agents/qa-tester.agent.md",
-      "contentHash": "46fa3794d4a86080bcaca009d68456869f631b89466d1eaa37a38d6138b5c43e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 149,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/rust-reviewer.agent.md": {
-      "filePath": ".github/agents/rust-reviewer.agent.md",
-      "contentHash": "7c37c9cd8a2f5aa75c88b30723473d816f1e52b2216670d12322f88bfb035b76",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/scientist.agent.md": {
-      "filePath": ".github/agents/scientist.agent.md",
-      "contentHash": "953a5dbd99a39792760ef43598dda355d9a74a3a4679e16faa09fb6b3e716660",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 71,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/security-reviewer.agent.md": {
-      "filePath": ".github/agents/security-reviewer.agent.md",
-      "contentHash": "f835fb63607ae4e9d99804a22f73b1bfd7c52a321add1425fb6109e12ecc5c19",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 174,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/swift-reviewer.agent.md": {
-      "filePath": ".github/agents/swift-reviewer.agent.md",
-      "contentHash": "264e16098fd6222f89c5602addd794c3daac1212dffe7aa2b2957e78f50ad587",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 160,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/test-engineer.agent.md": {
-      "filePath": ".github/agents/test-engineer.agent.md",
-      "contentHash": "c89989c5d57a930a7d88b8fe66ae7d0e315bc48b2abc42947e94b402b985c73a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 158,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/tracer.agent.md": {
-      "filePath": ".github/agents/tracer.agent.md",
-      "contentHash": "23ea073357080e39a7ce86cad00bcd1914e0f2e7d9f8825e3cbfefa834f902d9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 112,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/typescript-reviewer.agent.md": {
-      "filePath": ".github/agents/typescript-reviewer.agent.md",
-      "contentHash": "15497bb9fc03c1070a4e47878380e37d07d4be3ebca09602a1c7cb7f048adeac",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 128,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/verifier.agent.md": {
-      "filePath": ".github/agents/verifier.agent.md",
-      "contentHash": "f97aa4a99025b030354e477d0bee36c3ce91ebb5fde071bb9c7482911b16346e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 86,
-      "hasStructuralAnalysis": true
-    },
-    ".github/agents/writer.agent.md": {
-      "filePath": ".github/agents/writer.agent.md",
-      "contentHash": "363b6da0727c7bb214c3f0767373674aa24ee2ee8a3ff56452a728fd0d24e517",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 130,
-      "hasStructuralAnalysis": true
-    },
-    ".github/copilot-instructions.md": {
-      "filePath": ".github/copilot-instructions.md",
-      "contentHash": "5a2b73a8f9c11b534d1de20c53ae46a88f1f3c5ee930f8f0a30aecb8fb4f7e31",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 289,
-      "hasStructuralAnalysis": true
-    },
-    ".github/hooks/hooks.json": {
-      "filePath": ".github/hooks/hooks.json",
-      "contentHash": "8a02e1cda1d47996954639d644966f3364cc87a7245f07acda74e292d3e15ccb",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 33,
-      "hasStructuralAnalysis": true
-    },
-    ".github/hooks/post-tool-use.ps1": {
-      "filePath": ".github/hooks/post-tool-use.ps1",
-      "contentHash": "76a8bdf15ca4b479eda9b9b4c7eb2d2d5e60d7eaf525e13471732239e24f0291",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 280,
-      "hasStructuralAnalysis": false
-    },
-    ".github/hooks/post-tool-use.sh": {
-      "filePath": ".github/hooks/post-tool-use.sh",
-      "contentHash": "b694f2cb9cb4e1b9efb6082802cac7fa5b478e31289951e200b48ecdce58e6b7",
-      "functions": [
-        {
-          "name": "is_file_mutation_tool",
-          "params": [],
-          "exported": false,
-          "lineCount": 10
-        },
-        {
-          "name": "is_safe_python_path",
-          "params": [],
-          "exported": false,
-          "lineCount": 35
-        },
-        {
-          "name": "collect_python_files_from_tool_input",
-          "params": [],
-          "exported": false,
-          "lineCount": 21
-        },
-        {
-          "name": "run_ruff_for_files",
-          "params": [],
-          "exported": false,
-          "lineCount": 42
-        }
-      ],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 269,
-      "hasStructuralAnalysis": true
-    },
-    ".github/hooks/pre-tool-use.ps1": {
-      "filePath": ".github/hooks/pre-tool-use.ps1",
-      "contentHash": "68f659b846711fb88c928a0aacd2643348059762d20f6b9ecbd9aa550189447c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 92,
-      "hasStructuralAnalysis": false
-    },
-    ".github/hooks/pre-tool-use.sh": {
-      "filePath": ".github/hooks/pre-tool-use.sh",
-      "contentHash": "8449bb39c8a5a06b231da87d8e3c9bcd88b8cc4fa4c726af0a285c2304ef9a6e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 84,
-      "hasStructuralAnalysis": true
-    },
-    ".github/hooks/rtk-rewrite.json": {
-      "filePath": ".github/hooks/rtk-rewrite.json",
-      "contentHash": "79ff2c42ea32d1dda6a62a42a2dcd0155d2a4bbab6fa17341721dfb37a30def1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 13,
-      "hasStructuralAnalysis": true
-    },
-    ".github/hooks/stop.ps1": {
-      "filePath": ".github/hooks/stop.ps1",
-      "contentHash": "97c2b532a1a5f0c133ddbf65a688eb7766e69fa23a3a9f57af6fc1ec8015930f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 35,
-      "hasStructuralAnalysis": false
-    },
-    ".github/hooks/stop.sh": {
-      "filePath": ".github/hooks/stop.sh",
-      "contentHash": "154a7f20807201d36828bf8350f299dbd5e1b45a71364539d472b6d95f7f67de",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 29,
-      "hasStructuralAnalysis": true
-    },
-    ".github/prompts/quick-fix.prompt.md": {
-      "filePath": ".github/prompts/quick-fix.prompt.md",
-      "contentHash": "79f7996c7ab80819253ea6a94290727d572190ac42a4bb82edd6ff9c71f2562f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 20,
-      "hasStructuralAnalysis": true
-    },
-    ".github/prompts/quick-plan.prompt.md": {
-      "filePath": ".github/prompts/quick-plan.prompt.md",
-      "contentHash": "43172d99a267f37c7b199dd16ac3376cd1feec55a61868f0d7cfa733b2881284",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 26,
-      "hasStructuralAnalysis": true
-    },
-    ".github/prompts/quick-review.prompt.md": {
-      "filePath": ".github/prompts/quick-review.prompt.md",
-      "contentHash": "55db2ea86eb718a10eb5cc702141bdf46c9192138d09fe528350fcac078bdcc1",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ai-slop-cleaner/SKILL.md": {
-      "filePath": ".github/skills/ai-slop-cleaner/SKILL.md",
-      "contentHash": "430910f1420536ef14281ce09787c291aed6b2589e008e48c9868423da94813d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 45,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ask/SKILL.md": {
-      "filePath": ".github/skills/ask/SKILL.md",
-      "contentHash": "a4efc0fb85054e555b8b15a168ba547063cb7c4f13e3b2ec0652129aab9b82c8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 23,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/autoresearch/SKILL.md": {
-      "filePath": ".github/skills/autoresearch/SKILL.md",
-      "contentHash": "e3f544c7c7ae6aa793bbb4c11d41bc359a13fa50d1d78cc356706db70830f0c8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/cancel/SKILL.md": {
-      "filePath": ".github/skills/cancel/SKILL.md",
-      "contentHash": "6ca7011d9005c252e0b7a0aa5367624b4051662b7ff36d4fcfd2901930e6cd23",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 98,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ccg/SKILL.md": {
-      "filePath": ".github/skills/ccg/SKILL.md",
-      "contentHash": "6439319f98d52757452ea368b7f53f9f77d0bc0181891e03f91426fb3281bd54",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 101,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/coding-standards/SKILL.md": {
-      "filePath": ".github/skills/coding-standards/SKILL.md",
-      "contentHash": "669714e3c002a30dbae3728d7878505d87b26e40ddddb46442ffb7aedc22a066",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 145,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/configure-notifications/SKILL.md": {
-      "filePath": ".github/skills/configure-notifications/SKILL.md",
-      "contentHash": "29ab056d15e885edd0202144a4bb272ed1e105656dead275e0860071842ce1d8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/deep-dive/SKILL.md": {
-      "filePath": ".github/skills/deep-dive/SKILL.md",
-      "contentHash": "dd58bf0db3cc828b60806b0b3dc049b9b97b4d2b9e34daef50fafbe8dcea551f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 55,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/deep-interview/SKILL.md": {
-      "filePath": ".github/skills/deep-interview/SKILL.md",
-      "contentHash": "c503016749252614a54bc27ffd3e551b50ee28f85822db72ab7408823b9daf39",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 134,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/deepinit/SKILL.md": {
-      "filePath": ".github/skills/deepinit/SKILL.md",
-      "contentHash": "fd23fcf5e385b87e85ae1c5cb9eb4c1f04ce94e9c516cb902dfd50eeeb1a1f1d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/external-context/SKILL.md": {
-      "filePath": ".github/skills/external-context/SKILL.md",
-      "contentHash": "75359a08905ff5e90059fa59056783e2b5d828916048e032d2fcb22c38370b37",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 25,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/hud/SKILL.md": {
-      "filePath": ".github/skills/hud/SKILL.md",
-      "contentHash": "7b09b60fd7dd303bd7f0b495ccc6741c253847e31133784b268cae1c2fff116e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/omg-autopilot/SKILL.md": {
-      "filePath": ".github/skills/omg-autopilot/SKILL.md",
-      "contentHash": "cd25c156f2498081f60e2f96280d6b5cac11ec015514c7a405b67c69e7a6fae8",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 137,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/plan/SKILL.md": {
-      "filePath": ".github/skills/plan/SKILL.md",
-      "contentHash": "d673a79f596b653232210ae396b5c06142eb159fbc61f61e705e8608a1b87a6c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 110,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/push-omc/SKILL.md": {
-      "filePath": ".github/skills/push-omc/SKILL.md",
-      "contentHash": "a0b1cc2671e34db7c281bade9c02b73cb38ec6eb0739229d3ec6046ea84d0164",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 113,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ralph/SKILL.md": {
-      "filePath": ".github/skills/ralph/SKILL.md",
-      "contentHash": "d9b5cc54d8bc20193792f545e6923bc0ffdff9061f93ffb40cb45bf7a845f4b7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 86,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ralplan/SKILL.md": {
-      "filePath": ".github/skills/ralplan/SKILL.md",
-      "contentHash": "5da41396808982380424404ff839cd54aedf56f3b0392e529ec1002e751b6887",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 88,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/release/SKILL.md": {
-      "filePath": ".github/skills/release/SKILL.md",
-      "contentHash": "ea015e9ab6f5aff1aa1655307772a52f7f362a3a287103b374e78724be7ceec6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/remember/SKILL.md": {
-      "filePath": ".github/skills/remember/SKILL.md",
-      "contentHash": "2d89dd3c51e70002299bda1e5fea33fb95b2ee0cd2fa7a1a1a25e73e9387d37e",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 89,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/resume-claude/SKILL.md": {
-      "filePath": ".github/skills/resume-claude/SKILL.md",
-      "contentHash": "0d7e504da3f10960eaffe77468269a4ae16316618575d6d2182f86520d89575f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 91,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/review/SKILL.md": {
-      "filePath": ".github/skills/review/SKILL.md",
-      "contentHash": "85d032958a3e9d7bd76b5ab77ec9c5cc6763d74bf5ed2a132d24b099c134685c",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 28,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/sciomc/SKILL.md": {
-      "filePath": ".github/skills/sciomc/SKILL.md",
-      "contentHash": "e4fbedacd5225a85de24ef92b1948363303305bd61d7ea1b1627688634720213",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/security-scan/SKILL.md": {
-      "filePath": ".github/skills/security-scan/SKILL.md",
-      "contentHash": "46afd2a17329cf7d900da60ca44fae8b9c099d5f0174f5b8b60f4f006a80ef00",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 132,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/self-improve/SKILL.md": {
-      "filePath": ".github/skills/self-improve/SKILL.md",
-      "contentHash": "08b963558ec3922dc3d8480c478292a823e7085ba8863529e150512ed264f5c3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 221,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/skill-stocktake/SKILL.md": {
-      "filePath": ".github/skills/skill-stocktake/SKILL.md",
-      "contentHash": "93c68d119cbff1a8f4c2fe6c82fa3a6d13b2ce8f210c051528c3ee891367c258",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 139,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/skillify/SKILL.md": {
-      "filePath": ".github/skills/skillify/SKILL.md",
-      "contentHash": "1ad121fc0c96a073429fe838439cec36f167ffccda4988413221bb86e940dc78",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/status/SKILL.md": {
-      "filePath": ".github/skills/status/SKILL.md",
-      "contentHash": "c63ad13ebfad8ac3931de6b4c48032cf1134b9a1cdba2512b0fe23c26d426d04",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 85,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/tdd/SKILL.md": {
-      "filePath": ".github/skills/tdd/SKILL.md",
-      "contentHash": "74d5bd64f8c3ffff701a54d5539887c7feb3541220c408c34acc57a9aebe119a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 104,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/team/SKILL.md": {
-      "filePath": ".github/skills/team/SKILL.md",
-      "contentHash": "00f3e4ccbcb469baa855629f33dd3ed60003ee86a6109595f2499acf9068e59d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 185,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/trace/SKILL.md": {
-      "filePath": ".github/skills/trace/SKILL.md",
-      "contentHash": "fb21957a1ad769ffcf787c5fe7dd91df688c308a18a5edfbc95e0ba2c80ef938",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 54,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ultragoal/SKILL.md": {
-      "filePath": ".github/skills/ultragoal/SKILL.md",
-      "contentHash": "b3b3c7ff95dee5fd1d5654dccb2a7f03c9d1a9c2f4bc535bffd6d69bd2fb6c69",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 31,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ultraqa/SKILL.md": {
-      "filePath": ".github/skills/ultraqa/SKILL.md",
-      "contentHash": "fd66033fd8a082cc609012ad30b0943c0c408c4f8968e50afdf9594bd3140f11",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 50,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/ultrawork/SKILL.md": {
-      "filePath": ".github/skills/ultrawork/SKILL.md",
-      "contentHash": "a99a0e12affe9452615c7866534c4e360f05591daefd4f0e4ba03d5259b230e4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 44,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/verify/SKILL.md": {
-      "filePath": ".github/skills/verify/SKILL.md",
-      "contentHash": "a20474e601babb74fede7b79539d341241efce26ddacf986f89c82e50df892c3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 37,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/visual-verdict/SKILL.md": {
-      "filePath": ".github/skills/visual-verdict/SKILL.md",
-      "contentHash": "37095c0067ed0407d26d776d409f9e6cb28b791755bd1632e1d961467c604b78",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 30,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/wiki/SKILL.md": {
-      "filePath": ".github/skills/wiki/SKILL.md",
-      "contentHash": "a1584716a84bc1c3dcc8721f76b83168bd1e331efe0fda83cb4b0768319db8cc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".github/skills/writer-memory/SKILL.md": {
-      "filePath": ".github/skills/writer-memory/SKILL.md",
-      "contentHash": "1a47598b85f554337cd34b638ce8efb2f92d6005b082003487b9025de974a660",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 24,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/async-artifact-pipeline.md": {
-      "filePath": ".omg/plans/async-artifact-pipeline.md",
-      "contentHash": "91f7744514f24f156880ab02b980879dda665fa297b113e1449d3af81b9a3822",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 189,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/composable-multi-value-head-ralplan.md": {
-      "filePath": ".omg/plans/composable-multi-value-head-ralplan.md",
-      "contentHash": "704107eedbe17cb95ff9686a1478b9d95a67ccbc9d3293aec9967a9ebaef903d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 72,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/config-consolidation-ralplan.md": {
-      "filePath": ".omg/plans/config-consolidation-ralplan.md",
-      "contentHash": "df718cca620f3be322d95dc5ea10d65829367b1ef3038c9e7724f046d3588ca6",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 98,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/kaggle-docker-validation.md": {
-      "filePath": ".omg/plans/kaggle-docker-validation.md",
-      "contentHash": "cae1067d1cf139cdfa54b52b77c1392d93cadf6a5f6dc3ed2e849e388ac1da6b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 83,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/low-env-steps-telemetry-ralplan.md": {
-      "filePath": ".omg/plans/low-env-steps-telemetry-ralplan.md",
-      "contentHash": "92092d9d7900258c3a004c4f635e0c7ac8987b66202d40b466a9bef867e67255",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 103,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/output-standardization-ralplan.md": {
-      "filePath": ".omg/plans/output-standardization-ralplan.md",
-      "contentHash": "d79e74f7b08e77745ec76c60d500f23248839a88f9e26ac4d504cdccfa53e2a3",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 241,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/ralplan-baseline-sweep.md": {
-      "filePath": ".omg/plans/ralplan-baseline-sweep.md",
-      "contentHash": "7d7485362ee2d49c49624f63a1fddbdff204fccbda9c315b4e241aff2edb2e70",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 32,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/ralplan-rollout-optimization.md": {
-      "filePath": ".omg/plans/ralplan-rollout-optimization.md",
-      "contentHash": "0d3f5d09600e203317c85c901eebc16ba20118c7d86138976701d8df5762d674",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 125,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/ralplan-src-reorganization.md": {
-      "filePath": ".omg/plans/ralplan-src-reorganization.md",
-      "contentHash": "06475877d26c9c47eca3dae35d4d61bcb34be991b44b4ffd651ef668f57abcb9",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 53,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/remove-legacy-config-fields-ralplan.md": {
-      "filePath": ".omg/plans/remove-legacy-config-fields-ralplan.md",
-      "contentHash": "a697759c95c1a3aa424a32946e3fa01d0d4a82c70f1eed393aa23457f60406f0",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 130,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/self-play-curriculum-ralplan.md": {
-      "filePath": ".omg/plans/self-play-curriculum-ralplan.md",
-      "contentHash": "61ea053c249ada5c6bed0799f0dc9cedc1a7303888ef516aaf4ae89342a85909",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 236,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/telemetry-metrics-cleanup-ralplan.md": {
-      "filePath": ".omg/plans/telemetry-metrics-cleanup-ralplan.md",
-      "contentHash": "0eadc2f3d017860ce575fd3081df72a401ba6e6ed9721d04636c888b26e054d4",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 258,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/plans/trajectory-action-shield.md": {
-      "filePath": ".omg/plans/trajectory-action-shield.md",
-      "contentHash": "63094531fd3afe7d00e8b4422181227485dacce05afc7af8798d9377a0d324da",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 183,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-dive-config-consolidation.md": {
-      "filePath": ".omg/specs/deep-dive-config-consolidation.md",
-      "contentHash": "6a97f8d0c99918d84511f2cce56adbbf885102e9488cd0751e0f9d4f04bf80ac",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 158,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-dive-low-env-steps.md": {
-      "filePath": ".omg/specs/deep-dive-low-env-steps.md",
-      "contentHash": "b222931cd701101c4c036452b9b0d28610a28b0f7620850771dc62c9212b45fd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 92,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-dive-trace-config-consolidation.md": {
-      "filePath": ".omg/specs/deep-dive-trace-config-consolidation.md",
-      "contentHash": "9105b7704213aa9e8bd844cd6997d3e7bda7f9147d321a1cc3fb022aa8337b80",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 87,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-dive-trace-low-env-steps.md": {
-      "filePath": ".omg/specs/deep-dive-trace-low-env-steps.md",
-      "contentHash": "a02fa01e27ca76b60d27f0a83e3e775a2f662fcb6da35fe9309cc149debf9391",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 73,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-async-artifact-pipeline.md": {
-      "filePath": ".omg/specs/deep-interview-async-artifact-pipeline.md",
-      "contentHash": "072621caccaaa58d172885b69d4b72a4428e86190611880705ef41598b8aab03",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 88,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-baseline-stage1-comfort-throughput.md": {
-      "filePath": ".omg/specs/deep-interview-baseline-stage1-comfort-throughput.md",
-      "contentHash": "493e2338f3db0492eea27059f5c1dd94289844db3642805fafc8cf51eacfe92f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 67,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-baseline-sweep.md": {
-      "filePath": ".omg/specs/deep-interview-baseline-sweep.md",
-      "contentHash": "c2a10711daf4c489295adee97ec92ee430424f1d4ee4b67bb0e7d5c9eb37af0d",
+    ".understand-anything/.understandignore": {
+      "filePath": ".understand-anything/.understandignore",
+      "contentHash": "7d339cce3c91fbc91ad5acb5e3c39fbd0692dde820c0db91af4f4df55f573b72",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
       "totalLines": 120,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-composable-multi-value-head.md": {
-      "filePath": ".omg/specs/deep-interview-composable-multi-value-head.md",
-      "contentHash": "a143585d8c56202e6409c368d286ed6d097fbf354dc82b6417e06a21b4e13500",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 94,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-kaggle-docker-validation.md": {
-      "filePath": ".omg/specs/deep-interview-kaggle-docker-validation.md",
-      "contentHash": "6a1e1fd81d1fcf76ffb6c48e26aa61ec79052f2d27ba9305c38cde4b3424775d",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 84,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-output-standardization.md": {
-      "filePath": ".omg/specs/deep-interview-output-standardization.md",
-      "contentHash": "d3bc01b15eb7eba684361a6b52b0aca8fc9b1204c3078fb7d29beb39c94478dd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 147,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-remove-legacy-config-fields.md": {
-      "filePath": ".omg/specs/deep-interview-remove-legacy-config-fields.md",
-      "contentHash": "29ea4575cad148b7e127e7c9dc16d7140ac0011bdeb9085bac3befc776abe5b7",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 43,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-rollout-optimization.md": {
-      "filePath": ".omg/specs/deep-interview-rollout-optimization.md",
-      "contentHash": "0a584f1c86dfdd6e387fd79daff28abe6aa7c7fc3fd1083882e82e1e1440828a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 221,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-self-play-curriculum.md": {
-      "filePath": ".omg/specs/deep-interview-self-play-curriculum.md",
-      "contentHash": "3eae1d6b9a14a744fff87eba4bf5ca8a2c9b6f122636d74070f34c78893f1073",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 116,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-src-reorganization.md": {
-      "filePath": ".omg/specs/deep-interview-src-reorganization.md",
-      "contentHash": "9d5ae03c4ce913f1db623d091bf61ea3a5fd64740aa15e12ee872fbf7b420c18",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 95,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-telemetry-metrics-cleanup.md": {
-      "filePath": ".omg/specs/deep-interview-telemetry-metrics-cleanup.md",
-      "contentHash": "895f882aad52cf4ea021e2d595c7cc5f44413ea6fec8772bcdb2649b6bb6919f",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 67,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/specs/deep-interview-trajectory-action-shield.md": {
-      "filePath": ".omg/specs/deep-interview-trajectory-action-shield.md",
-      "contentHash": "ccd7202dd341b21219806648cedafd1a153a3ddc6ae104fe903909fb70ba3b40",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 93,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/ultragoal/ledger.json": {
-      "filePath": ".omg/ultragoal/ledger.json",
-      "contentHash": "ca38df47f03fcc759fd8a7611bbdcd614ac13eb1c53d71e6a04c89b4f9df3c75",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 39,
-      "hasStructuralAnalysis": true
-    },
-    ".omg/wiki/index.md": {
-      "filePath": ".omg/wiki/index.md",
-      "contentHash": "848fbdb32c07d00a896da012a5cfc20ffae6a1ef25c813794b51126e02f31031",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 33,
-      "hasStructuralAnalysis": true
-    },
-    ".understand-anything/.understandignore": {
-      "filePath": ".understand-anything/.understandignore",
-      "contentHash": "45cf1c0924513e80022f601f587bb409f01312a8c02af657e77e70e82d8d1103",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 112,
       "hasStructuralAnalysis": false
     },
     ".understand-anything/fingerprints.json": {
       "filePath": ".understand-anything/fingerprints.json",
-      "contentHash": "0bfd9394c49f684ee38bfe52098590b3b6b9edd74c45271e08d9e849463755d9",
+      "contentHash": "f9e7e178e53e4927de29fa6f9599c8923275266348607057ec2804b10fb1bb29",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 12254,
+      "totalLines": 13316,
       "hasStructuralAnalysis": true
     },
     ".understand-anything/knowledge-graph.json": {
       "filePath": ".understand-anything/knowledge-graph.json",
-      "contentHash": "cc3c575c04db40f2c9c4ccd1796e0d2bca16a4a3557e04373758544f434d6cb7",
+      "contentHash": "7746ca8b44e49bf1bdf4a863fe051e958ce1c5ce8cf2c728bc55fe664196966d",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 19124,
+      "totalLines": 35046,
       "hasStructuralAnalysis": true
     },
     ".understand-anything/meta.json": {
       "filePath": ".understand-anything/meta.json",
-      "contentHash": "324232c908aee59228d1442d9e9a74fc1f93a3b91d61f72cf4b0bc45c1f3fdaa",
+      "contentHash": "a54b925e6dca2425e084e73f91028887f7483665cf3daac51fb4d6f74f687571",
       "functions": [],
       "classes": [],
       "imports": [],
@@ -2228,24 +53,14 @@
       "totalLines": 65,
       "hasStructuralAnalysis": true
     },
-    "Makefile": {
-      "filePath": "Makefile",
-      "contentHash": "219161d23de84b76e4217e265a3b274a2a924b7b70e60fa4b89c32df572e8c28",
+    "conf/artifacts/default.yaml": {
+      "filePath": "conf/artifacts/default.yaml",
+      "contentHash": "f8d2838681be0bd0cbeb68687675846be661334c3a924e4f3cd9155c8dfdf13f",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 6,
-      "hasStructuralAnalysis": true
-    },
-    "README.md": {
-      "filePath": "README.md",
-      "contentHash": "a700a005ae7a286716a683fbf9bc29884077c6950fa40f4198925e1a8b04c91b",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 96,
+      "totalLines": 41,
       "hasStructuralAnalysis": true
     },
     "conf/config.yaml": {
@@ -2468,6 +283,136 @@
       "totalLines": 8,
       "hasStructuralAnalysis": true
     },
+    "conf/sweeps/wandb/2p_only_throughput.yaml": {
+      "filePath": "conf/sweeps/wandb/2p_only_throughput.yaml",
+      "contentHash": "ff820721550492290f0bbdf94002614a163792a30923d38f08a8c08d2a5cb6dc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/4p_only_throughput.yaml": {
+      "filePath": "conf/sweeps/wandb/4p_only_throughput.yaml",
+      "contentHash": "2175c9c64f594213d316604511cc752e22ac52f3161759df65e2ef5a2535285e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/baseline_sentinels.yaml": {
+      "filePath": "conf/sweeps/wandb/baseline_sentinels.yaml",
+      "contentHash": "14e1fa28066266d091df84b0a68ffdf7a6b13aaaa9931aab8051025d65865a17",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/baseline_stage1_comfort.yaml": {
+      "filePath": "conf/sweeps/wandb/baseline_stage1_comfort.yaml",
+      "contentHash": "9812bc2c3545a3fd274932a65a33186a525001629d0f3f18d55866c86e876533",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/baseline_stage2_stability.yaml": {
+      "filePath": "conf/sweeps/wandb/baseline_stage2_stability.yaml",
+      "contentHash": "da177ad3273cec27d8abd736b9c28250bad4c76769da2368ea7b7102277db47c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 46,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/budget.yaml": {
+      "filePath": "conf/sweeps/wandb/budget.yaml",
+      "contentHash": "1f7c2af50466c5df97d6b6fa63ff1a7c6314d472e419b24476b0344fdd1c3cf7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/capacity.yaml": {
+      "filePath": "conf/sweeps/wandb/capacity.yaml",
+      "contentHash": "71418937521bfba1ce29eaf760ce5db31d933c99a74c91eb232b6890e6295d5a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/curriculum.yaml": {
+      "filePath": "conf/sweeps/wandb/curriculum.yaml",
+      "contentHash": "7aeaa64b5c0501f8c6dcda23b4fd778748bdccb2b0b5a06d85e702943ef42dc4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/gnn_pointer_reward_search.yaml": {
+      "filePath": "conf/sweeps/wandb/gnn_pointer_reward_search.yaml",
+      "contentHash": "274e7b3dcf0f28e3676741cb3afe8f1dad32cee23c45ecb73d0bdbe266cea2af",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/gnn_pointer_reward_validate.yaml": {
+      "filePath": "conf/sweeps/wandb/gnn_pointer_reward_validate.yaml",
+      "contentHash": "81ae76621a4b5debe5a1772af293415d3372f17409694a85d3c3a1d0776820b6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/reward.yaml": {
+      "filePath": "conf/sweeps/wandb/reward.yaml",
+      "contentHash": "b59e3598f799f22c4078c0e46192ce439e436c2df1e7821479a975c0823b0f38",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/task_complexity.yaml": {
+      "filePath": "conf/sweeps/wandb/task_complexity.yaml",
+      "contentHash": "b57289b1c531ce8632fdd0a3eea5ada2e5b28a8222ea9de99838567e1e87316c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "conf/sweeps/wandb/throughput.yaml": {
+      "filePath": "conf/sweeps/wandb/throughput.yaml",
+      "contentHash": "7c336a93d0a436fcd4e7b7979634333c32e8da7b44a05773236dac3bcacac724",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
     "conf/task/default.yaml": {
       "filePath": "conf/task/default.yaml",
       "contentHash": "9103e569bda5421e974c5ed68f67397d233ea6156c03cac38968785f9fc19cca",
@@ -2508,14 +453,14 @@
       "totalLines": 24,
       "hasStructuralAnalysis": true
     },
-    "docs/ONBOARDING.md": {
-      "filePath": "docs/ONBOARDING.md",
-      "contentHash": "bc153aaee7ebab2a451b792b03d8c3a1eea2bc2d1747d6a17cf13fbc5d83a98c",
+    "docs/baseline_sweep_results.md": {
+      "filePath": "docs/baseline_sweep_results.md",
+      "contentHash": "ab52d8d752fa1305cd717835c5dacaff81a42411ee478c67eb190b38ff4ed89a",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 209,
+      "totalLines": 88,
       "hasStructuralAnalysis": true
     },
     "docs/baseline_sweep.md": {
@@ -2526,16 +471,6 @@
       "imports": [],
       "exports": [],
       "totalLines": 161,
-      "hasStructuralAnalysis": true
-    },
-    "docs/baseline_sweep_results.md": {
-      "filePath": "docs/baseline_sweep_results.md",
-      "contentHash": "ab52d8d752fa1305cd717835c5dacaff81a42411ee478c67eb190b38ff4ed89a",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 88,
       "hasStructuralAnalysis": true
     },
     "docs/config_migration.md": {
@@ -2568,1640 +503,24 @@
       "totalLines": 32,
       "hasStructuralAnalysis": true
     },
-    "mcp-server/.omc/state/last-tool-error.json": {
-      "filePath": "mcp-server/.omc/state/last-tool-error.json",
-      "contentHash": "12ae0875d94b0432e5b0ec59f8bab3887f06b2ceacee2e68e248ae08f9a96028",
+    "docs/ONBOARDING.md": {
+      "filePath": "docs/ONBOARDING.md",
+      "contentHash": "bc153aaee7ebab2a451b792b03d8c3a1eea2bc2d1747d6a17cf13fbc5d83a98c",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 7,
+      "totalLines": 209,
       "hasStructuralAnalysis": true
     },
-    "mcp-server/.omg/state/session-checkpoint.json": {
-      "filePath": "mcp-server/.omg/state/session-checkpoint.json",
-      "contentHash": "7ae5b7874657ba3a484a343faf11ebf736f64b52ece7eba71d337a3071251523",
+    "Makefile": {
+      "filePath": "Makefile",
+      "contentHash": "219161d23de84b76e4217e265a3b274a2a924b7b70e60fa4b89c32df572e8c28",
       "functions": [],
       "classes": [],
       "imports": [],
       "exports": [],
-      "totalLines": 35,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-30-55.706Z.json": {
-      "filePath": "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-30-55.706Z.json",
-      "contentHash": "87d637704d6dd30c88aa085888a2680993fc009c5c3a88a194e965fc2c5597cc",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 35,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-35-25.033Z.json": {
-      "filePath": "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-35-25.033Z.json",
-      "contentHash": "44dd0c2c2cd12dee3fc6c2d8e2aa5a7d699edb25f8a1c1c7b0f618e8f2f9a3a5",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 21,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-35-25.037Z.json": {
-      "filePath": "mcp-server/.omg/state/session-checkpoint.previous.2026-05-11T07-35-25.037Z.json",
-      "contentHash": "b82cbd8247226677816db4d24d23725e3fc6a5cb09b99b1e6afe1faaa2ad0820",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 18,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/package.json": {
-      "filePath": "mcp-server/package.json",
-      "contentHash": "137c51212404c884b5268c6e321c06f3c9ea44e208f9c0a14bbf59bcb1abedbd",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 21,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/claude-jsonl-importer.ts": {
-      "filePath": "mcp-server/src/bridge/claude-jsonl-importer.ts",
-      "contentHash": "d119b2186907d7a61443f4f8cd15b9b360fb02f86d5ec01be3f770cf6309eca0",
-      "functions": [
-        {
-          "name": "encodeProjectPath",
-          "params": [
-            "workspacePath"
-          ],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "getClaudeProjectDir",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "string | null",
-          "exported": false,
-          "lineCount": 6
-        },
-        {
-          "name": "findLatestJsonl",
-          "params": [
-            "projectDir"
-          ],
-          "returnType": "{ path: string; mtime: Date; sessionId: string } | null",
-          "exported": false,
-          "lineCount": 20
-        },
-        {
-          "name": "readLastLines",
-          "params": [
-            "filePath",
-            "maxLines"
-          ],
-          "returnType": "string[]",
-          "exported": false,
-          "lineCount": 5
-        },
-        {
-          "name": "parseJsonlLine",
-          "params": [
-            "line"
-          ],
-          "returnType": "JsonlLine | null",
-          "exported": false,
-          "lineCount": 7
-        },
-        {
-          "name": "extractModifiedFiles",
-          "params": [
-            "entries"
-          ],
-          "returnType": "string[]",
-          "exported": false,
-          "lineCount": 24
-        },
-        {
-          "name": "extractLastUserPrompt",
-          "params": [
-            "entries"
-          ],
-          "returnType": "string | null",
-          "exported": false,
-          "lineCount": 22
-        },
-        {
-          "name": "extractLastAssistantMessage",
-          "params": [
-            "entries"
-          ],
-          "returnType": "string | null",
-          "exported": false,
-          "lineCount": 19
-        },
-        {
-          "name": "detectClaudeSession",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "{\n  exists: boolean;\n  mtime: string | null;\n  session_id: string | null;\n  details: string;\n}",
-          "exported": true,
-          "lineCount": 19
-        },
-        {
-          "name": "importClaudeSession",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "ImportResult",
-          "exported": true,
-          "lineCount": 58
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "node:os",
-          "specifiers": [
-            "* as os"
-          ]
-        },
-        {
-          "source": "./omc-importer.js",
-          "specifiers": [
-            "ImportResult"
-          ]
-        }
-      ],
-      "exports": [
-        "encodeProjectPath",
-        "detectClaudeSession",
-        "importClaudeSession"
-      ],
-      "totalLines": 249,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/conflict-utils.ts": {
-      "filePath": "mcp-server/src/bridge/conflict-utils.ts",
-      "contentHash": "be71e60daef28e1e2764986c86f327f2fba1b277c9b92674665aa74210adf824",
-      "functions": [
-        {
-          "name": "readEmbeddedTimestamp",
-          "params": [
-            "filePath"
-          ],
-          "returnType": "{ ts: number; sourceOrigin: SourceOrigin } | null",
-          "exported": false,
-          "lineCount": 12
-        },
-        {
-          "name": "shouldSkipForConflict",
-          "params": [
-            "args"
-          ],
-          "returnType": "ConflictDecision",
-          "exported": true,
-          "lineCount": 24
-        },
-        {
-          "name": "rotateBackup",
-          "params": [
-            "dstPath",
-            "retainCount"
-          ],
-          "returnType": "string[]",
-          "exported": true,
-          "lineCount": 37
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "../utils.js",
-          "specifiers": [
-            "ensureDir",
-            "safeReadFile",
-            "safeJsonParse"
-          ]
-        }
-      ],
-      "exports": [
-        "shouldSkipForConflict",
-        "rotateBackup"
-      ],
-      "totalLines": 124,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/index.ts": {
-      "filePath": "mcp-server/src/bridge/index.ts",
-      "contentHash": "205b99f868a35daf9bf53a63b58fd82307f9502125e774a8391fb5d2eaba8cfe",
-      "functions": [
-        {
-          "name": "detectExternalSessions",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "DetectedSession[]",
-          "exported": true,
-          "lineCount": 40
-        },
-        {
-          "name": "importExternalSession",
-          "params": [
-            "source",
-            "options"
-          ],
-          "returnType": "ImportResult",
-          "exported": true,
-          "lineCount": 78
-        },
-        {
-          "name": "exportExternalSession",
-          "params": [
-            "target",
-            "options"
-          ],
-          "returnType": "ExportResult",
-          "exported": true,
-          "lineCount": 19
-        },
-        {
-          "name": "compareCheckpoints",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "{\n  omg: { exists: boolean; timestamp: string | null };\n  external: Array<{\n    source: string;\n    timestamp: string | null;\n    newer_than_omg: boolean;\n    omg_newer_than_external: boolean;\n  }>;\n}",
-          "exported": true,
-          "lineCount": 46
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "../utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "safeReadFile",
-            "safeWriteFile"
-          ]
-        },
-        {
-          "source": "../state-tools.js",
-          "specifiers": [
-            "getStateDir"
-          ]
-        },
-        {
-          "source": "./omc-importer.js",
-          "specifiers": [
-            "detectOmcSession",
-            "importOmcSession",
-            "ImportResult"
-          ]
-        },
-        {
-          "source": "./claude-jsonl-importer.js",
-          "specifiers": [
-            "detectClaudeSession",
-            "importClaudeSession"
-          ]
-        },
-        {
-          "source": "./omg-exporter.js",
-          "specifiers": [
-            "detectOmgSession",
-            "exportOmgSession",
-            "recordExportToken",
-            "ExportResult"
-          ]
-        },
-        {
-          "source": "./conflict-utils.js",
-          "specifiers": [
-            "rotateBackup",
-            "SourceOrigin"
-          ]
-        }
-      ],
-      "exports": [
-        "ImportResult",
-        "ExportResult",
-        "detectExternalSessions",
-        "importExternalSession",
-        "exportExternalSession",
-        "compareCheckpoints"
-      ],
-      "totalLines": 232,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/omc-importer.ts": {
-      "filePath": "mcp-server/src/bridge/omc-importer.ts",
-      "contentHash": "7d4a7a93b437a30d6f7b7b30b2b0cc6dba45e8d44ed00ecbe7f4679dec03f8e2",
-      "functions": [
-        {
-          "name": "readCheckpoint",
-          "params": [
-            "filePath"
-          ],
-          "returnType": "OmcCheckpoint | null",
-          "exported": false,
-          "lineCount": 7
-        },
-        {
-          "name": "isLoopback",
-          "params": [
-            "workspaceRoot",
-            "omcCheckpointPath"
-          ],
-          "returnType": "boolean",
-          "exported": false,
-          "lineCount": 15
-        },
-        {
-          "name": "importOmcSession",
-          "params": [
-            "workspaceRoot",
-            "force"
-          ],
-          "returnType": "ImportResult",
-          "exported": true,
-          "lineCount": 128
-        },
-        {
-          "name": "detectOmcSession",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "{ exists: boolean; mtime: string | null; details: string }",
-          "exported": true,
-          "lineCount": 31
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "../utils.js",
-          "specifiers": [
-            "safeReadFile",
-            "safeJsonParse",
-            "ensureDir"
-          ]
-        },
-        {
-          "source": "./conflict-utils.js",
-          "specifiers": [
-            "rotateBackup",
-            "shouldSkipForConflict",
-            "SourceOrigin"
-          ]
-        },
-        {
-          "source": "./omg-exporter.js",
-          "specifiers": [
-            "readExportToken"
-          ]
-        }
-      ],
-      "exports": [
-        "importOmcSession",
-        "detectOmcSession"
-      ],
-      "totalLines": 232,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/omg-exporter.ts": {
-      "filePath": "mcp-server/src/bridge/omg-exporter.ts",
-      "contentHash": "00ddeaab21d0a8447d0e1a3e09a2343c9257ca298e7cb99d661c4a20758b6e77",
-      "functions": [
-        {
-          "name": "readCheckpoint",
-          "params": [
-            "filePath"
-          ],
-          "returnType": "OmgCheckpoint | null",
-          "exported": false,
-          "lineCount": 7
-        },
-        {
-          "name": "summarizePrd",
-          "params": [
-            "prdPath"
-          ],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 16
-        },
-        {
-          "name": "detectOmgSession",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "{\n  exists: boolean;\n  mtime: string | null;\n  details: string;\n  has_checkpoint: boolean;\n}",
-          "exported": true,
-          "lineCount": 44
-        },
-        {
-          "name": "exportOmgSession",
-          "params": [
-            "workspaceRoot",
-            "force"
-          ],
-          "returnType": "ExportResult",
-          "exported": true,
-          "lineCount": 153
-        },
-        {
-          "name": "recordExportToken",
-          "params": [
-            "workspaceRoot",
-            "sessionId"
-          ],
-          "returnType": "ExportToken",
-          "exported": true,
-          "lineCount": 14
-        },
-        {
-          "name": "readExportToken",
-          "params": [
-            "workspaceRoot"
-          ],
-          "returnType": "ExportToken | null",
-          "exported": true,
-          "lineCount": 10
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "../utils.js",
-          "specifiers": [
-            "ensureDir",
-            "safeReadFile",
-            "safeJsonParse",
-            "safeWriteFile"
-          ]
-        },
-        {
-          "source": "./conflict-utils.js",
-          "specifiers": [
-            "rotateBackup",
-            "shouldSkipForConflict",
-            "SourceOrigin"
-          ]
-        }
-      ],
-      "exports": [
-        "detectOmgSession",
-        "exportOmgSession",
-        "recordExportToken",
-        "readExportToken"
-      ],
-      "totalLines": 323,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/bridge/tools.ts": {
-      "filePath": "mcp-server/src/bridge/tools.ts",
-      "contentHash": "0353948954d1d8d4a883544d60b65244d467e9389b48760bfe729627299f212f",
-      "functions": [
-        {
-          "name": "registerBridgeTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 115
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "../utils.js",
-          "specifiers": [
-            "errorResponse"
-          ]
-        },
-        {
-          "source": "./index.js",
-          "specifiers": [
-            "detectExternalSessions",
-            "importExternalSession",
-            "exportExternalSession",
-            "compareCheckpoints"
-          ]
-        }
-      ],
-      "exports": [
-        "registerBridgeTools"
-      ],
-      "totalLines": 126,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/checkpoint-tools.ts": {
-      "filePath": "mcp-server/src/checkpoint-tools.ts",
-      "contentHash": "cfdfc36b4ac4c9d0efa0c54e51679a453aa25cc2cdf56a80a902cf8aee31a036",
-      "functions": [
-        {
-          "name": "getCheckpointPath",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "getContextBytesPath",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "getTriggerPath",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "registerCheckpointTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 164
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "safeReadFile",
-            "safeWriteFile",
-            "safeJsonParse",
-            "errorResponse"
-          ]
-        },
-        {
-          "source": "./state-tools.js",
-          "specifiers": [
-            "getStateDir"
-          ]
-        },
-        {
-          "source": "./memory-tools.js",
-          "specifiers": [
-            "readMemory"
-          ]
-        },
-        {
-          "source": "./bridge/conflict-utils.js",
-          "specifiers": [
-            "SourceOrigin"
-          ]
-        }
-      ],
-      "exports": [
-        "registerCheckpointTools"
-      ],
-      "totalLines": 186,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/index.ts": {
-      "filePath": "mcp-server/src/index.ts",
-      "contentHash": "a62e6b2940e92783f2dc03b67f83b3191faf23d0cb32854ccf98291fcc35ad04",
-      "functions": [
-        {
-          "name": "main",
-          "params": [],
-          "exported": false,
-          "lineCount": 4
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "@modelcontextprotocol/sdk/server/stdio.js",
-          "specifiers": [
-            "StdioServerTransport"
-          ]
-        },
-        {
-          "source": "./state-tools.js",
-          "specifiers": [
-            "registerStateTools"
-          ]
-        },
-        {
-          "source": "./prd-tools.js",
-          "specifiers": [
-            "registerPrdTools"
-          ]
-        },
-        {
-          "source": "./workflow-tools.js",
-          "specifiers": [
-            "registerWorkflowTools"
-          ]
-        },
-        {
-          "source": "./memory-tools.js",
-          "specifiers": [
-            "registerMemoryTools"
-          ]
-        },
-        {
-          "source": "./checkpoint-tools.js",
-          "specifiers": [
-            "registerCheckpointTools"
-          ]
-        },
-        {
-          "source": "./model-router.js",
-          "specifiers": [
-            "registerModelRouter"
-          ]
-        },
-        {
-          "source": "./bridge/tools.js",
-          "specifiers": [
-            "registerBridgeTools"
-          ]
-        },
-        {
-          "source": "./ultragoal-tools.js",
-          "specifiers": [
-            "registerUltragoalTools"
-          ]
-        }
-      ],
-      "exports": [],
-      "totalLines": 39,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/memory-tools.ts": {
-      "filePath": "mcp-server/src/memory-tools.ts",
-      "contentHash": "f04b6fc2a893836b93021850ba9cff1c322b506a93f377900745c7adcd75b065",
-      "functions": [
-        {
-          "name": "getMemoryPath",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "readMemory",
-          "params": [],
-          "returnType": "MemoryStore",
-          "exported": true,
-          "lineCount": 10
-        },
-        {
-          "name": "writeMemory",
-          "params": [
-            "store"
-          ],
-          "returnType": "void",
-          "exported": false,
-          "lineCount": 5
-        },
-        {
-          "name": "registerMemoryTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 181
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "safeReadFile",
-            "safeWriteFile",
-            "safeJsonParse",
-            "errorResponse"
-          ]
-        }
-      ],
-      "exports": [
-        "readMemory",
-        "registerMemoryTools"
-      ],
-      "totalLines": 225,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/model-router.ts": {
-      "filePath": "mcp-server/src/model-router.ts",
-      "contentHash": "63dcffb1ca31e32b00099bef4246f05e0bffa4671a6f6e55acc5388036f5dc9c",
-      "functions": [
-        {
-          "name": "assessComplexity",
-          "params": [
-            "task",
-            "file_count"
-          ],
-          "returnType": "{ tier: \"high\" | \"medium\" | \"low\"; score: number; factors: string[] }",
-          "exported": false,
-          "lineCount": 44
-        },
-        {
-          "name": "recommend",
-          "params": [
-            "tier"
-          ],
-          "returnType": "ModelRecommendation",
-          "exported": false,
-          "lineCount": 25
-        },
-        {
-          "name": "registerModelRouter",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 52
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        }
-      ],
-      "exports": [
-        "registerModelRouter"
-      ],
-      "totalLines": 197,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/prd-tools.ts": {
-      "filePath": "mcp-server/src/prd-tools.ts",
-      "contentHash": "01eed0d35c4cf764175a5cc5d672b7bce21ee9a3d8bd77b8125657feea3f80d1",
-      "functions": [
-        {
-          "name": "getPrdPath",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "readPrd",
-          "params": [],
-          "returnType": "Prd | null",
-          "exported": false,
-          "lineCount": 8
-        },
-        {
-          "name": "writePrd",
-          "params": [
-            "prd"
-          ],
-          "returnType": "void",
-          "exported": false,
-          "lineCount": 6
-        },
-        {
-          "name": "registerPrdTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 193
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "safeReadFile",
-            "safeWriteFile",
-            "safeJsonParse",
-            "generateId",
-            "errorResponse"
-          ]
-        }
-      ],
-      "exports": [
-        "registerPrdTools"
-      ],
-      "totalLines": 237,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/state-tools.ts": {
-      "filePath": "mcp-server/src/state-tools.ts",
-      "contentHash": "80a7aa7695acba73aab6113b0504ae52a7ba074751504ddbbc187bf3d6108597",
-      "functions": [
-        {
-          "name": "getStateDir",
-          "params": [],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "getStatePath",
-          "params": [
-            "mode"
-          ],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 4
-        },
-        {
-          "name": "registerStateTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 159
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "validateMode",
-            "safeReadFile",
-            "safeWriteFile",
-            "safeJsonParse",
-            "errorResponse"
-          ]
-        }
-      ],
-      "exports": [
-        "getStateDir",
-        "getStatePath",
-        "registerStateTools"
-      ],
-      "totalLines": 175,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/ultragoal-tools.ts": {
-      "filePath": "mcp-server/src/ultragoal-tools.ts",
-      "contentHash": "27e5fee149c609f1510d6aa8bb1ec27f5eb35cf69ab42c0bd76f18329ae07954",
-      "functions": [
-        {
-          "name": "getUltragoalDir",
-          "params": [],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "getUltragoalLedgerPath",
-          "params": [],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "nowIso",
-          "params": [],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "initialLedger",
-          "params": [],
-          "returnType": "UltragoalLedger",
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "isRecord",
-          "params": [
-            "value"
-          ],
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "parseCheckpoint",
-          "params": [
-            "value"
-          ],
-          "returnType": "UltragoalCheckpoint | null",
-          "exported": false,
-          "lineCount": 17
-        },
-        {
-          "name": "parseGoal",
-          "params": [
-            "value"
-          ],
-          "returnType": "UltragoalGoal | null",
-          "exported": false,
-          "lineCount": 23
-        },
-        {
-          "name": "parseLedger",
-          "params": [
-            "raw"
-          ],
-          "returnType": "UltragoalLedger",
-          "exported": false,
-          "lineCount": 35
-        },
-        {
-          "name": "readUltragoalLedger",
-          "params": [],
-          "returnType": "UltragoalLedger",
-          "exported": true,
-          "lineCount": 5
-        },
-        {
-          "name": "writeUltragoalLedger",
-          "params": [
-            "ledger"
-          ],
-          "returnType": "void",
-          "exported": false,
-          "lineCount": 4
-        },
-        {
-          "name": "buildHandoffText",
-          "params": [
-            "activeGoal"
-          ],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 11
-        },
-        {
-          "name": "getUltragoalStatus",
-          "params": [],
-          "returnType": "UltragoalStatusResult",
-          "exported": true,
-          "lineCount": 12
-        },
-        {
-          "name": "createUltragoalGoal",
-          "params": [
-            "objective"
-          ],
-          "returnType": "UltragoalStatusResult",
-          "exported": true,
-          "lineCount": 37
-        },
-        {
-          "name": "requireEvidence",
-          "params": [
-            "evidence"
-          ],
-          "returnType": "string",
-          "exported": false,
-          "lineCount": 7
-        },
-        {
-          "name": "getActiveGoalOrThrow",
-          "params": [
-            "ledger",
-            "goalId"
-          ],
-          "returnType": "UltragoalGoal",
-          "exported": false,
-          "lineCount": 11
-        },
-        {
-          "name": "checkpointUltragoal",
-          "params": [
-            "goalId",
-            "evidence",
-            "note"
-          ],
-          "returnType": "UltragoalStatusResult",
-          "exported": true,
-          "lineCount": 19
-        },
-        {
-          "name": "completeUltragoal",
-          "params": [
-            "goalId",
-            "evidence"
-          ],
-          "returnType": "UltragoalStatusResult",
-          "exported": true,
-          "lineCount": 21
-        },
-        {
-          "name": "successResponse",
-          "params": [
-            "payload"
-          ],
-          "exported": false,
-          "lineCount": 5
-        },
-        {
-          "name": "ultragoalErrorResponse",
-          "params": [
-            "message"
-          ],
-          "exported": false,
-          "lineCount": 6
-        },
-        {
-          "name": "registerUltragoalTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 62
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "getWorkspaceRoot",
-            "ensureDir",
-            "safeReadFile",
-            "safeWriteFile",
-            "generateId"
-          ]
-        }
-      ],
-      "exports": [
-        "getUltragoalDir",
-        "getUltragoalLedgerPath",
-        "readUltragoalLedger",
-        "getUltragoalStatus",
-        "createUltragoalGoal",
-        "checkpointUltragoal",
-        "completeUltragoal",
-        "registerUltragoalTools"
-      ],
-      "totalLines": 350,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/utils.ts": {
-      "filePath": "mcp-server/src/utils.ts",
-      "contentHash": "c288ccf5724f1be0d31a41ea7e0b5058ed833ca61ae00255f8a65693e75ae5a0",
-      "functions": [
-        {
-          "name": "getWorkspaceRoot",
-          "params": [],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "ensureDir",
-          "params": [
-            "dir"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 5
-        },
-        {
-          "name": "validateMode",
-          "params": [
-            "mode"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 5
-        },
-        {
-          "name": "safeReadFile",
-          "params": [
-            "filePath"
-          ],
-          "returnType": "string | null",
-          "exported": true,
-          "lineCount": 10
-        },
-        {
-          "name": "safeWriteFile",
-          "params": [
-            "filePath",
-            "data"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 12
-        },
-        {
-          "name": "safeJsonParse",
-          "params": [
-            "input"
-          ],
-          "returnType": "{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }",
-          "exported": true,
-          "lineCount": 17
-        },
-        {
-          "name": "generateId",
-          "params": [],
-          "returnType": "string",
-          "exported": true,
-          "lineCount": 3
-        },
-        {
-          "name": "errorResponse",
-          "params": [
-            "message"
-          ],
-          "exported": true,
-          "lineCount": 5
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "* as path"
-          ]
-        },
-        {
-          "source": "node:crypto",
-          "specifiers": [
-            "randomUUID"
-          ]
-        }
-      ],
-      "exports": [
-        "getWorkspaceRoot",
-        "ensureDir",
-        "validateMode",
-        "safeReadFile",
-        "safeWriteFile",
-        "safeJsonParse",
-        "generateId",
-        "errorResponse"
-      ],
-      "totalLines": 74,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/src/workflow-tools.ts": {
-      "filePath": "mcp-server/src/workflow-tools.ts",
-      "contentHash": "b27f159567d83d0ae8543661058305ab72a8990851da28de49ad1a5fad52f4c0",
-      "functions": [
-        {
-          "name": "registerWorkflowTools",
-          "params": [
-            "server"
-          ],
-          "returnType": "void",
-          "exported": true,
-          "lineCount": 186
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "@modelcontextprotocol/sdk/server/mcp.js",
-          "specifiers": [
-            "McpServer"
-          ]
-        },
-        {
-          "source": "zod",
-          "specifiers": [
-            "z"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "* as fs"
-          ]
-        },
-        {
-          "source": "./state-tools.js",
-          "specifiers": [
-            "getStateDir",
-            "getStatePath"
-          ]
-        },
-        {
-          "source": "./utils.js",
-          "specifiers": [
-            "safeReadFile",
-            "safeWriteFile",
-            "safeJsonParse",
-            "errorResponse"
-          ]
-        }
-      ],
-      "exports": [
-        "registerWorkflowTools"
-      ],
-      "totalLines": 202,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/test/bridge-tests.mjs": {
-      "filePath": "mcp-server/test/bridge-tests.mjs",
-      "contentHash": "8ccd9c22d997fe0a6033a67903791b47e77e3228da44678ddaa1922b0dca8286",
-      "functions": [
-        {
-          "name": "freshDir",
-          "params": [
-            "prefix"
-          ],
-          "exported": false,
-          "lineCount": 3
-        },
-        {
-          "name": "writeJson",
-          "params": [
-            "p",
-            "data"
-          ],
-          "exported": false,
-          "lineCount": 4
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:test",
-          "specifiers": [
-            "describe",
-            "it",
-            "before",
-            "after"
-          ]
-        },
-        {
-          "source": "node:assert/strict",
-          "specifiers": [
-            "assert"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "path"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "fs"
-          ]
-        },
-        {
-          "source": "node:os",
-          "specifiers": [
-            "os"
-          ]
-        },
-        {
-          "source": "../dist/bridge/omc-importer.js",
-          "specifiers": [
-            "detectOmcSession",
-            "importOmcSession"
-          ]
-        },
-        {
-          "source": "../dist/bridge/claude-jsonl-importer.js",
-          "specifiers": [
-            "encodeProjectPath",
-            "detectClaudeSession",
-            "importClaudeSession"
-          ]
-        },
-        {
-          "source": "../dist/bridge/index.js",
-          "specifiers": [
-            "detectExternalSessions",
-            "importExternalSession",
-            "exportExternalSession",
-            "compareCheckpoints"
-          ]
-        },
-        {
-          "source": "../dist/bridge/omg-exporter.js",
-          "specifiers": [
-            "detectOmgSession",
-            "exportOmgSession",
-            "recordExportToken",
-            "readExportToken"
-          ]
-        },
-        {
-          "source": "../dist/bridge/conflict-utils.js",
-          "specifiers": [
-            "rotateBackup",
-            "shouldSkipForConflict"
-          ]
-        }
-      ],
-      "exports": [],
-      "totalLines": 618,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/test/run-tests.mjs": {
-      "filePath": "mcp-server/test/run-tests.mjs",
-      "contentHash": "72a023e2e799d628ea47046d5bb7716fea13aa40432c6a2a792c69d252a65b04",
-      "functions": [],
-      "classes": [],
-      "imports": [
-        {
-          "source": "node:test",
-          "specifiers": [
-            "describe",
-            "it",
-            "before",
-            "after"
-          ]
-        },
-        {
-          "source": "node:assert/strict",
-          "specifiers": [
-            "assert"
-          ]
-        },
-        {
-          "source": "node:path",
-          "specifiers": [
-            "path"
-          ]
-        },
-        {
-          "source": "node:fs",
-          "specifiers": [
-            "fs"
-          ]
-        },
-        {
-          "source": "node:os",
-          "specifiers": [
-            "os"
-          ]
-        },
-        {
-          "source": "../dist/utils.js",
-          "specifiers": [
-            "validateMode",
-            "safeJsonParse",
-            "generateId",
-            "safeReadFile",
-            "safeWriteFile"
-          ]
-        },
-        {
-          "source": "../dist/state-tools.js",
-          "specifiers": [
-            "getStatePath"
-          ]
-        },
-        {
-          "source": "../dist/ultragoal-tools.js",
-          "specifiers": [
-            "checkpointUltragoal",
-            "completeUltragoal",
-            "createUltragoalGoal",
-            "getUltragoalLedgerPath",
-            "getUltragoalStatus"
-          ]
-        }
-      ],
-      "exports": [],
-      "totalLines": 238,
-      "hasStructuralAnalysis": true
-    },
-    "mcp-server/tsconfig.json": {
-      "filePath": "mcp-server/tsconfig.json",
-      "contentHash": "fee86899bb77179611ed16b73572159d567e76a4717522e567900dbb17ac0804",
-      "functions": [],
-      "classes": [],
-      "imports": [],
-      "exports": [],
-      "totalLines": 20,
+      "totalLines": 6,
       "hasStructuralAnalysis": true
     },
     "pyproject.toml": {
@@ -4212,6 +531,16 @@
       "imports": [],
       "exports": [],
       "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "a700a005ae7a286716a683fbf9bc29884077c6950fa40f4198925e1a8b04c91b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 96,
       "hasStructuralAnalysis": true
     },
     "scripts/benchmark_jax_rl.py": {
@@ -5036,6 +1365,954 @@
       ],
       "exports": [],
       "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/__init__.py": {
+      "filePath": "src/artifacts/__init__.py",
+      "contentHash": "bdc2de3e9d5ca60624a5da6f9ac19399bbe717475f8a3980bf49346034a2c29d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": ".checkpoint_compat",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": ".checkpoint_retention",
+          "specifiers": [
+            "prune_checkpoints"
+          ]
+        },
+        {
+          "source": ".pipeline",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": ".replay",
+          "specifiers": [
+            "maybe_write_jax_checkpoint_replay"
+          ]
+        },
+        {
+          "source": ".run_paths",
+          "specifiers": [
+            "*"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/checkpoint_compat.py": {
+      "filePath": "src/artifacts/checkpoint_compat.py",
+      "contentHash": "678a48703dd552da529381eec714759dc338b4110d68f1fda5ef246808ef59ea",
+      "functions": [
+        {
+          "name": "load_checkpoint_payload",
+          "params": [
+            "checkpoint_path"
+          ],
+          "returnType": "object",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "_config_has_field",
+          "params": [
+            "config",
+            "field_name"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "validate_checkpoint_config_compatibility",
+          "params": [
+            "checkpoint",
+            "checkpoint_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "feature_metadata",
+          "params": [
+            "env_cfg"
+          ],
+          "returnType": "dict[str, int]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "checkpoint_state_dict",
+          "params": [
+            "checkpoint"
+          ],
+          "returnType": "Mapping[str, object] | None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "checkpoint_feature_metadata",
+          "params": [
+            "checkpoint"
+          ],
+          "returnType": "dict[str, int] | None",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "infer_feature_metadata_from_state_dict",
+          "params": [
+            "state_dict"
+          ],
+          "returnType": "dict[str, int] | None",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "validate_checkpoint_feature_compatibility",
+          "params": [
+            "checkpoint",
+            "env_cfg",
+            "checkpoint_path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 45
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Mapping"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TaskConfig",
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": "src.features.registry",
+          "specifiers": [
+            "candidate_feature_dim",
+            "feature_history_steps",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        }
+      ],
+      "exports": [
+        "load_checkpoint_payload",
+        "_config_has_field",
+        "validate_checkpoint_config_compatibility",
+        "feature_metadata",
+        "checkpoint_state_dict",
+        "checkpoint_feature_metadata",
+        "infer_feature_metadata_from_state_dict",
+        "validate_checkpoint_feature_compatibility"
+      ],
+      "totalLines": 259,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/checkpoint_retention.py": {
+      "filePath": "src/artifacts/checkpoint_retention.py",
+      "contentHash": "2fb8bf1d7d7f8dcc16eda97828a3a25df11e8ca4512041c769a0c9b17cadbfce",
+      "functions": [
+        {
+          "name": "_parse_update",
+          "params": [
+            "path"
+          ],
+          "returnType": "int | None",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "_collect_metric_by_update",
+          "params": [
+            "log_path",
+            "metric_name"
+          ],
+          "returnType": "dict[int, float]",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "prune_checkpoints",
+          "params": [
+            "run_dir",
+            "log_path",
+            "keep_last_n",
+            "keep_every_n_updates",
+            "keep_best_k_by_metric",
+            "best_metric_name",
+            "best_metric_mode",
+            "min_update_for_pruning",
+            "dry_run_pruning",
+            "protected_paths"
+          ],
+          "returnType": "RetentionDecision",
+          "exported": true,
+          "lineCount": 75
+        }
+      ],
+      "classes": [
+        {
+          "name": "RetentionDecision",
+          "methods": [],
+          "properties": [
+            "deleted",
+            "kept",
+            "reclaimed_bytes",
+            "dry_run"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Literal"
+          ]
+        }
+      ],
+      "exports": [
+        "RetentionDecision",
+        "_parse_update",
+        "_collect_metric_by_update",
+        "prune_checkpoints"
+      ],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/pipeline.py": {
+      "filePath": "src/artifacts/pipeline.py",
+      "contentHash": "490299e7a44cd6d92593d0d2183bf0b590f0fcfd3bf3d20ff12bc01cee7b8804",
+      "functions": [
+        {
+          "name": "_skipped_result",
+          "params": [
+            "job",
+            "reason"
+          ],
+          "returnType": "CheckpointResult",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_result_event",
+          "params": [
+            "result"
+          ],
+          "returnType": "dict[str, object]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "commit_checkpoint_payload",
+          "params": [
+            "run_dir",
+            "update",
+            "payload"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "_atomic_pickle_dump",
+          "params": [
+            "payload",
+            "path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_fsync_dir",
+          "params": [
+            "path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "append_jsonl_atomic",
+          "params": [
+            "path",
+            "record"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "write_optional_job",
+          "params": [
+            "queue_dir",
+            "kind",
+            "update",
+            "checkpoint_path",
+            "payload",
+            "result_root"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "load_optional_jobs",
+          "params": [
+            "queue_dir",
+            "statuses"
+          ],
+          "returnType": "list[dict[str, object]]",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "load_pending_optional_jobs",
+          "params": [
+            "queue_dir"
+          ],
+          "returnType": "list[dict[str, object]]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "load_active_optional_jobs",
+          "params": [
+            "queue_dir"
+          ],
+          "returnType": "list[dict[str, object]]",
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "protected_paths_from_jobs",
+          "params": [
+            "jobs"
+          ],
+          "returnType": "set[Path]",
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "CheckpointJob",
+          "methods": [
+            "numbered_path",
+            "latest_path"
+          ],
+          "properties": [
+            "update",
+            "run_dir",
+            "build_payload",
+            "final",
+            "created_at_unix",
+            "job_id"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "CheckpointResult",
+          "methods": [
+            "committed"
+          ],
+          "properties": [
+            "job_id",
+            "update",
+            "status",
+            "numbered_path",
+            "latest_path",
+            "final",
+            "reason",
+            "error",
+            "started_at_unix",
+            "finished_at_unix"
+          ],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "ArtifactPipelineStats",
+          "methods": [
+            "latest_lag_updates"
+          ],
+          "properties": [
+            "latest_requested_update",
+            "latest_committed_update",
+            "skipped_checkpoints",
+            "failed_checkpoints",
+            "queue_depth",
+            "unhealthy",
+            "last_error"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "ArtifactPipelineError",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2
+        },
+        {
+          "name": "AsyncArtifactPipeline",
+          "methods": [
+            "__init__",
+            "start",
+            "stats",
+            "submit_checkpoint",
+            "drain_results",
+            "flush",
+            "close",
+            "protected_paths",
+            "_worker_loop",
+            "_skip_all_pending_locked",
+            "_skip_one_intermediate_locked",
+            "_record_result_locked",
+            "_append_ledger"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 206
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "pickle",
+          "specifiers": [
+            "pickle"
+          ]
+        },
+        {
+          "source": "queue",
+          "specifiers": [
+            "queue"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Callable",
+            "Iterable",
+            "Mapping"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "field"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Literal"
+          ]
+        }
+      ],
+      "exports": [
+        "CheckpointJob",
+        "CheckpointResult",
+        "ArtifactPipelineStats",
+        "ArtifactPipelineError",
+        "AsyncArtifactPipeline",
+        "_skipped_result",
+        "_result_event",
+        "commit_checkpoint_payload",
+        "_atomic_pickle_dump",
+        "_fsync_dir",
+        "append_jsonl_atomic",
+        "write_optional_job",
+        "load_optional_jobs",
+        "load_pending_optional_jobs",
+        "load_active_optional_jobs",
+        "protected_paths_from_jobs"
+      ],
+      "totalLines": 422,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/replay.py": {
+      "filePath": "src/artifacts/replay.py",
+      "contentHash": "0deadbcf9bddc364740a7c808712612b28d94cee706f61dacb9d244ff8f4b1eb",
+      "functions": [
+        {
+          "name": "_seed_for_update",
+          "params": [
+            "cfg",
+            "update"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_reward_to_result",
+          "params": [
+            "reward"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_build_jax_policy_actions",
+          "params": [
+            "cfg",
+            "checkpoint_path"
+          ],
+          "exported": true,
+          "lineCount": 67
+        },
+        {
+          "name": "maybe_write_jax_checkpoint_replay",
+          "params": [
+            "cfg",
+            "update",
+            "checkpoint_path",
+            "log_path",
+            "output_dir"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 119
+        },
+        {
+          "name": "_pick_earlier_checkpoint",
+          "params": [
+            "run_dir",
+            "update"
+          ],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": ".checkpoint_compat",
+          "specifiers": [
+            "load_checkpoint_payload",
+            "validate_checkpoint_config_compatibility"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "encode_turn",
+            "ship_count_for_bucket"
+          ]
+        },
+        {
+          "source": "src.jax.policy",
+          "specifiers": [
+            "build_jax_policy"
+          ]
+        },
+        {
+          "source": "src.opponents",
+          "specifiers": [
+            "build_opponent"
+          ]
+        },
+        {
+          "source": "src.game.trajectory_shield",
+          "specifiers": [
+            "is_trajectory_safe_for_launch",
+            "select_runtime_shielded_policy_actions"
+          ]
+        }
+      ],
+      "exports": [
+        "_seed_for_update",
+        "_reward_to_result",
+        "_build_jax_policy_actions",
+        "maybe_write_jax_checkpoint_replay",
+        "_pick_earlier_checkpoint"
+      ],
+      "totalLines": 245,
+      "hasStructuralAnalysis": true
+    },
+    "src/artifacts/run_paths.py": {
+      "filePath": "src/artifacts/run_paths.py",
+      "contentHash": "d03f3c193e836eef01b3b5dd80ceaeaa160ab9f7aa84d7729f17bf8fedcbbf25",
+      "functions": [
+        {
+          "name": "_hydra_runtime_output_dir",
+          "params": [],
+          "returnType": "Path | None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "_hydra_job_num",
+          "params": [],
+          "returnType": "int | None",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "compose_run_name",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 17
+        },
+        {
+          "name": "_format_run_name_component",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_opponent_run_name_component",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "_run_name_env_count",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_rollout_player_counts",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "list[int]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "_run_name_component",
+          "params": [
+            "value"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "resolve_run_paths",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "tuple[TrainConfig, RunContext]",
+          "exported": true,
+          "lineCount": 50
+        },
+        {
+          "name": "write_run_manifests",
+          "params": [
+            "cfg",
+            "context",
+            "metadata"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 54
+        },
+        {
+          "name": "atomic_write_json",
+          "params": [
+            "path",
+            "payload"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "append_jsonl_atomic",
+          "params": [
+            "path",
+            "record"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_effective_run_id",
+          "params": [
+            "cfg"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "_cache_path",
+          "params": [
+            "output_root",
+            "cache_dir",
+            "value"
+          ],
+          "returnType": "Path",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "_git_identity",
+          "params": [],
+          "returnType": "dict[str, object]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "_fsync_dir",
+          "params": [
+            "path"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [
+        {
+          "name": "RunContext",
+          "methods": [],
+          "properties": [
+            "run_id",
+            "campaign_slug",
+            "run_dir",
+            "manifest_path",
+            "campaign_dir",
+            "campaign_manifest_path",
+            "logs_dir",
+            "log_path",
+            "checkpoints_dir",
+            "queue_dir",
+            "evaluations_dir",
+            "wandb_dir",
+            "wandb_artifact_dir",
+            "wandb_data_dir",
+            "indexes_dir",
+            "retention_class",
+            "model_compatibility_family"
+          ],
+          "exported": true,
+          "lineCount": 18
+        }
+      ],
+      "imports": [
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "subprocess",
+          "specifiers": [
+            "subprocess"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "uuid"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "replace"
+          ]
+        },
+        {
+          "source": "datetime",
+          "specifiers": [
+            "datetime",
+            "timezone"
+          ]
+        },
+        {
+          "source": "pathlib",
+          "specifiers": [
+            "Path"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Mapping"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "TrainConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "RunContext",
+        "_hydra_runtime_output_dir",
+        "_hydra_job_num",
+        "compose_run_name",
+        "_format_run_name_component",
+        "_opponent_run_name_component",
+        "_run_name_env_count",
+        "_rollout_player_counts",
+        "_run_name_component",
+        "resolve_run_paths",
+        "write_run_manifests",
+        "atomic_write_json",
+        "append_jsonl_atomic",
+        "_effective_run_id",
+        "_cache_path",
+        "_git_identity",
+        "_fsync_dir"
+      ],
+      "totalLines": 305,
       "hasStructuralAnalysis": true
     },
     "src/config/__init__.py": {
@@ -11636,129 +8913,6 @@
       "totalLines": 119,
       "hasStructuralAnalysis": true
     },
-    "tests/test_jax_env.py": {
-      "filePath": "tests/test_jax_env.py",
-      "contentHash": "f152a112da0b0f759742b7a8aa553da06b569c1bda9705b8d39a0e0e4fd1b4ab",
-      "functions": [
-        {
-          "name": "test_jax_reset_is_deterministic_for_identical_key",
-          "params": [],
-          "exported": true,
-          "lineCount": 16
-        },
-        {
-          "name": "test_jax_batched_reset_and_step_shapes",
-          "params": [],
-          "exported": true,
-          "lineCount": 24
-        },
-        {
-          "name": "test_noop_candidate_slot_is_valid_for_owned_planets_only",
-          "params": [],
-          "exported": true,
-          "lineCount": 8
-        },
-        {
-          "name": "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
-          "params": [],
-          "exported": true,
-          "lineCount": 53
-        },
-        {
-          "name": "test_launch_and_production_match_core_orbit_wars_mechanics",
-          "params": [],
-          "exported": true,
-          "lineCount": 20
-        },
-        {
-          "name": "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
-          "params": [],
-          "exported": true,
-          "lineCount": 88
-        },
-        {
-          "name": "test_jax_history_shapes_use_configured_window",
-          "params": [],
-          "exported": true,
-          "lineCount": 11
-        }
-      ],
-      "classes": [],
-      "imports": [
-        {
-          "source": "jax",
-          "specifiers": [
-            "jax"
-          ]
-        },
-        {
-          "source": "jax.numpy",
-          "specifiers": [
-            "jnp"
-          ]
-        },
-        {
-          "source": "numpy",
-          "specifiers": [
-            "np"
-          ]
-        },
-        {
-          "source": "src.config",
-          "specifiers": [
-            "RewardConfig",
-            "TaskConfig"
-          ]
-        },
-        {
-          "source": "src.game.constants",
-          "specifiers": [
-            "MAX_PLANETS"
-          ]
-        },
-        {
-          "source": "src.features",
-          "specifiers": [
-            "NO_OP_CANDIDATE_INDEX",
-            "candidate_feature_dim",
-            "global_feature_dim",
-            "self_feature_dim"
-          ]
-        },
-        {
-          "source": "src.jax.env",
-          "specifiers": [
-            "JaxAction",
-            "JaxFleetState",
-            "JaxGameState",
-            "JaxPlanetState",
-            "batched_reset",
-            "batched_step",
-            "empty_action",
-            "max_fleets",
-            "reset",
-            "step"
-          ]
-        },
-        {
-          "source": "src.jax.features",
-          "specifiers": [
-            "encode_turn"
-          ]
-        }
-      ],
-      "exports": [
-        "test_jax_reset_is_deterministic_for_identical_key",
-        "test_jax_batched_reset_and_step_shapes",
-        "test_noop_candidate_slot_is_valid_for_owned_planets_only",
-        "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
-        "test_launch_and_production_match_core_orbit_wars_mechanics",
-        "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
-        "test_jax_history_shapes_use_configured_window"
-      ],
-      "totalLines": 260,
-      "hasStructuralAnalysis": true
-    },
     "tests/test_jax_env_parity.py": {
       "filePath": "tests/test_jax_env_parity.py",
       "contentHash": "0cc6adbb104ee568e0e748d2fe0cb89031962141fe8e3ce98b59194aca4c5e60",
@@ -11996,6 +9150,129 @@
         "test_four_player_step_allows_simultaneous_four_way_combat_from_actions"
       ],
       "totalLines": 477,
+      "hasStructuralAnalysis": true
+    },
+    "tests/test_jax_env.py": {
+      "filePath": "tests/test_jax_env.py",
+      "contentHash": "f152a112da0b0f759742b7a8aa553da06b569c1bda9705b8d39a0e0e4fd1b4ab",
+      "functions": [
+        {
+          "name": "test_jax_reset_is_deterministic_for_identical_key",
+          "params": [],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "test_jax_batched_reset_and_step_shapes",
+          "params": [],
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "test_noop_candidate_slot_is_valid_for_owned_planets_only",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
+          "params": [],
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "test_launch_and_production_match_core_orbit_wars_mechanics",
+          "params": [],
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
+          "params": [],
+          "exported": true,
+          "lineCount": 88
+        },
+        {
+          "name": "test_jax_history_shapes_use_configured_window",
+          "params": [],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "jax",
+          "specifiers": [
+            "jax"
+          ]
+        },
+        {
+          "source": "jax.numpy",
+          "specifiers": [
+            "jnp"
+          ]
+        },
+        {
+          "source": "numpy",
+          "specifiers": [
+            "np"
+          ]
+        },
+        {
+          "source": "src.config",
+          "specifiers": [
+            "RewardConfig",
+            "TaskConfig"
+          ]
+        },
+        {
+          "source": "src.game.constants",
+          "specifiers": [
+            "MAX_PLANETS"
+          ]
+        },
+        {
+          "source": "src.features",
+          "specifiers": [
+            "NO_OP_CANDIDATE_INDEX",
+            "candidate_feature_dim",
+            "global_feature_dim",
+            "self_feature_dim"
+          ]
+        },
+        {
+          "source": "src.jax.env",
+          "specifiers": [
+            "JaxAction",
+            "JaxFleetState",
+            "JaxGameState",
+            "JaxPlanetState",
+            "batched_reset",
+            "batched_step",
+            "empty_action",
+            "max_fleets",
+            "reset",
+            "step"
+          ]
+        },
+        {
+          "source": "src.jax.features",
+          "specifiers": [
+            "encode_turn"
+          ]
+        }
+      ],
+      "exports": [
+        "test_jax_reset_is_deterministic_for_identical_key",
+        "test_jax_batched_reset_and_step_shapes",
+        "test_noop_candidate_slot_is_valid_for_owned_planets_only",
+        "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
+        "test_launch_and_production_match_core_orbit_wars_mechanics",
+        "test_jax_owner_relative_feature_shapes_and_values_for_four_players",
+        "test_jax_history_shapes_use_configured_window"
+      ],
+      "totalLines": 260,
       "hasStructuralAnalysis": true
     },
     "tests/test_jax_policy.py": {
