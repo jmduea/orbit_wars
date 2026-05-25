@@ -26,7 +26,7 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-jax-ppo-split.md",
       "workflow": "deep-interview",
-      "status": "executing",
+      "status": "complete",
       "title": "JAX PPO module split",
       "spec_id": null,
       "plan_id": "jax-ppo-split-plan",
@@ -34,9 +34,9 @@
         "telemetry-metrics-cleanup"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": null
+      "completed_at": "2026-05-25",
+      "evidence": "commit 60e47ce split ppo.py; 156 passed full pytest 2026-05-25; 33 passed targeted jax_ppo+curriculum; benchmark_jax_rl.py smoke OK (4537 env_steps/s)",
+      "notes": "Implementation complete; src/jax/ppo.py deleted; modules at rollout/, ppo_update.py, train_state.py, opponents/jax_actions/"
     },
     {
       "id": "rollout-optimization",
@@ -492,15 +492,14 @@
       "kind": "plan",
       "path": ".omg/plans/ralplan-jax-ppo-split.md",
       "workflow": "ralplan",
-      "status": "planned",
+      "status": "complete",
       "title": "JAX PPO module split plan",
       "spec_id": "jax-ppo-split",
       "plan_id": null,
       "related_ids": [],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": null
+      "completed_at": "2026-05-25",
+      "evidence": "ralplan-jax-ppo-split.md phases 0-8; all acceptance criteria met"
     },
     {
       "id": "jax-train-split",
@@ -528,11 +527,14 @@
       "workflow": "deep-interview",
       "status": "executing",
       "title": "Test suite speed and dev-loop efficiency",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "jax-ppo-split"
       ],
       "supersedes_id": null,
       "completed_at": null,
+      "evidence": null,
       "notes": "WSL2 incident: removed pytest-xdist from test-fast; CPU-only test-fast + serial test-jax; conftest blocks xdist"
     },
     {
