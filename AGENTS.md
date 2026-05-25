@@ -19,13 +19,14 @@
 
 ## Python Subsystems
 
-- `src/conf_schema.py` defines structured dataclass config defaults. When adding or renaming config fields, update this first.
-- `src/config.py` composes and validates Hydra configs against the canonical responsibility-group schema; do not add compatibility aliases for removed runtime fields.
-- `src/train.py` is a thin Hydra entrypoint that converts OmegaConf to `TrainConfig` and delegates to `src/jax_train.py`.
-- `src/jax_train.py`, `src/jax_env.py`, `src/jax_features.py`, `src/jax_policy.py`, and `src/jax_ppo.py` are the JAX training path. Be careful with shape-defining config such as player count, candidate count, feature history, ship buckets, and model dimensions because these affect JIT compilation and checkpoint compatibility.
-- `src/env.py` and `src/features.py` keep the Python environment/feature path. JAX and Python behavior are compared by parity tests, so mirror semantic changes across both paths when applicable.
-- `src/feature_registry.py` owns ordered feature schemas and dimension checks against constants. Feature additions usually require updates in registry, encoders, JAX encoders, tests, and checkpoint compatibility expectations.
-- `src/checkpoint_compat.py` validates checkpoint feature metadata and rejects checkpoints that embed the old flat runtime config shape; preserve this when changing feature dimensions or config ownership.
+- `src/config/schema.py` defines structured dataclass config defaults. When adding or renaming config fields, update this first, then `conf/` overrides.
+- `src/config/runtime.py` composes and validates Hydra configs into `TrainConfig`; do not add compatibility aliases for removed runtime fields. Dataclass defaults can differ from `conf/` YAML (e.g. `TaskConfig.candidate_count`); treat resolved Hydra config as runtime truth.
+- `src/train.py` is a thin Hydra entrypoint that delegates to `src/jax/train.py`.
+- JAX training lives under `src/jax/`: `train.py` (loop shell), `env.py`, `features.py`, `policy.py`, `ppo_update.py`, and `rollout/` (collect + metrics). Opponent action builders are in `src/opponents/jax_actions/`. Shape-defining config (player count, candidate count, feature history, ship buckets, model dimensions) affects JIT compilation and checkpoint compatibility.
+- Feature encoding is JAX-only (planet-edge schema): `src/jax/features.py` implements `encode_turn`; `src/features/registry.py` owns feature schemas and dims; `src/features/extractor.py` is the shared entry point for Kaggle obs and JAX env (coerces via `jax_game_from_observation`). Do not reintroduce v1 self/candidate/global encoders or `_v2` suffix modules.
+- Python game logic remains in `src/game/`; optional Python opponent inference uses `src/opponents/runtime.py`.
+- `src/artifacts/checkpoint_compat.py` validates checkpoint feature metadata; preserve compatibility checks when changing feature dimensions or config ownership.
+- Microbatched rollouts (`training.rollout_microbatch_envs < num_envs`) merge metrics in `jax.lax.scan`: use `_merge_metric_dicts` inside the scan (stable key set) and `_finalize_cross_chunk_rate_metrics` after — never add derived rate keys inside the scan body.
 
 ## Hydra And Experiment Rules
 
@@ -55,10 +56,10 @@ Do **not** run `make test` or `make test-jax` routinely while iterating. JAX env
 
 | If you changed… | Run first | Also run when… |
 |-----------------|-----------|----------------|
-| `conf/`, `src/config/schema.py`, telemetry/metrics | `make test-domain-config` | curriculum config wiring → `make test-domain-curriculum` |
+| `conf/`, `src/config/schema.py`, `src/config/runtime.py`, telemetry/metrics | `make test-domain-config` | curriculum config wiring → `make test-domain-curriculum` |
 | `src/features/`, `src/jax/features.py`, registry, extractor | `make test-domain-features` | user asks for JAX compile coverage |
 | `src/game/`, `src/jax/env.py` | `make test-domain-features` | user asks; env step smokes are slow-tier |
-| `src/jax/policy.py`, `src/jax/ppo_update.py`, `src/jax/rollout/`, opponents JAX actions | `make test-fast` | user asks for rollout/training smokes before merge |
+| `src/jax/policy.py`, `src/jax/ppo_update.py`, `src/jax/rollout/`, `src/opponents/jax_actions/` | `make test-domain-policy` or `make test-fast` | user asks for rollout/training smokes before merge |
 | `src/training/curriculum.py`, curriculum config | `make test-domain-curriculum` | training-loop integration is slow-tier only |
 | `src/artifacts/`, replay, checkpoint paths | `make test-domain-artifacts` | also `make test-domain-config` when metadata changes |
 | `src/jax/train.py` | `make test-fast` | full suite before merge, user approval only |
@@ -108,7 +109,7 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - **Daily dev loop (CPU-safe):** `make test-fast` — `-m "not slow and not jax"`; serial only.
 - **JAX lightweight (user-requested only):** `make test-jax` — metric/action-builder checks; no rollout/training smokes.
 - **Before sharing/merging:** `make test` — full suite including JAX compile/training smokes; user approval on WSL2.
-- **Domain targets:** `make test-domain-config`, `test-domain-features`, `test-domain-artifacts`, `test-domain-curriculum` (CPU-only where noted).
+- **Domain targets:** `make test-domain-config`, `test-domain-features`, `test-domain-policy`, `test-domain-artifacts`, `test-domain-curriculum` (CPU-only where noted).
 - **xdist blocked:** `tests/conftest.py` raises if parallel workers are requested.
 
 ## MCP Server Notes
@@ -131,3 +132,21 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - `.omg/`, `.omc/`, and `.understand-anything/` may contain workflow or analysis state. Do not delete or rewrite them unless the task explicitly targets those systems.
 - Spec/plan lifecycle truth lives in `.omg/workflow-manifest.json`. Before treating `.omg/specs/` or `.omg/plans/` markdown as backlog, call `omg_workflow_manifest_list(active_only=true)` or run `uv run python scripts/omg_workflow_manifest.py active`.
 - Keep future guidance concise and repository-specific. Prefer adding facts here only when they affect how agents safely edit, test, or run this repo.
+
+## Learned User Preferences
+
+- Prefer unified v2-only feature encoding and module layout; remove legacy v1 paths rather than maintaining parallel encoders.
+- Favor full rework over incremental shims when simplifying encoding, rollout, or training modules.
+- Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested.
+- Never use `pytest-xdist` or parallel pytest workers on WSL2/CUDA hosts.
+- Before treating `.omg/specs/` or `.omg/plans/` markdown as active backlog, consult `.omg/workflow-manifest.json` (or `omg_workflow_manifest_list(active_only=true)`).
+- Create git commits only when explicitly requested.
+
+## Learned Workspace Facts
+
+- Canonical feature path: Kaggle/JAX obs → `FeatureExtractor` → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
+- JAX concerns are split: rollout collection in `src/jax/rollout/collect.py`, PPO update in `src/jax/ppo_update.py`, opponent builders in `src/opponents/jax_actions/`.
+- `model.normalize_observations` appears in model YAMLs but is not wired into JAX training; treat as dead config until implemented or removed.
+- Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run python -m src.train print_resolved_config=true`.
+- Understand-Anything scans honor `.understandignore` for excluding non-project adjacent paths.
+- OMG Cursor config is generated from `.github/` via `uv run python scripts/sync_omg_cursor.py`; re-run after editing agents, skills, or `copilot-instructions.md`.
