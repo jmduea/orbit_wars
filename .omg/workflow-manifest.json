@@ -573,33 +573,35 @@
       "kind": "spec",
       "path": ".omg/specs/deep-dive-feature-encoding.md",
       "workflow": "deep-dive",
-      "status": "executing",
+      "status": "complete",
       "title": "Feature encoding v2 greenfield",
       "spec_id": null,
-      "plan_id": "feature-encoding-v2-plan",
+      "plan_id": null,
       "related_ids": [
         "feature-encoding-trace",
         "jax-ppo-split"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": "Phase 0 complete 2026-05-25: docs/feature-encoding-v2-phase0-results.md; spike script; P=13 E=12 G=46 locked; jax-ppo-split gate cleared",
-      "notes": "Phase 1 encoder complete; Phase 2 policy complete; Phase 3 rollout in progress"
+      "completed_at": "2026-05-25",
+      "evidence": "v2 greenfield Phases 0-5 code complete; hard cutover default v2; ablation non-blocking per deep-interview override.",
+      "notes": null
     },
     {
       "id": "feature-encoding-v2-plan",
       "kind": "plan",
       "path": ".omg/plans/ralplan-feature-encoding-v2.md",
       "workflow": "ralplan",
-      "status": "executing",
+      "status": "complete",
       "title": "Feature encoding v2 implementation plan",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "feature-encoding-trace"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": "Phase 2 complete: policy_v2 (PlanetEdgeBackboneEncoder, gnn_pointer_v2), train_state v2 init, test_jax_policy_v2 + test_v2_ten_update_training_smoke. Phase 3 partial: encode_dispatch, builders_v2, trajectory_shield v2, collect_v2, ppo_update_v2; 2p random rollout smoke; make test-domain-policy 22 passed, test-jax green",
-      "notes": "Phase 3 remaining: 4p/self-play rollout, 500-update smoke, shield parity gates"
+      "completed_at": "2026-05-25",
+      "evidence": "Phase 3: test_jax_curriculum_v2 (2p/4p self_play_staged), shield parity test. Phase 4: docs/feature-encoding-v2-ablation-runbook.md. Phase 5: encoding_version=v2 default, checkpoint_compat v2, submission_runtime.py, test_checkpoint_compat.py. Verified: make test-fast 104 passed, test-domain-features 22, test-domain-policy 33, test_jax_curriculum_v2 2.",
+      "notes": null
     },
     {
       "id": "feature-encoding-v2-phase1",
@@ -618,6 +620,22 @@
       "completed_at": "2026-05-25",
       "evidence": "registry_v2, features_v2, TaskConfig encoding_version/ship_feature_scale; make test-domain-features 22 passed; jax vmap smoke 1 passed",
       "notes": null
+    },
+    {
+      "id": "feature-encoding-v2-phase3-5",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-feature-encoding-v2-phase3-5.md",
+      "workflow": "deep-interview",
+      "status": "complete",
+      "title": "Feature encoding v2 Phases 3–5",
+      "related_ids": [
+        "feature-encoding",
+        "feature-encoding-v2-plan",
+        "feature-encoding-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Autopilot execution 2026-05-25; see .omg/autopilot/spec.md"
     }
   ]
 }

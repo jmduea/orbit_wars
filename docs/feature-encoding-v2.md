@@ -1,6 +1,6 @@
 # Feature Encoding v2
 
-**Status:** Phase 0 contract draft  
+**Status:** Phase 5 cutover complete — production default `encoding_version=v2`; v1 path retained for rollback/tests  
 **Plan:** `.omg/plans/ralplan-feature-encoding-v2.md`  
 **ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame) below  
 **Symmetry exploration:** `docs/feature-encoding-v2-symmetry.md`

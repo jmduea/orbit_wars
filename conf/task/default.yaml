@@ -4,7 +4,7 @@ max_fleets: 256
 player_count: 2
 max_ships: 1000.0
 ship_feature_scale: 1000.0
-encoding_version: v1
+encoding_version: v2
 feature_history_steps: 1
 trajectory_shield_enabled: false
 trajectory_shield_hit_mode: selected_target

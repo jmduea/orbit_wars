@@ -28,7 +28,7 @@ def _cfg(**kwargs) -> TaskConfig:
 
 def test_compose_hydra_includes_v2_task_fields() -> None:
     cfg = compose_hydra_train_config()
-    assert cfg.task.encoding_version == "v1"
+    assert cfg.task.encoding_version == "v2"
     assert cfg.task.ship_feature_scale == 1000.0
 
 

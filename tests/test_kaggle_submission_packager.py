@@ -162,3 +162,36 @@ def test_validate_tarball_layout_rejects_symlink(tmp_path: Path) -> None:
 def test_embedded_runtime_templates_compile() -> None:
     compile(MAIN_TEMPLATE, "generated_main.py", "exec")
     compile(IN_CONTAINER_VALIDATOR, "validate_submission.py", "exec")
+    assert "encoding_version_v2" in MAIN_TEMPLATE or "_encoding_version_v2" in MAIN_TEMPLATE
+    assert "_agent_v2" in MAIN_TEMPLATE
+    assert "encode_turn_dispatch" in MAIN_TEMPLATE
+
+
+def test_export_runtime_artifact_accepts_gnn_pointer_v2(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "jax_ckpt_v2.pkl"
+    config = _fake_config()
+    config.model.architecture = "gnn_pointer_v2"
+    config.task.encoding_version = "v2"
+    payload = {
+        "update": 3,
+        "params": {"params": {"planet_enc_0": {"kernel": np.zeros((13, 16), dtype=np.float32)}}},
+        "config": config,
+        "feature_metadata": {
+            "schema_version": 2,
+            "encoding_version": "v2",
+            "planet_feature_dim": 13,
+            "edge_feature_dim": 12,
+            "global_feature_dim": 46,
+            "feature_history_steps": 1,
+            "ship_feature_scale": 1000.0,
+            "edge_layout": "top_k_per_source",
+            "edge_k": 3,
+        },
+    }
+    with checkpoint.open("wb") as file:
+        pickle.dump(payload, file)
+
+    artifact = export_runtime_artifact(checkpoint)
+
+    assert artifact["config"]["model"]["architecture"] == "gnn_pointer_v2"
+    assert artifact["config"]["task"]["encoding_version"] == "v2"

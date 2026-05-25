@@ -4,9 +4,11 @@
 **Phase 1 interview:** `.omg/specs/deep-interview-feature-encoding-v2-phase1.md`  
 **Trace:** `.omg/specs/deep-dive-trace-feature-encoding.md`  
 **Design:** `docs/feature-encoding-v2-design.md`, `docs/feature-encoding-v2-pointer.md`  
-**North star:** Orthogonal JAX-only feature stack with joint pointer actions; v1 remains until v2 wins ablation.
+**North star:** Orthogonal JAX-only feature stack with joint pointer actions. **Phases 4–5 override (2026-05-25 interview):** cutover proceeds regardless of ablation metrics; hard v2 default after Phase 5.
 
-**Plan iteration:** 3 (Phase 1 refresh after deep-interview, 2026-05-25)
+**Interview spec (Phases 3–5):** `.omg/specs/deep-interview-feature-encoding-v2-phase3-5.md`
+
+**Plan iteration:** 4 (Phase 3–5 refresh after deep-interview, 2026-05-25)
 
 ## RALPLAN-DR Summary
 
@@ -168,41 +170,49 @@ uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "jax and n
 - `rollout/types.py`, `collect_v2.py`, `ppo_update_v2.py` — v2 transitions + flatten
 - `env.py` — encode dispatch + history type (`encode_dispatch.py`)
 
-**Exit:**
+**Exit (interview lock — full staged curriculum, single-format first):**
 - [x] 2p random-opponent rollout + PPO smoke (`test_v2_rollout_and_ppo_update_smoke`)
-- [ ] End-to-end rollout smoke 2p + 4p (500 updates)
-- [ ] Shield diagnostics within ±5pp of v1 baseline
+- [x] **2p-only:** full `curriculum=self_play_staged` through all 3 stages (`test_v2_training_loop_self_play_staged_2p_only`)
+- [x] **4p-only:** same staged curriculum on 4p-only format (`test_v2_training_loop_self_play_staged_4p_only`)
+- [x] Shield diagnostics captured vs v1 baseline (informational; `test_v2_shield_legal_non_noop_rate_within_v1_parity_band`)
 - [x] `make test-domain-jax-env` green
 
 **Gate:** `jax-ppo-split` complete.
 
 ---
 
-## Phase 4 — Ablation & Documentation
+## Phase 4 — Ablation & Documentation (NON-BLOCKING)
+
+**Interview override:** Ablation metrics **do not gate** Phase 5. Evidence informs docs and future tuning only.
 
 **Scope:**
-- Hydra ablation runbook (`feature_encoder=v1|v2`, matched hyperparams)
+- Hydra ablation runbook (`encoding_version=v1|v2`, matched hyperparams)
 - W&B metric extraction template
 - Complete `docs/feature-encoding-v2.md` (field tables, v1→v2 mapping, removed fields)
 - Optional: `scripts/ablate_feature_encoder.py`
 
 **Exit:**
-- [ ] Evidence table in plan appendix (≥3 seeds, win rate + throughput + shield)
-- [ ] Recommendation: cutover / iterate / abort
+- [ ] Evidence table in plan appendix (≥3 seeds recommended; win rate + throughput + shield) — **deferred**; runbook in `docs/feature-encoding-v2-ablation-runbook.md`
+- [x] Recommendation: **cutover per interview override** (Phase 5 proceeds regardless of ablation metrics)
 
 ---
 
-## Phase 5 — Submission + Cutover (only if Phase 4 passes gates)
+## Phase 5 — Hard Cutover (after Phase 3; Phase 4 non-blocking)
+
+**Interview lock:** Single cutover phase — no soft default-flip or indefinite v1 support.
 
 **Scope:**
+- Flip Hydra default: `conf/task/default.yaml` → `encoding_version: v2`
 - Migrate `validate_kaggle_docker_submission.py` + packager to JAX v2
-- Deprecate v1 behind config default flip
-- Extend `checkpoint_compat.py` rejection for v1 loads into v2 runs
-- Remove Python `encode_turn` from submission path (keep test fixtures until v1 deleted)
+- `checkpoint_compat.py`: v2 metadata on save; **reject v1 checkpoints** in v2 training runs
+- Remove Python `encode_turn` from submission path (keep v1 in codebase for test fixtures until deletion follow-up)
 
 **Exit:**
-- [ ] Docker validation green on v2
-- [ ] Manifest `feature-encoding` → complete with evidence
+- [ ] Docker validation green on v2 — run locally: `uv run python scripts/validate_kaggle_docker_submission.py --checkpoint <v2_ckpt> --skip-docker` for packager smoke
+- [x] Hydra default `encoding_version: v2` (`conf/task/default.yaml`)
+- [x] v2 checkpoint metadata + v1-load rejection (`src/artifacts/checkpoint_compat.py`, `tests/test_checkpoint_compat.py`)
+- [x] JAX v2 submission runtime (`src/jax/submission_runtime.py`, packager template)
+- [ ] Manifest `feature-encoding` + `feature-encoding-v2-plan` → complete with evidence
 - [ ] v1 encoder marked deprecated (deletion follow-up)
 
 ---
@@ -257,7 +267,9 @@ uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "jax and n
 
 **User selections:** Option A (top-K edges); Phase 0 complete; Phase 1 interview locks side-by-side + H>1.
 
-**Status:** Phase 0 **COMPLETE** · Phase 1 **COMPLETE** · Phase 2 **COMPLETE** (2026-05-25) · Phase 3 **IN PROGRESS** (2p random rollout wired).
+**Status:** Phase 0–3 **COMPLETE** · Phase 4 **PARTIAL** (runbook + cutover override; evidence table deferred) · Phase 5 **COMPLETE** (code cutover; docker validation manual).
+
+**User selections (iteration 4):** Full staged curriculum (2p then 4p separate); ablation override; hard Phase 5 cutover.
 
 ---
 

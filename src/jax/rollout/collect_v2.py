@@ -40,6 +40,7 @@ def _rollout_metrics_v2(data, cfg: TrainConfig, env_count: int) -> dict[str, jax
             cfg.training.rollout_steps * env_count,
             dtype=jnp.float32,
         ),
+        "samples": data["target_index"].astype(jnp.float32).size,
         "reward_mean": data["reward"].mean(),
         "episode_done": episode_done,
         "episodes_2p": jnp.where(cfg.task.player_count == 2, episode_done, 0.0),
