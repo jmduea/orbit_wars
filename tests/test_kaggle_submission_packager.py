@@ -46,6 +46,7 @@ def _fake_config() -> SimpleNamespace:
         ),
         model=SimpleNamespace(
             architecture="gnn_pointer",
+            pointer_decoder="joint_flat",
             hidden_size=16,
             attention_heads=4,
             max_moves_k=3,
@@ -112,7 +113,9 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
         docker_image="unused",
         seed=42,
         player_count="both",
-        timeout_seconds=1.0,
+        per_step_seconds=1.0,
+        overage_budget_seconds=60.0,
+        episode_steps=500,
     )
 
     package_path = build_submission_package(args)
@@ -165,7 +168,11 @@ def test_embedded_runtime_templates_compile() -> None:
     assert "_agent_v1" not in MAIN_TEMPLATE
     assert "encoding_version" not in MAIN_TEMPLATE
     assert "empty_feature_history" in MAIN_TEMPLATE
-    assert "FeatureExtractor" in MAIN_TEMPLATE
+    assert "jitted_encode" in MAIN_TEMPLATE
+    assert "_initialize_submission()" in MAIN_TEMPLATE
+    assert "compile_batched_feature_encode" in MAIN_TEMPLATE
+    assert "deterministic_eval=True" in MAIN_TEMPLATE
+    assert "StepTimingBudget" in IN_CONTAINER_VALIDATOR
 
 
 def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
@@ -197,3 +204,103 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
 
     assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
     assert artifact["feature_metadata"]["schema_version"] == 4
+
+def test_export_runtime_artifact_includes_factorized_pointer_decoder(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt_factorized.pkl"
+    config = _fake_config()
+    config.model.architecture = "gnn_pointer"
+    config.model.pointer_decoder = "factorized_topk"
+    payload = {
+        "update": 5,
+        "params": {
+            "params": {"planet_enc_0": {"kernel": np.zeros((13, 16), dtype=np.float32)}}
+        },
+        "config": config,
+        "feature_metadata": {
+            "schema_version": 4,
+            "planet_feature_dim": 13,
+            "edge_feature_dim": 18,
+            "global_feature_dim": 46,
+            "feature_history_steps": 1,
+            "ship_feature_scale": 1000.0,
+            "edge_layout": "top_k_per_source",
+            "edge_k": 3,
+            "intercept_anchors": (1.0, 6.0),
+            "pointer_decoder": "factorized_topk",
+            "action_layout_version": 2,
+        },
+    }
+    with checkpoint.open("wb") as file:
+        pickle.dump(payload, file)
+
+    artifact = export_runtime_artifact(checkpoint)
+
+    assert artifact["feature_metadata"]["pointer_decoder"] == "factorized_topk"
+    assert artifact["feature_metadata"]["action_layout_version"] == 2
+    assert artifact["config"]["model"]["pointer_decoder"] == "factorized_topk"
+
+
+def test_export_runtime_artifact_rejects_pointer_decoder_metadata_mismatch(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt_mismatch.pkl"
+    config = _fake_config()
+    config.model.pointer_decoder = "joint_flat"
+    payload = {
+        "update": 1,
+        "params": {"dense": {"kernel": np.zeros((2, 2), dtype=np.float32)}},
+        "config": config,
+        "feature_metadata": {
+            "schema_version": 4,
+            "pointer_decoder": "factorized_topk",
+            "action_layout_version": 2,
+        },
+    }
+    with checkpoint.open("wb") as file:
+        pickle.dump(payload, file)
+
+    with pytest.raises(ValidationError, match="pointer_decoder"):
+        export_runtime_artifact(checkpoint)
+
+
+def test_build_submission_package_includes_factorized_runtime_modules(
+    tmp_path: Path,
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt_factorized.pkl"
+    config = _fake_config()
+    config.model.pointer_decoder = "factorized_topk"
+    payload = {
+        "update": 2,
+        "params": {"dense": {"kernel": np.zeros((2, 2), dtype=np.float32)}},
+        "config": config,
+        "feature_metadata": {
+            "schema_version": 4,
+            "pointer_decoder": "factorized_topk",
+            "action_layout_version": 2,
+        },
+    }
+    with checkpoint.open("wb") as file:
+        pickle.dump(payload, file)
+    args = argparse.Namespace(
+        checkpoint=checkpoint,
+        output_dir=tmp_path / "package",
+        keep_staging=False,
+        skip_docker=True,
+        docker_image="unused",
+        seed=42,
+        player_count="both",
+        per_step_seconds=1.0,
+        overage_budget_seconds=60.0,
+        episode_steps=500,
+    )
+
+    package_path = build_submission_package(args)
+
+    with tarfile.open(package_path, "r:gz") as archive:
+        names = set(archive.getnames())
+    assert "src/jax/action_codec.py" in names
+    assert "src/jax/decoders/factorized_topk_pointer.py" in names
+    assert "src/features/catalog/planet.py" in names
+    assert "src/features/catalog/edge.py" in names

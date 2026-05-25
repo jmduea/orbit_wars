@@ -4,6 +4,7 @@ import argparse
 import dataclasses
 import hashlib
 import json
+import os
 import pickle
 import shutil
 import subprocess
@@ -24,6 +25,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 RUNTIME_FILES = (
     "features/__init__.py",
+    "features/catalog/__init__.py",
+    "features/catalog/_core.py",
+    "features/catalog/_types.py",
+    "features/catalog/edge.py",
+    "features/catalog/global_.py",
+    "features/catalog/planet.py",
     "features/extractor.py",
     "features/registry.py",
     "game/__init__.py",
@@ -31,6 +38,13 @@ RUNTIME_FILES = (
     "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
+    "jax/action_codec.py",
+    "jax/decoders/__init__.py",
+    "jax/decoders/factorized_topk_pointer.py",
+    "jax/encoders/__init__.py",
+    "jax/encoders/planet_encoder_common.py",
+    "jax/encoders/planet_graph_transformer.py",
+    "jax/feature_primitives.py",
     "jax/features.py",
     "jax/policy.py",
     "jax/submission_runtime.py",
@@ -40,7 +54,7 @@ RUNTIME_FILES = (
     "opponents/__init__.py",
     "opponents/jax_actions/__init__.py",
     "opponents/jax_actions/builders.py",
-    "opponents/jax_actions/sampling.py",
+    "artifacts/checkpoint_compat.py",
 )
 TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax.train")
 
@@ -84,7 +98,18 @@ def parse_args() -> argparse.Namespace:
         default="both",
         help="Self-play player counts to validate inside Docker.",
     )
-    parser.add_argument("--timeout-seconds", type=float, default=1.0)
+    parser.add_argument(
+        "--per-step-seconds",
+        type=float,
+        default=1.0,
+        help="Target per-turn inference budget after setup (Kaggle default: 1s).",
+    )
+    parser.add_argument(
+        "--overage-budget-seconds",
+        type=float,
+        default=60.0,
+        help="Total allowed cumulative per-step overrun across one episode.",
+    )
     parser.add_argument(
         "--episode-steps",
         type=int,
@@ -140,8 +165,23 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
     model_cfg = _require_dict(config_dict, "model")
     training_cfg = _require_dict(config_dict, "training")
     architecture = str(model_cfg.get("architecture", "")).strip().lower()
-    if architecture not in {"gnn_pointer", "gnn_pointer_v2"}:
+    if architecture not in {
+        "gnn_pointer",
+        "gnn_pointer_v2",
+        "planet_graph_transformer",
+    }:
         raise ValidationError("unsupported_architecture", f"Unsupported architecture: {architecture!r}")
+
+    feature_metadata = _to_plain_data(checkpoint.get("feature_metadata", {}))
+    if not isinstance(feature_metadata, dict):
+        feature_metadata = {}
+    stored_decoder = feature_metadata.get("pointer_decoder")
+    model_decoder = str(model_cfg.get("pointer_decoder", "joint_flat")).strip().lower()
+    if stored_decoder is not None and str(stored_decoder) != model_decoder:
+        raise ValidationError(
+            "checkpoint_schema_failed",
+            "Checkpoint model.pointer_decoder disagrees with feature_metadata.pointer_decoder",
+        )
 
     params = checkpoint["params"]
     if isinstance(params, Mapping) and set(params.keys()) == {"params"}:
@@ -164,7 +204,7 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
                 )
             },
         },
-        "feature_metadata": _to_plain_data(checkpoint.get("feature_metadata", {})),
+        "feature_metadata": feature_metadata,
         "export_seconds": time.perf_counter() - start,
     }
     return artifact
@@ -181,6 +221,11 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
         "source_checkpoint_name": artifact["source_checkpoint_name"],
         "source_checkpoint_sha256": artifact["source_checkpoint_sha256"],
         "architecture": artifact["config"]["model"].get("architecture"),
+        "pointer_decoder": artifact["feature_metadata"].get("pointer_decoder")
+        or artifact["config"]["model"].get("pointer_decoder"),
+        "action_layout_version": artifact["feature_metadata"].get(
+            "action_layout_version"
+        ),
         "feature_metadata": artifact["feature_metadata"],
         "forbidden_runtime_imports": TRAINING_ONLY_IMPORTS,
     }
@@ -198,6 +243,14 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
         destination = package_dir / filename
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(repo_src / filename, destination)
+    artifacts_init = package_dir / "artifacts" / "__init__.py"
+    artifacts_init.write_text(
+        '"""Submission runtime artifacts package."""\n', encoding="utf-8"
+    )
+    opponents_init = package_dir / "opponents" / "__init__.py"
+    opponents_init.write_text(
+        '"""Submission runtime opponents package."""\n', encoding="utf-8"
+    )
 
 
 def create_tarball(staging_dir: Path, package_path: Path) -> None:
@@ -216,13 +269,42 @@ def validate_tarball_layout(package_path: Path) -> None:
             raise ValidationError("package_layout_failed", "submission.tar.gz must contain root main.py")
 
 
+def _resolve_docker_cli() -> str:
+    """Return a usable docker CLI path or raise with WSL/Docker Desktop hints."""
+    docker = shutil.which("docker")
+    if docker is not None:
+        return docker
+
+    usr_bin = Path("/usr/bin/docker")
+    if usr_bin.is_symlink() and not usr_bin.exists():
+        try:
+            target = os.readlink(usr_bin)
+        except OSError:
+            target = "<unknown>"
+        raise ValidationError(
+            "docker_unavailable",
+            "Docker CLI symlink at /usr/bin/docker points to a missing target "
+            f"({target}). On WSL with Docker Desktop: open Docker Desktop → Settings → "
+            "Resources → WSL Integration, enable this distro, then verify `docker info` "
+            "in a fresh shell.",
+        )
+
+    if Path("/var/run/docker.sock").exists():
+        raise ValidationError(
+            "docker_unavailable",
+            "Docker socket exists at /var/run/docker.sock but the docker CLI was not found on PATH. "
+            "Install the docker CLI or enable Docker Desktop WSL integration.",
+        )
+
+    raise ValidationError("docker_unavailable", "docker executable was not found")
+
+
 def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
-    if shutil.which("docker") is None:
-        raise ValidationError("docker_unavailable", "docker executable was not found")
+    docker_cli = _resolve_docker_cli()
     if str(args.docker_image).startswith("-"):
         raise ValidationError("docker_image_invalid", "Docker image must not start with '-'")
     docker_info = subprocess.run(
-        ["docker", "info", "--format", "{{.ServerVersion}}"],
+        [docker_cli, "info", "--format", "{{.ServerVersion}}"],
         text=True,
         capture_output=True,
         check=False,
@@ -238,7 +320,7 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
         validator_path = temp_dir / "validate_submission.py"
         validator_path.write_text(IN_CONTAINER_VALIDATOR, encoding="utf-8")
         command = [
-            "docker",
+            docker_cli,
             "run",
             "--rm",
             "--network",
@@ -264,8 +346,10 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
             str(args.seed),
             "--player-count",
             args.player_count,
-            "--timeout-seconds",
-            str(args.timeout_seconds),
+            "--per-step-seconds",
+            str(args.per_step_seconds),
+            "--overage-budget-seconds",
+            str(args.overage_budget_seconds),
             "--episode-steps",
             str(args.episode_steps),
             "--replay-output-dir",
@@ -352,8 +436,9 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-CONFIG_TEMPLATE = '''from __future__ import annotations
+CONFIG_TEMPLATE = """from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -371,6 +456,7 @@ class TaskConfig:
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
+    intercept_anchors: tuple[float, float] = (1.0, 6.0)
 
 
 @dataclass(slots=True)
@@ -387,11 +473,15 @@ class RewardConfig:
 @dataclass(slots=True)
 class ModelConfig:
     architecture: str = "gnn_pointer"
+    value_head: str = "shared"
+    pointer_decoder: str = "joint_flat"
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
     gnn_k_neighbors: int = 5
     gnn_message_passing_layers: int = 2
+    planet_transformer_layers: int = 2
+    spatial_attention_bias: bool = True
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 
@@ -409,34 +499,36 @@ class TrainConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
 
 
+def _from_dict(cls: type, data: dict[str, Any]) -> Any:
+    field_names = {item.name for item in dataclasses.fields(cls)}
+    return cls(**{key: value for key, value in data.items() if key in field_names})
+
+
 def config_from_plain(data: dict[str, Any]) -> TrainConfig:
     return TrainConfig(
-        task=TaskConfig(**data.get("task", {})),
-        reward=RewardConfig(**data.get("reward", {})),
-        model=ModelConfig(**data.get("model", {})),
-        training=TrainingConfig(**data.get("training", {})),
+        task=_from_dict(TaskConfig, data.get("task", {})),
+        reward=_from_dict(RewardConfig, data.get("reward", {})),
+        model=_from_dict(ModelConfig, data.get("model", {})),
+        training=_from_dict(TrainingConfig, data.get("training", {})),
     )
-'''
+"""
 
 
-MAIN_TEMPLATE = r'''from __future__ import annotations
+MAIN_TEMPLATE = r"""from __future__ import annotations
 
 import json
-import math
 import pickle
 import time
-from pathlib import Path
 from typing import Any
 
 import jax
 import jax.numpy as jnp
 
 from src.config import config_from_plain
-from src.game.constants import MAX_PLANETS
 from src.jax.policy import build_jax_policy
 
 
-_ROOT = Path(__file__).resolve().parent
+_ROOT = __import__("pathlib").Path(__file__).resolve().parent
 _ARTIFACT_PATH = _ROOT / "runtime_artifact.pkl"
 _MANIFEST_PATH = _ROOT / "manifest.json"
 _STATE = None
@@ -450,6 +542,9 @@ def _load_state():
     with _ARTIFACT_PATH.open("rb") as file:
         artifact = pickle.load(file)
     cfg = config_from_plain(artifact["config"])
+    from src.jax.submission_runtime import apply_feature_metadata_to_model_config
+
+    cfg = apply_feature_metadata_to_model_config(cfg, artifact.get("feature_metadata"))
     params = artifact["params"]
     policy = build_jax_policy(cfg)
     _warm_policy(policy, params, cfg)
@@ -464,6 +559,7 @@ def _load_state():
         "history": history,
         "manifest": manifest,
         "load_seconds": time.perf_counter() - started,
+        "ready": False,
     }
     return _STATE
 
@@ -481,44 +577,80 @@ def _warm_policy(policy, params, cfg) -> None:
     jax.tree_util.tree_map(lambda value: value.block_until_ready(), outputs)
 
 
-def agent(obs: Any) -> list[list[float | int]]:
-    state = _load_state()
-    from src.features import FeatureExtractor
-    from src.jax.submission_runtime import (
-        batch_game,
-        batch_turn,
-        moves_from_jax_action,
-        select_runtime_shielded_policy_actions,
-    )
+def _act_on_obs(obs: Any, state: dict[str, Any]) -> list[list[float | int]]:
+    from src.jax.submission_runtime import moves_from_jax_action
 
-    cfg = state["cfg"]
-    extractor = FeatureExtractor(cfg.task)
-    extracted = extractor.extract(
-        obs,
-        history=state["history"],
-        max_fleet_slots=int(cfg.task.max_fleets),
-    )
-    game = extracted.game
-    batch = extracted.batch
-    if not bool(jnp.any(batch.planet_mask)):
+    game = state["parse_game"](obs)
+    if not bool(jnp.any(game.planets.active)):
         return []
-    game_batched = batch_game(game)
-    batch_batched = batch_turn(batch)
-    action = select_runtime_shielded_policy_actions(
-        jax.random.PRNGKey(0),
-        state["policy"],
-        {"params": state["params"]},
+    game_batched, batch_batched = state["jitted_encode"](game, state["history"])
+    action = state["jitted_act"](
         game_batched,
         batch_batched,
-        cfg,
-        deterministic=True,
+        jax.random.PRNGKey(0),
     )
-    state["history"] = extractor.append_history(state["history"], obs, max_fleet_slots=int(cfg.task.max_fleets))
+    jax.block_until_ready(action.valid)
+    state["history"] = state["jitted_append_history"](state["history"], game)
     return moves_from_jax_action(action, env_index=0)
-'''
 
 
-IN_CONTAINER_VALIDATOR = r'''from __future__ import annotations
+def _warm_submission_path(state: dict[str, Any]) -> None:
+    # Compile the full encode -> policy -> shield path before the first live obs.
+    from kaggle_environments import make
+
+    player_count = max(2, int(state["cfg"].task.player_count))
+    env = make(
+        "orbit_wars",
+        configuration={"seed": 0, "episodeSteps": 500},
+        debug=True,
+    )
+    env.run([lambda _obs: [] for _ in range(player_count)])
+    obs = env.steps[0][0].observation
+    _act_on_obs(obs, state)
+
+
+def _initialize_submission() -> None:
+    state = _load_state()
+    if state.get("ready"):
+        return
+    from functools import partial
+
+    from src.jax.submission_runtime import (
+        compile_batched_feature_encode,
+        compile_feature_history_append,
+        compile_shielded_policy_act,
+        jax_game_from_observation_fast,
+    )
+
+    task_cfg = state["cfg"].task
+    state["parse_game"] = partial(
+        jax_game_from_observation_fast,
+        max_fleet_slots=int(task_cfg.max_fleets),
+    )
+    state["jitted_encode"] = compile_batched_feature_encode(task_cfg)
+    state["jitted_append_history"] = compile_feature_history_append(task_cfg)
+    state["jitted_act"] = compile_shielded_policy_act(
+        state["policy"],
+        {"params": state["params"]},
+        state["cfg"],
+        deterministic=True,
+        deterministic_eval=True,
+    )
+    _warm_submission_path(state)
+    state["ready"] = True
+
+
+def agent(obs: Any) -> list[list[float | int]]:
+    if _STATE is None or not _STATE.get("ready"):
+        raise RuntimeError("submission setup must finish before the first observation")
+    return _act_on_obs(obs, _STATE)
+
+
+_initialize_submission()
+"""
+
+
+IN_CONTAINER_VALIDATOR = r"""from __future__ import annotations
 
 import argparse
 import importlib.util
@@ -539,8 +671,13 @@ def main() -> int:
             extract_dir = Path(extract_text)
             extract_package(args.package, extract_dir)
             module, import_seconds = import_submission(extract_dir)
-            artifact_load_seconds = artifact_load_probe(module)
-            first_latency = first_action_probe(module, args.timeout_seconds, args.episode_steps)
+            artifact_load_seconds = setup_probe(module)
+            first_action = first_action_probe(
+                module,
+                args.per_step_seconds,
+                args.overage_budget_seconds,
+                args.episode_steps,
+            )
             results = []
             player_counts = [2, 4] if args.player_count == "both" else [int(args.player_count)]
             for player_count in player_counts:
@@ -549,7 +686,8 @@ def main() -> int:
                     modules,
                     player_count,
                     args.seed,
-                    args.timeout_seconds,
+                    args.per_step_seconds,
+                    args.overage_budget_seconds,
                     args.episode_steps,
                     args.replay_output_dir,
                     args.checkpoint_update,
@@ -560,8 +698,8 @@ def main() -> int:
                 "docker_image": "gcr.io/kaggle-images/python-simulations",
                 "package": str(args.package),
                 "import_seconds": import_seconds,
-                "artifact_load_seconds": artifact_load_seconds,
-                "first_action_seconds": first_latency,
+                "setup_seconds": artifact_load_seconds,
+                "first_action": first_action,
                 "episodes": results,
             }, indent=2))
             return 0
@@ -575,7 +713,8 @@ def parse_args():
     parser.add_argument("--package", required=True, type=Path)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--player-count", choices=("2", "4", "both"), default="both")
-    parser.add_argument("--timeout-seconds", type=float, default=1.0)
+    parser.add_argument("--per-step-seconds", type=float, default=1.0)
+    parser.add_argument("--overage-budget-seconds", type=float, default=60.0)
     parser.add_argument("--episode-steps", type=int, default=500)
     parser.add_argument("--replay-output-dir", type=Path, default=None)
     parser.add_argument("--checkpoint-update", type=int, default=-1)
@@ -650,49 +789,95 @@ def import_submission(extract_dir: Path, module_name="submission_main"):
     return module, time.perf_counter() - started
 
 
-def artifact_load_probe(module) -> float:
+class StepTimingBudget:
+    def __init__(self, per_step_seconds: float, overage_budget_seconds: float):
+        self.per_step_seconds = per_step_seconds
+        self.overage_budget_seconds = overage_budget_seconds
+        self.total_overage_seconds = 0.0
+        self.latencies = []
+
+    def record(self, elapsed: float) -> None:
+        self.latencies.append(elapsed)
+        self.total_overage_seconds += max(0.0, elapsed - self.per_step_seconds)
+        if self.total_overage_seconds > self.overage_budget_seconds:
+            raise PhaseError(
+                "overage_budget_failed",
+                "cumulative step overage "
+                f"{self.total_overage_seconds:.3f}s exceeded budget "
+                f"{self.overage_budget_seconds:.3f}s "
+                f"(last step {elapsed:.3f}s, per-step limit {self.per_step_seconds:.3f}s)",
+            )
+
+    def summary(self) -> dict[str, float | int]:
+        latencies = list(self.latencies)
+        mean_action = sum(latencies) / len(latencies) if latencies else 0.0
+        return {
+            "agent_calls": len(latencies),
+            "max_action_seconds": max(latencies) if latencies else 0.0,
+            "mean_action_seconds": mean_action,
+            "total_overage_seconds": self.total_overage_seconds,
+            "per_step_seconds": self.per_step_seconds,
+            "overage_budget_seconds": self.overage_budget_seconds,
+        }
+
+
+def setup_probe(module) -> float:
     started = time.perf_counter()
-    try:
-        load_state = getattr(module, "_load_state")
-        load_state()
-    except Exception as exc:
-        raise PhaseError("artifact_load_failed", str(exc)) from exc
+    state = getattr(module, "_STATE", None)
+    if state is None or not state.get("ready"):
+        raise PhaseError(
+            "setup_failed",
+            "submission setup must finish at import time before the first observation",
+        )
     return time.perf_counter() - started
 
 
-def first_action_probe(module, timeout_seconds: float, episode_steps: int) -> float:
+def first_action_probe(
+    module,
+    per_step_seconds: float,
+    overage_budget_seconds: float,
+    episode_steps: int,
+) -> dict[str, float | int]:
     from kaggle_environments import make
 
     env = make("orbit_wars", configuration={"seed": 123, "episodeSteps": episode_steps}, debug=True)
     env.run([lambda obs: [] for _ in range(2)])
     obs = env.steps[0][0].observation
+    timing = StepTimingBudget(per_step_seconds, overage_budget_seconds)
     started = time.perf_counter()
     try:
         action = module.agent(obs)
     except Exception as exc:
         raise PhaseError("first_action_failed", str(exc)) from exc
     elapsed = time.perf_counter() - started
+    timing.record(elapsed)
     validate_action(action)
-    if elapsed > timeout_seconds:
-        raise PhaseError("timeout_failed", f"first action took {elapsed:.3f}s > {timeout_seconds:.3f}s")
-    return elapsed
+    return {"action_seconds": elapsed, **timing.summary()}
 
 
-def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, episode_steps: int, replay_output_dir, checkpoint_update: int):
+def run_episode(
+    modules,
+    player_count: int,
+    seed: int,
+    per_step_seconds: float,
+    overage_budget_seconds: float,
+    episode_steps: int,
+    replay_output_dir,
+    checkpoint_update: int,
+):
     from kaggle_environments import make
 
-    latencies = []
+    timing = StepTimingBudget(per_step_seconds, overage_budget_seconds)
 
     def make_timed_agent(module):
         def timed_agent(obs):
             started = time.perf_counter()
             action = module.agent(obs)
             elapsed = time.perf_counter() - started
-            latencies.append(elapsed)
+            timing.record(elapsed)
             validate_action(action)
-            if elapsed > timeout_seconds:
-                raise PhaseError("timeout_failed", f"agent call took {elapsed:.3f}s > {timeout_seconds:.3f}s")
             return action
+
         return timed_agent
 
     agents = [make_timed_agent(module) for module in modules]
@@ -719,10 +904,9 @@ def run_episode(modules, player_count: int, seed: int, timeout_seconds: float, e
         "player_count": player_count,
         "statuses": statuses,
         "rewards": rewards,
-        "max_action_seconds": max(latencies) if latencies else 0.0,
-        "agent_calls": len(latencies),
         "episode_steps": episode_steps,
         "replay_html_path": str(replay_html_path) if replay_html_path is not None else None,
+        **timing.summary(),
     }
 
 
@@ -743,7 +927,7 @@ def validate_action(action):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""
 
 
 if __name__ == "__main__":
