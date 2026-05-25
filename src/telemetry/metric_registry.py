@@ -163,6 +163,16 @@ _METRICS: tuple[MetricDefinition, ...] = (
     ),
     _metric("entropy", "losses", "Mean action entropy across minibatches."),
     _metric(
+        "entropy_stop",
+        "losses",
+        "Mean stop-head entropy for factorized pointer decoders.",
+    ),
+    _metric(
+        "entropy_move",
+        "losses",
+        "Mean source/target/ship entropy for factorized pointer decoders.",
+    ),
+    _metric(
         "approx_kl", "losses", "Approximate KL divergence between old and new policy."
     ),
     _metric("total_loss", "losses", "Final weighted PPO loss used for optimization."),
