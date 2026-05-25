@@ -1,17 +1,17 @@
 # Orbit Wars — Onboarding Guide
 
-*Generated from the Understand-Anything knowledge graph (analyzed 2026-05-22, commit `e9ab5ab`).*
+*Generated from the Understand-Anything knowledge graph (analyzed 2026-05-25, commit `56ea682`). Scope: project RL code only — OMG/Cursor mirrors, `mcp-server/`, and training outputs are excluded via `.understandignore`.*
 
 ---
 
 ## Project Overview
 
-**Orbit Wars** (`orbit-wars`) is a Hydra-first Python reinforcement-learning project for the Orbit Wars game. It trains policies with JAX/PPO, uses structured configuration and experiment operations, and ships an OMG MCP workflow server for agent tooling.
+**Orbit Wars** (`orbit-wars`) is a Hydra-first Python 3.12 reinforcement-learning project for the Orbit Wars game. Policies train with JAX/Flax PPO; configuration is split into responsibility groups under `conf/`; experiments log to Weights & Biases; checkpoints and replays flow through an artifact pipeline.
 
 | | |
 |---|---|
-| **Languages** | Python (primary), TypeScript, YAML, TOML, shell, Makefile |
-| **Frameworks** | Hydra, JAX, Flax, Optax, pytest, Weights & Biases, MCP |
+| **Languages** | Python (primary), YAML, TOML, JSON, Markdown, shell, Makefile |
+| **Frameworks** | Hydra, JAX, Flax, Optax, pytest, Weights & Biases |
 | **Package manager** | [uv](https://github.com/astral-sh/uv) (Python 3.12) |
 
 **First commands**
@@ -20,189 +20,235 @@
 uv sync --group dev
 uv run --group dev pytest
 uv run python -m src.train model=attention training.total_updates=1000
-uv run python -m src.train print_resolved_config=true   # dry-run config only
+uv run python -m src.train print_resolved_config=true   # resolve config without training
 ```
 
-Canonical agent guidance also lives in `AGENTS.md` and `README.md`.
+Canonical references: `README.md` (user-facing) and `AGENTS.md` (agent/editor guidance).
 
 ---
 
 ## Architecture Layers
 
-The repo is organized into six layers. Start with **Training Runtime** and **Hydra Configuration**; treat **OMG MCP Server** as a separate package.
+The scoped graph organizes **117 file-level nodes** into six layers. Read **Training Runtime** and **Hydra Configuration** first; use **Test Suite** to validate any change.
 
 ### 1. Training Runtime (`src/`)
 
-Environment dynamics, feature encoders, policies, PPO, training orchestration, telemetry, artifacts, and checkpoints.
+JAX/Python RL stack: Hydra entrypoint, game simulation, feature encoding, PPO policies, opponents, curriculum, telemetry, and checkpoint artifact pipelines.
 
-| File | Role | Complexity |
-|------|------|------------|
-| `train.py` | Thin Hydra entry → `TrainConfig` → `jax_train` | simple |
-| `config.py` | Composes/validates Hydra configs | **complex** |
-| `conf_schema.py` | Dataclass config defaults (edit first for schema changes) | **complex** |
-| `jax_train.py` | JAX training loop orchestration | **complex** |
-| `env.py` / `jax_env.py` | Python vs vectorized JAX environment | **complex** |
-| `features.py` / `jax_features.py` | Feature encoders (keep in parity) | **complex** |
-| `feature_registry.py` | Ordered feature schemas, dimension checks | moderate |
-| `jax_policy.py` / `jax_ppo.py` | Model + PPO updates | **complex** |
-| `curriculum.py` / `opponents.py` | Staged self-play and opponent profiles | moderate |
-| `telemetry.py` | W&B and run metrics | moderate |
-| `artifact_pipeline.py` | Async artifact handling | **complex** |
-| `checkpoint_compat.py` | Checkpoint feature metadata validation | moderate |
-| `trajectory_shield.py` | Action masking / trajectory constraints | **complex** |
-| `constants.py`, `game_types.py`, `normalization.py`, `seed_scheduler.py`, `jax_device.py` | Shared types, norms, device setup | simple–moderate |
+| Package | Role |
+|---------|------|
+| `src/train.py` | Thin Hydra CLI → typed config → `src/jax/train.py` |
+| `src/config/` | Dataclass schema (`schema.py`) and Hydra composition/validation (`runtime.py`) |
+| `src/game/` | Reference Python env, types, constants, trajectory shield |
+| `src/features/` | Feature registry, encoding, normalization |
+| `src/jax/` | Vectorized env, features, policy, PPO, training orchestrator |
+| `src/opponents/` | Opponent pool and runtime mixing |
+| `src/training/` | Curriculum stages and seed scheduling |
+| `src/telemetry/` | Metric registry and experiment logger |
+| `src/artifacts/` | Checkpoints, replay eval, async pipeline, path layout |
 
 ### 2. Hydra Configuration (`conf/`)
 
-Responsibility groups: `model/`, `task/`, `reward/`, `training/`, `format/`, `opponents/`, `curriculum/`, `telemetry/`, `artifacts/`. Root `conf/config.yaml` composes them. Model presets include `attention`, `mlp`, `gnn_pointer`, and entity-transformer variants.
+Responsibility-group YAML composing models, tasks, rewards, training budgets, formats, opponents, curriculum, telemetry, artifacts, and W&B sweep grids.
+
+| Group | Examples |
+|-------|----------|
+| `model/` | `attention`, `mlp`, `gnn_pointer`, entity-transformer presets |
+| `task/`, `reward/`, `training/` | Shape, reward shaping, PPO budget |
+| `format/` | 2p/4p and mixed rollout topologies |
+| `opponents/`, `curriculum/` | Self-play profiles and staged progression |
+| `telemetry/`, `artifacts/` | Metric groups and checkpoint cadence |
+| `sweeps/wandb/` | Campaign templates (capacity, budget, reward, throughput, …) |
 
 Override with normal Hydra syntax, e.g. `training.total_updates=2000`. Prefer `opponents=<profile>` over sweeping profile-internal fields.
 
-### 3. Test Suite (`tests/`, `mcp-server/test/`)
+### 3. Test Suite (`tests/`)
 
-Pytest validates config, curriculum, features, JAX parity, PPO, telemetry, artifacts, and trajectory shield. MCP tests live under `mcp-server/test/` and import from `dist/` — run `npm run build` in `mcp-server/` after TS changes.
+Pytest guards Hydra wiring, JAX env/policy/PPO behavior, feature dimensions, curriculum, telemetry, artifacts, trajectory shield, and Kaggle packaging.
 
-### 4. Operations and Docs (`docs/`, `scripts/`, `.github/`)
+### 4. Documentation (`docs/`)
 
-- `docs/experiments.md`, `docs/hydra_migration.md`, `docs/config_migration.md` — experiment and config history
-- `scripts/benchmark_jax_rl.py`, `scripts/compare_attention_candidates.py` — benchmarks and comparisons
-- `.github/` — OMG agents, skills, hooks (synced to `.cursor/` via `scripts/sync_omg_cursor.py`)
+Experiment guides, baseline sweep notes, Hydra/config migration history, and this onboarding doc.
 
-### 5. OMG MCP Server (`mcp-server/`)
+### 5. Scripts (`scripts/`)
 
-TypeScript MCP server: state, PRD, memory, checkpoint, bridge (Claude/OMC import), model routing, ultragoal. Entry: `mcp-server/src/index.ts`.
+Operational CLIs: JAX benchmarks, artifact workers, Kaggle Docker validation, attention log comparison, IDE tooling sync.
 
-### 6. Miscellaneous
+### 6. Project Root
 
-Local caches, session checkpoints under `.omg/`, and generated training outputs (`outputs/`, `wandb/`, `artifacts/`) — not source of truth.
+`README.md`, `AGENTS.md`, `pyproject.toml`, `Makefile`, and Understand-Anything graph metadata under `.understand-anything/`.
 
 ---
 
 ## Key Concepts
 
-1. **Hydra-first training** — YAML responsibility groups compose into dataclasses; `src/train.py` only bridges Hydra → JAX. Config shape drives JIT and checkpoint compatibility.
+1. **Hydra-first training** — YAML groups compose into dataclasses in `src/config/`; `src/train.py` only bridges Hydra to JAX. Shape-defining fields drive JIT compilation and checkpoint compatibility.
 
-2. **Dual environment paths** — `env.py` / `features.py` (reference Python) mirror `jax_env.py` / `jax_features.py` (training). Parity tests (`test_jax_env_parity.py`) require semantic alignment when you change game state or features.
+2. **Package layout** — Game rules live in `src/game/`, observations in `src/features/`, acceleration in `src/jax/`. Do not look for legacy flat modules (`src/env.py`, `src/config.py`); the graph and imports use the package paths.
 
-3. **Feature registry as contract** — `feature_registry.py` defines ordered schemas and dimensions. New features touch registry, both encoders, tests, and `checkpoint_compat.py`.
+3. **Python ↔ JAX parity** — `src/game/env.py` and `src/features/encoding.py` are reference implementations; `src/jax/env.py` and `src/jax/features.py` must stay semantically aligned. `tests/test_jax_env_parity.py` is the guardrail.
 
-4. **Mixed 2p/4p training** — `format.rollout_groups` and curriculum stages control mixed player counts; avoid reintroducing flat rollout knobs.
+4. **Feature registry as contract** — `src/features/registry.py` fixes ordered schemas and dimensions. New features require registry, both encoders, tests, and `src/artifacts/checkpoint_compat.py`.
 
-5. **Opponent profiles** — Select via `opponents=<profile>` (`self_play_curriculum`, `latest_only`, etc.) rather than ad hoc nested overrides.
+5. **Mixed 2p/4p training** — `format.rollout_groups` and `src/training/curriculum.py` control player-count mix and stage gates; avoid reintroducing flat rollout knobs.
 
-6. **Checkpoint compatibility** — Checkpoints embed feature metadata; old flat config shapes are rejected. Shape-defining fields (player count, candidates, history, ship buckets, model dims) are breaking changes.
+6. **Opponent profiles** — Select via `opponents=<profile>` (`self_play_curriculum`, `noop_only`, `latest_only`, etc.) rather than ad hoc nested overrides.
 
-7. **OMG workflow bridge** — `.github/` is the catalog; Cursor uses `.cursor/` (regenerate with `sync_omg_cursor.py`). MCP workflow tools need a built `mcp-server/dist/`.
+7. **Checkpoint compatibility** — Checkpoints embed feature metadata; incompatible shapes or old flat config layouts are rejected in `checkpoint_compat.py`.
+
+8. **Campaign outputs** — New runs use `outputs/campaigns/<campaign>/runs/<run_id>/` with Hydra snapshots, manifests, and checkpoints grouped by experimental question (`output.campaign=`).
 
 ---
 
 ## Guided Tour
 
-Recommended learning path from the knowledge graph tour:
+Recommended path from the knowledge graph (10 steps). Each step links file-level nodes you can open in the [Understand dashboard](/understand-dashboard) after `/understand`.
 
-| Step | Focus | Read / run |
-|------|--------|------------|
-| **1** | Project overview | `README.md`, `AGENTS.md` |
-| **2** | Training entry | `src/train.py` → `config.py` → `jax_train.py` |
-| | *Lesson* | Hydra composes YAML groups before dataclasses and JAX consume them |
-| **3** | Environment & features | `env.py`, `jax_env.py`, `features.py`, `jax_features.py`, `feature_registry.py` |
-| **4** | Policy & PPO | `jax_policy.py`, `jax_ppo.py`, `normalization.py`, `trajectory_shield.py` |
-| **5** | Configuration surface | `conf/config.yaml`, `conf/model/*`, `conf/task/default.yaml`, `conf/training/default.yaml` |
-| **6** | Verification & ops | `docs/*`, `scripts/benchmark_jax_rl.py`, targeted pytest modules |
-| **7** | OMG MCP server | `mcp-server/src/index.ts`, tool modules, `npm run build` + `npm test` |
+| Step | Title | What to read |
+|------|--------|----------------|
+| **1** | Hydra Training Entry | `src/train.py` — canonical `uv run python -m src.train`; maps CLI overrides to responsibility groups |
+| **2** | Config Schema & Runtime | `src/config/schema.py`, `src/config/runtime.py` — dataclass contract and Hydra validation |
+| **3** | JAX Training Orchestrator | `src/jax/train.py` — devices, vectorized envs, PPO loop, curriculum, logging, artifacts |
+| **4** | Game Rules & Reference Env | `src/game/constants.py`, `types.py`, `env.py` — ground truth for game dynamics |
+| **5** | Observation Features | `src/features/registry.py`, `encoding.py`, `src/jax/features.py` — observation layout for policies |
+| **6** | JAX Environment & PPO | `src/jax/env.py`, `src/jax/ppo.py` — batched stepping and policy updates |
+| **7** | Policy Architectures | `src/jax/policy.py` — Flax modules selected by `conf/model/*.yaml` |
+| **8** | Safe Launches & Opponents | `src/game/trajectory_shield.py`, `src/opponents/*`, `src/training/curriculum.py` |
+| **9** | Telemetry & Experiment Logging | `src/telemetry/metric_registry.py`, `logger.py` |
+| **10** | Checkpoints & Artifact Pipeline | `src/artifacts/pipeline.py`, `replay.py`, `checkpoint_compat.py` |
+
+**Hydra lesson (step 1):** Groups compose at runtime; overrides like `model=attention training.total_updates=1000` nest without editing defaults on disk.
+
+**JAX lesson (step 6):** `jit`/`vmap` batch independent envs; PPO relies on static shapes from task config (players, candidates, history frames) to avoid recompilation.
 
 ---
 
-## File Map (by layer)
+## File Map
 
-### Training Runtime — quick reference
+### Training Runtime — by package
 
-- **Entry & config:** `train.py`, `config.py`, `conf_schema.py`
-- **JAX core:** `jax_train.py`, `jax_env.py`, `jax_features.py`, `jax_policy.py`, `jax_ppo.py`
-- **Python parity:** `env.py`, `features.py`
-- **Training support:** `curriculum.py`, `opponents.py`, `opponent_pool.py`, `replay.py`, `run_paths.py`, `metric_registry.py`, `checkpoint_retention.py`
-- **Safety & I/O:** `trajectory_shield.py`, `artifact_pipeline.py`, `checkpoint_compat.py`, `telemetry.py`
-
-### Hydra Configuration
-
-- `conf/config.yaml` — root composition
-- `conf/model/*.yaml` — architecture presets
-- `conf/task/`, `conf/reward/`, `conf/training/`, `conf/format/`, `conf/opponents/`, `conf/curriculum/`, `conf/telemetry/`
-- `pyproject.toml`, `Makefile` — project tooling
-
-### Test Suite (high-signal)
-
-| Test file | What it guards |
-|-----------|----------------|
-| `test_config_consolidation.py` | Hydra/schema wiring |
-| `test_curriculum.py` | Curriculum stages |
-| `test_jax_env_parity.py` | Python ↔ JAX env parity |
-| `test_jax_ppo.py`, `test_jax_policy.py` | RL update path |
-| `test_trajectory_shield.py` | Action shield semantics |
-| `test_artifact_pipeline.py` | Artifact async pipeline |
-| `test_telemetry.py` | Metrics/W&B integration |
-
-### OMG MCP Server
-
-| File | Purpose |
+| Path | Summary |
 |------|---------|
-| `index.ts` | Tool registration |
-| `state-tools.ts`, `prd-tools.ts`, `workflow-tools.ts` | Workflow state & PRD |
-| `memory-tools.ts`, `checkpoint-tools.ts` | Memory & session checkpoints |
-| `ultragoal-tools.ts` | Durable goals (most complex MCP module) |
-| `bridge/*` | Claude/OMC session import/export |
-| `utils.ts` | JSON/size/symlink guards |
+| `src/train.py` | Hydra entry; resolves `TrainConfig` and delegates to JAX training |
+| `src/config/schema.py` | Dataclass defaults for all responsibility groups |
+| `src/config/runtime.py` | OmegaConf resolvers, composition, validation |
+| `src/game/env.py` | Python reset/step, rewards, opponent hooks |
+| `src/game/trajectory_shield.py` | Blocks illegal fleet launches during rollouts |
+| `src/features/registry.py` | Ordered feature schemas and dimension checks |
+| `src/features/encoding.py` | Self/candidate/global tensors with history |
+| `src/features/normalization.py` | Feature normalization helpers |
+| `src/jax/train.py` | Main training control plane |
+| `src/jax/env.py` | Vectorized game simulation |
+| `src/jax/features.py` | JIT feature encoder matching Python layout |
+| `src/jax/policy.py` | MLP, attention, entity transformer, GNN pointer |
+| `src/jax/ppo.py` | Rollout collection and PPO updates |
+| `src/jax/device.py` | Device selection utilities |
+| `src/opponents/pool.py` | Opponent source definitions |
+| `src/opponents/runtime.py` | Mixing random, scripted, self-play, snapshots |
+| `src/training/curriculum.py` | Stage progression and win-rate gates |
+| `src/training/seed_scheduler.py` | Reseeding schedule for rollouts |
+| `src/telemetry/metric_registry.py` | Named metric groups for logging |
+| `src/telemetry/logger.py` | W&B / JSONL flattening |
+| `src/artifacts/pipeline.py` | Async checkpoint and replay jobs |
+| `src/artifacts/replay.py` | Policy evaluation against opponents |
+| `src/artifacts/checkpoint_compat.py` | Feature metadata and config-shape validation |
+| `src/artifacts/run_paths.py` | Campaign/run directory layout |
+| `src/artifacts/checkpoint_retention.py` | Retention policy for checkpoints |
 
-### Operations scripts
+### Hydra Configuration — high-signal files
+
+| Path | Role |
+|------|------|
+| `conf/config.yaml` | Root composition of responsibility groups |
+| `conf/task/default.yaml` | Player count, candidates, feature history |
+| `conf/training/default.yaml` | PPO budget, batching, optimizer |
+| `conf/model/*.yaml` | Architecture capacity presets |
+| `conf/format/*.yaml` | 2p/4p and mixed rollout groups |
+| `conf/opponents/*.yaml` | Opponent family profiles |
+| `conf/curriculum/*.yaml` | Staged progression |
+| `conf/sweeps/wandb/*.yaml` | W&B multirun templates |
+
+### Test Suite — what each file guards
+
+| Test | Focus |
+|------|--------|
+| `test_config_consolidation.py` | Hydra group wiring and schema |
+| `test_curriculum.py` | Curriculum stage transitions |
+| `test_features.py`, `test_feature_history.py`, `test_feature_registry.py` | Observation layout |
+| `test_jax_env.py`, `test_jax_env_parity.py` | JAX env and Python parity |
+| `test_jax_policy.py`, `test_jax_ppo.py` | Policy and PPO path |
+| `test_trajectory_shield.py` | Launch shield semantics |
+| `test_telemetry.py`, `test_metric_registry.py` | Metrics and logging |
+| `test_artifact_pipeline.py`, `test_replay.py`, `test_run_paths.py` | Artifacts and paths |
+| `test_jax_train_timing.py` | Training loop timing smoke |
+| `test_kaggle_submission_packager.py` | Submission packaging |
+
+### Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `benchmark_jax_rl.py` | JAX RL throughput benchmarks |
-| `compare_attention_candidates.py` | Compare attention configs from logs |
-| `run_artifact_worker.py` | Artifact worker process |
-| `validate_kaggle_docker_submission.py` | Kaggle submission validation (**complex**) |
+| `scripts/benchmark_jax_rl.py` | JAX RL throughput benchmarks |
+| `scripts/compare_attention_candidates.py` | Compare attention configs from logs |
+| `scripts/run_artifact_worker.py` | Artifact worker process |
+| `scripts/validate_kaggle_docker_submission.py` | Kaggle Docker submission validation |
+| `scripts/sync_omg_cursor.py` | Sync OMG catalog to Cursor (tooling; outside graph scope) |
+| `Makefile` | `setup` and `test` convenience targets |
+
+### Documentation
+
+| Doc | Topic |
+|-----|--------|
+| `docs/experiments.md` | Experiment conventions |
+| `docs/baseline_sweep.md` | Baseline sweep methodology |
+| `docs/config_migration.md`, `docs/hydra_migration.md` | Config history |
 
 ---
 
 ## Complexity Hotspots
 
-Approach these with extra care — they are marked **complex** in the graph or are central to correctness:
+Files marked **complex** in the graph — read tests alongside code before changing behavior.
 
-### Training runtime (core RL path)
+### Core RL path (`src/`)
 
-- `src/config.py`, `src/conf_schema.py` — config schema changes ripple everywhere
-- `src/env.py`, `src/jax_env.py` — game dynamics and vectorization
-- `src/features.py`, `src/jax_features.py` — observation space (checkpoint-breaking)
-- `src/jax_train.py`, `src/jax_policy.py`, `src/jax_ppo.py` — training loop and learning
-- `src/artifact_pipeline.py`, `src/trajectory_shield.py`, `src/metric_registry.py`
+- `src/config/schema.py`, `src/config/runtime.py` — schema and validation ripple through training
+- `src/game/env.py`, `src/jax/env.py` — game dynamics and vectorization
+- `src/features/registry.py`, `src/features/encoding.py`, `src/jax/features.py` — observation contract (checkpoint-breaking)
+- `src/jax/train.py`, `src/jax/policy.py`, `src/jax/ppo.py` — training loop and learning
+- `src/game/trajectory_shield.py`, `src/opponents/runtime.py` — safety and opponent mixing
+- `src/telemetry/metric_registry.py` — metric surface area
+- `src/artifacts/pipeline.py`, `replay.py`, `checkpoint_compat.py`, `run_paths.py` — persistence and compatibility
 
-### Tests that mirror complex behavior
+### Tests mirroring complex behavior
 
-- `tests/test_jax_env_parity.py`, `tests/test_jax_ppo.py`, `tests/test_trajectory_shield.py`, `tests/test_artifact_pipeline.py`
+- `tests/test_jax_env.py`, `test_jax_env_parity.py`, `test_jax_ppo.py`
+- `tests/test_curriculum.py`, `test_trajectory_shield.py`, `test_telemetry.py`
 
-### MCP & tooling
+### Scripts
 
-- `mcp-server/src/ultragoal-tools.ts`
-- `mcp-server/test/bridge-tests.mjs`
-- `scripts/validate_kaggle_docker_submission.py`
+- `scripts/run_artifact_worker.py`, `validate_kaggle_docker_submission.py`, `sync_omg_cursor.py`
 
-**Safer starting points:** `src/train.py`, `src/constants.py`, `src/game_types.py`, `tests/conftest.py` (all **simple**).
+**Safer starting points:** `src/train.py`, `src/game/constants.py`, `src/game/types.py`, `tests/conftest.py` (simple complexity in the graph).
 
 ---
 
 ## Suggested verification matrix
 
-When you touch a subsystem, run the focused tests from `AGENTS.md`:
+When you touch a subsystem, run focused tests from `AGENTS.md`:
 
 | Change area | Tests |
 |-------------|--------|
 | Config / schema | `test_config_consolidation.py`, `test_curriculum.py`, `test_telemetry.py` |
-| Env / features | `test_env.py`, `test_features.py`, `test_feature_history.py`, `test_jax_env.py`, `test_jax_env_parity.py` |
+| Env / features | `test_features.py`, `test_feature_history.py`, `test_jax_env.py`, `test_jax_env_parity.py` |
 | Policy / PPO | `test_jax_policy.py`, `test_jax_ppo.py` |
+| Artifacts | `test_artifact_pipeline.py`, `test_replay.py`, `test_run_paths.py` |
 | Full check | `uv run --group dev pytest` |
 
 ---
 
 ## Regenerating this guide
 
-Run `/understand` to refresh `.understand-anything/knowledge-graph.json`, then `/understand-onboard` to update this document.
+1. Run `/understand` to refresh `.understand-anything/knowledge-graph.json`.
+2. Run `/understand-onboard` to regenerate this document.
+3. Commit `docs/ONBOARDING.md` so the team shares the same map.
+
+Graph stats at generation time: **691 nodes**, **1408 edges**, **115 files** analyzed, **239 paths** excluded by `.understandignore`.
