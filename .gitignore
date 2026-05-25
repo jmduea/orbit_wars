@@ -224,8 +224,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Understand-Anything (machine-local symlinks from scripts/install_understand_anything_cursor.sh)
-.cursor/skills/understand
-.cursor/skills/understand-*/
+.cursor/skills/understand*
 .cursor/agents/architecture-analyzer.md
 .cursor/agents/article-analyzer.md
 .cursor/agents/assemble-reviewer.md
