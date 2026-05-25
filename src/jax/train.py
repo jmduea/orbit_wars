@@ -1326,6 +1326,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "trajectory_shield_legal_non_noop_rate": float(
                     rollout_scalars["trajectory_shield_legal_non_noop_rate"]
                 ),
+                "stop_rate": float(rollout_scalars["stop_rate"]),
+                "mean_active_launches_per_turn": float(
+                    rollout_scalars["mean_active_launches_per_turn"]
+                ),
+                "stop_utilization_ratio": float(
+                    rollout_scalars["mean_active_launches_per_turn"]
+                )
+                / max(float(cfg.model.max_moves_k), 1.0),
                 "survival_time": survival_time,
                 "score_share": score_share,
                 "update_seconds": update_seconds,

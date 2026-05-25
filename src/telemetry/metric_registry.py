@@ -378,6 +378,21 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Percent of learner decisions that targeted neutral planets.",
     ),
     _metric(
+        "stop_rate",
+        "action_decision",
+        "Fraction of active factorized launch steps where the stop head fired.",
+    ),
+    _metric(
+        "mean_active_launches_per_turn",
+        "action_decision",
+        "Mean non-stop launches with a positive ship bucket per env-turn.",
+    ),
+    _metric(
+        "stop_utilization_ratio",
+        "action_decision",
+        "mean_active_launches_per_turn divided by model.max_moves_k (L1 gate).",
+    ),
+    _metric(
         "survival_time",
         "game_state",
         "Mean survival time for completed episodes.",
