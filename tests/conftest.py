@@ -25,7 +25,13 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_jax_env_dispatch.py": "jax_env",
     "test_jax_env_parity.py": "jax_env",
     "test_jax_policy_gnn.py": "policy",
+    "test_jax_policy_encoder.py": "policy",
+    "test_jax_policy_factorized_decoder.py": "policy",
+    "test_trajectory_shield_factorized.py": "policy",
+    "test_factored_action_builders.py": "policy",
+    "test_factored_step_vmap.py": "policy",
     "test_jax_ppo.py": "policy",
+    "test_ppo_update.py": "policy",
     "test_jax_rollout.py": "policy",
     "test_jax_scripted_opponents.py": "policy",
     "test_jax_curriculum.py": "curriculum",
@@ -33,6 +39,7 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_artifact_pipeline.py": "artifacts",
     "test_replay.py": "artifacts",
     "test_kaggle_submission_packager.py": "artifacts",
+    "test_submission_runtime_metadata.py": "artifacts",
     "test_curriculum.py": "curriculum",
     "test_jax_train_timing.py": "curriculum",
 }
@@ -105,6 +112,18 @@ SLOW_TESTS = frozenset(
 
 FAST_JAX_PPO_TESTS = frozenset(
     {
+        "test_discounted_returns_resets_at_terminal_steps",
+        "test_masked_mean_respects_zero_mask_entries",
+        "test_default_training_config_uses_canonical_gae_lambda",
+        "test_gae_lambda_one_matches_monte_carlo_path",
+        "test_gae_lambda_below_one_differs_from_monte_carlo",
+        "test_invalid_gae_lambda_rejected_at_compose",
+        "test_training_ppo_hyperparameters_compose_from_hydra",
+        "test_ppo_update_reports_near_zero_kl_for_on_policy_batch",
+        "test_ppo_vf_and_ent_coefs_scale_reported_total_loss",
+        "test_ppo_update_factorized_path_matches_on_policy_kl",
+        "test_ppo_update_changes_params_after_optimizer_step",
+        "test_gradient_checkpointing_encoder_init_apply_smoke",
         "test_rollout_metric_aggregation_recomputes_rate_metrics",
         "test_rollout_microbatching_requires_even_environment_division",
         "test_jax_action_builder_allows_fewer_fleet_slots_than_planets",
@@ -164,7 +183,10 @@ def _is_slow(item: pytest.Item) -> bool:
         return True
     if test_name in SLOW_TESTS:
         return True
-    if filename == "test_jax_ppo.py" and test_name not in FAST_JAX_PPO_TESTS:
+    if (
+        filename in {"test_jax_ppo.py", "test_ppo_update.py"}
+        and test_name not in FAST_JAX_PPO_TESTS
+    ):
         return True
     if filename == "test_trajectory_shield.py" and test_name in SLOW_TRAJECTORY_SHIELD_TESTS:
         return True
