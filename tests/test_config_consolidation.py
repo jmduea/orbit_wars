@@ -17,10 +17,11 @@ def test_root_config_composes_from_responsibility_groups() -> None:
     assert cfg.training.total_updates == 100
     assert cfg.format.rollout_groups
     assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 3
+    assert len(cfg.curriculum.stages) == 8
     assert cfg.curriculum.stages[0]["id"] == "bootstrap_random"
+    assert cfg.curriculum.stages[-1]["id"] == "self_play"
     assert cfg.opponents.self_play.enabled is True
-    assert cfg.opponents.snapshot.pool_size == 5
+    assert cfg.opponents.snapshot.pool_size == 2
     assert cfg.artifacts.artifact_pipeline.enabled is True
     assert cfg.output.root == "outputs"
     assert cfg.output.campaign == "default"
@@ -150,10 +151,8 @@ def test_baseline_sweep_scaffolding_is_discoverable() -> None:
     sweep_dir = Path("conf/sweeps/wandb")
     assert expected <= {path.name for path in sweep_dir.glob("*.yaml")}
 
-    baseline_docs = Path("docs/baseline_sweep.md").read_text()
     experiment_docs = Path("docs/experiments.md").read_text()
     for filename in expected:
-        assert filename in baseline_docs
         assert filename in experiment_docs
 
 

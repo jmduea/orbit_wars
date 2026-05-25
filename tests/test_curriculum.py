@@ -31,9 +31,9 @@ def test_default_hydra_config_uses_new_curriculum_surface():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
     assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 3
-    assert cfg.curriculum.stages[-1]["id"] == "self_play_pressure"
-    assert cfg.opponents.snapshot.pool_size == 5
+    assert len(cfg.curriculum.stages) == 8
+    assert cfg.curriculum.stages[-1]["id"] == "self_play"
+    assert cfg.opponents.snapshot.pool_size == 2
 
 
 def test_curriculum_rejects_unknown_family():
