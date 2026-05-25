@@ -37,7 +37,7 @@ class FeatureGroupRegistry:
 
     def __init__(self, features: Sequence[FeatureItem], history_steps: int = 1):
         self.all_features = tuple(features)
-        self.history_steps = max(1, int(history_steps))
+        self.history_steps = max(1, history_steps)
         self._active_features = tuple(
             feature for feature in self.all_features if feature.active
         )
