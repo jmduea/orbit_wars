@@ -16,6 +16,10 @@ class FeatureDefinition:
     name: str
     size: int = 1
     active: bool = True
+    description: str = ""
+
+    def __repr__(self) -> str:
+        return f"FeatureDefinition(name={self.name}, size={self.size}, active={self.active},\n description={self.description})"
 
 
 class FeatureCompute(Protocol):

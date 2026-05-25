@@ -30,8 +30,9 @@ def _curriculum_config(stages):
 def test_default_hydra_config_uses_new_curriculum_surface():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
-    assert cfg.curriculum.enabled is False
-    assert cfg.curriculum.stages == []
+    assert cfg.curriculum.enabled is True
+    assert len(cfg.curriculum.stages) == 3
+    assert cfg.curriculum.stages[-1]["id"] == "self_play_pressure"
     assert cfg.opponents.snapshot.pool_size == 5
 
 
@@ -90,6 +91,23 @@ def test_recent_biased_snapshot_selection_prefers_newer_updates():
     assert float(view.historical_selection_probs[1]) > float(
         view.historical_selection_probs[0]
     )
+
+
+def test_stage_view_historical_probs_finite_when_no_valid_snapshots():
+    cfg = _curriculum_config(
+        [{"id": "historical", "opponent_families": {"historical": 1.0}}]
+    )
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+
+    view = controller.stage_view(
+        10,
+        snapshot_ids=jax.numpy.array([1, 2], dtype=jax.numpy.int32),
+        snapshot_valid_mask=jax.numpy.array([False, False]),
+        snapshot_updates=jax.numpy.array([2, 8], dtype=jax.numpy.int32),
+    )
+
+    assert jax.numpy.isfinite(view.historical_selection_probs).all()
+    assert float(view.historical_selection_probs.sum()) == pytest.approx(0.0)
 
 
 def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():

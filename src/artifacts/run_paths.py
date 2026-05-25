@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping
 
+from src.artifacts.checkpoint_compat import (
+    action_layout_version_for_pointer_decoder,
+    pointer_decoder_for_model,
+)
 from src.config import TrainConfig
 
 
@@ -189,12 +193,17 @@ def write_run_manifests(
     cfg: TrainConfig, context: RunContext, metadata: Mapping[str, object]
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
+    pointer_decoder = pointer_decoder_for_model(cfg.model)
     run_manifest = {
         "run_id": context.run_id,
         "campaign": context.campaign_slug,
         "run_name": cfg.run_name,
         "job_type": metadata.get("job_type", "train"),
         "model_compatibility_family": context.model_compatibility_family,
+        "pointer_decoder": pointer_decoder,
+        "action_layout_version": action_layout_version_for_pointer_decoder(
+            pointer_decoder
+        ),
         "seed": int(cfg.seed),
         "retention_class": context.retention_class,
         "hydra_output_dir": str(context.run_dir),

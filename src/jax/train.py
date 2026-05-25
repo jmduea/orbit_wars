@@ -11,10 +11,13 @@ from pathlib import Path
 from typing import Callable
 
 from src.artifacts.checkpoint_compat import (
+    checkpoint_feature_metadata,
     feature_metadata,
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
+    validate_checkpoint_encoder_compatibility,
     validate_checkpoint_feature_compatibility,
+    validate_checkpoint_pointer_decoder_compatibility,
 )
 from src.artifacts.checkpoint_retention import prune_checkpoints
 from src.artifacts.pipeline import (
@@ -46,6 +49,14 @@ import jax.numpy as jnp  # noqa: E402
 
 import jax  # noqa: E402
 
+# jax.config.update("jax_debug_nans", True)
+from src.jax.rollout.metrics import (  # noqa: E402
+    BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS,
+)
+from src.jax.rollout.metrics import (  # noqa: E402
+    trajectory_shield_legal_rate,
+)
+
 from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
 from .features import TurnBatch  # noqa: E402
 from .policy import build_jax_policy  # noqa: E402
@@ -53,11 +64,6 @@ from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: 
 from .rollout.collect import collect_rollout_jax  # noqa: E402
 from .rollout.types import JaxTransitionBatch  # noqa: E402
 from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
-
-from src.jax.rollout.metrics import (  # noqa: E402
-    BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS,
-    trajectory_shield_legal_rate,
-)
 
 
 @dataclass(slots=True)
@@ -622,7 +628,10 @@ def _checkpoint_payload_builder(
     opt_state = train_state.opt_state
     rng_key = key
     cfg_snapshot = deepcopy(cfg)
-    metadata = feature_metadata(cfg_snapshot.task)
+    metadata = feature_metadata(
+        cfg_snapshot.task,
+        model_cfg=cfg_snapshot.model,
+    )
     curriculum_state_snapshot = (
         deepcopy(curriculum.state_dict()) if curriculum is not None else None
     )
@@ -878,13 +887,16 @@ def _snapshot_due(cfg: TrainConfig, update: int) -> bool:
     return interval > 0 and update % interval == 0
 
 
-def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> None:
+def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> Path:
     """Run an end-to-end JAX training loop for the JAX environment backend.
 
     This path keeps environment state, feature encoding, action sampling, rollout
     storage, return/advantage computation, and PPO updates in JAX. Mixed 2p/4p
     training uses Option A: each format owns its env state and jitted collector,
     then compatible transition batches are concatenated before PPO updates.
+
+    Returns:
+        Path to the JSONL metrics log for this run.
     """
 
     ensure_cuda_jax_if_nvidia_present()
@@ -1221,27 +1233,27 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 if episode_count
                 else 0.0
             )
-            decision_count = float(rollout_scalars["decision_count"])
-            noop_percent = (
-                (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
-                if decision_count
-                else 0.0
-            )
-            friendly_target_percent = (
-                (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
-                if decision_count
-                else 0.0
-            )
-            enemy_target_percent = (
-                (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
-                if decision_count
-                else 0.0
-            )
-            neutral_target_percent = (
-                (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
-                if decision_count
-                else 0.0
-            )
+            # decision_count = float(rollout_scalars["decision_count"])
+            # noop_percent = (
+            #     (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
+            #     if decision_count
+            #     else 0.0
+            # )
+            # friendly_target_percent = (
+            #     (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
+            #     if decision_count
+            #     else 0.0
+            # )
+            # enemy_target_percent = (
+            #     (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
+            #     if decision_count
+            #     else 0.0
+            # )
+            # neutral_target_percent = (
+            #     (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
+            #     if decision_count
+            #     else 0.0
+            # )
             total_env_steps += env_steps
             completed_episodes += episodes
             seed_scheduler.update_metric(float(rollout_scalars[cfg.training.plateau_metric]))
@@ -1289,10 +1301,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "overall_win_rate": overall_win_rate,
                 "average_reward": average_reward,
                 "average_episode_reward": average_episode_reward,
-                "noop_percent": noop_percent,
-                "friendly_target_percent": friendly_target_percent,
-                "enemy_target_percent": enemy_target_percent,
-                "neutral_target_percent": neutral_target_percent,
+                # "noop_percent": noop_percent,
+                # "friendly_target_percent": friendly_target_percent,
+                # "enemy_target_percent": enemy_target_percent,
+                # "neutral_target_percent": neutral_target_percent,
                 "trajectory_shield_blocked_count": float(
                     rollout_scalars["trajectory_shield_blocked_count"]
                 ),
@@ -1359,54 +1371,54 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "historical_snapshot_ids": historical_ids,
                 "historical_snapshot_ages_updates": historical_ages,
                 **{name: float(value) for name, value in metrics_host.items()},
-                "won_non_noop_actions_per_step": float(
-                    rollout_scalars["won_non_noop_actions_per_step"]
-                ),
-                "lost_non_noop_actions_per_step": float(
-                    rollout_scalars["lost_non_noop_actions_per_step"]
-                ),
-                "won_avg_fleet_launch_size": float(
-                    rollout_scalars["won_avg_fleet_launch_size"]
-                ),
-                "lost_avg_fleet_launch_size": float(
-                    rollout_scalars["lost_avg_fleet_launch_size"]
-                ),
-                "won_avg_planets_owned": float(
-                    rollout_scalars["won_avg_planets_owned"]
-                ),
-                "lost_avg_planets_owned": float(
-                    rollout_scalars["lost_avg_planets_owned"]
-                ),
-                "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
-                "lost_avg_planets_lost": float(
-                    rollout_scalars["lost_avg_planets_lost"]
-                ),
-                "won_avg_planets_taken": float(
-                    rollout_scalars["won_avg_planets_taken"]
-                ),
-                "lost_avg_planets_taken": float(
-                    rollout_scalars["lost_avg_planets_taken"]
-                ),
-                "won_avg_garrisoned_ships_per_planet": float(
-                    rollout_scalars["won_avg_garrisoned_ships_per_planet"]
-                ),
-                "lost_avg_garrisoned_ships_per_planet": float(
-                    rollout_scalars["lost_avg_garrisoned_ships_per_planet"]
-                ),
-                "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
-                "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
-                "won_avg_production_diff": float(
-                    rollout_scalars["won_avg_production_diff"]
-                ),
-                "lost_avg_production_diff": float(
-                    rollout_scalars["lost_avg_production_diff"]
-                ),
-                "won_avg_launch_fleet_speed": float(
-                    rollout_scalars["won_avg_launch_fleet_speed"]
-                ),
-                "lost_avg_launch_fleet_speed": float(
-                    rollout_scalars["lost_avg_launch_fleet_speed"]
-                ),
+                # "won_non_noop_actions_per_step": float(
+                #     rollout_scalars["won_non_noop_actions_per_step"]
+                # ),
+                # "lost_non_noop_actions_per_step": float(
+                #     rollout_scalars["lost_non_noop_actions_per_step"]
+                # ),
+                # "won_avg_fleet_launch_size": float(
+                #     rollout_scalars["won_avg_fleet_launch_size"]
+                # ),
+                # "lost_avg_fleet_launch_size": float(
+                #     rollout_scalars["lost_avg_fleet_launch_size"]
+                # ),
+                # "won_avg_planets_owned": float(
+                #     rollout_scalars["won_avg_planets_owned"]
+                # ),
+                # "lost_avg_planets_owned": float(
+                #     rollout_scalars["lost_avg_planets_owned"]
+                # ),
+                # "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
+                # "lost_avg_planets_lost": float(
+                #     rollout_scalars["lost_avg_planets_lost"]
+                # ),
+                # "won_avg_planets_taken": float(
+                #     rollout_scalars["won_avg_planets_taken"]
+                # ),
+                # "lost_avg_planets_taken": float(
+                #     rollout_scalars["lost_avg_planets_taken"]
+                # ),
+                # "won_avg_garrisoned_ships_per_planet": float(
+                #     rollout_scalars["won_avg_garrisoned_ships_per_planet"]
+                # ),
+                # "lost_avg_garrisoned_ships_per_planet": float(
+                #     rollout_scalars["lost_avg_garrisoned_ships_per_planet"]
+                # ),
+                # "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
+                # "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
+                # "won_avg_production_diff": float(
+                #     rollout_scalars["won_avg_production_diff"]
+                # ),
+                # "lost_avg_production_diff": float(
+                #     rollout_scalars["lost_avg_production_diff"]
+                # ),
+                # "won_avg_launch_fleet_speed": float(
+                #     rollout_scalars["won_avg_launch_fleet_speed"]
+                # ),
+                # "lost_avg_launch_fleet_speed": float(
+                #     rollout_scalars["lost_avg_launch_fleet_speed"]
+                # ),
                 "opponent_composition": {
                     "latest": float(rollout_scalars["opponent_slots_latest"]),
                     "historical": float(rollout_scalars["opponent_slots_historical"]),
@@ -1426,11 +1438,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             append_jsonl(log_path, record)
             telemetry.log(record, step=update)
             if update % cfg.training.log_every == 0:
+                entropy_line = f"entropy={float(record['entropy']):.4f}"
+                if "entropy_stop" in record and "entropy_move" in record:
+                    entropy_line = (
+                        f"entropy_stop={float(record['entropy_stop']):.4f} "
+                        f"entropy_move={float(record['entropy_move']):.4f} "
+                        f"entropy={float(record['entropy']):.4f}"
+                    )
                 print(
                     f"update={update} steps={total_env_steps} episodes={completed_episodes} "
                     f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
-                    f"entropy={record['entropy']:.3f}"
+                    f"{entropy_line}"
                 )
             if update % cfg.artifacts.checkpoint_every == 0 or update == cfg.training.total_updates:
                 is_final = update == cfg.training.total_updates
@@ -1502,6 +1521,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             f"checkpoint worker failed at update {first_failure.update}: "
             f"{first_failure.error or first_failure.reason or first_failure.status}"
         )
+    return log_path
 
 
 def append_jsonl(path: Path, record: dict[str, object]) -> None:
@@ -1527,6 +1547,17 @@ def load_jax_checkpoint(
     )
     validate_checkpoint_feature_compatibility(
         checkpoint, cfg.task, checkpoint_path=checkpoint_path
+    )
+    stored_metadata = checkpoint_feature_metadata(checkpoint)
+    validate_checkpoint_encoder_compatibility(
+        stored_metadata,
+        cfg,
+        checkpoint_path=checkpoint_path,
+    )
+    validate_checkpoint_pointer_decoder_compatibility(
+        stored_metadata,
+        cfg,
+        checkpoint_path=checkpoint_path,
     )
     params = jax.device_put(checkpoint["params"])
     opt_state = checkpoint.get("opt_state")

@@ -145,3 +145,45 @@ def test_infer_metadata_rejects_v1_self_encoder() -> None:
     }
 
     assert infer_feature_metadata_from_state_dict(state_dict) is None
+
+
+def test_feature_metadata_includes_factorized_pointer_decoder() -> None:
+    metadata = feature_metadata(
+        _task(),
+        model_cfg=ModelConfig(
+            architecture="gnn_pointer",
+            pointer_decoder="factorized_topk",
+        ),
+    )
+    assert metadata["pointer_decoder"] == "factorized_topk"
+    assert metadata["action_layout_version"] == 2
+
+
+def test_validate_rejects_pointer_decoder_mismatch() -> None:
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "joint_flat"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored["pointer_decoder"] = "factorized_topk"
+    stored["action_layout_version"] = 2
+
+    from src.artifacts.checkpoint_compat import validate_checkpoint_pointer_decoder_compatibility
+
+    with pytest.raises(ValueError, match="pointer_decoder"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_action_layout_mismatch() -> None:
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "factorized_topk"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored["action_layout_version"] = 1
+
+    from src.artifacts.checkpoint_compat import validate_checkpoint_pointer_decoder_compatibility
+
+    with pytest.raises(ValueError, match="action_layout_version"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+

@@ -5,9 +5,12 @@ import re
 from pathlib import Path
 
 from src.artifacts import run_paths
+from src.artifacts.run_paths import (
+    compose_run_name,
+    resolve_run_paths,
+    write_run_manifests,
+)
 from src.config import TrainConfig
-from src.artifacts.run_paths import compose_run_name, resolve_run_paths, write_run_manifests
-
 
 RUN_NAME_TIMESTAMP_RE = r"\d{8}T\d{6}Z"
 
@@ -44,6 +47,8 @@ def test_write_run_manifests_records_required_paths(tmp_path: Path) -> None:
     assert manifest["run_id"] == "run-001"
     assert manifest["campaign"] == "capacity"
     assert manifest["model_compatibility_family"] == cfg.model.architecture
+    assert manifest["pointer_decoder"] == "joint_flat"
+    assert manifest["action_layout_version"] == 1
     assert manifest["paths"]["checkpoints_dir"] == str(context.checkpoints_dir)
     assert context.campaign_manifest_path.exists()
     assert (context.indexes_dir / "runs.jsonl").exists()

@@ -6,6 +6,7 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
+import jax
 from src.opponents.pool import (
     OPPONENT_FAMILY_COUNT,
     OPPONENT_FAMILY_IDS,
@@ -141,10 +142,14 @@ class CurriculumController:
             )
         else:
             historical_probs = valid_mask.astype(jnp.float32)
+        total = historical_probs.sum()
         historical_probs = jnp.where(
-            historical_probs.sum() > 0.0,
-            historical_probs / historical_probs.sum(),
-            historical_probs,
+            total > 0.0,
+            historical_probs / jnp.maximum(total, 1.0),
+            jnp.zeros_like(historical_probs),
+        )
+        historical_probs = jnp.where(
+            jnp.isfinite(historical_probs), historical_probs, 0.0
         )
         return StageView(
             stage_index=jnp.asarray(self.stage_index, dtype=jnp.int32),

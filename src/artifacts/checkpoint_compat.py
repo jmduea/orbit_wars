@@ -66,7 +66,14 @@ METADATA_KEYS = (
     "edge_k",
     "intercept_anchors",
     "encoder_backbone",
+    "pointer_decoder",
+    "action_layout_version",
 )
+
+POINTER_DECODER_JOINT_FLAT = "joint_flat"
+POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
+ACTION_LAYOUT_JOINT_FLAT = 1
+ACTION_LAYOUT_FACTORIZED_TOPK = 2
 
 
 def encoder_backbone_for_architecture(architecture: str) -> str:
@@ -80,6 +87,79 @@ def encoder_backbone_for_architecture(architecture: str) -> str:
     raise ValueError(
         f"Unsupported model architecture for encoder_backbone metadata: {architecture!r}"
     )
+
+
+def pointer_decoder_for_model(model_cfg: ModelConfig) -> str:
+    """Map ``ModelConfig`` to the checkpoint pointer-decoder slug."""
+
+    raw = getattr(model_cfg, "pointer_decoder", POINTER_DECODER_JOINT_FLAT)
+    normalized = str(raw).strip().lower()
+    if normalized in {POINTER_DECODER_JOINT_FLAT, "joint", "flat"}:
+        return POINTER_DECODER_JOINT_FLAT
+    if normalized in {
+        POINTER_DECODER_FACTORIZED_TOPK,
+        "factorized",
+        "factorized_topk",
+    }:
+        return POINTER_DECODER_FACTORIZED_TOPK
+    raise ValueError(
+        f"Unsupported pointer_decoder {raw!r}. Expected "
+        f"{POINTER_DECODER_JOINT_FLAT!r} or {POINTER_DECODER_FACTORIZED_TOPK!r}."
+    )
+
+
+def is_factorized_pointer_decoder(model_cfg: ModelConfig) -> bool:
+    """Return True when the configured model uses the factorized top-K decoder."""
+
+    return pointer_decoder_for_model(model_cfg) == POINTER_DECODER_FACTORIZED_TOPK
+
+
+def action_layout_version_for_pointer_decoder(pointer_decoder: str) -> int:
+    """Return the integer action-layout version for a pointer decoder slug."""
+
+    if pointer_decoder == POINTER_DECODER_JOINT_FLAT:
+        return ACTION_LAYOUT_JOINT_FLAT
+    if pointer_decoder == POINTER_DECODER_FACTORIZED_TOPK:
+        return ACTION_LAYOUT_FACTORIZED_TOPK
+    raise ValueError(f"Unsupported pointer_decoder slug: {pointer_decoder!r}")
+
+
+def validate_checkpoint_pointer_decoder_compatibility(
+    stored: Mapping[str, object] | None,
+    cfg: TrainConfig,
+    *,
+    checkpoint_path: str | Path | None = None,
+) -> None:
+    """Raise when checkpoint pointer decoder differs from the current model."""
+
+    if stored is None:
+        return
+
+    stored_decoder = stored.get("pointer_decoder")
+    if stored_decoder is None:
+        return
+
+    expected = pointer_decoder_for_model(cfg.model)
+    if str(stored_decoder) != expected:
+        location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+        raise ValueError(
+            f"Checkpoint{location} pointer_decoder={stored_decoder!r} is incompatible "
+        f"with current model (expected pointer_decoder={expected!r}). Retrain or "
+        "load a matching checkpoint."
+        )
+
+    stored_layout = stored.get("action_layout_version")
+    if stored_layout is not None:
+        expected_layout = action_layout_version_for_pointer_decoder(expected)
+        if int(stored_layout) != expected_layout:
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} action_layout_version={stored_layout!r} is "
+                f"incompatible with pointer_decoder={expected!r} (expected "
+                f"action_layout_version={expected_layout}). Retrain or load a "
+                "matching checkpoint."
+            )
+    return
 
 
 def load_checkpoint_payload(checkpoint_path: str | Path) -> object:
@@ -176,6 +256,11 @@ def feature_metadata(
         metadata["encoder_backbone"] = encoder_backbone_for_architecture(
             model_cfg.architecture
         )
+        pointer_decoder = pointer_decoder_for_model(model_cfg)
+        metadata["pointer_decoder"] = pointer_decoder
+        metadata["action_layout_version"] = action_layout_version_for_pointer_decoder(
+            pointer_decoder
+        )
     return metadata
 
 
@@ -217,8 +302,10 @@ def checkpoint_feature_metadata(
                 parsed[key] = int(value)
             elif key == "ship_feature_scale":
                 parsed[key] = float(value)
-            elif key in {"edge_layout", "encoder_backbone"}:
+            elif key in {"edge_layout", "encoder_backbone", "pointer_decoder"}:
                 parsed[key] = str(value)
+            elif key == "action_layout_version":
+                parsed[key] = int(value)
             elif key == "intercept_anchors":
                 parsed[key] = tuple(float(v) for v in value)
             else:
