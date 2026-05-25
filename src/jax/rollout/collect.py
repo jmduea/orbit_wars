@@ -31,75 +31,7 @@ from src.opponents.jax_actions.sampling import (
 from src.opponents.pool import OPPONENT_HISTORICAL, OPPONENT_LATEST, sample_opponent_type_ids_jax
 from src.training.curriculum import StageView, default_stage_view
 
-
-def _rollout_metrics(data, cfg: TrainConfig, env_count: int) -> dict[str, jax.Array]:
-    done_float = data["done"].astype(jnp.float32)
-    episode_done = done_float.sum()
-    metrics = {
-        "env_steps": jnp.array(
-            cfg.training.rollout_steps * env_count,
-            dtype=jnp.float32,
-        ),
-        "samples": data["target_index"].astype(jnp.float32).size,
-        "reward_mean": data["reward"].mean(),
-        "episode_done": episode_done,
-        "episodes_2p": jnp.where(cfg.task.player_count == 2, episode_done, 0.0),
-        "episodes_4p": jnp.where(cfg.task.player_count == 4, episode_done, 0.0),
-        "win_rate_2p": jnp.where(
-            cfg.task.player_count == 2,
-            (data["terminal_is_first"] * done_float).sum()
-            / jnp.maximum(episode_done, 1.0),
-            0.0,
-        ),
-        "first_place_rate_4p": jnp.where(
-            cfg.task.player_count == 4,
-            (data["terminal_is_first"] * done_float).sum()
-            / jnp.maximum(episode_done, 1.0),
-            0.0,
-        ),
-        "average_placement_4p": jnp.where(
-            cfg.task.player_count == 4,
-            (data["terminal_placement"] * done_float).sum()
-            / jnp.maximum(episode_done, 1.0),
-            0.0,
-        ),
-        "loss_sample_count_2p": jnp.array(0.0, dtype=jnp.float32),
-        "loss_sample_count_4p": jnp.array(0.0, dtype=jnp.float32),
-    }
-    for key in (
-        "opponent_slots_total",
-        "opponent_slots_latest",
-        "opponent_slots_historical",
-        "opponent_slots_random",
-        "opponent_slots_noop",
-        "opponent_slots_nearest_sniper",
-        "opponent_slots_turtle",
-        "opponent_slots_opportunistic",
-        "opponent_historical_fallback_latest_slots",
-    ):
-        if key in data:
-            metrics[key] = data[key].sum()
-    original_non_noop = data.get("trajectory_shield_original_non_noop_count")
-    if original_non_noop is not None:
-        legal_non_noop = data["trajectory_shield_legal_non_noop_count"].sum()
-        original_total = original_non_noop.sum()
-        metrics["trajectory_shield_legal_non_noop_count"] = legal_non_noop
-        metrics["trajectory_shield_original_non_noop_count"] = original_total
-        metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
-            original_total > 0.0,
-            legal_non_noop / original_total,
-            0.0,
-        )
-        for key in (
-            "trajectory_shield_blocked_count",
-            "trajectory_shield_blocked_sun_count",
-            "trajectory_shield_blocked_bounds_count",
-            "trajectory_shield_blocked_unintended_hit_count",
-            "trajectory_shield_blocked_horizon_count",
-            "trajectory_shield_fallback_noop_count",
-        ):
-            metrics[key] = data[key].sum()
-    return metrics
+from .metrics import rollout_metrics
 
 
 def collect_rollout_jax(
@@ -313,6 +245,8 @@ def collect_rollout_jax(
             "done": result.done,
             "terminal_is_first": result.terminal_is_first,
             "terminal_placement": result.terminal_placement,
+            "terminal_survival_time": result.terminal_survival_time,
+            "terminal_score_share": result.terminal_score_share,
             "opponent_slots_total": family_counts["opponent_slots_total"],
             "opponent_slots_latest": family_counts["opponent_slots_latest"],
             "opponent_slots_historical": family_counts["opponent_slots_historical"],
@@ -371,5 +305,5 @@ def collect_rollout_jax(
         returns=returns,
         advantages=advantages,
     )
-    metrics = _rollout_metrics(data, cfg, env_count)
+    metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     return key, env_state, turn_batch, transitions, metrics
