@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "omg-workflow": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "WORKSPACE_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}

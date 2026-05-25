@@ -1,0 +1,1 @@
+/home/jmduea/projects/orbit_wars/.github/prompts/quick-review.prompt.md
