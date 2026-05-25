@@ -24,7 +24,7 @@ test-domain-jax-env:
 	uv run --group dev pytest tests/test_jax_env.py tests/test_jax_env_v2_dispatch.py -m "jax and not slow"
 
 test-domain-policy:
-	uv run --group dev pytest tests/test_jax_policy.py tests/test_jax_policy_v2.py tests/test_jax_rollout_v2.py tests/test_jax_ppo.py tests/test_trajectory_shield.py -m "jax and not slow"
+	uv run --group dev pytest tests/test_jax_policy.py tests/test_jax_policy_v2.py tests/test_jax_rollout_v2.py tests/test_jax_scripted_opponents_v2.py tests/test_jax_ppo.py tests/test_trajectory_shield.py -m "jax and not slow"
 
 test-domain-artifacts:
 	uv run --group dev pytest tests/test_artifact_pipeline.py tests/test_replay.py tests/test_kaggle_submission_packager.py -m "not slow and not jax"

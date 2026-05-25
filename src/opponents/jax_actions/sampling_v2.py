@@ -13,7 +13,10 @@ from src.opponents.jax_actions.builders_v2 import (
     _sample_policy_action_v2,
     _sample_policy_action_v2_with_params,
     build_noop_action_from_edge_batch,
+    build_opportunistic_action_from_edge_batch,
     build_random_action_from_edge_batch,
+    build_sniper_action_from_edge_batch,
+    build_turtle_action_from_edge_batch,
 )
 from src.opponents.jax_actions.sampling import (
     _gather_action_by_env,
@@ -67,6 +70,25 @@ def _shielded_random_edge_action(
         cfg,
         _edge_bucket_mask(shielded, cfg, env_count=env_count),
     )
+
+
+def _shielded_scripted_edge_action(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    builder,
+) -> JaxAction:
+    env_count = batch.planet_features.shape[0]
+    edge_count = edge_action_count(cfg.task)
+    shielded = jax.vmap(
+        lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
+            game_row, batch_row, cfg.task
+        )
+    )(game, batch)
+    bucket_mask = shielded.ship_bucket_mask.reshape(
+        env_count, edge_count, cfg.task.ship_bucket_count
+    )
+    return builder(game, shielded.batch, cfg, bucket_mask)
 
 
 def _sample_historical_action_v2(
@@ -155,8 +177,20 @@ def _sample_single_family_2p_action_v2(
     def random_branch(_: None) -> JaxAction:
         return _shielded_random_edge_action(key, game, batch, cfg)
 
-    def scripted_fallback_branch(_: None) -> JaxAction:
-        return _shielded_random_edge_action(jax.random.fold_in(key, 19), game, batch, cfg)
+    def nearest_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_sniper_action_from_edge_batch
+        )
+
+    def turtle_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_turtle_action_from_edge_batch
+        )
+
+    def opportunistic_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_opportunistic_action_from_edge_batch
+        )
 
     def noop_branch(_: None) -> JaxAction:
         return build_noop_action_from_edge_batch(game, batch, cfg)
@@ -166,9 +200,9 @@ def _sample_single_family_2p_action_v2(
         (
             latest_branch,
             historical_branch,
-            scripted_fallback_branch,
-            scripted_fallback_branch,
-            scripted_fallback_branch,
+            nearest_branch,
+            turtle_branch,
+            opportunistic_branch,
             random_branch,
             noop_branch,
         ),
@@ -316,8 +350,20 @@ def _sample_single_family_4p_action_v2(
             jax.random.fold_in(key, cfg.task.player_count), game, batch, cfg
         )
 
-    def scripted_fallback_branch(_: None) -> JaxAction:
-        return _shielded_random_edge_action(jax.random.fold_in(key, 29), game, batch, cfg)
+    def nearest_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_sniper_action_from_edge_batch
+        )
+
+    def turtle_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_turtle_action_from_edge_batch
+        )
+
+    def opportunistic_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_opportunistic_action_from_edge_batch
+        )
 
     def noop_branch(_: None) -> JaxAction:
         return build_noop_action_from_edge_batch(game, batch, cfg)
@@ -327,9 +373,9 @@ def _sample_single_family_4p_action_v2(
         (
             latest_branch,
             historical_branch,
-            scripted_fallback_branch,
-            scripted_fallback_branch,
-            scripted_fallback_branch,
+            nearest_branch,
+            turtle_branch,
+            opportunistic_branch,
             random_branch,
             noop_branch,
         ),

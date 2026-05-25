@@ -336,6 +336,160 @@ def _sample_shielded_sequence_v2_with_params(
         diagnostics=diagnostics,
     )
 
+
+def _edge_scripted_context(
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None,
+):
+    from src.features.registry_v2 import EDGE_FEATURE_SCHEMA, edge_k
+
+    env_count = batch.planet_features.shape[0]
+    k = edge_k(cfg.task)
+    flat_count = MAX_PLANETS * k
+    flat_mask = batch.edge_mask.reshape(env_count, flat_count)
+    owner_slice = EDGE_FEATURE_SCHEMA.slice("target_owner_slot")
+    owner_slots = batch.edge_features[..., owner_slice].reshape(env_count, flat_count, 4)
+    distance = batch.edge_features[..., EDGE_FEATURE_SCHEMA.slice("distance")].reshape(
+        env_count, flat_count
+    )
+    if ship_bucket_mask is None:
+        full_mask = jnp.concatenate(
+            [flat_mask, jnp.ones((env_count, 1), dtype=bool)], axis=1
+        )
+        bucket_mask = default_edge_action_bucket_mask(
+            full_mask, cfg.task.ship_bucket_count
+        )
+    else:
+        bucket_mask = ship_bucket_mask
+    real_bucket = bucket_mask[:, :flat_count, :][..., 1:].any(axis=-1)
+    valid = flat_mask & real_bucket
+    owner_sum = owner_slots.sum(axis=-1)
+    neutral = valid & (owner_sum < 0.5)
+    enemy = valid & (owner_sum > 0.5) & (owner_slots[..., 0] < 0.5)
+    return {
+        "env_count": env_count,
+        "flat_count": flat_count,
+        "valid": valid,
+        "neutral": neutral,
+        "enemy": enemy,
+        "distance": distance,
+        "bucket_mask": bucket_mask,
+    }
+
+
+def _bucket_for_flat_target(
+    flat_target: jax.Array,
+    bucket_mask: jax.Array,
+    has_target: jax.Array,
+    cfg: TrainConfig,
+    *,
+    conservative: bool,
+) -> jax.Array:
+    selected_bucket_mask = jnp.take_along_axis(
+        bucket_mask,
+        flat_target[:, None, None].repeat(cfg.task.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_ids = jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)
+    if conservative:
+        nonzero = selected_bucket_mask & (bucket_ids[None, :] > 0)
+        bucket = jnp.argmax(nonzero.astype(jnp.int32), axis=-1)
+        bucket = jnp.where(has_target & nonzero.any(axis=-1), bucket, 0)
+    else:
+        bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
+        bucket = jnp.where(has_target, bucket, 0)
+    return bucket
+
+
+def _build_scripted_edge_action(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    *,
+    pick_mask: jax.Array,
+    distance: jax.Array,
+    bucket_mask: jax.Array,
+    use_nearest: bool,
+    conservative_bucket: bool,
+) -> JaxAction:
+    noop_idx = noop_edge_index(cfg.task)
+    if use_nearest:
+        masked_distance = jnp.where(pick_mask, distance, jnp.inf)
+        flat_target = jnp.argmin(masked_distance, axis=-1)
+    else:
+        flat_target = jnp.argmax(pick_mask.astype(jnp.int32), axis=-1)
+    has_target = pick_mask.any(axis=-1)
+    bucket = _bucket_for_flat_target(
+        flat_target,
+        bucket_mask,
+        has_target,
+        cfg,
+        conservative=conservative_bucket,
+    )
+    target = jnp.where(has_target, flat_target, noop_idx)
+    bucket = jnp.where(has_target, bucket, 0)
+    return build_action_from_edge_batch(
+        game, batch, target[:, None], bucket[:, None], cfg
+    )
+
+
+def build_sniper_action_from_edge_batch(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["valid"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=True,
+        conservative_bucket=False,
+    )
+
+
+def build_turtle_action_from_edge_batch(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["neutral"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=False,
+        conservative_bucket=True,
+    )
+
+
+def build_opportunistic_action_from_edge_batch(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["enemy"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=False,
+        conservative_bucket=False,
+    )
+
 def build_noop_action_from_edge_batch(
     game,
     batch: JaxTurnBatchV2,
