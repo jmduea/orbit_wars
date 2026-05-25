@@ -499,7 +499,8 @@
       "related_ids": [],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "ralplan-jax-ppo-split.md phases 0-8; all acceptance criteria met"
+      "evidence": "ralplan-jax-ppo-split.md phases 0-8; all acceptance criteria met",
+      "notes": null
     },
     {
       "id": "jax-train-split",
@@ -525,32 +526,31 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-test-efficiency.md",
       "workflow": "deep-interview",
-      "status": "executing",
+      "status": "complete",
       "title": "Test suite speed and dev-loop efficiency",
       "spec_id": null,
-      "plan_id": null,
+      "plan_id": "test-efficiency-plan",
       "related_ids": [
         "jax-ppo-split"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": "WSL2 incident: removed pytest-xdist from test-fast; CPU-only test-fast + serial test-jax; conftest blocks xdist"
+      "completed_at": "2026-05-25",
+      "evidence": "commits b382c5f b5dfb66 be4632c; make test-fast 89 passed in 12.7s (14.2s wall); make test-jax 18 passed in 49.6s; full suite 156 passed; markers+Makefile+conftest xdist block; sweep split smoke/fast vs slow/full",
+      "notes": "Phase 3 JAX module fixtures deferred — fast tier is CPU-only (no JAX); Phase 4 xdist rejected WSL2-safe serial only per spec §5"
     },
     {
       "id": "test-efficiency-plan",
       "kind": "plan",
       "path": ".omg/plans/ralplan-test-efficiency.md",
       "workflow": "ralplan",
-      "status": "executing",
+      "status": "complete",
       "title": "Test suite speed and dev-loop efficiency plan",
-      "spec_id": null,
+      "spec_id": "test-efficiency",
       "plan_id": null,
       "related_ids": [],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": null
+      "completed_at": "2026-05-25",
+      "evidence": "Phases 1-2 complete; Phase 3 deferred (CPU-only fast tier); Phase 4 cancelled (WSL2 xdist rejection); verification protocol passed"
     },
     {
       "id": "feature-encoding-trace",
