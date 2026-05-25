@@ -29,9 +29,10 @@ def _task_cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def _train_cfg(*, architecture: str) -> TrainConfig:
+def _train_cfg(*, architecture: str, pointer_decoder: str = "joint_flat") -> TrainConfig:
     cfg = TrainConfig()
     cfg.model.architecture = architecture
+    cfg.model.pointer_decoder = pointer_decoder
     cfg.model.hidden_size = 64
     cfg.model.attention_heads = 4
     cfg.model.planet_transformer_layers = 2
@@ -130,9 +131,17 @@ def test_spatial_bias_prefers_closer_planets() -> None:
 
 
 def test_build_jax_policy_dispatches_transformer() -> None:
-    cfg = _train_cfg(architecture="planet_graph_transformer")
+    cfg = _train_cfg(architecture="planet_graph_transformer", pointer_decoder="joint_flat")
     policy = build_jax_policy(cfg)
     assert policy.__class__.__name__ == "ComposablePlanetPolicy"
+
+
+def test_build_jax_policy_dispatches_factorized_transformer() -> None:
+    cfg = _train_cfg(
+        architecture="planet_graph_transformer", pointer_decoder="factorized_topk"
+    )
+    policy = build_jax_policy(cfg)
+    assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
 
 def test_encoder_backbone_metadata_mapping() -> None:

@@ -1,6 +1,6 @@
 # Feature Encoding v2 — Pointer Action Space
 
-**Status:** ADR-001 (joint flat, production default) + **ADR-005 (factorized top-K, planned M1)**
+**Status:** ADR-001 (joint flat, legacy preset) + **ADR-005 (factorized top-K, production default since M1 Phase 4)**
 
 ## v1 vs v2 (joint flat — current default)
 

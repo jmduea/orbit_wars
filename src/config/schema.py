@@ -52,7 +52,7 @@ class ModelConfig:
     gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
-    pointer_decoder: str = "joint_flat"
+    pointer_decoder: str = "factorized_topk"
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 

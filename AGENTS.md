@@ -141,6 +141,7 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - Never use `pytest-xdist` or parallel pytest workers on WSL2/CUDA hosts.
 - Before treating `.omg/specs/` or `.omg/plans/` markdown as active backlog, consult `.omg/workflow-manifest.json` (or `omg_workflow_manifest_list(active_only=true)`).
 - Create git commits only when explicitly requested.
+- Do not start test runs (`make test-fast`, domain targets, or `pytest`) when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
 
 ## Learned Workspace Facts
 

@@ -290,6 +290,7 @@ class FakeV2RuntimePolicy:
 def test_runtime_selector_chooses_safe_target_over_unsafe_high_logit() -> None:
     task_cfg = _cfg(candidate_count=4, ship_bucket_count=4)
     train_cfg = TrainConfig(task=task_cfg)
+    train_cfg.model.pointer_decoder = "joint_flat"
     planets = [
         _planet(0, 0, 80.0, 50.0, ships=40),
         _planet(1, 1, 20.0, 50.0),

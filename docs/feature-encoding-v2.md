@@ -2,7 +2,7 @@
 
 **Status:** Phase 5 cutover complete — production default `encoding_version=v2`; v1 path retained for rollback/tests  
 **Plan:** `.omg/plans/ralplan-feature-encoding-v2.md`  
-**ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame), **ADR-005 (factored pointer — planned)** below  
+**ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame), **ADR-005 (factored pointer — promoted M1)** below  
 **Symmetry exploration:** `docs/feature-encoding-v2-symmetry.md`
 
 ## Overview
@@ -118,7 +118,7 @@ Decoder weights are incompatible across values; load-time rejection mirrors `enc
 
 ### Status
 
-Phase 0 (contract + shield spike) in progress. Default runtime remains `joint_flat` until M1 Phase 4 ablation.
+Phase 4 ablation complete (2026-05-25). Default runtime is **`factorized_topk`** via `model=planet_graph_transformer_factorized`.
 
 ---
 

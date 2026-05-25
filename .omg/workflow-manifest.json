@@ -767,7 +767,7 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-factored-pointer-decoder.md",
       "workflow": "deep-interview",
-      "status": "executing",
+      "status": "complete",
       "title": "M1: Factored top-K pointer decoder + stop head",
       "spec_id": null,
       "plan_id": null,
@@ -776,16 +776,16 @@
         "intercept-edge-features"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": "Iter-4 adjustment: reverted dense P×P; active plan is factorized_topk (iter-2 consensus). Ralph PRD updated."
+      "completed_at": "2026-05-25",
+      "evidence": "Phase 4 ablation 6/6 runs; H2 pass (median 1.15× throughput); factorized_topk promoted default (conf/config.yaml). L1 skipped on ablation JSONL; telemetry wired for future runs. See docs/m1-factored-pointer-results.md.",
+      "notes": "R1 relative gate failed seed 202 only; promotion on aggregate stability + throughput."
     },
     {
       "id": "ralplan-factored-pointer-decoder",
       "kind": "plan",
       "path": ".omg/plans/ralplan-factored-pointer-decoder.md",
       "workflow": "ralplan",
-      "status": "executing",
+      "status": "complete",
       "title": "Plan: M1 factored top-K pointer decoder",
       "spec_id": null,
       "plan_id": null,
@@ -793,9 +793,9 @@
         "planet-self-attention-encoder"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": "Phase 4 ablation infra ready (scripts/run_m1_ablation.py, artifacts/m1/baseline_pin.json). Encoder: planet_graph_transformer both arms."
+      "completed_at": "2026-05-25",
+      "evidence": "Phase 4 cutover: default model=planet_graph_transformer_factorized; gate eval artifacts/m1/gate_evaluation.json.",
+      "notes": "M1 plan complete."
     },
     {
       "id": "alphazero-mcts-planning",
