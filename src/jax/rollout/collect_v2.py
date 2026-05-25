@@ -13,22 +13,29 @@ from src.jax.env import (
     batched_step_multi_player,
 )
 from src.jax.features_v2 import JaxTurnBatchV2
-from src.jax.policy_v2 import edge_action_count
 from src.jax.ppo_update import discounted_returns
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatchV2
 from src.opponents.jax_actions.builders_v2 import (
     _sample_shielded_sequence_v2_with_params,
     build_action_from_edge_batch,
-    build_random_action_from_edge_batch,
 )
-from src.opponents.jax_actions.sampling_v2 import _four_player_step_action_v2_random
-from src.game.trajectory_shield import apply_trajectory_shield_to_turn_batch_v2
+from src.opponents.jax_actions.sampling import (
+    _maybe_effective_single_family_id,
+    _opponent_count_metrics,
+    _single_stage_family_id,
+)
+from src.opponents.jax_actions.sampling_v2 import (
+    _four_player_step_action_v2,
+    _sample_opponent_2p_action_v2,
+)
+from src.opponents.pool import OPPONENT_HISTORICAL, OPPONENT_LATEST, sample_opponent_type_ids_jax
+from src.training.curriculum import StageView, default_stage_view
 
 
 def _rollout_metrics_v2(data, cfg: TrainConfig, env_count: int) -> dict[str, jax.Array]:
     done_float = data["done"].astype(jnp.float32)
     episode_done = done_float.sum()
-    return {
+    metrics = {
         "env_steps": jnp.array(
             cfg.training.rollout_steps * env_count,
             dtype=jnp.float32,
@@ -58,6 +65,20 @@ def _rollout_metrics_v2(data, cfg: TrainConfig, env_count: int) -> dict[str, jax
         "loss_sample_count_2p": jnp.array(0.0, dtype=jnp.float32),
         "loss_sample_count_4p": jnp.array(0.0, dtype=jnp.float32),
     }
+    for key in (
+        "opponent_slots_total",
+        "opponent_slots_latest",
+        "opponent_slots_historical",
+        "opponent_slots_random",
+        "opponent_slots_noop",
+        "opponent_slots_nearest_sniper",
+        "opponent_slots_turtle",
+        "opponent_slots_opportunistic",
+        "opponent_historical_fallback_latest_slots",
+    ):
+        if key in data:
+            metrics[key] = data[key].sum()
+    return metrics
 
 
 def collect_rollout_jax_v2(
@@ -68,20 +89,20 @@ def collect_rollout_jax_v2(
     policy: object,
     cfg: TrainConfig,
     opponent_params_by_player: tuple[dict, ...] | None = None,
-    stage_view=None,
+    stage_view: StageView | None = None,
     historical_params_pool: dict | None = None,
     update: int = 0,
     env_index_offset: int | jax.Array = 0,
 ):
-    del opponent_params_by_player, stage_view, historical_params_pool, update
+    del update
     if cfg.task.player_count not in (2, 4):
         raise ValueError(
             "v2 rollout supports env.player_count of 2 or 4; "
             f"got {cfg.task.player_count}."
         )
-    if cfg.opponents.mode.opponent != "random":
+    if cfg.opponents.mode.opponent not in {"self", "random"}:
         raise ValueError(
-            "v2 rollout currently supports opponent='random' only; "
+            "JAX training supports opponent='self' or opponent='random', "
             f"got {cfg.opponents.mode.opponent!r}."
         )
 
@@ -89,7 +110,7 @@ def collect_rollout_jax_v2(
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
         env_index_offset, dtype=jnp.int32
     )
-    edge_count = edge_action_count(cfg.task)
+    active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
 
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache = carry
@@ -107,23 +128,68 @@ def collect_rollout_jax_v2(
             state.game, batch, sample.target_index, sample.ship_bucket, cfg
         )
 
+        single_family_id = _single_stage_family_id(active_stage_view)
+        effective_single_family_id = _maybe_effective_single_family_id(
+            single_family_id, active_stage_view
+        )
+        single_family = single_family_id >= 0
+        opponent_type_ids = sample_opponent_type_ids_jax(
+            jax.random.fold_in(opp_key, 9973),
+            env_count,
+            cfg.task.player_count,
+            ids=active_stage_view.family_ids,
+            probs=active_stage_view.family_probs,
+        )
+        opponent_type_ids = jnp.where(
+            single_family,
+            jnp.full(
+                (env_count, cfg.task.player_count),
+                single_family_id,
+                dtype=jnp.int32,
+            ),
+            opponent_type_ids,
+        )
+        has_historical = jnp.any(active_stage_view.snapshot_valid_mask)
+        effective_type_ids = jnp.where(
+            (opponent_type_ids == OPPONENT_HISTORICAL)
+            & jnp.logical_not(has_historical),
+            active_stage_view.fallback_family_id,
+            opponent_type_ids,
+        )
+        family_counts = _opponent_count_metrics(
+            effective_type_ids, state.learner_player
+        )
+        historical_fallback_slots = (
+            (
+                (
+                    (opponent_type_ids == OPPONENT_HISTORICAL)
+                    & (effective_type_ids == OPPONENT_LATEST)
+                )
+                & (
+                    jnp.arange(cfg.task.player_count, dtype=jnp.int32)[None, :]
+                    != state.learner_player[:, None]
+                )
+            )
+            .astype(jnp.float32)
+            .sum()
+        )
+
         if cfg.task.player_count == 2:
             opp_game = state.game._replace(
                 player=(1 - state.learner_player).astype(jnp.int32)
             )
-            opp_shielded = jax.vmap(
-                lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
-                    game_row, batch_row, cfg.task
-                )
-            )(opp_game, opp_batch_cache)
-            opponent_action = build_random_action_from_edge_batch(
+            opponent_action = _sample_opponent_2p_action_v2(
                 opp_key,
                 opp_game,
-                opp_shielded.batch,
-                cfg,
-                opp_shielded.ship_bucket_mask.reshape(
-                    env_count, edge_count, cfg.task.ship_bucket_count
-                ),
+                opp_batch_cache,
+                effective_type_ids=effective_type_ids,
+                single_family=single_family,
+                effective_single_family_id=effective_single_family_id,
+                train_state=train_state,
+                policy=policy,
+                cfg=cfg,
+                stage_view=active_stage_view,
+                historical_params_pool=historical_params_pool,
             )
             next_state, result = batched_step(
                 state, learner_action, opponent_action, cfg.task, cfg.reward
@@ -147,14 +213,22 @@ def collect_rollout_jax_v2(
                 flat_player_batch,
             )
             per_player_action = jax.vmap(
-                lambda player_id: _four_player_step_action_v2_random(
+                lambda player_id: _four_player_step_action_v2(
                     player_id,
                     opp_key=opp_key,
                     player_games=player_games,
                     player_batches=player_batches,
+                    effective_type_ids=effective_type_ids,
+                    single_family=single_family,
+                    effective_single_family_id=effective_single_family_id,
                     learner_action=learner_action,
                     learner_player=state.learner_player,
+                    train_state=train_state,
+                    policy=policy,
                     cfg=cfg,
+                    opponent_params_by_player=opponent_params_by_player,
+                    active_stage_view=active_stage_view,
+                    historical_params_pool=historical_params_pool,
                 )
             )(player_ids)
             multi_player_action = jax.tree.map(
@@ -218,6 +292,15 @@ def collect_rollout_jax_v2(
             "done": result.done,
             "terminal_is_first": result.terminal_is_first,
             "terminal_placement": result.terminal_placement,
+            "opponent_slots_total": family_counts["opponent_slots_total"],
+            "opponent_slots_latest": family_counts["opponent_slots_latest"],
+            "opponent_slots_historical": family_counts["opponent_slots_historical"],
+            "opponent_slots_random": family_counts["opponent_slots_random"],
+            "opponent_slots_noop": family_counts["opponent_slots_noop"],
+            "opponent_slots_nearest_sniper": family_counts["opponent_slots_nearest_sniper"],
+            "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
+            "opponent_slots_opportunistic": family_counts["opponent_slots_opportunistic"],
+            "opponent_historical_fallback_latest_slots": historical_fallback_slots,
         }
         return (key, next_state, next_batch, next_opp_batch_cache), transition
 

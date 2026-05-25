@@ -8,6 +8,7 @@ from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.rollout.types import JaxTransitionBatchV2
 from src.jax.train_state import init_train_state
+from src.training.curriculum import CurriculumController
 
 
 def _v2_smoke_cfg(*, rollout_steps: int) -> TrainConfig:
@@ -92,3 +93,68 @@ def test_v2_four_player_random_rollout_smoke():
     assert float(metrics["loss_sample_count_2p"]) == 0.0
     assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
     assert next_train_state.params is not train_state.params
+
+
+def _v2_self_play_cfg(*, player_count: int = 2) -> TrainConfig:
+    cfg = _v2_smoke_cfg(rollout_steps=1)
+    cfg.task.player_count = player_count
+    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.self_play.enabled = True
+    cfg.curriculum.enabled = True
+    cfg.curriculum.stages = [{"id": "latest", "opponent_families": {"latest": 1.0}}]
+    return cfg
+
+
+def _stage_view(cfg: TrainConfig, *, pool_size: int = 2):
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    return controller.stage_view(
+        1,
+        snapshot_ids=jax.numpy.zeros((pool_size,), dtype=jax.numpy.int32),
+        snapshot_valid_mask=jax.numpy.zeros((pool_size,), dtype=bool),
+        snapshot_updates=jax.numpy.zeros((pool_size,), dtype=jax.numpy.int32),
+    )
+
+
+@pytest.mark.jax
+def test_v2_two_player_self_play_latest_rollout_smoke():
+    cfg = _v2_self_play_cfg(player_count=2)
+    reset_keys = jax.random.split(jax.random.PRNGKey(30), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.PRNGKey(31), policy, cfg)
+    _key, _env_state, _turn_batch, transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(32),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        stage_view=_stage_view(cfg),
+    )
+    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert float(rollout_metrics["opponent_slots_total"]) == 2.0
+    assert float(rollout_metrics["opponent_slots_latest"]) == 2.0
+    assert float(rollout_metrics["opponent_slots_random"]) == 0.0
+
+
+@pytest.mark.jax
+def test_v2_four_player_self_play_random_family_rollout_smoke():
+    cfg = _v2_self_play_cfg(player_count=4)
+    cfg.curriculum.stages = [{"id": "random", "opponent_families": {"random": 1.0}}]
+    reset_keys = jax.random.split(jax.random.PRNGKey(40), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.PRNGKey(41), policy, cfg)
+    _key, _env_state, _turn_batch, transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(42),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        stage_view=_stage_view(cfg),
+    )
+    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert float(rollout_metrics["opponent_slots_total"]) == 6.0
+    assert float(rollout_metrics["opponent_slots_random"]) == 6.0
+    assert float(rollout_metrics["opponent_slots_latest"]) == 0.0

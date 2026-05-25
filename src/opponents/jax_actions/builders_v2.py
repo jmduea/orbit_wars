@@ -335,3 +335,62 @@ def _sample_shielded_sequence_v2_with_params(
         ship_bucket_mask=bucket_mask_stack,
         diagnostics=diagnostics,
     )
+
+def build_noop_action_from_edge_batch(
+    game,
+    batch: JaxTurnBatchV2,
+    cfg: TrainConfig,
+) -> JaxAction:
+    """Build a pass/no-op action that launches no fleets."""
+
+    env_count = batch.planet_features.shape[0]
+    noop_idx = noop_edge_index(cfg.task)
+    noop_target = jnp.full((env_count, 1), noop_idx, dtype=jnp.int32)
+    noop_bucket = jnp.zeros((env_count, 1), dtype=jnp.int32)
+    return build_action_from_edge_batch(game, batch, noop_target, noop_bucket, cfg)
+
+
+def _sample_policy_action_v2_with_params(
+    key: jax.Array,
+    game,
+    batch: JaxTurnBatchV2,
+    params: dict,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+) -> JaxAction:
+    sample = _sample_shielded_sequence_v2_with_params(
+        key,
+        game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=deterministic,
+    )
+    return build_action_from_edge_batch(
+        game, batch, sample.target_index, sample.ship_bucket, cfg
+    )
+
+
+def _sample_policy_action_v2(
+    key: jax.Array,
+    game,
+    batch: JaxTurnBatchV2,
+    train_state,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+) -> JaxAction:
+    return _sample_policy_action_v2_with_params(
+        key,
+        game,
+        batch,
+        train_state.params,
+        policy,
+        cfg,
+        deterministic=deterministic,
+    )
+
