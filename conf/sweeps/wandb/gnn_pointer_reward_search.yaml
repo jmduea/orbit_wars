@@ -21,19 +21,19 @@ parameters:
   model:
     value: gnn_pointer
   format:
-    value: mix_2p_4p_16env
+    values: [2p_32env, 4p_32env]
   training.total_updates:
-    value: 80
+    value: 500
   training.rollout_steps:
-    value: 64
+    value: 500
   training.minibatch_size:
-    value: 256
+    value: 1024
   training.rollout_microbatch_envs:
-    value: 8
+    value: 32
   training.update_chunk_rows_min:
     value: 256
   training.update_chunk_rows_max:
-    value: 2048
+    value: 8192
   training.lr:
     values: [0.0001, 0.0003, 0.0006]
   training.ent_coef:
@@ -49,8 +49,8 @@ parameters:
   model.gnn_message_passing_layers:
     values: [1, 2, 3]
   artifacts.checkpoint_every:
-    value: 1000
+    value: 500
   artifacts.artifact_pipeline.enabled:
-    value: false
+    value: true
   artifacts.replay.enabled:
-    value: false
+    value: true
