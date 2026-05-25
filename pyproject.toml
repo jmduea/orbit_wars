@@ -48,6 +48,16 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 
+[tool.pyrefly]
+project-includes = [
+    "src",
+    "tests",
+    "scripts",
+]
+search-path = ["."]
+python-version = "3.12.0"
+infer-with-first-use = false
+
 [dependency-groups]
 dev = [
     "ruff>=0.15.13",
