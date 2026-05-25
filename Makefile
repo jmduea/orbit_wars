@@ -18,7 +18,7 @@ test-domain-config:
 	uv run --group dev pytest tests/test_config_consolidation.py tests/test_telemetry.py tests/test_metric_registry.py tests/test_run_paths.py -m "not slow and not jax"
 
 test-domain-features:
-	uv run --group dev pytest tests/test_features.py tests/test_feature_history.py tests/test_feature_registry.py tests/test_normalization.py -m "not slow and not jax"
+	uv run --group dev pytest tests/test_features.py tests/test_feature_history.py tests/test_feature_registry.py tests/test_feature_registry_v2.py tests/test_feature_encoding_v2_golden.py tests/test_normalization.py -m "not slow and not jax"
 
 test-domain-jax-env:
 	uv run --group dev pytest tests/test_jax_env.py -m "jax and not slow"

@@ -19,21 +19,30 @@ v2 replaces v1's self/candidate/global flat groups with:
 
 ---
 
-## ADR-001: Action Space
+## ADR-001: Action Space (Final)
 
 ### Decision
 
-Joint pointer selects an **edge index** from a flat list of legal `(source, target)` pairs for the current decision step. Ship bucket is sampled conditioned on the chosen edge.
+Joint pointer selects an **edge index** from a flat list of legal `(source, target)` pairs for the current decision step. Ship bucket is sampled **conditioned on the chosen edge**.
 
-### Index space
+### Index space (static JIT layout)
 
 ```
-edges[e] = (src_planet_id, tgt_planet_id)   for e in 0..E_flat-1
-logits[e] for e in 0..E_flat-1
-logits[NO_OP]  — dedicated stop logit (index E_flat)
+K = max(0, candidate_count - 1)
+E_flat = MAX_PLANETS * K
+
+For src_row in 0 .. MAX_PLANETS-1, slot k in 0 .. K-1:
+  flat_idx = src_row * K + k
+  edge = (edge_src_ids[src_row], edge_tgt_ids[src_row, k])   when edge_mask[src_row, k]
+
+logits: float32[E_flat + 1]
+  logits[0 .. E_flat-1]  — edge candidates (masked illegal)
+  logits[E_flat]           — NO_OP (always legal)
 ```
 
-**K-step launches:** For `max_moves_k > 1`, repeat pointer+ship within turn; decrement available ships per source; mask edges whose source has no ships remaining.
+**Padding contract:** Non-owned source rows keep `edge_mask=False`; edge features zeroed. Policy softmax uses the legality mask before sampling.
+
+**K-step launches (`max_moves_k > 1`):** Repeat pointer → ship bucket within the same env step. After each launch, decrement available ships on the chosen source; mask edges whose source has zero ships remaining. NO_OP remains legal each sub-step.
 
 ### Legality mask (action sampling)
 
@@ -44,7 +53,7 @@ logits[NO_OP]  — dedicated stop logit (index E_flat)
 | `src != tgt` | Required |
 | Sun-crossing shot | **Masked** (align with JAX v1 training) |
 | Trajectory shield | Applied at sample time per bucket |
-| NO_OP | Always legal |
+| NO_OP | Always legal (`logits[E_flat]`) |
 
 ### Game API mapping (submission)
 
@@ -53,16 +62,26 @@ External format unchanged: `[source_planet_id, angle, ships]`.
 Internal decode:
 
 ```
-(src, tgt) = edges[e]
-angle = atan2(tgt.y - src.y, tgt.x - src.x)
+(src, tgt) = edges[flat_idx]
+angle_abs = atan2(tgt.y - src.y, tgt.x - src.x)    # or canonical + θ_ref (ADR-004)
 ships = bucket_to_count(source_ships, bucket)
 ```
 
 Target planet is **angle-implied** at game API — must match training shield geometry.
 
-### File touch list
+### File touch list (Phase 3 scope)
 
-See ralplan appendix. Critical: `trajectory_shield.py`, `opponents/jax_actions/builders.py`, three inference decode loops (packager, runtime, replay).
+| Area | Files |
+|------|-------|
+| Shield | `src/game/trajectory_shield.py` — edge-batch variant |
+| Action builders | `src/opponents/jax_actions/builders.py` — `build_action_from_edge_batch` |
+| Sampling | `src/opponents/jax_actions/sampling.py` |
+| Rollout | `src/jax/rollout/types.py`, `collect.py`, `metrics.py` |
+| PPO | `src/jax/ppo_update.py` — v2 transition flatten |
+| Policy | `src/jax/policy.py` — joint edge decoder |
+| Env | `src/jax/env.py` — encode dispatch |
+| Submission | `scripts/validate_kaggle_docker_submission.py`, packager decode loops |
+| Inference | `src/opponents/runtime.py` (if Python path retained for debug) |
 
 ---
 
@@ -172,9 +191,11 @@ Layers A (owner-relative) + B (frame) + C (edge-primary geometry) are **in scope
 
 ---
 
-## Schema v2 (Draft — dims TBD Phase 0 lock)
+## Schema v2 (Locked — Phase 0)
 
-### Planet features (P — target ~12–14)
+**Dims:** P=13, E=12, G=46. **Evidence:** `docs/feature-encoding-v2-phase0-results.md`, `scripts/spike_feature_encoding_v2_phase0.py budget`.
+
+### Planet features (P = 13)
 
 Scale: `S = task.ship_feature_scale`. Frame: ADR-004 (`r`, `θ` learner-canonical).
 
@@ -189,13 +210,13 @@ Scale: `S = task.ship_feature_scale`. Frame: ADR-004 (`r`, `θ` learner-canonica
 | rotating_flag | 1 | 0/1 |
 | owner_slot | 4 | relative one-hot (4p) |
 | incoming_friendly_pressure | 1 | `pressure / S` |
-| incoming_enemy_pressure | 1 | `pressure / S` |
-| outgoing_friendly_ships | 1 | `outgoing / S` |
 | ship_delta | 1 | `(ships - ships_prev) / S` |
 
-### Edge features (E — target ~10–12)
+Note: P=13 omits planet-row `incoming_enemy_pressure` and `outgoing_friendly_ships` (edge tensor carries target pressures; outgoing is source-local and omitted at this dim budget).
 
-Distances/deltas in **learner frame** (ADR-004), then scaled.
+### Edge features (E = 12)
+
+Distances/deltas in **learner frame** (ADR-004), then scaled. Target production / ship_delta / owner_changed live on planet rows (Layer C dedup).
 
 | Field | Dim | Encoding |
 |-------|-----|----------|
@@ -203,27 +224,30 @@ Distances/deltas in **learner frame** (ADR-004), then scaled.
 | distance | 1 | learner-frame `/ BOARD_SIZE` |
 | sun_crossing | 1 | 0/1 |
 | target_ships | 1 | `min(ships, S) / S` |
-| target_production | 1 | `/ MAX_PRODUCTION` |
 | target_owner_slot | 4 | relative one-hot |
 | turns_to_arrival | 1 | `distance / MAX_FLEET_SPEED / MAX_STEPS` |
 | target_incoming_friendly | 1 | `pressure / S` |
 | target_incoming_enemy | 1 | `pressure / S` |
-| target_ship_delta | 1 | `(ships - ships_prev) / S` |
-| owner_changed | 1 | 0/1 |
 
-### Global features (G — target ~45, evolved from v1 global-only)
+### Global features (G = 46)
 
-Retain v1 global group semantics without duplicating into planet rows. Ship/fleet totals use `MAX_PLANETS * S` as denominator where v1 used `MAX_PLANETS * max_ships`.
+Retain v1 global group semantics (45 dims) plus **`angular_velocity`** (normalized; Kaggle obs field). Ship/fleet totals use `MAX_PLANETS * S` as denominator where v1 used `MAX_PLANETS * max_ships`.
 
 - step_fraction, planet/ship/fleet fractions
 - owner-relative counts/ships/fleets/production (4 slots)
 - active_owner_mask, player_count
-- **angular_velocity** (normalized; Kaggle obs field, useful for rotating planets)
-- delta slots (ships, planets, fleets, production)
+- **angular_velocity** (1)
+- delta slots (ships, planets, fleets, production) — 16 dims
 
-### Dim budget (default H=1, K=3, P≈13, E≈12, G≈45)
+### Dim budget (default H=1, K=3)
 
-Approx per decision: `P*60 + K*60*E + G ≈ 780 + 2160 + 45` — **encoder payload larger than v1 row** but structured; pointer softmax over `60*K+1 ≈ 181` vs v1 `C=4` per source. **Phase 0 spike required** to validate JIT/memory; may reduce P/E or owned-row sparsity.
+| Component | Floats |
+|-----------|-------:|
+| Planets (60×13) | 780 |
+| Edges (60×3×12) | 2160 |
+| Global | 46 |
+| **Total** | **2986** |
+| Pointer softmax | 181 |
 
 ---
 
@@ -307,12 +331,18 @@ architecture: gnn_pointer_v2
 
 ## Phase 0 exit checklist
 
-- [x] ADR-001 action space drafted
+- [x] ADR-001 action space finalized
+- [x] ADR-002 edge layout (top-K) finalized
 - [x] ADR-003 ship feature scale (`ship_feature_scale` vs fleet speed)
 - [x] ADR-004 symmetry frame (`θ_ref` = sun → owned-planet centroid)
-- [x] Schema draft tables
+- [x] Schema draft tables → **P=13, E=12, G=46 locked**
 - [x] Submission audit
 - [x] Cutover numeric gates documented
-- [ ] **P, E, G dims locked** (after float budget spike)
-- [ ] **v1 baseline metrics captured**
-- [ ] **jax-ppo-split dependency cleared**
+- [x] Float budget spike (`scripts/spike_feature_encoding_v2_phase0.py`)
+- [x] Equivariance spike (known transforms)
+- [x] v1 baseline metrics captured (`docs/feature-encoding-v2-phase0-results.md`)
+- [x] jax-ppo-split dependency cleared
+- [x] Config sketch (`conf/model/gnn_pointer_v2.yaml`)
+- [ ] Layer D planet sort — deferred
+
+**Phase 0: COMPLETE** — see `docs/feature-encoding-v2-phase0-results.md`.

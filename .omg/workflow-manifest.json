@@ -550,7 +550,8 @@
       "related_ids": [],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "Phases 1-2 complete; Phase 3 deferred (CPU-only fast tier); Phase 4 cancelled (WSL2 xdist rejection); verification protocol passed"
+      "evidence": "Phases 1-2 complete; Phase 3 deferred (CPU-only fast tier); Phase 4 cancelled (WSL2 xdist rejection); verification protocol passed",
+      "notes": null
     },
     {
       "id": "feature-encoding-trace",
@@ -572,7 +573,7 @@
       "kind": "spec",
       "path": ".omg/specs/deep-dive-feature-encoding.md",
       "workflow": "deep-dive",
-      "status": "planned",
+      "status": "executing",
       "title": "Feature encoding v2 greenfield",
       "spec_id": null,
       "plan_id": "feature-encoding-v2-plan",
@@ -582,25 +583,40 @@
       ],
       "supersedes_id": null,
       "completed_at": null,
-      "evidence": null,
-      "notes": "v2 greenfield: planet+edge encoder, joint pointer, side-by-side v1; ralplan consensus"
+      "evidence": "Phase 0 complete 2026-05-25: docs/feature-encoding-v2-phase0-results.md; spike script; P=13 E=12 G=46 locked; jax-ppo-split gate cleared",
+      "notes": "v2 greenfield: planet+edge encoder, joint pointer, side-by-side v1; Phase 1 encoder next"
     },
     {
       "id": "feature-encoding-v2-plan",
       "kind": "plan",
       "path": ".omg/plans/ralplan-feature-encoding-v2.md",
       "workflow": "ralplan",
-      "status": "planned",
+      "status": "executing",
       "title": "Feature encoding v2 implementation plan",
-      "spec_id": "feature-encoding",
+      "spec_id": null,
       "plan_id": null,
       "related_ids": [
         "feature-encoding-trace"
       ],
       "supersedes_id": null,
       "completed_at": null,
-      "evidence": null,
-      "notes": "Option A top-K edges; GNN v2 first; Phase 0 ADR gate"
+      "evidence": "ralplan iteration 3: Phase 1 expanded with JaxTurnBatchV2 contract, boundary matrix, interview locks",
+      "notes": "Phase 0 complete; Phase 1 ready for execution"
+    },
+    {
+      "id": "feature-encoding-v2-phase1",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-feature-encoding-v2-phase1.md",
+      "workflow": "deep-interview",
+      "status": "complete",
+      "title": "Feature encoding v2 Phase 1 encoder",
+      "related_ids": [
+        "feature-encoding",
+        "feature-encoding-v2-plan"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "registry_v2, features_v2, TaskConfig encoding_version/ship_feature_scale; make test-domain-features 22 passed; jax vmap smoke 1 passed"
     }
   ]
 }

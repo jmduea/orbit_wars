@@ -1,0 +1,10 @@
+# Phase 0 config sketch — not wired until Phase 1+.
+# Side-by-side with model=gnn_pointer (v1 encoding).
+architecture: gnn_pointer_v2
+hidden_size: 224
+attention_heads: 7
+max_moves_k: 3
+gnn_k_neighbors: 5
+gnn_message_passing_layers: 2
+normalize_observations: true
+obs_norm_clip: 10.0

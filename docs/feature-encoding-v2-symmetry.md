@@ -211,10 +211,11 @@ Side:    planet_id map for decode only (not policy input, or separate non-gradie
 ## Phase 0 additions (proposed)
 
 - [x] **ADR-004 Symmetry:** learner frame with **`θ_ref` = sun → owned-planet centroid** (2p/4p same rule)
-- [ ] Planet row fields: sun-polar `r, θ` + edge-primary geometry (Layer C)
-- [ ] Spike: encode symmetric reset; verify 90°/180° equivariance under known transforms
-- [ ] Document decode: canonical angle + `θ_ref` → absolute submission angle
-- [ ] Add `angular_velocity` to global schema
+- [x] Planet row fields: sun-polar `r, θ` + edge-primary geometry (Layer C)
+- [x] Spike: encode symmetric reset; verify 90°/180° equivariance under known transforms
+- [x] Document decode: canonical angle + `θ_ref` → absolute submission angle
+- [x] Add `angular_velocity` to global schema (G=46)
+- [ ] **Layer D planet sort — deferred** (user lock)
 
 ---
 

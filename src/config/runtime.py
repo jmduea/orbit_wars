@@ -7,6 +7,11 @@ from typing import Any
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from src.telemetry.metric_registry import (
+    CURRICULUM_PROMOTION_METRIC_NAMES,
+    validate_scalar_update_metric_name,
+)
+
 from .schema import (
     ArtifactsConfig,
     RewardConfig,
@@ -14,10 +19,6 @@ from .schema import (
     TrainConfig,
     TrainingConfig,
     register_config_schemas,
-)
-from src.telemetry.metric_registry import (
-    CURRICULUM_PROMOTION_METRIC_NAMES,
-    validate_scalar_update_metric_name,
 )
 
 _CURRICULUM_FAMILIES = {
@@ -144,6 +145,10 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         raise ValueError("task.trajectory_shield_horizon must be a positive integer.")
     if float(task.trajectory_shield_epsilon) < 0.0:
         raise ValueError("task.trajectory_shield_epsilon must be non-negative.")
+    if task.encoding_version not in {"v1", "v2"}:
+        raise ValueError("task.encoding_version must be 'v1' or 'v2'.")
+    if float(task.ship_feature_scale) <= 0.0:
+        raise ValueError("task.ship_feature_scale must be positive.")
 
     value_head = cfg.model.value_head.strip().lower()
     if value_head not in {"shared", "format_routed"}:

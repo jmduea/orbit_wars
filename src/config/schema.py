@@ -15,6 +15,8 @@ class TaskConfig:
     max_fleets: int = 256
     player_count: int = 2
     max_ships: float = 400.0
+    ship_feature_scale: float = 1000.0
+    encoding_version: str = "v1"
     feature_history_steps: int = 1
     trajectory_shield_enabled: bool = True
     trajectory_shield_hit_mode: str = "selected_target"

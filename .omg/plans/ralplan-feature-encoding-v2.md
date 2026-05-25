@@ -1,9 +1,12 @@
 # Ralplan: Feature Encoding v2 Greenfield
 
 **Source spec:** `.omg/specs/deep-dive-feature-encoding.md`  
+**Phase 1 interview:** `.omg/specs/deep-interview-feature-encoding-v2-phase1.md`  
 **Trace:** `.omg/specs/deep-dive-trace-feature-encoding.md`  
 **Design:** `docs/feature-encoding-v2-design.md`, `docs/feature-encoding-v2-pointer.md`  
 **North star:** Orthogonal JAX-only feature stack with joint pointer actions; v1 remains until v2 wins ablation.
+
+**Plan iteration:** 3 (Phase 1 refresh after deep-interview, 2026-05-25)
 
 ## RALPLAN-DR Summary
 
@@ -40,21 +43,21 @@
 
 **Exit criteria (all required):**
 
-- [ ] **ADR-001 Action space:** joint pointer index = flat edge list per env `(src_idx, tgt_idx)`; NO_OP token; legality mask rules (active, owned source, ≠self, sun-cross, shield); file touch list.
+- [x] **ADR-001 Action space:** joint pointer index = flat edge list per env `(src_idx, tgt_idx)`; NO_OP token; legality mask rules (active, owned source, ≠self, sun-cross, shield); file touch list.
 - [x] **ADR-003 Ship feature scale:** rename `max_ships` → `ship_feature_scale`; document vs fleet-speed `1000` literal and `MAX_FLEET_SPEED`.
 - [x] **ADR-004 Symmetry frame:** `θ_ref` = sun → unweighted centroid of owned planets (2p/4p); see `docs/feature-encoding-v2-symmetry.md`.
-- [ ] **Schema lock:** P, E, G field tables with dims, encoding formulas (`S`, learner frame), and total float budget (target: ≤200 floats/decision at default H=1, K=4).
-- [ ] **Edge representation ADR:** top-K per source vs dense; K default = `task.candidate_count - 1` for ablation continuity.
-- [ ] **v1 baseline table:** win rate, `rollout_env_steps_per_sec` (2p/4p), shield rates at promoted config (≥1 seed, document command).
-- [ ] **Submission audit:** `scripts/validate_kaggle_docker_submission.py` + packager paths; confirm game API accepts planet-id targets.
-- [ ] **Ablation numeric gates** (defaults, user may tune):
+- [x] **Schema lock:** P=13, E=12, G=46; encoding formulas; float budget spike → `docs/feature-encoding-v2-phase0-results.md`.
+- [x] **Edge representation ADR:** top-K per source; K default = `task.candidate_count - 1`.
+- [x] **v1 baseline table:** win rate, `rollout_env_steps_per_sec` (2p/4p), shield rates — smoke capture in phase0 results doc.
+- [x] **Submission audit:** `scripts/validate_kaggle_docker_submission.py` + packager paths; confirm game API accepts planet-id targets.
+- [x] **Ablation numeric gates** (defaults, user may tune):
   - Win rate: v2 ≥ v1 − **2%** at matched updates/seeds
   - Throughput: v2 rollout env steps/sec ≥ **85%** of v1 on 4p smoke
   - Shield: `trajectory_shield_legal_non_noop_rate` within **±5pp** of v1
   - Evidence: **≥3 seeds**, 2p and 4p stages, **500+ updates** smoke / 2000+ for cutover recommendation
-- [ ] **Config sketch:** `task.encoding_version=v1|v2`, `task.ship_feature_scale`, `conf/model/gnn_pointer_v2.yaml`
-- [ ] **Checkpoint metadata v2:** `schema_version: 2`, `planet_feature_dim`, `edge_feature_dim`, `global_feature_dim`, `ship_feature_scale`, `edge_layout`
-- [ ] **Dependency gate:** `jax-ppo-split` status = complete OR explicit merge freeze on `rollout/`, `ppo_update.py`, `opponents/jax_actions/`
+- [x] **Config sketch:** `task.encoding_version=v1|v2`, `task.ship_feature_scale`, `conf/model/gnn_pointer_v2.yaml`
+- [x] **Checkpoint metadata v2:** `schema_version: 2`, `planet_feature_dim`, `edge_feature_dim`, `global_feature_dim`, `ship_feature_scale`, `edge_layout`
+- [x] **Dependency gate:** `jax-ppo-split` status = complete (2026-05-25)
 
 **Deliverables:** `docs/feature-encoding-v2.md` (schema draft), ADR in plan appendix.
 
@@ -62,22 +65,82 @@
 
 ---
 
-## Phase 1 — JAX Encoder v2
+## Phase 1 — JAX Encoder v2 (encoder-only; NEXT)
 
-**Scope:**
-- `src/features/registry_v2.py` — planet/edge/global schemas
-- `src/jax/features_v2.py` — `encode_turn_v2` → `JaxTurnBatchV2`
-- `src/config/schema.py` + `conf/task/` — `encoding_version`
-- Planet deltas; global-only history when H>1
+**Interview lock (2026-05-25):** JAX v2 is the **canonical new implementation**; v1 stays the **runtime default** (`encoding_version=v1`) until Phase 5 cutover. Phase 1 does **not** wire env, rollout, policy, or submission.
 
-**Exit:**
-- [ ] JIT smoke: `vmap(encode_turn_v2)` at default config
-- [ ] `tests/test_feature_encoding_v2_golden.py` — golden vectors (2p, 4p, sun-cross, history)
-- [ ] `make test-domain-features` green; **v1 tests unchanged**
+### Scope (in)
+
+| Deliverable | Path | Notes |
+|-------------|------|-------|
+| Schema registry | `src/features/registry_v2.py` | P=13, E=12, G=46; slice helpers mirror v1 registry |
+| v2 encoder | `src/jax/features_v2.py` | `encode_turn_v2`, `JaxTurnBatchV2`, `JaxFeatureHistoryV2` |
+| Config fields | `src/config/schema.py`, `src/conf_schema.py`, `conf/task/` | `encoding_version`, `ship_feature_scale` (default 1000) |
+| Golden tests | `tests/test_feature_encoding_v2_golden.py` | 2p, 4p, sun-cross, H>1 |
+| Constants (optional) | `src/game/constants.py` | `BASE_PLANET/EDGE/GLOBAL` v2 dim exports if needed |
+
+### Scope (explicitly out)
+
+- `src/jax/env.py` encode dispatch (`encode_turn` vs `encode_turn_v2`) → **Phase 3**
+- `src/jax/policy.py`, rollout, PPO, shield, action builders → **Phases 2–3**
+- Python `encode_turn` removal / submission migration → **Phase 5**
+- Layer D invariant planet sort → **deferred**
+- Python↔JAX v2 value parity harness → **optional follow-up**
+
+### `JaxTurnBatchV2` contract (frozen Phase 0)
+
+Static shapes at default `candidate_count=4` → K=3:
+
+```
+planet_features:  (MAX_PLANETS, P)       P=13
+planet_mask:      (MAX_PLANETS,)         active planets
+edge_features:    (MAX_PLANETS, K, E)    E=12; zeroed when edge_mask=False
+edge_mask:        (MAX_PLANETS, K)       valid (src→tgt) pairs; sun-cross masked
+edge_src_ids:     (MAX_PLANETS,)         planet id per row (decode side channel)
+edge_tgt_ids:     (MAX_PLANETS, K)
+global_features:  (G,) or (H * G,)       G=46; H = feature_history_steps
+theta_ref:        scalar per env         learner frame reference (ADR-004)
+```
+
+Batched leading dim: `(num_envs, …)` after vmap — same convention as v1 `JaxTurnBatch`.
+
+### Encoding semantics
+
+1. **Learner frame:** `θ_ref` = sun → unweighted centroid of learner-owned active planets; planets use sun-polar `(r, θ)`; edges use learner-frame `(Δx, Δy, distance)`.
+2. **Top-K edges:** Per active source row, rank targets by distance ascending; deprioritize sun-crossing (JAX v1 spirit). K = `max(0, candidate_count - 1)`.
+3. **History:** Planet `ship_delta` from prior step; **global-only** stack when H>1 (no edge history); edges recomputed each step.
+4. **Normalization:** `ship_feature_scale` (not `max_ships`) for all ship/fleet fractions in v2 paths.
+
+### Implementation order (recommended)
+
+1. `registry_v2.py` + dim validation tests  
+2. Frame helpers (`θ_ref`, canonical polar, sun-cross) — reuse math from `scripts/spike_feature_encoding_v2_phase0.py`  
+3. Planet + global encoders (port logic from v1 global block where applicable)  
+4. Edge top-K builder + edge feature rows  
+5. `JaxFeatureHistoryV2` + global history stack  
+6. Golden fixtures + JIT `vmap` smoke  
+
+### Exit criteria
+
+- [x] `registry_v2` validates P=13, E=12, G=46 at import
+- [x] `encode_turn_v2` JIT-compiles; `vmap` smoke at default + H=10 config
+- [x] Golden vectors: 2p reset, 4p reset, sun-cross fixture, H>1 history reorder
+- [x] `encoding_version` + `ship_feature_scale` in TaskConfig/Hydra; default `v1` unchanged behavior
+- [x] `make test-domain-features` green; **all v1 tests unchanged**
+
+### Verify
+
+```bash
+make test-domain-features
+uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "not slow and not jax"
+uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "jax and not slow"  # if marked jax
+```
 
 ---
 
 ## Phase 2 — Policy v2 (GNN only)
+
+**Prerequisite:** Phase 1 exit criteria met.
 
 **Scope:**
 - `PlanetEdgeBackboneEncoder` + `gnn_pointer_v2` in `src/jax/policy.py` (or `policy_v2.py`)
@@ -95,6 +158,8 @@
 ---
 
 ## Phase 3 — Joint Pointer + Shield + Rollout
+
+**Prerequisite:** Phase 2 forward/sample smoke green.
 
 **Scope:**
 - Joint edge pointer decoder (not adapted slot decoder)
@@ -159,33 +224,52 @@
 
 ---
 
-## Architect Notes
+## Architect Review (Iteration 3 — Phase 1 refresh)
 
-- Version dispatch only in: `env.py`, `build_jax_policy`, `checkpoint_compat.feature_metadata`, submission script.
-- Do not scatter `if v2` in game rules.
-- Rollout may store compact edge indices + re-encode in update if memory tight (spike in Phase 0 budget).
-- Metrics: version-gated schema slices in `rollout/metrics.py`.
+**Approved** with notes:
+
+1. **Phase boundary is correct.** Keeping `encode_turn` as the only env entry until Phase 3 avoids half-wired training paths. Phase 2 can consume `JaxTurnBatchV2` via unit tests and synthetic batches without touching rollout.
+2. **`JaxFeatureHistoryV2` should be global-only** — do not port v1's self/candidate history buffers. Store `(H-1)` global frames + prior planet ownership/ships for deltas only.
+3. **Edge row indexing:** Use planet **row index** (0..MAX_PLANETS-1) in tensors; `edge_src_ids`/`edge_tgt_ids` carry game planet ids for Phase 3 decode. Do not conflate row index with planet id in masks.
+4. **Reuse v1 primitives** where semantics match: `owner_relative_summary`, fleet pressure, sun-cross geometry from `src/jax/features.py` — copy into v2 module or extract shared `jax/feature_geom.py` only if duplication exceeds ~40 lines (prefer copy in Phase 1 to minimize blast radius).
+5. **`conf_schema.py` + Hydra:** Add fields to both dataclass layers; validate `encoding_version in {"v1","v2"}` at compose time. Do not rename/remove `max_ships` in Phase 1.
+6. **Risk:** Edge top-K + learner frame is the highest complexity slice — implement planet/global first, land golden tests, then edges.
+
+**Phase 2–3 reminder:** Version dispatch stays in `env.py`, `build_jax_policy`, `checkpoint_compat`, submission — not game rules.
 
 ---
 
-## Critic Checklist (Iteration 2)
+## Critic Checklist (Iteration 3 — Phase 1 refresh)
 
-- [x] Ralplan file exists with phased deliverables
-- [x] Spec matches v2 greenfield direction
-- [x] Design docs referenced (see `docs/`)
-- [x] Phase 0 ADR/metrics before Phase 1 code
+- [x] Phase 0 complete with evidence doc
+- [x] Phase 1 scope bounded (encoder-only) with explicit out-of-scope list
+- [x] `JaxTurnBatchV2` field table matches Phase 0 ADR shapes
+- [x] H=1 and H>1 both in Phase 1 exit criteria (interview lock)
+- [x] Default `encoding_version=v1` preserves existing training
+- [x] Implementation order + verify commands documented
 - [x] Each phase has pytest/Makefile target
-- [x] Numeric cutover criteria (defaults locked, user tunable)
-- [x] Edge memory budget addressed (Option A top-K)
-- [x] Submission phase before v1 removal talk
-- [x] Single v2 policy target for v2 v1 (GNN)
-- [x] jax-ppo-split dependency gate
-- [x] v1 functional until Phase 5
-- [x] Ablation runbook in Phase 4
+- [x] v1 tests must not regress
+- [x] No env/rollout/policy wiring in Phase 1
+- [x] Phase 1 implemented (2026-05-25)
 
-**User selections:** Option A (top-K edges); execute Phase 0 via team.
+**Consensus:** **Approved** for Phase 1 execution.
 
-**Phase 0 status:** In progress — see `docs/feature-encoding-v2.md` for ADR/schema draft. Remaining: dim lock spike, v1 baseline capture, jax-ppo-split gate.
+**User selections:** Option A (top-K edges); Phase 0 complete; Phase 1 interview locks side-by-side + H>1.
+
+**Status:** Phase 0 **COMPLETE** · Phase 1 **COMPLETE** (2026-05-25) — Phase 2 policy next.
+
+---
+
+## Phase Boundary Matrix
+
+| Concern | Phase 1 | Phase 2 | Phase 3 | Phase 5 |
+|---------|---------|---------|---------|---------|
+| `encode_turn_v2` | ✅ build | consume in tests | wire env dispatch | submission |
+| `encoding_version` config | ✅ add (default v1) | policy branch | rollout branch | default flip |
+| `JaxTurnBatchV2` | ✅ define | policy input | rollout transitions | — |
+| Joint pointer / shield | — | stub decoder | ✅ full | — |
+| Python encoder | unchanged | unchanged | unchanged | deprecate |
+| Golden tests | ✅ v2 only | + policy smoke | + e2e rollout | docker |
 
 ---
 
