@@ -234,19 +234,19 @@ Files marked **complex** in the graph — read tests alongside code before chang
 
 ## Suggested verification matrix
 
-When you touch a subsystem, run focused tests from `AGENTS.md`:
+Canonical **agent** test-selection rules live in `AGENTS.md` § *Test Selection For Coding Agents*. Quick reference:
 
 | Change area | Quick command | Files / notes |
 |-------------|---------------|---------------|
 | Config / schema | `make test-domain-config` | `test_config_consolidation.py`, `test_telemetry.py`, `test_metric_registry.py`, `test_run_paths.py` |
-| Env / features | `make test-domain-features` | `test_features.py`, `test_feature_history.py`, `test_feature_registry.py`, `test_normalization.py` |
+| Env / features | `make test-domain-features` | Python feature tests; add `make test-domain-jax-env` when JAX env mirrors change |
 | JAX env | `make test-domain-jax-env` | serial `-m "jax and not slow"`; parity stays in slow tier |
 | Policy / PPO | `make test-domain-policy` | serial `-m "jax and not slow"` |
 | Curriculum | `make test-domain-curriculum` | CPU subset of `test_curriculum.py`, `test_jax_train_timing.py` |
 | Artifacts | `make test-domain-artifacts` | `test_artifact_pipeline.py`, `test_replay.py`, `test_kaggle_submission_packager.py` |
-| Daily dev loop | `make test-fast` | CPU-only, serial, `-m "not slow and not jax"` |
-| JAX quick check | `make test-jax` | serial `-m "jax and not slow"` when editing JAX code |
-| Full check | `make test` | all tests including slow; serial only — **never use `-n auto` on WSL2** |
+| Default agent iteration | `make test-fast` | CPU-only, serial, `-m "not slow and not jax"` |
+| JAX follow-up | `make test-jax` | after edits under `src/jax/` |
+| Pre-merge only | `make test` | all tests including slow; serial; ask user on WSL2 |
 
 IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.vscode/settings.json` so the test explorer defaults to the CPU-safe tier.
 
