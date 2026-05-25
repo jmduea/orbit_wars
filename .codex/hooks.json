@@ -28,16 +28,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".github/hooks/stop.sh"
-          }
-        ]
-      }
     ]
   }
 }

@@ -10,12 +10,6 @@
       {
         "command": ".cursor/hooks/cursor-post-tool-use.sh"
       }
-    ],
-    "stop": [
-      {
-        "command": ".cursor/hooks/cursor-stop.sh",
-        "loop_limit": 1
-      }
     ]
   }
 }

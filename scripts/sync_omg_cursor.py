@@ -191,7 +191,6 @@ def sync_hooks_json() -> None:
         "hooks": {
             "preToolUse": [{"command": ".cursor/hooks/cursor-pre-tool-use.sh"}],
             "postToolUse": [{"command": ".cursor/hooks/cursor-post-tool-use.sh"}],
-            "stop": [{"command": ".cursor/hooks/cursor-stop.sh", "loop_limit": 1}],
         },
     }
     (CURSOR / "hooks.json").write_text(
