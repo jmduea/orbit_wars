@@ -570,9 +570,27 @@
       "kind": "spec",
       "path": ".omg/specs/deep-dive-feature-encoding.md",
       "workflow": "deep-dive",
-      "status": "draft",
-      "title": "Feature encoding optimization",
+      "status": "planned",
+      "title": "Feature encoding v2 greenfield",
       "spec_id": null,
+      "plan_id": "feature-encoding-v2-plan",
+      "related_ids": [
+        "feature-encoding-trace",
+        "jax-ppo-split"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "v2 greenfield: planet+edge encoder, joint pointer, side-by-side v1; ralplan consensus"
+    },
+    {
+      "id": "feature-encoding-v2-plan",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-feature-encoding-v2.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Feature encoding v2 implementation plan",
+      "spec_id": "feature-encoding",
       "plan_id": null,
       "related_ids": [
         "feature-encoding-trace"
@@ -580,7 +598,7 @@
       "supersedes_id": null,
       "completed_at": null,
       "evidence": null,
-      "notes": "Balanced scope: dedup + config leverage + parity/measurement"
+      "notes": "Option A top-K edges; GNN v2 first; Phase 0 ADR gate"
     }
   ]
 }
