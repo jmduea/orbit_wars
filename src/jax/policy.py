@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import flax.linen as nn
 import jax.numpy as jnp
 
@@ -18,7 +20,12 @@ from src.jax.action_codec import (
     action_log_prob_and_entropy,
     ensure_policy_sequence,
 )
+from src.jax.decoder_carry import resolve_decoder_initial_state
 from src.jax.decoders.factorized_topk_pointer import FactorizedTopKPointerDecoder
+from src.jax.distributional_value import (
+    expected_value_from_logits,
+    value_support,
+)
 from src.jax.encoders import EncoderOutput
 from src.jax.encoders.planet_encoder_common import (
     PlanetEdgeEncoderOutput,
@@ -85,6 +92,8 @@ class AutoregressivePointerDecoder(nn.Module):
 
     ship_bucket_count: int
     max_moves_k: int
+    ship_action_mode: str = "buckets"
+    decoder_carry: bool = False
     hidden_size: int = 128
 
     @nn.compact
@@ -93,16 +102,22 @@ class AutoregressivePointerDecoder(nn.Module):
         encoder_out: EncoderOutput,
         candidate_mask: jax.Array,
         target_sequence: jax.Array | None = None,
+        decoder_hidden_in: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
         batch_size = encoder_out.context_query.shape[0]
 
         decoder_cell = nn.GRUCell(features=self.hidden_size, name="dec_gru")
         query_dense = nn.Dense(self.hidden_size, name="ptr_q")
         key_dense = nn.Dense(self.hidden_size, name="ptr_k")
         ship_dense = nn.Dense(self.hidden_size, name="ship_dense_step")
-        ship_out = nn.Dense(self.ship_bucket_count, name="ship_out_step")
+        ship_width = (
+            1
+            if self.ship_action_mode.strip().lower() == "continuous_fraction"
+            else self.ship_bucket_count
+        )
+        ship_out = nn.Dense(ship_width, name="ship_out_step")
 
         init_decoder_state = nn.Dense(self.hidden_size, name="init_dec_state")(
             encoder_out.context_query
@@ -116,7 +131,11 @@ class AutoregressivePointerDecoder(nn.Module):
         )
 
         all_target_logits, all_ship_logits, all_chosen_targets = [], [], []
-        current_state = init_decoder_state
+        current_state = resolve_decoder_initial_state(
+            init_decoder_state,
+            decoder_hidden_in,
+            enabled=self.decoder_carry,
+        )
         current_rng = rng
 
         for step_idx in range(self.max_moves_k):
@@ -161,7 +180,15 @@ class AutoregressivePointerDecoder(nn.Module):
             jnp.stack(all_target_logits, axis=1),
             jnp.stack(all_ship_logits, axis=1),
             jnp.stack(all_chosen_targets, axis=1),
+            current_state,
         )
+
+
+class ValueHeadOutput(NamedTuple):
+    """Scalar bootstrap value plus optional distributional logits."""
+
+    value: jax.Array
+    value_logits: jax.Array | None = None
 
 
 class SharedValueHead(nn.Module):
@@ -174,12 +201,13 @@ class SharedValueHead(nn.Module):
         self,
         value_input: jax.Array,
         player_count: jax.Array | None = None,
-    ) -> jax.Array:
+    ) -> ValueHeadOutput:
         del player_count
         value_hidden = nn.relu(
             nn.Dense(self.hidden_size, name="shared_value_dense")(value_input)
         )
-        return nn.Dense(1, name="shared_value_out")(value_hidden).squeeze(-1)
+        value = nn.Dense(1, name="shared_value_out")(value_hidden).squeeze(-1)
+        return ValueHeadOutput(value=value, value_logits=None)
 
 
 class FormatRoutedValueHead(nn.Module):
@@ -192,7 +220,7 @@ class FormatRoutedValueHead(nn.Module):
         self,
         value_input: jax.Array,
         player_count: jax.Array | None = None,
-    ) -> jax.Array:
+    ) -> ValueHeadOutput:
         if player_count is None:
             raise ValueError(
                 "FormatRoutedValueHead requires an explicit player_count array."
@@ -220,7 +248,37 @@ class FormatRoutedValueHead(nn.Module):
             four_player_hidden
         ).squeeze(-1)
 
-        return jnp.where(player_count == 2, two_player_value, four_player_value)
+        value = jnp.where(player_count == 2, two_player_value, four_player_value)
+        return ValueHeadOutput(value=value, value_logits=None)
+
+
+class CategoricalValueHead(nn.Module):
+    """C51-style categorical return distribution with scalar expected value."""
+
+    hidden_size: int = 128
+    value_bins: int = 51
+    value_max: float = 1.0
+
+    @nn.compact
+    def __call__(
+        self,
+        value_input: jax.Array,
+        player_count: jax.Array | None = None,
+    ) -> ValueHeadOutput:
+        del player_count
+        if self.value_bins < 2:
+            raise ValueError("CategoricalValueHead requires value_bins >= 2.")
+        if self.value_max <= 0.0:
+            raise ValueError("CategoricalValueHead requires value_max > 0.")
+        value_hidden = nn.relu(
+            nn.Dense(self.hidden_size, name="distributional_value_dense")(value_input)
+        )
+        value_logits = nn.Dense(self.value_bins, name="distributional_value_out")(
+            value_hidden
+        )
+        support = value_support(self.value_bins, self.value_max)
+        value = expected_value_from_logits(value_logits, support)
+        return ValueHeadOutput(value=value, value_logits=value_logits)
 
 
 # --- Helper Functions ---
@@ -237,13 +295,28 @@ def build_value_head(cfg: TrainConfig) -> nn.Module:
     """Construct the configured critic head module."""
 
     normalized_value_head = cfg.model.value_head.strip().lower()
+    hidden = cfg.model.hidden_size
     if normalized_value_head == "shared":
-        return SharedValueHead(hidden_size=cfg.model.hidden_size)
+        return SharedValueHead(hidden_size=hidden)
     if normalized_value_head == "format_routed":
-        return FormatRoutedValueHead(hidden_size=cfg.model.hidden_size)
+        return FormatRoutedValueHead(hidden_size=hidden)
+    if normalized_value_head == "distributional":
+        return CategoricalValueHead(
+            hidden_size=hidden,
+            value_bins=cfg.model.value_bins,
+            value_max=cfg.model.value_max,
+        )
     raise ValueError(
-        f"Unsupported value head '{cfg.model.value_head}'. Expected 'shared' or 'format_routed'."
+        "Unsupported value head "
+        f"'{cfg.model.value_head}'. Expected 'shared', 'format_routed', or "
+        "'distributional'."
     )
+
+
+def is_distributional_value_head(cfg: TrainConfig) -> bool:
+    """Return True when the configured critic uses categorical return logits."""
+
+    return cfg.model.value_head.strip().lower() == "distributional"
 
 
 # --- Planet-Edge Policy Encoders ---
@@ -290,7 +363,7 @@ class PlanetEdgeBackboneEncoder(nn.Module):
     k_neighbors: int = 5
     msg_passing_layers: int = 2
     planet_feature_dim: int = 13
-    edge_feature_dim: int = 18
+    edge_feature_dim: int = 19
     global_feature_dim: int = 46
     edge_k: int = 3
     gradient_checkpointing: bool = False
@@ -382,6 +455,7 @@ class ComposablePlanetPolicy(nn.Module):
     encoder_module: nn.Module
     decoder_module: nn.Module
     value_head_module: nn.Module | None = None
+    decoder_carry: bool = False
     hidden_size: int = 128
     edge_k: int = 3
 
@@ -391,6 +465,7 @@ class ComposablePlanetPolicy(nn.Module):
         batch: TurnBatch,
         player_count: jax.Array | None = None,
         target_sequence: jax.Array | None = None,
+        decoder_hidden: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
     ) -> JaxPolicyOutput:
@@ -415,24 +490,31 @@ class ComposablePlanetPolicy(nn.Module):
             context_query=encoder_out.context_query,
             value_input=encoder_out.value_input,
         )
-        target_logits, ship_logits, decoded_target_sequence = self.decoder_module(
-            decoder_encoder,
-            action_mask,
-            target_sequence=target_sequence,
-            rng=rng,
-            deterministic=deterministic,
+        target_logits, ship_logits, decoded_target_sequence, decoder_hidden_out = (
+            self.decoder_module(
+                decoder_encoder,
+                action_mask,
+                target_sequence=target_sequence,
+                decoder_hidden_in=decoder_hidden,
+                rng=rng,
+                deterministic=deterministic,
+            )
         )
 
         value_head_module = self.value_head_module
         if value_head_module is None:
             value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        value = value_head_module(encoder_out.value_input, player_count=player_count)
+        value_out = value_head_module(
+            encoder_out.value_input, player_count=player_count
+        )
 
         return JaxPolicyOutput(
             target_logits=target_logits,
             ship_logits=ship_logits,
-            value=value,
+            value=value_out.value,
             decoded_target_sequence=decoded_target_sequence,
+            value_logits=value_out.value_logits,
+            decoder_hidden=decoder_hidden_out if self.decoder_carry else None,
         )
 
 
@@ -442,6 +524,7 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
     encoder_module: nn.Module
     decoder_module: FactorizedTopKPointerDecoder
     value_head_module: nn.Module | None = None
+    decoder_carry: bool = False
     hidden_size: int = 128
 
     @nn.compact
@@ -451,6 +534,7 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
         player_count: jax.Array | None = None,
         source_sequence: jax.Array | None = None,
         target_slot_sequence: jax.Array | None = None,
+        decoder_hidden: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
     ) -> FactoredPolicyOutput:
@@ -463,10 +547,12 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
             decoded_source_sequence,
             decoded_target_slot_sequence,
             decoded_stop_sequence,
+            decoder_hidden_out,
         ) = self.decoder_module(
             encoder_out,
             source_sequence=source_sequence,
             target_slot_sequence=target_slot_sequence,
+            decoder_hidden_in=decoder_hidden,
             rng=rng,
             deterministic=deterministic,
         )
@@ -474,17 +560,21 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
         value_head_module = self.value_head_module
         if value_head_module is None:
             value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        value = value_head_module(encoder_out.value_input, player_count=player_count)
+        value_out = value_head_module(
+            encoder_out.value_input, player_count=player_count
+        )
 
         return FactoredPolicyOutput(
             source_logits=source_logits,
             target_logits=target_logits,
             stop_logits=stop_logits,
             ship_logits=ship_logits,
-            value=value,
+            value=value_out.value,
             decoded_source_sequence=decoded_source_sequence,
             decoded_target_slot_sequence=decoded_target_slot_sequence,
             decoded_stop_sequence=decoded_stop_sequence,
+            value_logits=value_out.value_logits,
+            decoder_hidden=decoder_hidden_out if self.decoder_carry else None,
         )
 
 
@@ -506,12 +596,16 @@ def build_pointer_decoder(cfg: TrainConfig) -> nn.Module:
     if pointer_decoder_for_model(cfg.model) == POINTER_DECODER_FACTORIZED_TOPK:
         return FactorizedTopKPointerDecoder(
             ship_bucket_count=cfg.task.ship_bucket_count,
+            ship_action_mode=cfg.task.ship_action_mode,
+            decoder_carry=cfg.model.decoder_carry,
             max_moves_k=cfg.model.max_moves_k,
             hidden_size=hidden,
             edge_k=edge_k(cfg.task),
         )
     return AutoregressivePointerDecoder(
         ship_bucket_count=cfg.task.ship_bucket_count,
+        ship_action_mode=cfg.task.ship_action_mode,
+        decoder_carry=cfg.model.decoder_carry,
         max_moves_k=cfg.model.max_moves_k,
         hidden_size=hidden,
     )
@@ -556,6 +650,7 @@ def _build_planet_edge_policy_shell(
             decoder_module=decoder_module,
             value_head_module=value_head_module,
             hidden_size=hidden,
+            decoder_carry=cfg.model.decoder_carry,
         )
     return ComposablePlanetPolicy(
         encoder_module=encoder_module,
@@ -563,6 +658,7 @@ def _build_planet_edge_policy_shell(
         value_head_module=value_head_module,
         hidden_size=hidden,
         edge_k=k_slots,
+        decoder_carry=cfg.model.decoder_carry,
     )
 
 
@@ -705,5 +801,7 @@ def first_policy_step(output: JaxPolicyOutput) -> JaxPolicyOutput:
             ship_logits=output.ship_logits[:, 0, :, :],
             value=output.value,
             decoded_target_sequence=output.decoded_target_sequence[:, :1],
+            value_logits=output.value_logits,
+            decoder_hidden=output.decoder_hidden,
         )
     return output

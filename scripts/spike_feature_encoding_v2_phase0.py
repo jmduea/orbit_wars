@@ -33,7 +33,7 @@ from src.game.constants import (  # noqa: E402
 
 # Phase 0 locked schema (docs/feature-encoding-v2.md)
 PLANET_FEATURE_DIM = 13
-EDGE_FEATURE_DIM = 18
+EDGE_FEATURE_DIM = 19
 GLOBAL_FEATURE_DIM = BASE_GLOBAL_FEATURE_DIM + 1  # + angular_velocity
 DEFAULT_CANDIDATE_COUNT = 4
 DEFAULT_HISTORY_STEPS = 1

@@ -60,9 +60,12 @@ def _feat_crosses_now(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
     return ctx.crosses_now.astype(jnp.float32)[..., None]
 
 
-# TODO(M5): forward-projected target ships per anchor.
-def _feat_target_ships(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
-    return (jnp.minimum(ctx.tgt_ships, ctx.scale) / ctx.scale)[..., None]
+def _feat_target_ships_s1(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.tgt_ships_per_anchor[..., 0:1]
+
+
+def _feat_target_ships_s6(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.tgt_ships_per_anchor[..., 1:2]
 
 
 def _feat_target_owner_slot(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
@@ -107,7 +110,8 @@ EDGE_FEATURE_ENTRIES: tuple[FeatureCatalogEntry, ...] = (
         _feat_sun_cross_at_intercept_s6,
     ),
     FeatureCatalogEntry(FeatureDefinition("crosses_now"), _feat_crosses_now),
-    FeatureCatalogEntry(FeatureDefinition("target_ships"), _feat_target_ships),
+    FeatureCatalogEntry(FeatureDefinition("target_ships_s1"), _feat_target_ships_s1),
+    FeatureCatalogEntry(FeatureDefinition("target_ships_s6"), _feat_target_ships_s6),
     FeatureCatalogEntry(
         FeatureDefinition("target_owner_slot", size=4), _feat_target_owner_slot
     ),

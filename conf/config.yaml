@@ -1,5 +1,5 @@
 defaults:
-  - model: planet_graph_transformer_factorized
+  - model: transformer_factorized
   - task: default
   - reward: terminal_only
   - training: default

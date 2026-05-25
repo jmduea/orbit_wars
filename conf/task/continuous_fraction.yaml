@@ -1,0 +1,2 @@
+# Continuous sigmoid ship fraction head (width 1) instead of discrete buckets.
+ship_action_mode: continuous_fraction

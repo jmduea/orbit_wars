@@ -12,6 +12,7 @@ from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
 from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
+from src.jax.decoder_carry import empty_decoder_hidden
 from src.jax.features import TurnBatch
 
 
@@ -178,6 +179,83 @@ def batch_turn(batch: TurnBatch) -> TurnBatch:
     )
 
 
+
+
+def empty_submission_decoder_hidden(cfg: TrainConfig) -> jax.Array | None:
+    """Return a single-env zero decoder carry when cross-turn carry is enabled."""
+
+    if not cfg.model.decoder_carry:
+        return None
+    return empty_decoder_hidden(1, cfg.model.hidden_size)
+
+
+def select_runtime_shielded_policy_actions_with_carry(
+    key: jax.Array,
+    policy: object,
+    variables: dict[str, object],
+    game: JaxGameState,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+    deterministic_eval: bool = False,
+    decoder_hidden_in: jax.Array | None = None,
+) -> tuple[JaxAction, jax.Array | None]:
+    """Sample shielded actions and return updated decoder carry when enabled."""
+
+    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+
+    return _sample_policy_action_with_params(
+        key,
+        game,
+        batch,
+        variables,
+        policy,
+        cfg,
+        deterministic=deterministic,
+        deterministic_eval=deterministic_eval,
+        decoder_hidden_in=decoder_hidden_in,
+    )
+
+
+def compile_shielded_policy_act_with_carry(
+    policy: object,
+    variables: dict[str, object],
+    cfg: TrainConfig,
+    *,
+    deterministic: bool = True,
+    deterministic_eval: bool = True,
+):
+    """Return a JIT-compiled shielded act fn returning ``(action, decoder_hidden)``."""
+
+    if not cfg.model.decoder_carry:
+        raise ValueError(
+            "compile_shielded_policy_act_with_carry requires model.decoder_carry=true"
+        )
+
+    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+
+    def _compiled_act(
+        game: JaxGameState,
+        batch: TurnBatch,
+        key: jax.Array,
+        decoder_hidden_in: jax.Array | None,
+    ) -> tuple[JaxAction, jax.Array | None]:
+        return _sample_policy_action_with_params(
+            key,
+            game,
+            batch,
+            variables,
+            policy,
+            cfg,
+            deterministic=deterministic,
+            deterministic_eval=deterministic_eval,
+            decoder_hidden_in=decoder_hidden_in,
+        )
+
+    return jax.jit(_compiled_act)
+
+
 def select_runtime_shielded_policy_actions(
     key: jax.Array,
     policy: object,
@@ -193,7 +271,7 @@ def select_runtime_shielded_policy_actions(
 
     from src.opponents.jax_actions.builders import _sample_policy_action_with_params
 
-    return _sample_policy_action_with_params(
+    action, _decoder_hidden = _sample_policy_action_with_params(
         key,
         game,
         batch,
@@ -203,6 +281,7 @@ def select_runtime_shielded_policy_actions(
         deterministic=deterministic,
         deterministic_eval=deterministic_eval,
     )
+    return action
 
 
 
@@ -223,7 +302,7 @@ def compile_shielded_policy_act(
         batch: TurnBatch,
         key: jax.Array,
     ) -> JaxAction:
-        return _sample_policy_action_with_params(
+        action, _decoder_hidden = _sample_policy_action_with_params(
             key,
             game,
             batch,
@@ -233,6 +312,7 @@ def compile_shielded_policy_act(
             deterministic=deterministic,
             deterministic_eval=deterministic_eval,
         )
+        return action
 
     return jax.jit(_compiled_act)
 

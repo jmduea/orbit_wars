@@ -147,10 +147,30 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         raise ValueError("task.trajectory_shield_epsilon must be non-negative.")
     if float(task.ship_feature_scale) <= 0.0:
         raise ValueError("task.ship_feature_scale must be positive.")
+    edge_rank_mode = str(task.edge_rank_mode).strip().lower()
+    if edge_rank_mode not in {"snapshot", "intercept_min"}:
+        raise ValueError("task.edge_rank_mode must be 'snapshot' or 'intercept_min'.")
 
     value_head = cfg.model.value_head.strip().lower()
-    if value_head not in {"shared", "format_routed"}:
-        raise ValueError("model.value_head must be 'shared' or 'format_routed'.")
+    if value_head == "distributional":
+        if int(cfg.model.value_bins) < 2:
+            raise ValueError(
+                "model.value_bins must be at least 2 when value_head=distributional."
+            )
+        if float(cfg.model.value_max) <= 0.0:
+            raise ValueError(
+                "model.value_max must be positive when value_head=distributional."
+            )
+    elif value_head not in {"shared", "format_routed"}:
+        raise ValueError(
+            "model.value_head must be 'shared', 'format_routed', or 'distributional'."
+        )
+
+    ship_action_mode = str(task.ship_action_mode).strip().lower()
+    if ship_action_mode not in {"buckets", "continuous_fraction"}:
+        raise ValueError(
+            "task.ship_action_mode must be 'buckets' or 'continuous_fraction'."
+        )
 
     training = cfg.training
     if int(training.update_chunk_rows_min) <= 0:

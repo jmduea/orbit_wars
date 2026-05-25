@@ -4,6 +4,12 @@ import jax
 import jax.numpy as jnp
 
 from src.config import TrainConfig
+from src.jax.decoder_carry import (
+    decoder_carry_enabled,
+    empty_decoder_hidden,
+    reset_decoder_hidden_on_done,
+)
+from src.jax.ship_action import is_continuous_ship_mode
 from src.jax.features import encode_turn
 from src.jax.env import (
     JaxEnvState,
@@ -66,9 +72,21 @@ def collect_rollout_jax(
         env_index_offset, dtype=jnp.int32
     )
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
+    carry_enabled = decoder_carry_enabled(cfg)
+    fresh_decoder_hidden = (
+        empty_decoder_hidden(env_count, cfg.model.hidden_size) if carry_enabled else None
+    )
+    if carry_enabled:
+        initial_decoder_hidden = (
+            env_state.decoder_hidden
+            if env_state.decoder_hidden is not None
+            else fresh_decoder_hidden
+        )
+    else:
+        initial_decoder_hidden = None
 
     def scan_step(carry, _):
-        key, state, batch, opp_batch_cache = carry
+        key, state, batch, opp_batch_cache, decoder_hidden = carry
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
         sample = _sample_shielded_sequence_with_params(
             learner_key,
@@ -78,6 +96,7 @@ def collect_rollout_jax(
             policy,
             cfg,
             deterministic=False,
+            decoder_hidden_in=decoder_hidden,
         )
         if is_factorized_pointer_decoder(cfg.model):
             learner_action = build_action_from_factored_batch(
@@ -89,6 +108,7 @@ def collect_rollout_jax(
                 sample.stop_flag,
                 sample.step_mask,
                 cfg,
+                ship_fraction=sample.ship_fraction,
             )
         else:
             learner_action = build_action_from_edge_batch(
@@ -205,6 +225,14 @@ def collect_rollout_jax(
                 state, multi_player_action, cfg.task, cfg.reward
             )
 
+        if carry_enabled:
+            next_decoder_hidden = reset_decoder_hidden_on_done(
+                sample.decoder_hidden_out,
+                result.done,
+                fresh_decoder_hidden,
+            )
+            next_state = next_state._replace(decoder_hidden=next_decoder_hidden)
+
         def maybe_reset(new, old):
             cond = result.done.reshape(result.done.shape + (1,) * (old.ndim - 1))
             return jnp.where(cond, new, old)
@@ -222,6 +250,14 @@ def collect_rollout_jax(
             )
             merged_state = jax.tree.map(maybe_reset, reset_states, next_state)
             merged_batch = jax.tree.map(maybe_reset, reset_batches, result.batch)
+            if carry_enabled:
+                merged_state = merged_state._replace(
+                    decoder_hidden=reset_decoder_hidden_on_done(
+                        merged_state.decoder_hidden,
+                        result.done,
+                        fresh_decoder_hidden,
+                    )
+                )
             return merged_state, merged_batch
 
         next_state, next_batch = jax.lax.cond(
@@ -282,7 +318,20 @@ def collect_rollout_jax(
             "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
             "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
         }
-        return (key, next_state, next_batch, next_opp_batch_cache), transition
+        if carry_enabled:
+            transition["decoder_hidden"] = decoder_hidden
+        if is_continuous_ship_mode(cfg):
+            transition["ship_fraction"] = sample.ship_fraction
+        next_carry_decoder_hidden = (
+            next_state.decoder_hidden if carry_enabled else None
+        )
+        return (
+            key,
+            next_state,
+            next_batch,
+            next_opp_batch_cache,
+            next_carry_decoder_hidden,
+        ), transition
 
     if cfg.task.player_count == 2:
         initial_opp_game = env_state.game._replace(
@@ -294,9 +343,9 @@ def collect_rollout_jax(
     else:
         initial_opp_batch_cache = turn_batch
 
-    (_, env_state, turn_batch, _), data = jax.lax.scan(
+    (_, env_state, turn_batch, _, _), data = jax.lax.scan(
         scan_step,
-        (key, env_state, turn_batch, initial_opp_batch_cache),
+        (key, env_state, turn_batch, initial_opp_batch_cache, initial_decoder_hidden),
         None,
         length=cfg.training.rollout_steps,
     )
@@ -313,26 +362,31 @@ def collect_rollout_jax(
     advantages = jnp.broadcast_to(
         advantages_step[..., None], data["target_index"].shape
     )
-    transitions = JaxTransitionBatch(
-        planet_features=data["planet_features"],
-        planet_mask=data["planet_mask"],
-        edge_features=data["edge_features"],
-        edge_mask=data["edge_mask"],
-        edge_src_ids=data["edge_src_ids"],
-        edge_tgt_ids=data["edge_tgt_ids"],
-        global_features=data["global_features"],
-        theta_ref=data["theta_ref"],
-        player_count=data["player_count"],
-        ship_bucket_mask=data["ship_bucket_mask"],
-        target_index=data["target_index"],
-        ship_bucket=data["ship_bucket"],
-        log_prob=data["log_prob"],
-        returns=returns,
-        advantages=advantages,
-        source_index=data["source_index"],
-        target_slot=data["target_slot"],
-        stop_flag=data["stop_flag"],
-        step_mask=data["step_mask"],
-    )
+    transition_kwargs = {
+        "planet_features": data["planet_features"],
+        "planet_mask": data["planet_mask"],
+        "edge_features": data["edge_features"],
+        "edge_mask": data["edge_mask"],
+        "edge_src_ids": data["edge_src_ids"],
+        "edge_tgt_ids": data["edge_tgt_ids"],
+        "global_features": data["global_features"],
+        "theta_ref": data["theta_ref"],
+        "player_count": data["player_count"],
+        "ship_bucket_mask": data["ship_bucket_mask"],
+        "target_index": data["target_index"],
+        "ship_bucket": data["ship_bucket"],
+        "log_prob": data["log_prob"],
+        "returns": returns,
+        "advantages": advantages,
+        "source_index": data["source_index"],
+        "target_slot": data["target_slot"],
+        "stop_flag": data["stop_flag"],
+        "step_mask": data["step_mask"],
+    }
+    if carry_enabled:
+        transition_kwargs["decoder_hidden"] = data["decoder_hidden"]
+    if is_continuous_ship_mode(cfg):
+        transition_kwargs["ship_fraction"] = data["ship_fraction"]
+    transitions = JaxTransitionBatch(**transition_kwargs)
     metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     return key, env_state, turn_batch, transitions, metrics

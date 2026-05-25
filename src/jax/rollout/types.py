@@ -7,7 +7,6 @@ import flax.struct
 import optax
 
 import jax
-
 from src.game.trajectory_shield import ShieldDiagnostics
 
 
@@ -33,6 +32,8 @@ class JaxTransitionBatch(NamedTuple):
     target_slot: jax.Array
     stop_flag: jax.Array
     step_mask: jax.Array
+    decoder_hidden: jax.Array | None = None
+    ship_fraction: jax.Array | None = None
 
 
 @flax.struct.dataclass
@@ -56,3 +57,5 @@ class ShieldedSequenceSample(NamedTuple):
     target_slot: jax.Array
     stop_flag: jax.Array
     step_mask: jax.Array
+    decoder_hidden_out: jax.Array | None = None
+    ship_fraction: jax.Array | None = None

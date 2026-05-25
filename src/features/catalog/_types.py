@@ -64,6 +64,8 @@ class EdgeRowAssemblyContext:
     trajectory shield's snapshot-line check); the per-anchor
     ``sun_cross_at_intercept_per_anchor`` is the predictive counterpart
     evaluated against the target's future position at each anchor.
+    ``tgt_ships_per_anchor`` holds ``min(ships + production * tau, scale) / scale``
+    at each anchor's intercept delay ``tau``.
     """
 
     intercept_delta_x_per_anchor: Any
@@ -72,7 +74,7 @@ class EdgeRowAssemblyContext:
     intercept_turns_per_anchor: Any
     sun_cross_at_intercept_per_anchor: Any
     crosses_now: Any
-    tgt_ships: Any
+    tgt_ships_per_anchor: Any
     owner_slot: Any
     incoming_friendly: Any
     incoming_enemy: Any

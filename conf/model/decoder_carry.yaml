@@ -1,0 +1,2 @@
+# Enable cross-turn decoder GRU carry (default off for checkpoint compat).
+decoder_carry: true

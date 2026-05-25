@@ -18,11 +18,11 @@ def test_schema_base_dims_match_catalogs() -> None:
     assert GLOBAL_FEATURE_SCHEMA.base_dim == GLOBAL_FEATURE_CATALOG.base_dim
 
 
-def test_edge_feature_dim_is_eighteen() -> None:
+def test_edge_feature_dim_is_nineteen() -> None:
     from src.config import TaskConfig
 
-    assert edge_feature_dim(TaskConfig()) == 18
-    assert EDGE_FEATURE_CATALOG.base_dim == 18
+    assert edge_feature_dim(TaskConfig()) == 19
+    assert EDGE_FEATURE_CATALOG.base_dim == 19
 
 
 def test_edge_catalog_ordered_field_list_pin() -> None:
@@ -36,7 +36,8 @@ def test_edge_catalog_ordered_field_list_pin() -> None:
         ("intercept_turns_s6", 1),
         ("sun_cross_at_intercept_s6", 1),
         ("crosses_now", 1),
-        ("target_ships", 1),
+        ("target_ships_s1", 1),
+        ("target_ships_s6", 1),
         ("target_owner_slot", 4),
         ("target_incoming_friendly", 1),
         ("target_incoming_enemy", 1),
@@ -60,6 +61,8 @@ def test_edge_schema_slice_lookup_for_new_feature_names() -> None:
         "intercept_turns_s6",
         "sun_cross_at_intercept_s6",
         "crosses_now",
+        "target_ships_s1",
+        "target_ships_s6",
     ):
         sl = EDGE_FEATURE_SCHEMA.base_slice(name)
         assert sl.stop > sl.start

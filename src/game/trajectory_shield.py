@@ -113,6 +113,47 @@ def ship_count_for_bucket_jax(
     return jnp.where((available <= 0.0) | (fraction <= 0.0), 0.0, ships)
 
 
+def ship_count_for_fraction_jax(
+    available_ships: jax.Array, fraction: jax.Array
+) -> jax.Array:
+    """Map a continuous fraction in ``(0, 1]`` to a discrete launch count."""
+
+    available = jnp.maximum(available_ships, 0.0)
+    frac = jnp.clip(fraction.astype(jnp.float32), 1e-6, 1.0)
+    ships = jnp.ceil(available * frac)
+    ships = jnp.minimum(available, jnp.maximum(1.0, ships))
+    return jnp.where(available <= 0.0, 0.0, ships)
+
+
+def validate_continuous_ship_launch_jax(
+    game,
+    batch,
+    env_cfg: Any,
+    planet_ships: jax.Array,
+    src_row: jax.Array,
+    slot: jax.Array,
+    ship_count: jax.Array,
+) -> jax.Array:
+    """Return True when a continuous ship count passes trajectory shield checks."""
+
+    original_mask = batch.edge_mask[src_row, slot]
+    target_id = batch.edge_tgt_ids[src_row, slot]
+    source_id = batch.edge_src_ids[src_row]
+    angle = _launch_angle_for_edge(game, batch.edge_tgt_ids, src_row, slot)
+    source_ships = planet_ships[src_row]
+    reason_code = _trajectory_reason_code_jax(
+        game,
+        source_id,
+        target_id,
+        angle,
+        ship_count,
+        game.player,
+        env_cfg,
+    )
+    legal = (reason_code == _REASON_TO_CODE[SAFE_REASON]) & (ship_count <= source_ships)
+    return original_mask & (target_id >= 0) & legal & (ship_count > 0.0)
+
+
 def fleet_speed_py(ships: float, ship_speed: float = MAX_FLEET_SPEED) -> float:
     safe = max(float(ships), 1.0)
     speed = 1.0 + (ship_speed - 1.0) * (math.log(safe) / math.log(1000.0)) ** 1.5

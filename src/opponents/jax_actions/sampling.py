@@ -224,7 +224,7 @@ def _sample_historical_action(
             policy,
             cfg,
             deterministic=cfg.opponents.snapshot.deterministic,
-        )
+        )[0]
     )(jnp.arange(pool_size, dtype=jnp.int32), historical_params_pool)
     historical_action = _gather_action_by_env(pool_actions, selected)
     fallback = jnp.logical_not(has_snapshot)
@@ -253,7 +253,7 @@ def _sample_single_family_2p_action(
     historical_params_pool: dict | None,
 ) -> JaxAction:
     def latest_branch(_: None) -> JaxAction:
-        return _sample_policy_action(
+        action, _decoder_hidden = _sample_policy_action(
             key,
             game,
             batch,
@@ -262,6 +262,7 @@ def _sample_single_family_2p_action(
             cfg,
             deterministic=cfg.opponents.self_play.deterministic,
         )
+        return action
 
     def historical_branch(_: None) -> JaxAction:
         current_action = latest_branch(None)
@@ -441,7 +442,7 @@ def _sample_single_family_4p_action(
     )
 
     def latest_branch(_: None) -> JaxAction:
-        return _sample_policy_action_with_params(
+        action, _decoder_hidden = _sample_policy_action_with_params(
             key,
             game,
             batch,
@@ -450,6 +451,7 @@ def _sample_single_family_4p_action(
             cfg,
             deterministic=cfg.opponents.self_play.deterministic,
         )
+        return action
 
     def historical_branch(_: None) -> JaxAction:
         current_action = latest_branch(None)

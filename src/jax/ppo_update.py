@@ -13,9 +13,14 @@ from src.jax.action_codec import (
     action_log_prob_and_entropy,
     factored_action_log_prob_with_shield,
 )
+from src.jax.distributional_value import (
+    categorical_value_cross_entropy,
+    value_support,
+)
 from src.jax.features import TurnBatch
-from src.jax.policy import action_log_prob_and_entropy, edge_action_count
+from src.jax.policy import edge_action_count, is_distributional_value_head
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.ship_action import is_continuous_ship_mode
 
 
 def concatenate_transition_batches(
@@ -177,6 +182,35 @@ def _aggregate_ppo_metrics(
     return metrics
 
 
+def _value_loss_per_step(
+    cfg: TrainConfig,
+    value: jax.Array,
+    value_logits: jax.Array | None,
+    returns: jax.Array,
+) -> jax.Array:
+    """Return per-step critic loss with shape matching ``returns``."""
+
+    if is_distributional_value_head(cfg):
+        if value_logits is None:
+            raise ValueError(
+                "Distributional value head requires value_logits in policy output."
+            )
+        support = value_support(cfg.model.value_bins, cfg.model.value_max)
+        batch_size, sequence_k = returns.shape
+        bins = value_logits.shape[-1]
+        expanded_logits = jnp.broadcast_to(
+            value_logits[:, None, :],
+            (batch_size, sequence_k, bins),
+        ).reshape(-1, bins)
+        flat_ce = categorical_value_cross_entropy(
+            expanded_logits,
+            returns.reshape(-1),
+            support,
+        )
+        return flat_ce.reshape(batch_size, sequence_k)
+    return 0.5 * (returns - value[:, None]) ** 2
+
+
 def _ppo_update_joint_flat_jax(
     train_state: JaxTrainState,
     policy: object,
@@ -201,6 +235,13 @@ def _ppo_update_joint_flat_jax(
     advantages = (advantages - advantage_mean) / jnp.sqrt(
         masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
     )
+    continuous = is_continuous_ship_mode(cfg)
+    ship_fraction = None
+    if continuous and batch.ship_fraction is not None:
+        ship_fraction = batch.ship_fraction.reshape(env_rows, sequence_k)
+    decoder_hidden = None
+    if cfg.model.decoder_carry and batch.decoder_hidden is not None:
+        decoder_hidden = batch.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -265,6 +306,14 @@ def _ppo_update_joint_flat_jax(
             advantages, minibatch_count, minibatch_size, 0.0
         ),
     }
+    if continuous and ship_fraction is not None:
+        minibatches["ship_fraction"] = _reshape_minibatches(
+            ship_fraction, minibatch_count, minibatch_size, 0.0
+        )
+    if cfg.model.decoder_carry and decoder_hidden is not None:
+        minibatches["decoder_hidden"] = _reshape_minibatches(
+            decoder_hidden, minibatch_count, minibatch_size, 0.0
+        )
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
@@ -280,20 +329,29 @@ def _ppo_update_joint_flat_jax(
         )
 
         def loss_fn(params):
-            output = policy.apply(
-                params,
-                mb_batch,
-                player_count=minibatch["player_count"],
-                target_sequence=minibatch["target"],
-            )
+            apply_kwargs = {
+                "player_count": minibatch["player_count"],
+                "target_sequence": minibatch["target"],
+            }
+            if cfg.model.decoder_carry and "decoder_hidden" in minibatch:
+                apply_kwargs["decoder_hidden"] = minibatch["decoder_hidden"]
+            output = policy.apply(params, mb_batch, **apply_kwargs)
             output = mask_policy_output_for_shield_v2(
                 output,
                 minibatch["edge_action_mask"],
                 cfg.task.ship_bucket_count,
                 minibatch["ship_bucket_mask"],
             )
+            fraction_arg = (
+                minibatch["ship_fraction"]
+                if continuous and "ship_fraction" in minibatch
+                else None
+            )
             new_log_prob, entropy = action_log_prob_and_entropy(
-                output, minibatch["target"], minibatch["bucket"]
+                output,
+                minibatch["target"],
+                minibatch["bucket"],
+                ship_fraction=fraction_arg,
             )
             approx_kl = masked_mean(
                 minibatch["old_log_prob"] - new_log_prob,
@@ -307,9 +365,14 @@ def _ppo_update_joint_flat_jax(
                 minibatch["advantages"] * ratio,
                 minibatch["advantages"] * clipped_ratio,
             )
-            value_error = (minibatch["returns"] - output.value[:, None]) ** 2
+            value_error = _value_loss_per_step(
+                cfg,
+                output.value,
+                output.value_logits,
+                minibatch["returns"],
+            )
             policy_loss = -masked_mean(policy_objective, minibatch["mask"])
-            value_loss = 0.5 * masked_mean(value_error, minibatch["mask"])
+            value_loss = masked_mean(value_error, minibatch["mask"])
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             loss = (
                 policy_loss
@@ -330,7 +393,7 @@ def _ppo_update_joint_flat_jax(
                     minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
-                format_value_loss = 0.5 * masked_mean(value_error, format_mask)
+                format_value_loss = masked_mean(value_error, format_mask)
                 format_entropy = masked_mean(entropy, format_mask)
                 format_approx_kl = masked_mean(
                     minibatch["old_log_prob"] - new_log_prob,
@@ -397,6 +460,13 @@ def _ppo_update_factorized_jax(
     advantages = (advantages - advantage_mean) / jnp.sqrt(
         masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
     )
+    continuous = is_continuous_ship_mode(cfg)
+    ship_fraction = None
+    if continuous and batch.ship_fraction is not None:
+        ship_fraction = batch.ship_fraction.reshape(env_rows, sequence_k)
+    decoder_hidden = None
+    if cfg.model.decoder_carry and batch.decoder_hidden is not None:
+        decoder_hidden = batch.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -462,6 +532,14 @@ def _ppo_update_factorized_jax(
             advantages, minibatch_count, minibatch_size, 0.0
         ),
     }
+    if continuous and ship_fraction is not None:
+        minibatches["ship_fraction"] = _reshape_minibatches(
+            ship_fraction, minibatch_count, minibatch_size, 0.0
+        )
+    if cfg.model.decoder_carry and decoder_hidden is not None:
+        minibatches["decoder_hidden"] = _reshape_minibatches(
+            decoder_hidden, minibatch_count, minibatch_size, 0.0
+        )
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
@@ -477,16 +555,22 @@ def _ppo_update_factorized_jax(
         )
 
         def loss_fn(params):
-            output = policy.apply(
-                params,
-                mb_batch,
-                player_count=minibatch["player_count"],
-                source_sequence=minibatch["source"],
-                target_slot_sequence=minibatch["target_slot"],
-            )
+            apply_kwargs = {
+                "player_count": minibatch["player_count"],
+                "source_sequence": minibatch["source"],
+                "target_slot_sequence": minibatch["target_slot"],
+            }
+            if cfg.model.decoder_carry and "decoder_hidden" in minibatch:
+                apply_kwargs["decoder_hidden"] = minibatch["decoder_hidden"]
+            output = policy.apply(params, mb_batch, **apply_kwargs)
             has_real_bucket = minibatch["ship_bucket_mask"][..., 1:].any(axis=-1)
             source_mask = (mb_batch.edge_mask[:, None, :, :] & has_real_bucket).any(
                 axis=-1
+            )
+            fraction_arg = (
+                minibatch["ship_fraction"]
+                if continuous and "ship_fraction" in minibatch
+                else None
             )
             new_log_prob, entropy, stop_entropy, move_entropy = (
                 factored_action_log_prob_with_shield(
@@ -498,6 +582,7 @@ def _ppo_update_factorized_jax(
                     minibatch["mask"],
                     source_mask,
                     minibatch["ship_bucket_mask"],
+                    ship_fraction=fraction_arg,
                 )
             )
             approx_kl = masked_mean(
@@ -512,9 +597,14 @@ def _ppo_update_factorized_jax(
                 minibatch["advantages"] * ratio,
                 minibatch["advantages"] * clipped_ratio,
             )
-            value_error = (minibatch["returns"] - output.value[:, None]) ** 2
+            value_error = _value_loss_per_step(
+                cfg,
+                output.value,
+                output.value_logits,
+                minibatch["returns"],
+            )
             policy_loss = -masked_mean(policy_objective, minibatch["mask"])
-            value_loss = 0.5 * masked_mean(value_error, minibatch["mask"])
+            value_loss = masked_mean(value_error, minibatch["mask"])
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             entropy_stop_loss = masked_mean(stop_entropy, minibatch["mask"])
             entropy_move_loss = masked_mean(move_entropy, minibatch["mask"])
@@ -539,7 +629,7 @@ def _ppo_update_factorized_jax(
                     minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
-                format_value_loss = 0.5 * masked_mean(value_error, format_mask)
+                format_value_loss = masked_mean(value_error, format_mask)
                 format_entropy = masked_mean(entropy, format_mask)
                 format_approx_kl = masked_mean(
                     minibatch["old_log_prob"] - new_log_prob,

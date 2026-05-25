@@ -1,54 +1,88 @@
 {
-  "title": "PPO GAE + gradient checkpointing",
-  "description": "Wire training.gae_lambda (default 0.95) and enable_gradient_checkpointing to JAX PPO rollout and encoders.",
+  "title": "Policy Advances Audit",
+  "description": "Verify or implement five policy advance gaps from ralplan-policy-advances-audit: F1 closed, M5-intercept, M5-value, M6-decoder-carry, M6-ships.",
   "stories": [
     {
       "id": "S1",
-      "title": "Config: gae_lambda",
+      "title": "F1 masked-attention regression guard",
       "description": "",
       "acceptance_criteria": [
-        "TrainingConfig has gae_lambda default 0.95",
-        "Hydra override training.gae_lambda composes",
-        "Runtime validates 0 <= gae_lambda <= 1"
+        "Test asserts inactive planet rows receive zero attention contribution in transformer encoder",
+        "make test-domain-features passes"
       ],
-      "passes": false,
-      "priority": 1
+      "passes": true,
+      "priority": 1,
+      "verification_evidence": "test_inactive_planet_features_do_not_affect_transformer_output in test_jax_policy_encoder.py; make test-domain-features 18/18"
     },
     {
       "id": "S2",
-      "title": "GAE rollout wiring",
+      "title": "M5-intercept edge_rank_mode",
       "description": "",
       "acceptance_criteria": [
-        "gae_returns_and_advantages in ppo_update.py",
-        "collect_rollout_jax uses GAE",
-        "lambda=1 matches MC on toy tensors"
+        "TaskConfig.edge_rank_mode supports snapshot and intercept_min",
+        "intercept_min ranks top-K by min anchor intercept distance",
+        "Default snapshot preserves existing golden tests",
+        "make test-domain-features passes"
       ],
-      "passes": false,
-      "priority": 2
+      "passes": true,
+      "priority": 2,
+      "verification_evidence": "TaskConfig.edge_rank_mode snapshot|intercept_min; _intercept_min_distance_matrix in features.py; tests in test_intercept_edge_features.py; make test-domain-features pass"
     },
     {
       "id": "S3",
-      "title": "Gradient checkpointing",
+      "title": "M5-intercept projected target_ships",
       "description": "",
       "acceptance_criteria": [
-        "Encoder layers use nn.remat when flag true",
-        "Policy init/apply works flag on/off for both architectures"
+        "Edge catalog adds per-anchor projected target_ships",
+        "Schema bumps if edge dim changes",
+        "Golden tests cover projected ships"
       ],
-      "passes": false,
-      "priority": 3
+      "passes": true,
+      "priority": 3,
+      "verification_evidence": "target_ships_s1/s6 per anchor in edge catalog; E=19 schema v5; projected ships in features.py; golden tests test_projected_target_ships_*; make test-domain-features 20/20"
     },
     {
       "id": "S4",
-      "title": "Tests and verification",
+      "title": "M5-value categorical critic",
       "description": "",
       "acceptance_criteria": [
-        "tests/test_ppo_update.py extended",
+        "ModelConfig.value_head=distributional with value_bins/value_max",
+        "CategoricalValueHead returns scalar expected value from bin logits",
+        "PPO value loss uses cross-entropy on projected returns",
         "make test-fast passes"
       ],
-      "passes": false,
-      "priority": 4
+      "passes": true,
+      "priority": 4,
+      "verification_evidence": "make test-fast: 171 passed. Added CategoricalValueHead, ModelConfig.value_bins/value_max, distributional PPO CE loss, conf/model/distributional_value.yaml, tests/test_distributional_value.py (7 tests)."
+    },
+    {
+      "id": "S5",
+      "title": "M6-decoder-carry",
+      "description": "",
+      "acceptance_criteria": [
+        "model.decoder_carry flag gates cross-turn GRU state",
+        "Rollout carry resets decoder hidden on terminal",
+        "Submission runtime mirrors carry when enabled"
+      ],
+      "passes": true,
+      "priority": 5,
+      "verification_evidence": "model.decoder_carry flag; rollout carry resets on terminal via reset_decoder_hidden_on_done; submission_runtime compile_shielded_policy_act_with_carry. tests/test_decoder_carry.py (3 tests). make test-fast 178 passed."
+    },
+    {
+      "id": "S6",
+      "title": "M6-ships continuous fraction",
+      "description": "",
+      "acceptance_criteria": [
+        "task.ship_action_mode=buckets|continuous_fraction",
+        "Continuous mode uses sigmoid fraction head",
+        "Action builders map fraction to ship count",
+        "Shield validates continuous counts"
+      ],
+      "passes": true,
+      "priority": 6,
+      "verification_evidence": "task.ship_action_mode=buckets|continuous_fraction; sigmoid fraction head (Dense(1)); ship_count_for_fraction_jax + validate_continuous_ship_launch_jax; builders/PPO/action_codec wired. tests/test_continuous_ship_action.py (4 tests). make test-fast 178 passed."
     }
   ],
-  "created_at": "2026-05-25T18:44:42.660Z",
-  "updated_at": "2026-05-25T18:44:42.666Z"
+  "created_at": "2026-05-25T21:07:03.738Z",
+  "updated_at": "2026-05-25T21:48:46.219Z"
 }

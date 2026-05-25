@@ -1,0 +1,84 @@
+program: -m
+method: bayes
+run_cap: 48
+metric:
+  name: overall_win_rate
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  output.campaign:
+    value: mixed_train_param_search
+  telemetry.wandb.group:
+    value: mixed_train_param_search
+  telemetry.wandb.tags:
+    value: [transformer_factorized, mixed_train_param_search, bayes, win_rate]
+  curriculum:
+    value: self_play_staged
+  opponents:
+    value: self_play_curriculum
+  model:
+    value: transformer_factorized
+  task.ship_action_mode:
+    value: continuous_fraction
+  format:
+    value: mix_2p_4p_16env
+  training.total_updates:
+    value: 2500
+  training.rollout_steps:
+    value: 500
+  training.minibatch_size:
+    value: 256
+  training.rollout_microbatch_envs:
+    value: 16
+  training.update_chunk_rows_min:
+    value: 4096
+  training.update_chunk_rows_max:
+    value: 8192
+  training.lean_rollout_metrics:
+    value: true
+  artifacts.checkpoint_every:
+    value: 2500
+  artifacts.artifact_pipeline.enabled:
+    value: true
+  artifacts.replay.enabled:
+    value: true
+  training.gamma:
+    value: 0.99
+  training.gae_lambda:
+    value: 0.95
+  training.vf_coef:
+    value: 0.5
+  training.max_grad_norm:
+    value: 0.5
+  training.epochs:
+    values: [1, 2, 4]
+  training.clip_coef:
+    values: [0.1, 0.2]
+  training.lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.0006
+  training.ent_coef:
+    distribution: log_uniform_values
+    min: 0.001
+    max: 0.01
+  reward.reward_capture_planet:
+    distribution: uniform
+    min: 0.0
+    max: 0.1
+  reward.reward_production_delta:
+    distribution: uniform
+    min: 0.0
+    max: 0.02
+  reward.early_terminal_reward_shaping_enabled:
+    values: [true, false]
+  task.candidate_count:
+    values: [4, 8]
+  task.max_fleets:
+    values: [128, 256]

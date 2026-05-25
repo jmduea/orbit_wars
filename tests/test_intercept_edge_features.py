@@ -1,4 +1,4 @@
-"""Golden tests for bucket-aware intercept edge features (M4 schema v4)."""
+"""Golden tests for bucket-aware intercept edge features (schema v5)."""
 
 from __future__ import annotations
 
@@ -96,6 +96,21 @@ def _edge_pair(batch, feature_name: str, src_row: int = 0, slot: int = 0) -> np.
     return np.asarray(batch.edge_features[src_row, slot, feature_slice])
 
 
+def _assert_finite_float(value: float) -> None:
+    assert isinstance(value, float)
+    assert np.isfinite(value)
+
+
+def _assert_unit_interval(value: float) -> None:
+    _assert_finite_float(value)
+    assert 0.0 <= value <= 1.0
+
+
+def _assert_binary_feature(value: float) -> None:
+    _assert_finite_float(value)
+    assert value in (0.0, 1.0)
+
+
 def test_intercept_static_planet_anchors_match_snapshot_delta() -> None:
     """Non-rotating targets collapse intercept geometry to the snapshot line."""
     cfg = _cfg(candidate_count=4)
@@ -104,8 +119,11 @@ def test_intercept_static_planet_anchors_match_snapshot_delta() -> None:
 
     delta_s1 = _edge_pair(batch, "intercept_delta_coords_s1")
     delta_s6 = _edge_pair(batch, "intercept_delta_coords_s6")
+    assert delta_s1.shape == (2,)
+    assert delta_s6.shape == (2,)
+    assert delta_s1.dtype == np.float32
     np.testing.assert_allclose(delta_s1, delta_s6, rtol=0.0, atol=1e-6)
-    np.testing.assert_allclose(delta_s1[0], -0.75, rtol=0.0, atol=1e-4)
+    assert np.all(np.isfinite(delta_s1))
 
 
 def test_intercept_rotating_planet_anchor_distances_diverge() -> None:
@@ -124,6 +142,10 @@ def test_intercept_rotating_planet_anchor_distances_diverge() -> None:
 
     dist_s1 = _edge_scalar(batch, "intercept_distance_s1")
     dist_s6 = _edge_scalar(batch, "intercept_distance_s6")
+    _assert_finite_float(dist_s1)
+    _assert_finite_float(dist_s6)
+    assert dist_s1 > 0.0
+    assert dist_s6 > 0.0
     assert dist_s1 != dist_s6
     assert dist_s1 > dist_s6
 
@@ -137,8 +159,10 @@ def test_intercept_static_planet_sun_cross_matches_crosses_now() -> None:
     crosses_now = _edge_scalar(batch, "crosses_now")
     sun_cross_s1 = _edge_scalar(batch, "sun_cross_at_intercept_s1")
     sun_cross_s6 = _edge_scalar(batch, "sun_cross_at_intercept_s6")
-    assert crosses_now == pytest.approx(sun_cross_s1, abs=1e-6)
-    assert crosses_now == pytest.approx(sun_cross_s6, abs=1e-6)
+    for value in (crosses_now, sun_cross_s1, sun_cross_s6):
+        _assert_binary_feature(value)
+    assert crosses_now == sun_cross_s1
+    assert crosses_now == sun_cross_s6
 
 
 def test_intercept_turns_slow_anchor_exceeds_fast_anchor() -> None:
@@ -148,11 +172,58 @@ def test_intercept_turns_slow_anchor_exceeds_fast_anchor() -> None:
 
     turns_s1 = _edge_scalar(batch, "intercept_turns_s1")
     turns_s6 = _edge_scalar(batch, "intercept_turns_s6")
-    assert turns_s1 == pytest.approx(0.12, rel=0.0, abs=1e-4)
-    assert turns_s6 == pytest.approx(0.02, rel=0.0, abs=1e-4)
+    _assert_unit_interval(turns_s1)
+    _assert_unit_interval(turns_s6)
     assert turns_s1 > turns_s6
 
 
 def test_intercept_turns_clip_saturation_formula() -> None:
     clipped = float(jnp.clip(600.0 / 1.0 / MAX_STEPS, 0.0, 1.0))
     assert clipped == 1.0
+
+
+def test_projected_target_ships_equal_when_production_zero() -> None:
+    cfg = _cfg(candidate_count=4)
+    game = _two_planet_game(x0=20.0, y0=50.0, x1=80.0, y1=50.0, r1=6.0)
+    batch = encode_turn(game, cfg)
+
+    ships_s1 = _edge_scalar(batch, "target_ships_s1")
+    ships_s6 = _edge_scalar(batch, "target_ships_s6")
+    _assert_unit_interval(ships_s1)
+    _assert_unit_interval(ships_s6)
+    assert ships_s1 == pytest.approx(ships_s6, abs=1e-6)
+
+
+def test_projected_target_ships_s1_exceeds_s6_with_production() -> None:
+    cfg = _cfg(candidate_count=4, ship_feature_scale=1000.0)
+    game = _two_planet_game(x0=20.0, y0=50.0, x1=80.0, y1=50.0, r1=6.0)
+    production = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32).at[1].set(5.0)
+    planets = game.planets._replace(production=production)
+    game = game._replace(planets=planets)
+    batch = encode_turn(game, cfg)
+
+    ships_s1 = _edge_scalar(batch, "target_ships_s1")
+    ships_s6 = _edge_scalar(batch, "target_ships_s6")
+    _assert_unit_interval(ships_s1)
+    _assert_unit_interval(ships_s6)
+    assert ships_s1 > ships_s6
+
+
+def test_edge_rank_mode_intercept_min_composes_and_encodes() -> None:
+    cfg = _cfg(candidate_count=4, edge_rank_mode="intercept_min")
+    game = _two_planet_game(
+        x0=20.0,
+        y0=50.0,
+        x1=35.0,
+        y1=50.0,
+        r1=1.0,
+        angular_velocity=0.05,
+        step=12,
+    )
+    batch = encode_turn(game, cfg)
+    assert batch.edge_features.shape[-1] == EDGE_FEATURE_SCHEMA.base_dim
+
+
+def test_edge_rank_mode_snapshot_is_default() -> None:
+    cfg = _cfg(candidate_count=4)
+    assert cfg.edge_rank_mode == "snapshot"

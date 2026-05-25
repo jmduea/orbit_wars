@@ -4,9 +4,10 @@ max_fleets: 256
 player_count: 4
 max_ships: 400.0
 ship_feature_scale: 1000.0
-feature_history_steps: 1
+feature_history_steps: 5
 trajectory_shield_enabled: false
 trajectory_shield_hit_mode: selected_target
 trajectory_shield_horizon: 20
 trajectory_shield_epsilon: 1.0e-06
 intercept_anchors: [1.0, 6.0]
+edge_rank_mode: snapshot

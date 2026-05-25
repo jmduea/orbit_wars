@@ -24,9 +24,9 @@ def _task(**kwargs) -> TaskConfig:
 def test_feature_metadata_includes_schema_and_dims() -> None:
     metadata = feature_metadata(_task())
 
-    assert metadata["schema_version"] == 4
+    assert metadata["schema_version"] == 5
     assert metadata["planet_feature_dim"] == 13
-    assert metadata["edge_feature_dim"] == 18
+    assert metadata["edge_feature_dim"] == 19
     assert metadata["global_feature_dim"] == 46
     assert metadata["ship_feature_scale"] == 1000.0
     assert metadata["edge_layout"] == "top_k_per_source"
@@ -49,13 +49,13 @@ def test_validate_rejects_v1_checkpoint_metadata() -> None:
         validate_checkpoint_feature_compatibility(checkpoint, _task())
 
 
-def test_validate_rejects_v3_schema_version() -> None:
+def test_validate_rejects_v4_schema_version() -> None:
     env_cfg = _task()
     stored = dict(feature_metadata(env_cfg))
-    stored["schema_version"] = 3
+    stored["schema_version"] = 4
     checkpoint = {"feature_metadata": stored}
 
-    with pytest.raises(ValueError, match="schema_version=3"):
+    with pytest.raises(ValueError, match="schema_version=4"):
         validate_checkpoint_feature_compatibility(checkpoint, env_cfg)
 
 
@@ -81,7 +81,7 @@ def test_infer_metadata_from_state_dict_keys() -> None:
         "params": {
             "encoder_module": {
                 "planet_enc_0": {"kernel": __import__("numpy").zeros((13, 16))},
-                "edge_enc_0": {"kernel": __import__("numpy").zeros((18, 16))},
+                "edge_enc_0": {"kernel": __import__("numpy").zeros((19, 16))},
                 "global_enc_0": {"kernel": __import__("numpy").zeros((46, 16))},
             }
         }
@@ -90,9 +90,9 @@ def test_infer_metadata_from_state_dict_keys() -> None:
     inferred = infer_feature_metadata_from_state_dict(state_dict)
 
     assert inferred is not None
-    assert inferred["schema_version"] == 4
+    assert inferred["schema_version"] == 5
     assert inferred["planet_feature_dim"] == 13
-    assert inferred["edge_feature_dim"] == 18
+    assert inferred["edge_feature_dim"] == 19
     assert inferred["global_feature_dim"] == 46
 
 

@@ -186,9 +186,9 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
         },
         "config": config,
         "feature_metadata": {
-            "schema_version": 4,
+            "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 18,
+            "edge_feature_dim": 19,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
@@ -203,7 +203,8 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
     artifact = export_runtime_artifact(checkpoint)
 
     assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
-    assert artifact["feature_metadata"]["schema_version"] == 4
+    assert artifact["feature_metadata"]["schema_version"] == 5
+
 
 def test_export_runtime_artifact_includes_factorized_pointer_decoder(
     tmp_path: Path,
@@ -219,9 +220,9 @@ def test_export_runtime_artifact_includes_factorized_pointer_decoder(
         },
         "config": config,
         "feature_metadata": {
-            "schema_version": 4,
+            "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 18,
+            "edge_feature_dim": 19,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
@@ -253,7 +254,7 @@ def test_export_runtime_artifact_rejects_pointer_decoder_metadata_mismatch(
         "params": {"dense": {"kernel": np.zeros((2, 2), dtype=np.float32)}},
         "config": config,
         "feature_metadata": {
-            "schema_version": 4,
+            "schema_version": 5,
             "pointer_decoder": "factorized_topk",
             "action_layout_version": 2,
         },
@@ -276,7 +277,7 @@ def test_build_submission_package_includes_factorized_runtime_modules(
         "params": {"dense": {"kernel": np.zeros((2, 2), dtype=np.float32)}},
         "config": config,
         "feature_metadata": {
-            "schema_version": 4,
+            "schema_version": 5,
             "pointer_decoder": "factorized_topk",
             "action_layout_version": 2,
         },

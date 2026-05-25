@@ -100,6 +100,7 @@ class JaxEnvState(NamedTuple):
     learner_player: jax.Array
     episode_count: jax.Array
     feature_history: FeatureHistory | None = None
+    decoder_hidden: jax.Array | None = None
 
 
 class JaxAction(NamedTuple):
@@ -310,6 +311,7 @@ def assign_learner_players(
         feature_history=jax.vmap(
             lambda history, game: append_feature_history(history, game, cfg)
         )(histories, games),
+        decoder_hidden=None,
     )
     return env_state, turn_batch
 

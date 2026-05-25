@@ -23,7 +23,7 @@ def test_eval_deterministic_masks_noop_when_launch_available() -> None:
         dtype=bool,
     )
 
-    target, bucket, _, _ = _sample_step_from_logits(
+    target, bucket, _, _, _ = _sample_step_from_logits(
         key=jnp.array([0, 0], dtype=jnp.uint32),
         target_logits=target_logits,
         ship_logits=ship_logits,
@@ -51,7 +51,7 @@ def test_eval_deterministic_falls_back_to_noop_without_launch() -> None:
         dtype=bool,
     )
 
-    target, bucket, _, _ = _sample_step_from_logits(
+    target, bucket, _, _, _ = _sample_step_from_logits(
         key=jnp.array([0, 0], dtype=jnp.uint32),
         target_logits=target_logits,
         ship_logits=ship_logits,

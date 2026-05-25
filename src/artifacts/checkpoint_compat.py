@@ -1,7 +1,7 @@
 """Checkpoint feature-compatibility metadata and validation.
 
-Floor schema_version is 4 (intercept-anchor edges). Earlier versions are not
-loadable; migrate by retraining.
+Floor schema_version is 5 (intercept projected target ships per anchor). Earlier
+versions are not loadable; migrate by retraining.
 """
 
 from __future__ import annotations
@@ -242,7 +242,7 @@ def feature_metadata(
 
     history = feature_history_steps(env_cfg)
     metadata: dict[str, int | float | str | tuple] = {
-        "schema_version": 4,
+        "schema_version": 5,
         "feature_history_steps": history,
         "planet_feature_dim": planet_feature_dim(env_cfg),
         "edge_feature_dim": edge_feature_dim(env_cfg),
@@ -379,7 +379,7 @@ def infer_feature_metadata_from_state_dict(
     }
     if all(value is not None for value in v2_dims.values()):
         return {
-            "schema_version": 4,
+            "schema_version": 5,
             **{key: int(value) for key, value in v2_dims.items()},
         }
 
@@ -479,11 +479,11 @@ def validate_checkpoint_feature_compatibility(
         )
 
     stored_schema = stored.get("schema_version")
-    if stored_schema is not None and int(stored_schema) < 4:
+    if stored_schema is not None and int(stored_schema) < 5:
         raise ValueError(
             f"Checkpoint{location} uses feature schema_version={stored_schema}. "
-            "Schema v4 (intercept-anchor edge features) is required; v3 → v4 "
-            "migration required — retrain or run an explicit conversion."
+            "Schema v5 (projected target ships per intercept anchor) is required; "
+            "v4 → v5 migration required — retrain or run an explicit conversion."
         )
 
     dimension_keys = (

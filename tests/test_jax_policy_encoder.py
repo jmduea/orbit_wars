@@ -15,6 +15,12 @@ from src.config.schema import TaskConfig
 from src.features.catalog.planet import PLANET_FEATURE_CATALOG
 from src.features.registry import edge_k, planet_feature_dim
 from src.game.constants import MAX_PLANETS
+from src.jax.encoders.planet_encoder_common import (
+    planet_attention_mask_with_bias,
+    planet_orbit_coords,
+    planet_pairwise_spatial_bias,
+    planet_self_attention_mask,
+)
 from src.jax.policy import (
     build_gnn_pointer_policy,
     build_jax_policy,
@@ -114,11 +120,6 @@ def test_all_masked_planets_produce_finite_outputs() -> None:
 
 
 def test_spatial_bias_prefers_closer_planets() -> None:
-    from src.jax.encoders.planet_encoder_common import (
-        planet_orbit_coords,
-        planet_pairwise_spatial_bias,
-    )
-
     dim = planet_feature_dim(_task_cfg())
     radius_slice = PLANET_FEATURE_CATALOG.base_slice("orbit_radius")
     planet_features = jnp.zeros((1, 3, dim), dtype=jnp.float32)
@@ -165,3 +166,35 @@ def test_transformer_hidden_size_must_divide_heads() -> None:
     cfg.model.hidden_size = 63
     with pytest.raises(ValueError, match="divisible"):
         build_planet_graph_transformer_policy(cfg)
+
+
+def test_planet_self_attention_mask_excludes_inactive_planets() -> None:
+    """Active queries must not attend to inactive planet keys (F1 regression guard)."""
+    planet_mask = jnp.array([[True, True, False, False]], dtype=bool)
+    attn = planet_self_attention_mask(planet_mask)
+    assert bool(attn[0, 0, 1])
+    assert not bool(attn[0, 0, 2])
+    assert not bool(attn[0, 1, 2])
+
+
+def test_inactive_planet_coords_do_not_change_active_attention_bias() -> None:
+    """Spatial bias for active pairs ignores perturbations on inactive planet rows."""
+    cfg = _train_cfg(architecture="planet_graph_transformer")
+    batch = make_synthetic_turn_batch(1, cfg.task, key=jax.random.PRNGKey(0))
+    active_mask = jnp.zeros((1, MAX_PLANETS), dtype=bool)
+    active_mask = active_mask.at[0, :2].set(True)
+    batch_base = batch._replace(planet_mask=active_mask)
+    batch_perturbed = batch_base._replace(
+        planet_features=batch.planet_features.at[0, 2:].set(999.0)
+    )
+    coords_base = planet_orbit_coords(batch_base.planet_features)
+    coords_perturbed = planet_orbit_coords(batch_perturbed.planet_features)
+    bias_base = planet_attention_mask_with_bias(
+        batch_base.planet_mask, coords_base, spatial_attention_bias=True
+    )
+    bias_perturbed = planet_attention_mask_with_bias(
+        batch_perturbed.planet_mask, coords_perturbed, spatial_attention_bias=True
+    )
+    np.testing.assert_allclose(
+        bias_base[0, 0, 0, :2], bias_perturbed[0, 0, 0, :2], rtol=0.0, atol=1e-6
+    )

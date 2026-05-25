@@ -125,8 +125,13 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
         for key, spec in parameters.items():
             if "value" in spec:
                 values = [spec["value"]]
-            else:
+            elif "values" in spec:
                 values = list(spec["values"])
+            elif "distribution" in spec:
+                # W&B bayes/uniform sweeps are not grid-enumerable; smoke with min.
+                values = [spec["min"]]
+            else:
+                raise KeyError(f"Unsupported sweep parameter spec for {key!r}: {spec!r}")
             keys.append(key)
             value_sets.append(values)
 

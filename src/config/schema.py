@@ -19,11 +19,13 @@ class TaskConfig:
     # TODO: Move to ActionCodecConfig or something more action-adjacent.
     candidate_count: int = 8
     ship_bucket_count: int = 8
+    ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
     trajectory_shield_enabled: bool = True
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, float] = (1.0, 6.0)
+    edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
 
 
 @dataclass(slots=True)
@@ -44,7 +46,11 @@ class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
     architecture: str = "gnn_pointer"
-    value_head: str = "shared"  # format_routed for 2p/4p routing
+    value_head: str = (
+        "shared"  # format_routed for 2p/4p routing; distributional for C51 critic
+    )
+    value_bins: int = 51
+    value_max: float = 1.0
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
@@ -53,6 +59,7 @@ class ModelConfig:
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
     pointer_decoder: str = "factorized_topk"
+    decoder_carry: bool = False
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 

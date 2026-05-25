@@ -6,6 +6,7 @@ import flax.linen as nn
 import jax.numpy as jnp
 
 import jax
+from src.jax.decoder_carry import resolve_decoder_initial_state
 from src.jax.encoders.planet_encoder_common import PlanetEdgeEncoderOutput
 
 
@@ -14,6 +15,8 @@ class FactorizedTopKPointerDecoder(nn.Module):
 
     ship_bucket_count: int
     max_moves_k: int
+    ship_action_mode: str = "buckets"
+    decoder_carry: bool = False
     hidden_size: int = 128
     edge_k: int = 3
 
@@ -24,9 +27,11 @@ class FactorizedTopKPointerDecoder(nn.Module):
         *,
         source_sequence: jax.Array | None = None,
         target_slot_sequence: jax.Array | None = None,
+        decoder_hidden_in: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
     ) -> tuple[
+        jax.Array,
         jax.Array,
         jax.Array,
         jax.Array,
@@ -52,7 +57,12 @@ class FactorizedTopKPointerDecoder(nn.Module):
         tgt_k_dense = nn.Dense(self.hidden_size, name="factorized_tgt_k")
         stop_dense = nn.Dense(1, name="factorized_stop")
         ship_dense = nn.Dense(self.hidden_size, name="factorized_ship_dense")
-        ship_out = nn.Dense(self.ship_bucket_count, name="factorized_ship_out")
+        ship_width = (
+            1
+            if self.ship_action_mode.strip().lower() == "continuous_fraction"
+            else self.ship_bucket_count
+        )
+        ship_out = nn.Dense(ship_width, name="factorized_ship_out")
 
         start_token = self.param(
             "factorized_start_token",
@@ -77,7 +87,11 @@ class FactorizedTopKPointerDecoder(nn.Module):
             all_stops,
         ) = ([], [], [], [], [], [], [])
 
-        current_state = init_decoder_state
+        current_state = resolve_decoder_initial_state(
+            init_decoder_state,
+            decoder_hidden_in,
+            enabled=self.decoder_carry,
+        )
         current_rng = rng
 
         for step_idx in range(self.max_moves_k):
@@ -159,4 +173,5 @@ class FactorizedTopKPointerDecoder(nn.Module):
             jnp.stack(all_sources, axis=1),
             jnp.stack(all_target_slots, axis=1),
             jnp.stack(all_stops, axis=1),
+            current_state,
         )

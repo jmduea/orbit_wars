@@ -157,6 +157,56 @@ def _planet_features(
     return assemble_planet_features(context)
 
 
+def _intercept_min_distance_matrix(
+    game,
+    planets,
+    env_cfg: TaskConfig,
+    *,
+    src_x: jax.Array,
+    src_y: jax.Array,
+    dist: jax.Array,
+    valid_target: jax.Array,
+) -> jax.Array:
+    """Minimum raw intercept distance across anchor speeds for every source-target pair."""
+
+    anchor_speeds = tuple(float(s) for s in env_cfg.intercept_anchors)
+    tgt_x = planets.x[None, :]
+    tgt_y = planets.y[None, :]
+    tgt_initial_x = game.initial_planets.x[None, :]
+    tgt_initial_y = game.initial_planets.y[None, :]
+    tgt_radius = planets.radius[None, :]
+    tgt_active = planets.active[None, :]
+
+    init_dx = tgt_initial_x - BOARD_CENTER[0]
+    init_dy = tgt_initial_y - BOARD_CENTER[1]
+    orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
+    rotates = (orbit_radius + tgt_radius < ROTATION_RADIUS_LIMIT) & tgt_active
+    start_angle = jnp.arctan2(init_dy, init_dx)
+
+    min_dist = jnp.full(dist.shape, jnp.inf, dtype=jnp.float32)
+    for anchor_speed in anchor_speeds:
+        speed = jnp.asarray(anchor_speed, dtype=jnp.float32)
+        tau = jnp.maximum(dist / jnp.maximum(speed, 1e-6), 0.0)
+        step_index = game.step.astype(jnp.float32) + tau
+        tgt_future_x, tgt_future_y = orbital_position_at_step_jax(
+            start_angle,
+            orbit_radius,
+            game.angular_velocity,
+            step_index,
+            rotates,
+            tgt_x,
+            tgt_y,
+        )
+        raw_future_dx = tgt_future_x - src_x
+        raw_future_dy = tgt_future_y - src_y
+        intercept_dist = jnp.sqrt(
+            raw_future_dx * raw_future_dx + raw_future_dy * raw_future_dy
+        )
+        min_dist = jnp.minimum(min_dist, intercept_dist.astype(jnp.float32))
+
+    return jnp.where(valid_target, min_dist, jnp.inf)
+
+
 def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
     planets = game.planets
     fleets = game.fleets
@@ -190,11 +240,24 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
     )
 
     sort_distance = jnp.where(valid_target, dist, jnp.inf)
+    rank_mode = str(env_cfg.edge_rank_mode).strip().lower()
+    if rank_mode == "intercept_min":
+        sort_distance = _intercept_min_distance_matrix(
+            game,
+            planets,
+            env_cfg,
+            src_x=src_x,
+            src_y=src_y,
+            dist=dist,
+            valid_target=valid_target,
+        )
+    elif rank_mode != "snapshot":
+        raise ValueError(
+            f"Unsupported task.edge_rank_mode {env_cfg.edge_rank_mode!r}. "
+            "Expected 'snapshot' or 'intercept_min'."
+        )
     sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
     sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
-    # TODO(thin-trajectory-shield-follow-up): re-rank top-K by intercept proximity.
-    # Snapshot sort retained for M4 golden-test stability; ADR-002 amendment will
-    # accompany the re-rank when the follow-up milestone lands.
     order = jnp.lexsort((sort_id, sort_distance, sort_blocked), axis=1)[:, :k]
     pad_width = k - order.shape[1]
     if pad_width > 0:
@@ -205,6 +268,7 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
     tgt_y = jnp.take(planets.y, order, axis=0)
     tgt_radius = jnp.take(planets.radius, order, axis=0)
     tgt_ships = jnp.take(planets.ships, order, axis=0)
+    tgt_production = jnp.take(planets.production, order, axis=0)
     tgt_owner = jnp.take(planets.owner, order, axis=0)
     tgt_active = jnp.take(planets.active, order, axis=0)
 
@@ -239,10 +303,16 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
     intercept_distance_per_anchor: list[jax.Array] = []
     intercept_turns_per_anchor: list[jax.Array] = []
     sun_cross_at_intercept_per_anchor: list[jax.Array] = []
+    tgt_ships_per_anchor: list[jax.Array] = []
 
     for anchor_speed in anchor_speeds:
         speed = jnp.asarray(anchor_speed, dtype=jnp.float32)
         tau = jnp.maximum(snapshot_distance_raw / jnp.maximum(speed, 1e-6), 0.0)
+        projected_ships = tgt_ships + tgt_production * tau
+        normalized_projected_ships = (
+            jnp.minimum(jnp.maximum(projected_ships, 0.0), scale) / scale
+        )
+        tgt_ships_per_anchor.append(normalized_projected_ships)
         step_index = game.step.astype(jnp.float32) + tau
         tgt_future_x, tgt_future_y = orbital_position_at_step_jax(
             start_angle_per_edge,
@@ -303,7 +373,7 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
             sun_cross_at_intercept_per_anchor, axis=-1
         ),
         crosses_now=crosses_now.astype(jnp.float32),
-        tgt_ships=tgt_ships,
+        tgt_ships_per_anchor=jnp.stack(tgt_ships_per_anchor, axis=-1),
         owner_slot=owner_slot,
         incoming_friendly=incoming_friendly,
         incoming_enemy=incoming_enemy,
@@ -329,7 +399,7 @@ def _global_frame(game, env_cfg: TaskConfig, scale, history: FeatureHistory | No
 
 
 def _previous_global_features(history: FeatureHistory | None, env_cfg: TaskConfig):
-    if history is None or feature_history_steps(env_cfg) <= 1 or history.length <= 0:
+    if history is None or feature_history_steps(env_cfg) <= 1:
         return (
             jnp.zeros((GLOBAL_FEATURE_CATALOG.base_dim,), dtype=jnp.float32),
             jnp.asarray(0.0, dtype=jnp.float32),

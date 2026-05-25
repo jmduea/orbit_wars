@@ -27,12 +27,16 @@ class JaxPolicyOutput(NamedTuple):
     decoded_target_sequence: jax.Array
         Shape: (batch, sequence_k). Target path used by autoregressive decoders,
         or -1 for decoders whose steps can be sampled from logits directly.
+    value_logits: jax.Array | None
+        Shape: (batch, value_bins) when ``model.value_head=distributional``; else None.
     """
 
     target_logits: jax.Array
     ship_logits: jax.Array
     value: jax.Array
     decoded_target_sequence: jax.Array
+    value_logits: jax.Array | None = None
+    decoder_hidden: jax.Array | None = None
 
 
 class FactoredPolicyOutput(NamedTuple):
@@ -46,6 +50,12 @@ class FactoredPolicyOutput(NamedTuple):
     decoded_source_sequence: jax.Array
     decoded_target_slot_sequence: jax.Array
     decoded_stop_sequence: jax.Array
+    value_logits: jax.Array | None = None
+    decoder_hidden: jax.Array | None = None
+
+
+def __continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
+    return -jax.nn.softplus(-logit) - jax.nn.softplus(logit)
 
 
 def ensure_policy_sequence(value: jax.Array) -> jax.Array:
@@ -91,6 +101,7 @@ def factored_action_log_prob_and_entropy(
     ship_bucket: jax.Array,
     stop_flag: jax.Array,
     step_mask: jax.Array,
+    ship_fraction: jax.Array | None = None,
 ) -> tuple[jax.Array, jax.Array]:
     """Compute factorized log-probability and entropy for one launch sequence."""
 
@@ -136,12 +147,17 @@ def factored_action_log_prob_and_entropy(
         target_slot[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
         axis=2,
     ).squeeze(axis=2)
-    ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-    ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-    ship_lp = jnp.take_along_axis(
-        ship_log_probs, ship_bucket[..., None], axis=-1
-    ).squeeze(-1)
-    ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
+    if selected_ship_logits.shape[-1] == 1:
+        ship_logit = selected_ship_logits[..., 0]
+        ship_lp = _continuous_fraction_log_prob(ship_logit)
+        ship_entropy = jnp.zeros_like(ship_lp)
+    else:
+        ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
+        ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
+        ship_lp = jnp.take_along_axis(
+            ship_log_probs, ship_bucket[..., None], axis=-1
+        ).squeeze(-1)
+        ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
 
     head_active = step_mask * (1.0 - stop_flag)
     log_prob = stop_lp + head_active * (source_lp + target_lp + ship_lp)
@@ -202,12 +218,17 @@ def _factored_step_log_prob_entropy(
     selected_ship_logits = jnp.where(
         selected_bucket_mask, selected_ship_logits, illegal_logit
     )
-    ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-    ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-    ship_lp = jnp.take_along_axis(
-        ship_log_probs, ship_bucket[..., None], axis=-1
-    ).squeeze(-1)
-    ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
+    if selected_ship_logits.shape[-1] == 1:
+        ship_logit = selected_ship_logits[..., 0]
+        ship_lp = _continuous_fraction_log_prob(ship_logit)
+        ship_entropy = jnp.zeros_like(ship_lp)
+    else:
+        ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
+        ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
+        ship_lp = jnp.take_along_axis(
+            ship_log_probs, ship_bucket[..., None], axis=-1
+        ).squeeze(-1)
+        ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
 
     head_active = 1.0 - stop
     move_entropy = head_active * (source_entropy + target_entropy + ship_entropy)
@@ -225,6 +246,7 @@ def factored_action_log_prob_with_shield(
     step_mask: jax.Array,
     source_mask: jax.Array,
     ship_bucket_mask: jax.Array,
+    ship_fraction: jax.Array | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Factorized log-prob replay using rollout-equivalent per-step shield masks."""
 
@@ -242,6 +264,8 @@ def factored_action_log_prob_with_shield(
     ship_bucket = ensure_action_sequence(ship_bucket.astype(jnp.int32))
     stop_flag = ensure_action_sequence(stop_flag.astype(jnp.float32))
     step_mask = ensure_action_sequence(step_mask.astype(jnp.float32))
+    if ship_fraction is not None:
+        ship_fraction = ensure_action_sequence(ship_fraction.astype(jnp.float32))
 
     if source_mask.ndim == 2:
         source_mask = source_mask[:, None, :]
@@ -272,6 +296,7 @@ def factored_action_log_prob_with_shield(
             tgt,
             bkt,
             stop,
+            ship_fraction=ship_fraction,
         )
         return (
             mask * log_prob,
@@ -309,6 +334,7 @@ def action_log_prob_and_entropy(
     output: JaxPolicyOutput,
     target_index: jax.Array,
     ship_bucket: jax.Array,
+    ship_fraction: jax.Array | None = None,
 ) -> tuple[jax.Array, jax.Array]:
     """Compute joint log-probability and entropy for target/bucket actions."""
 
@@ -327,13 +353,18 @@ def action_log_prob_and_entropy(
         target_index[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
         axis=2,
     ).squeeze(axis=2)
-    ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-    ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-    ship_lp = jnp.take_along_axis(
-        ship_log_probs, ship_bucket[..., None], axis=-1
-    ).squeeze(-1)
+    if selected_ship_logits.shape[-1] == 1:
+        ship_logit = selected_ship_logits[..., 0]
+        ship_lp = _continuous_fraction_log_prob(ship_logit)
+        ship_entropy = jnp.zeros_like(ship_lp)
+    else:
+        ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
+        ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
+        ship_lp = jnp.take_along_axis(
+            ship_log_probs, ship_bucket[..., None], axis=-1
+        ).squeeze(-1)
+        ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
     target_entropy = -(target_probs * target_log_probs).sum(axis=-1)
-    ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
     log_prob = target_lp + ship_lp
     entropy = target_entropy + ship_entropy
     if squeeze_sequence:
