@@ -119,6 +119,55 @@ task.intercept_anchors=[1.0,6.0]
 
 Results doc: [m4-intercept-edge-results.md](./m4-intercept-edge-results.md).
 
+## M2 planet self-attention ablation (encoder-only)
+
+**Prerequisite:** M4 intercept-edge features merged (schema v4, E=18). Do not start until both arms share identical feature metadata.
+
+**Baseline pin:** record commit SHA + feature metadata in `artifacts/m2/baseline_pin.json`.
+
+| Arm | Hydra | `encoder_backbone` |
+|-----|-------|-------------------|
+| Baseline | `model=gnn_pointer` | `planet_gnn` |
+| M2 | `model=planet_graph_transformer` | `planet_self_attention` |
+
+Shared anchor (GPU ablation profile — see `artifacts/m2/baseline_pin.json`):
+
+```bash
+format=mix_2p_4p_16env
+training=ablation_m2
+telemetry=ablation
+curriculum=latest_only
+task.candidate_count=4
+task.trajectory_shield_enabled=true
+training.total_updates=500
+```
+
+Run all arms in-process (avoids repeated XLA compile):
+
+```bash
+uv run python scripts/run_m2_ablation.py --skip-existing
+```
+
+**Gates (both arms scratch-retrained, 3 paired seeds):**
+
+| ID | Metric | Pass |
+|----|--------|------|
+| W1 | `episode_reward_mean` (updates 450–500) | ≥ +2% vs GNN, 2p and 4p |
+| H2 | `rollout_env_steps_per_sec` median | ≥ 0.90× GNN |
+| H1 | Submission validator | zero illegal actions |
+| S1 | `trajectory_shield_legal_non_noop_rate` | within ±5pp of GNN |
+
+Throughput benchmark (**sequential only — never run two benchmark processes in parallel**):
+
+```bash
+# Runs GNN (3 reps) then transformer (3 reps), one process at a time
+uv run python scripts/benchmark_m2_paired_throughput.py --warmup 2 --updates 20 --reps 3
+```
+
+Do not launch separate `benchmark_jax_rl.py` jobs concurrently; paired GPU contention and asymmetric JIT warmup invalidate H2. Run when no other training job is using the GPU.
+
+Results doc: [m2-planet-self-attention-results.md](./m2-planet-self-attention-results.md) — Phase 3 complete 2026-05-25; gates in `artifacts/m2/gate_evaluation.json`.
+
 ## Cutover recommendation field
 
 After collecting evidence, record observed deltas in the plan appendix. Default recommendation post-Phase 5: **production default is v2** (`conf/task/default.yaml` → `encoding_version: v2`); use ablation numbers to prioritize follow-up tuning, not to block deployment.

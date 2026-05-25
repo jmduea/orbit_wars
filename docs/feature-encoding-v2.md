@@ -2,7 +2,7 @@
 
 **Status:** Phase 5 cutover complete — production default `encoding_version=v2`; v1 path retained for rollback/tests  
 **Plan:** `.omg/plans/ralplan-feature-encoding-v2.md`  
-**ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame) below  
+**ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame), **ADR-005 (factored pointer — planned)** below  
 **Symmetry exploration:** `docs/feature-encoding-v2-symmetry.md`
 
 ## Overview
@@ -85,7 +85,42 @@ Target planet is **angle-implied** at game API — must match training shield ge
 
 ---
 
-## ADR-002: Edge Layout (Option A — Approved)
+## ADR-005: Factored Top-K Pointer + Stop Head (Planned — M1)
+
+### Decision
+
+Replace ADR-001 **joint flat** pointer with a **factorized** decoder per launch step:
+
+1. **Source** — softmax over `MAX_PLANETS` (owned + ships mask)
+2. **Target slot** — softmax over `K` slots **conditioned on chosen source row** (ADR-002 top-K preserved)
+3. **Ship bucket** — softmax over buckets conditioned on `(source, slot)`
+4. **Stop** — Bernoulli/logit per step; padding within fixed `max_moves_k` loop via `step_active_mask`
+
+**Preserves ADR-002:** target candidates remain top-K per source; shield evaluates `(src_row, slot)` via `evaluate_edge_pair`.
+
+**Amends ADR-001:** no flat `P×K+1` joint softmax; NO_OP slot removed from target head (stop head replaces trailing NO_OP semantics).
+
+### Log-probability factorization
+
+```
+log π_step = log π_stop + active × (log π_src + log π_tgt_slot + log π_bucket)
+active = 1 when stop=0 and step is before padding cutoff
+```
+
+### Checkpoint plane (no schema_version bump)
+
+| Field | Values |
+|-------|--------|
+| `pointer_decoder` | `joint_flat` \| `factorized_topk` |
+| `action_layout_version` | `1` = joint flat (ADR-001), `2` = factorized top-K |
+
+Decoder weights are incompatible across values; load-time rejection mirrors `encoder_backbone`.
+
+### Status
+
+Phase 0 (contract + shield spike) in progress. Default runtime remains `joint_flat` until M1 Phase 4 ablation.
+
+---
 
 ### Decision
 

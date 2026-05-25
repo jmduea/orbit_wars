@@ -53,7 +53,7 @@ Responsibility-group YAML composing models, tasks, rewards, training budgets, fo
 
 | Group | Examples |
 |-------|----------|
-| `model/` | `attention`, `mlp`, `gnn_pointer`, entity-transformer presets |
+| `model/` | `attention`, `mlp`, `gnn_pointer`, `planet_graph_transformer`, entity-transformer presets |
 | `task/`, `reward/`, `training/` | Shape, reward shaping, PPO budget |
 | `format/` | 2p/4p and mixed rollout topologies |
 | `opponents/`, `curriculum/` | Self-play profiles and staged progression |
