@@ -716,13 +716,231 @@
       "workflow": "ralplan",
       "status": "complete",
       "title": "Plan: Bucket-aware edge intercept features (M4)",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "intercept-edge-features",
         "thin-trajectory-shield"
       ],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "Phases 1-3: catalog E=18, encoder rewrite, goldens, docs; Phase 4 ablation deferred"
+      "evidence": "Phases 1-3: catalog E=18, encoder rewrite, goldens, docs; Phase 4 ablation deferred",
+      "notes": null
+    },
+    {
+      "id": "planet-self-attention-encoder",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-planet-self-attention-encoder.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "M2: Planet self-attention encoder (Graph Transformer)",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "intercept-edge-features",
+        "feature-encoding-v2-plan"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Phase 3 ablation complete; Phase 4 cutover applied 2026-05-25: conf/config.yaml default model=planet_graph_transformer. artifacts/m2/gate_evaluation.json W1/H2/H3 pass.",
+      "notes": "M2 complete (Phases 0-4). H1 submission smoke deferred. M1 Phase 4 unblocked."
+    },
+    {
+      "id": "ralplan-planet-self-attention-encoder",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-planet-self-attention-encoder.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "Plan: M2 planet self-attention encoder",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "intercept-edge-features"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Phase 4 cutover applied 2026-05-25 (default model=planet_graph_transformer). Phase 3 gates W1/H2/H3 pass.",
+      "notes": "M2 plan complete."
+    },
+    {
+      "id": "factored-pointer-decoder",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-factored-pointer-decoder.md",
+      "workflow": "deep-interview",
+      "status": "executing",
+      "title": "M1: Factored top-K pointer decoder + stop head",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "planet-self-attention-encoder",
+        "intercept-edge-features"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Iter-4 adjustment: reverted dense P×P; active plan is factorized_topk (iter-2 consensus). Ralph PRD updated."
+    },
+    {
+      "id": "ralplan-factored-pointer-decoder",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-factored-pointer-decoder.md",
+      "workflow": "ralplan",
+      "status": "executing",
+      "title": "Plan: M1 factored top-K pointer decoder",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "planet-self-attention-encoder"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Phase 4 ablation infra ready (scripts/run_m1_ablation.py, artifacts/m1/baseline_pin.json). Encoder: planet_graph_transformer both arms."
+    },
+    {
+      "id": "alphazero-mcts-planning",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-alphazero-mcts-planning.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "M3: AlphaZero-style MCTS planning",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder",
+        "planet-self-attention-encoder"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "User locks: Q1 per-launch-step, Q3 algorithm dispatch, Q10 deferred until user directs. Execution: save only — do not start Phase 0 yet."
+    },
+    {
+      "id": "ralplan-alphazero-mcts-planning",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-alphazero-mcts-planning.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Plan: M3 AlphaZero MCTS planning",
+      "spec_id": "alphazero-mcts-planning",
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder",
+        "planet-self-attention-encoder"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Iter-2 consensus after planner+architect+critic. Awaiting execution approval hook."
+    },
+    {
+      "id": "ppo-encoder-decoder-audit-trace",
+      "kind": "trace",
+      "path": ".omg/specs/deep-dive-trace-ppo-encoder-decoder-audit.md",
+      "workflow": "deep-dive",
+      "status": "complete",
+      "title": "PPO post encoder/decoder trace",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Factorized shield mask bug found and fixed; hyperparam wiring verified"
+    },
+    {
+      "id": "ppo-encoder-decoder-audit",
+      "kind": "spec",
+      "path": ".omg/specs/deep-dive-ppo-encoder-decoder-audit.md",
+      "workflow": "deep-dive",
+      "status": "complete",
+      "title": "PPO encoder/decoder audit",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder",
+        "ppo-encoder-decoder-audit-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "tests/test_ppo_update.py + mask_factored fix in trajectory_shield.py"
+    },
+    {
+      "id": "ppo-gae-gradient-checkpoint",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-ppo-gae-gradient-checkpoint.md",
+      "workflow": "deep-interview",
+      "status": "planned",
+      "title": "PPO GAE + gradient checkpointing",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "ppo-encoder-decoder-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Follow-up from ppo-encoder-decoder-audit"
+    },
+    {
+      "id": "ralplan-ppo-gae-gradient-checkpoint",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-ppo-gae-gradient-checkpoint.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Plan: PPO GAE + gradient checkpointing",
+      "spec_id": "ppo-gae-gradient-checkpoint",
+      "plan_id": null,
+      "related_ids": [
+        "ppo-gae-gradient-checkpoint",
+        "ppo-encoder-decoder-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Iter-1 consensus; default gae_lambda=1.0, encoder-only remat"
+    },
+    {
+      "id": "policy-advances-audit",
+      "kind": "spec",
+      "path": ".omg/specs/deep-dive-policy-advances-audit.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Policy advances audit (4 features)",
+      "spec_id": null,
+      "plan_id": "ralplan-policy-advances-audit",
+      "related_ids": [
+        "factored-pointer-decoder",
+        "alphazero-mcts-planning",
+        "ppo-gae-gradient-checkpoint",
+        "planet-self-attention-encoder",
+        "composable-multi-value-head"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": "ralplan iter-1 2026-05-25: F1 PARTIAL/closed masked fixed-P; F2 NOT IMPLEMENTED→M5-value; F3 PARTIAL→M6-decoder-carry; F4 NOT IMPLEMENTED→M6-ships; F5 PARTIAL M4 done→M5-intercept-lookahead",
+      "notes": "Spec and plan markdown written; consensus iter-1 complete; awaiting execution approval hook"
+    },
+    {
+      "id": "ralplan-policy-advances-audit",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-policy-advances-audit.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Plan: Policy advances audit (4 features)",
+      "spec_id": "policy-advances-audit",
+      "related_ids": [
+        "factored-pointer-decoder",
+        "alphazero-mcts-planning",
+        "ppo-gae-gradient-checkpoint"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": "ralplan-policy-advances-audit.md iter-1: architect+critic synthesized approval; dependency order M5I→M5V→M6S/M6B",
+      "notes": "Audit-only pass complete; implementation milestones not yet registered as separate manifest entries"
     }
   ]
 }
