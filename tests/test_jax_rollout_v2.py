@@ -70,3 +70,25 @@ def test_v2_ten_update_training_smoke():
         )
         assert float(metrics["loss_sample_count_2p"]) > 0.0
         assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
+
+
+@pytest.mark.jax
+def test_v2_four_player_random_rollout_smoke():
+    cfg = _v2_smoke_cfg(rollout_steps=1)
+    cfg.task.player_count = 4
+    reset_keys = jax.random.split(jax.random.PRNGKey(20), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.PRNGKey(21), policy, cfg)
+    _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(22), env_state, turn_batch, train_state, policy, cfg
+    )
+    assert isinstance(transitions, JaxTransitionBatchV2)
+    next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert float(rollout_metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
+    assert float(rollout_metrics["episodes_4p"]) >= 0.0
+    assert float(metrics["loss_sample_count_4p"]) > 0.0
+    assert float(metrics["loss_sample_count_2p"]) == 0.0
+    assert all(bool(jax.numpy.isfinite(value)) for value in metrics.values())
+    assert next_train_state.params is not train_state.params

@@ -181,39 +181,80 @@ def ppo_update_jax_v2(
                 "approx_kl": approx_kl,
                 "loss": loss,
                 "sample_count": minibatch["mask"].sum(),
-                "total_loss": loss,
-                "total_loss_2p": loss,
-                "total_loss_4p": jnp.array(0.0, dtype=jnp.float32),
-                "loss_sample_count_2p": minibatch["mask"].sum(),
-                "loss_sample_count_4p": jnp.array(0.0, dtype=jnp.float32),
             }
+            for format_player_count in (2, 4):
+                suffix = f"{format_player_count}p"
+                format_mask = minibatch["mask"] * (
+                    minibatch["player_count"][:, None] == format_player_count
+                ).astype(jnp.float32)
+                format_policy_loss = -masked_mean(policy_objective, format_mask)
+                format_value_loss = 0.5 * masked_mean(value_error, format_mask)
+                format_entropy = masked_mean(entropy, format_mask)
+                format_approx_kl = masked_mean(
+                    minibatch["old_log_prob"] - new_log_prob,
+                    format_mask,
+                )
+                format_total_loss = (
+                    format_policy_loss
+                    + cfg.training.vf_coef * format_value_loss
+                    - cfg.training.ent_coef * format_entropy
+                )
+                metrics[f"policy_loss_{suffix}"] = format_policy_loss
+                metrics[f"value_loss_{suffix}"] = format_value_loss
+                metrics[f"entropy_{suffix}"] = format_entropy
+                metrics[f"approx_kl_{suffix}"] = format_approx_kl
+                metrics[f"total_loss_{suffix}"] = format_total_loss
+                metrics[f"loss_sample_count_{suffix}"] = format_mask.sum()
             return loss, metrics
 
         (_loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
         updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
+        metrics = dict(metrics)
+        metrics["total_loss"] = _loss
         return (params, opt_state), metrics
 
     (params, opt_state), metrics_by_minibatch = jax.lax.scan(
         update_minibatch, (train_state.params, train_state.opt_state), minibatches
+    )
+    format_metric_names = frozenset(
+        f"{metric_name}_{suffix}"
+        for suffix in ("2p", "4p")
+        for metric_name in (
+            "policy_loss",
+            "value_loss",
+            "entropy",
+            "approx_kl",
+            "total_loss",
+        )
+    )
+    format_sample_names = frozenset(
+        f"loss_sample_count_{suffix}" for suffix in ("2p", "4p")
     )
     metric_weights = jnp.where(metrics_by_minibatch["sample_count"] > 0.0, 1.0, 0.0)
     metric_denominator = jnp.maximum(metric_weights.sum(), 1.0)
     metrics = {
         name: (values * metric_weights).sum() / metric_denominator
         for name, values in metrics_by_minibatch.items()
-        if name
-        not in {
-            "sample_count",
-            "total_loss_2p",
-            "total_loss_4p",
-            "loss_sample_count_4p",
-        }
+        if name not in {"sample_count", *format_metric_names, *format_sample_names}
     }
+    for suffix in ("2p", "4p"):
+        sample_name = f"loss_sample_count_{suffix}"
+        sample_counts = metrics_by_minibatch[sample_name]
+        sample_denominator = jnp.maximum(sample_counts.sum(), 1.0)
+        metrics[sample_name] = sample_counts.sum()
+        for metric_name in (
+            "policy_loss",
+            "value_loss",
+            "entropy",
+            "approx_kl",
+            "total_loss",
+        ):
+            name = f"{metric_name}_{suffix}"
+            metrics[name] = (
+                metrics_by_minibatch[name] * sample_counts
+            ).sum() / sample_denominator
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
-    metrics["total_loss_2p"] = metrics["total_loss"]
-    metrics["loss_sample_count_2p"] = metrics_by_minibatch["loss_sample_count_2p"].sum()
-    metrics["loss_sample_count_4p"] = jnp.array(0.0, dtype=jnp.float32)
     return (
         JaxTrainState(
             params=params, opt_state=opt_state, optimizer=train_state.optimizer
