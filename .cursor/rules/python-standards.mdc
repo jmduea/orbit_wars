@@ -1,0 +1,89 @@
+---
+description: Python OOP, uv, Google docstrings, and architecture diagram conventions
+alwaysApply: true
+---
+
+# Python & Project Standards
+
+## Dependency management (uv)
+
+- Use **uv** for all Python installs, sync, and script execution — never `pip install` directly.
+- Sync dev tools: `uv sync --group dev`
+- Run code/tests: `uv run python …`, `uv run --group dev pytest …`, `make test-fast`
+- Add runtime deps in `[project] dependencies`; dev-only in `[dependency-groups] dev` in `pyproject.toml`.
+- Pin with `uv add <pkg>` / `uv add --dev <pkg>`; keep `requires-python = ">=3.12,<3.13"`.
+
+## Object-oriented design
+
+Match existing layering in `src/` — lower packages must not import orchestration (`jax/train.py`, Hydra shell).
+
+- Prefer **`@dataclass(slots=True)`** for config and value objects; use **`Protocol`** (+ `@runtime_checkable` when needed) for stage contracts (`src/*/contracts.py`).
+- Favor composition and narrow public APIs over deep inheritance hierarchies.
+- Keep modules single-purpose; colocate helpers with their owner package.
+- Use `from __future__ import annotations` in new modules.
+- Name types/functions by domain role (`TrainConfig`, `encode_turn`), not implementation detail.
+
+```python
+# ✅ GOOD — dataclass config + protocol contract
+@dataclass(slots=True)
+class TaskConfig:
+    """Environment and feature-shape configuration shared by all backends."""
+
+    candidate_count: int = 8
+
+@runtime_checkable
+class FeatureEncodingContract(Protocol):
+    """Planet-edge observation encoding contract."""
+
+    def encode_turn(self, game_state: object, task: TaskConfig) -> TurnBatch: ...
+```
+
+## Type hints
+
+- Annotate **all** function parameters, return values, and public class attributes.
+- Use modern syntax: `X | Y`, built-in generics (`list[int]`, `dict[str, float]`), and `typing` only when needed (`Protocol`, `TypedDict`, `TypeVar`).
+- Prefer concrete domain types over bare `object`/`Any`; use `Any` only at true boundaries (Hydra raw config, untyped external payloads).
+- Type module-level constants and dataclass fields; keep `pyproject.toml` `pythonVersion = "3.12"` in sync with annotations.
+
+```python
+# ✅ GOOD — fully annotated public API
+def merge_metric_dicts(
+    left: dict[str, jax.Array],
+    right: dict[str, jax.Array],
+) -> dict[str, jax.Array]:
+    ...
+```
+
+## Docstrings & comments (Google style)
+
+- **Module**: one-line purpose when non-obvious.
+- **Public classes/functions**: Google docstrings with `Args`, `Returns`, `Raises` as needed.
+- **Dataclasses / simple protocols**: one-line summary is enough.
+- **Comments**: explain *why* (invariants, JAX shape constraints, Hydra/runtime mismatches) — not what the code already says.
+- Do not restate type hints in docstrings unless clarifying units or semantics.
+
+```python
+def compose_hydra_train_config(cfg_raw: DictConfig) -> TrainConfig:
+    """Compose and validate a resolved training configuration from Hydra output.
+
+    Args:
+        cfg_raw: Raw OmegaConf dict from Hydra composition.
+
+    Returns:
+        Validated ``TrainConfig`` ready for the JAX training loop.
+
+    Raises:
+        ValueError: If required groups are missing or validation fails.
+    """
+```
+
+## Architecture diagrams
+
+When adding or materially changing a pipeline stage, cross-cutting subsystem, or import boundary:
+
+1. Update the stage doc under `docs/architecture/` (see `docs/architecture/README.md` index).
+2. Include at least one **Mermaid** diagram (`flowchart`, `sequenceDiagram`, or `classDiagram`) showing data/control flow and owner modules.
+3. Keep diagrams in sync with owner paths and primary entrypoints listed in the stage table.
+4. For large refactors, note import-layer constraints from the README (`config → game → features → jax → …`).
+
+Do not add standalone architecture markdown outside `docs/architecture/` unless the user explicitly requests it.
