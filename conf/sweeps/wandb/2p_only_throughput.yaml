@@ -15,14 +15,10 @@ parameters:
     value: throughput_only
   output.campaign:
     value: 2p_only_throughput
-  model:
-    value: mlp
-  format:
-    values: [2p_16env, 2p_32env]
   training.total_updates:
     value: 30
   training.rollout_steps:
-    values: [64, 128, 250, 500]
+    values: [250, 500]
   training.minibatch_size:
     values: [256, 512, 1024]
   training.rollout_microbatch_envs:
