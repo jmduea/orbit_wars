@@ -4,10 +4,20 @@ import jax
 import jax.numpy as jnp
 
 from src.config import TrainConfig
-from src.game.trajectory_shield import apply_trajectory_shield_to_turn_batch
+from src.game.trajectory_shield import apply_trajectory_shield_to_turn_batch_v2
 from src.jax.env import JaxAction
-from src.jax.features import JaxTurnBatch
+from src.jax.features import TurnBatch
+from src.jax.policy import edge_action_count
 from src.jax.rollout.types import JaxTrainState
+from src.opponents.jax_actions.builders import (
+    _sample_policy_action,
+    _sample_policy_action_with_params,
+    build_noop_action_from_edge_batch,
+    build_opportunistic_action_from_edge_batch,
+    build_random_action_from_edge_batch,
+    build_sniper_action_from_edge_batch,
+    build_turtle_action_from_edge_batch,
+)
 from src.opponents.pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
@@ -18,17 +28,6 @@ from src.opponents.pool import (
     OPPONENT_TURTLE,
 )
 from src.training.curriculum import StageView
-
-from .builders import (
-    build_noop_action_from_batch,
-    build_opportunistic_action_from_batch,
-    build_random_action_from_batch,
-    build_sniper_action_from_batch,
-    build_turtle_action_from_batch,
-    _sample_policy_action,
-    _sample_policy_action_with_params,
-)
-
 
 def _select_env_action(
     condition: jax.Array,
@@ -68,53 +67,6 @@ def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
 def _gather_action_by_env(pool_action: JaxAction, indices: jax.Array) -> JaxAction:
     env_indices = jnp.arange(indices.shape[0], dtype=jnp.int32)
     return jax.tree.map(lambda field: field[indices, env_indices], pool_action)
-
-
-def _sample_historical_action(
-    key: jax.Array,
-    game,
-    batch: JaxTurnBatch,
-    historical_params_pool: dict | None,
-    stage_view: StageView,
-    current_action: JaxAction,
-    policy: object,
-    cfg: TrainConfig,
-) -> tuple[JaxAction, jax.Array]:
-    env_count = batch.self_features.shape[0]
-    has_snapshot = jnp.any(stage_view.snapshot_valid_mask)
-    if historical_params_pool is None:
-        return current_action, jnp.zeros((env_count,), dtype=jnp.int32)
-    logits = jnp.where(
-        stage_view.snapshot_valid_mask,
-        jnp.log(jnp.maximum(stage_view.historical_selection_probs, 1e-12)),
-        jnp.asarray(-1e9, dtype=jnp.float32),
-    )
-    selected = jax.random.categorical(key, logits, shape=(env_count,))
-    pool_size = stage_view.snapshot_valid_mask.shape[0]
-    pool_actions = jax.vmap(
-        lambda idx, params: _sample_policy_action_with_params(
-            jax.random.fold_in(key, idx),
-            game,
-            batch,
-            params,
-            policy,
-            cfg,
-            deterministic=cfg.opponents.snapshot.deterministic,
-        )
-    )(jnp.arange(pool_size, dtype=jnp.int32), historical_params_pool)
-    historical_action = _gather_action_by_env(pool_actions, selected)
-    fallback = jnp.logical_not(has_snapshot)
-    action = jax.tree.map(
-        lambda hist, cur: jnp.where(fallback, cur, hist),
-        historical_action,
-        current_action,
-    )
-    fallback_count = jnp.where(
-        fallback,
-        jnp.ones((env_count,), dtype=jnp.int32),
-        jnp.zeros((env_count,), dtype=jnp.int32),
-    )
-    return action, fallback_count
 
 
 def _opponent_count_metrics(
@@ -177,19 +129,117 @@ def _maybe_effective_single_family_id(
     )
 
 
+
+def _edge_bucket_mask(
+    shielded,
+    cfg: TrainConfig,
+    *,
+    env_count: int,
+) -> jax.Array:
+    edge_count = edge_action_count(cfg.task)
+    return shielded.ship_bucket_mask.reshape(
+        env_count, edge_count, cfg.task.ship_bucket_count
+    )
+
+
+def _shielded_random_edge_action(
+    key: jax.Array,
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+) -> JaxAction:
+    env_count = batch.planet_features.shape[0]
+    shielded = jax.vmap(
+        lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
+            game_row, batch_row, cfg.task
+        )
+    )(game, batch)
+    return build_random_action_from_edge_batch(
+        key,
+        game,
+        shielded.batch,
+        cfg,
+        _edge_bucket_mask(shielded, cfg, env_count=env_count),
+    )
+
+
+def _shielded_scripted_edge_action(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    builder,
+) -> JaxAction:
+    env_count = batch.planet_features.shape[0]
+    edge_count = edge_action_count(cfg.task)
+    shielded = jax.vmap(
+        lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
+            game_row, batch_row, cfg.task
+        )
+    )(game, batch)
+    bucket_mask = shielded.ship_bucket_mask.reshape(
+        env_count, edge_count, cfg.task.ship_bucket_count
+    )
+    return builder(game, shielded.batch, cfg, bucket_mask)
+
+
+def _sample_historical_action(
+    key: jax.Array,
+    game,
+    batch: TurnBatch,
+    historical_params_pool: dict | None,
+    stage_view: StageView,
+    current_action: JaxAction,
+    policy: object,
+    cfg: TrainConfig,
+) -> tuple[JaxAction, jax.Array]:
+    env_count = batch.planet_features.shape[0]
+    has_snapshot = jnp.any(stage_view.snapshot_valid_mask)
+    if historical_params_pool is None:
+        return current_action, jnp.zeros((env_count,), dtype=jnp.int32)
+    logits = jnp.where(
+        stage_view.snapshot_valid_mask,
+        jnp.log(jnp.maximum(stage_view.historical_selection_probs, 1e-12)),
+        jnp.asarray(-1e9, dtype=jnp.float32),
+    )
+    selected = jax.random.categorical(key, logits, shape=(env_count,))
+    pool_size = stage_view.snapshot_valid_mask.shape[0]
+    pool_actions = jax.vmap(
+        lambda idx, params: _sample_policy_action_with_params(
+            jax.random.fold_in(key, idx),
+            game,
+            batch,
+            params,
+            policy,
+            cfg,
+            deterministic=cfg.opponents.snapshot.deterministic,
+        )
+    )(jnp.arange(pool_size, dtype=jnp.int32), historical_params_pool)
+    historical_action = _gather_action_by_env(pool_actions, selected)
+    fallback = jnp.logical_not(has_snapshot)
+    action = jax.tree.map(
+        lambda hist, cur: jnp.where(fallback, cur, hist),
+        historical_action,
+        current_action,
+    )
+    fallback_count = jnp.where(
+        fallback,
+        jnp.ones((env_count,), dtype=jnp.int32),
+        jnp.zeros((env_count,), dtype=jnp.int32),
+    )
+    return action, fallback_count
+
+
 def _sample_single_family_2p_action(
     key: jax.Array,
     family_id: jax.Array,
     game,
-    batch: JaxTurnBatch,
+    batch: TurnBatch,
     train_state: JaxTrainState,
     policy: object,
     cfg: TrainConfig,
     stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    """Build a 2p opponent action without constructing unused families."""
-
     def latest_branch(_: None) -> JaxAction:
         return _sample_policy_action(
             key,
@@ -216,47 +266,25 @@ def _sample_single_family_2p_action(
         return historical_action
 
     def random_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_random_action_from_batch(
-            key, shielded.batch, cfg, shielded.ship_bucket_mask
-        )
+        return _shielded_random_edge_action(key, game, batch, cfg)
 
     def nearest_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_sniper_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_sniper_action_from_edge_batch
         )
 
     def turtle_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_turtle_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_turtle_action_from_edge_batch
         )
 
     def opportunistic_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_opportunistic_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_opportunistic_action_from_edge_batch
         )
 
     def noop_branch(_: None) -> JaxAction:
-        return build_noop_action_from_batch(batch, cfg)
+        return build_noop_action_from_edge_batch(game, batch, cfg)
 
     return jax.lax.switch(
         jnp.clip(family_id, 0, OPPONENT_NOOP),
@@ -271,6 +299,98 @@ def _sample_single_family_2p_action(
         ),
         None,
     )
+
+
+def _sample_mixed_opponent_2p_action(
+    opp_key: jax.Array,
+    opp_game,
+    opp_batch_cache: TurnBatch,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    slot_type: jax.Array,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    env_count = int(slot_type.shape[0])
+    env_indices = jnp.arange(env_count, dtype=jnp.int32)
+    per_env = jax.vmap(
+        lambda env_index: _sample_single_family_2p_action(
+            jax.random.fold_in(opp_key, env_index),
+            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
+            _slice_env_axis(opp_game, env_index),
+            _slice_env_axis(opp_batch_cache, env_index),
+            train_state,
+            policy,
+            cfg,
+            stage_view,
+            historical_params_pool,
+        )
+    )(env_indices)
+    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)
+
+
+def _sample_opponent_2p_action(
+    opp_key: jax.Array,
+    opp_game,
+    opp_batch_cache: TurnBatch,
+    *,
+    effective_type_ids: jax.Array,
+    single_family: jax.Array,
+    effective_single_family_id: jax.Array,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    slot_type = jnp.take_along_axis(
+        effective_type_ids,
+        (1 - opp_game.player).astype(jnp.int32)[:, None],
+        axis=1,
+    ).squeeze(axis=1)
+    if cfg.opponents.mode.opponent == "self":
+
+        def single_opponent_branch(_: None) -> JaxAction:
+            return _sample_single_family_2p_action(
+                opp_key,
+                effective_single_family_id,
+                opp_game,
+                opp_batch_cache,
+                train_state,
+                policy,
+                cfg,
+                stage_view,
+                historical_params_pool,
+            )
+
+        def mixed_opponent_branch(_: None) -> JaxAction:
+            return _sample_mixed_opponent_2p_action(
+                opp_key,
+                opp_game,
+                opp_batch_cache,
+                train_state,
+                policy,
+                cfg,
+                slot_type,
+                stage_view,
+                historical_params_pool,
+            )
+
+        return jax.lax.cond(
+            single_family,
+            single_opponent_branch,
+            mixed_opponent_branch,
+            None,
+        )
+    if cfg.opponents.mode.opponent == "random":
+        return _shielded_random_edge_action(opp_key, opp_game, opp_batch_cache, cfg)
+    raise ValueError(
+        "JAX training supports opponent='self' or opponent='random', "
+        f"got {cfg.opponents.mode.opponent!r}."
+    )
+
+
 
 
 def _opponent_params_for_player(
@@ -293,7 +413,7 @@ def _sample_single_family_4p_action(
     family_id: jax.Array,
     player_id: jax.Array,
     game,
-    batch: JaxTurnBatch,
+    batch: TurnBatch,
     train_state: JaxTrainState,
     policy: object,
     cfg: TrainConfig,
@@ -301,8 +421,6 @@ def _sample_single_family_4p_action(
     stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    """Build one 4p player action without constructing unused families."""
-
     opponent_params = _opponent_params_for_player(
         player_id,
         train_state,
@@ -336,50 +454,27 @@ def _sample_single_family_4p_action(
         return historical_action
 
     def random_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_random_action_from_batch(
-            jax.random.fold_in(key, cfg.task.player_count),
-            shielded.batch,
-            cfg,
-            shielded.ship_bucket_mask,
+        return _shielded_random_edge_action(
+            jax.random.fold_in(key, cfg.task.player_count), game, batch, cfg
         )
 
     def nearest_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_sniper_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_sniper_action_from_edge_batch
         )
 
     def turtle_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_turtle_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_turtle_action_from_edge_batch
         )
 
     def opportunistic_branch(_: None) -> JaxAction:
-        shielded = jax.vmap(
-            lambda game_row, turn_row: apply_trajectory_shield_to_turn_batch(
-                game_row, turn_row, cfg.task
-            )
-        )(game, batch)
-        return build_opportunistic_action_from_batch(
-            shielded.batch, cfg, shielded.ship_bucket_mask
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_opportunistic_action_from_edge_batch
         )
 
     def noop_branch(_: None) -> JaxAction:
-        return build_noop_action_from_batch(batch, cfg)
+        return build_noop_action_from_edge_batch(game, batch, cfg)
 
     return jax.lax.switch(
         jnp.clip(family_id, 0, OPPONENT_NOOP),
@@ -396,30 +491,32 @@ def _sample_single_family_4p_action(
     )
 
 
-def _sample_mixed_opponent_2p_action(
-    opp_key: jax.Array,
-    opp_game,
-    opp_batch_cache: JaxTurnBatch,
+def _sample_mixed_player_4p_action(
+    player_key: jax.Array,
+    player_id: jax.Array,
+    player_game,
+    player_batch: TurnBatch,
+    slot_type: jax.Array,
     train_state: JaxTrainState,
     policy: object,
     cfg: TrainConfig,
-    slot_type: jax.Array,
+    opponent_params_by_player: tuple[dict, ...] | None,
     stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    """Sample per-env opponent actions with lax.switch (no eager multi-family compute)."""
-
     env_count = int(slot_type.shape[0])
     env_indices = jnp.arange(env_count, dtype=jnp.int32)
     per_env = jax.vmap(
-        lambda env_index: _sample_single_family_2p_action(
-            jax.random.fold_in(opp_key, env_index),
+        lambda env_index: _sample_single_family_4p_action(
+            jax.random.fold_in(player_key, env_index),
             jnp.asarray(slot_type[env_index], dtype=jnp.int32),
-            _slice_env_axis(opp_game, env_index),
-            _slice_env_axis(opp_batch_cache, env_index),
+            player_id,
+            _slice_env_axis(player_game, env_index),
+            _slice_env_axis(player_batch, env_index),
             train_state,
             policy,
             cfg,
+            opponent_params_by_player,
             stage_view,
             historical_params_pool,
         )
@@ -445,8 +542,6 @@ def _four_player_step_action(
     active_stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    """Build one player's env-batch action row (vmapped over player_id)."""
-
     player_batch = jax.tree.map(
         lambda x: jnp.take(x, player_id, axis=0), player_batches
     )
@@ -492,16 +587,8 @@ def _four_player_step_action(
             None,
         )
     elif cfg.opponents.mode.opponent == "random":
-        player_shielded = jax.vmap(
-            lambda game, turn: apply_trajectory_shield_to_turn_batch(
-                game, turn, cfg.task
-            )
-        )(player_game, player_batch)
-        opponent_action = build_random_action_from_batch(
-            player_key,
-            player_shielded.batch,
-            cfg,
-            player_shielded.ship_bucket_mask,
+        opponent_action = _shielded_random_edge_action(
+            player_key, player_game, player_batch, cfg
         )
     else:
         raise ValueError(
@@ -511,37 +598,3 @@ def _four_player_step_action(
     is_learner_player = learner_player == player_id
     return _select_env_action(is_learner_player, learner_action, opponent_action)
 
-
-def _sample_mixed_player_4p_action(
-    player_key: jax.Array,
-    player_id: jax.Array,
-    player_game,
-    player_batch: JaxTurnBatch,
-    slot_type: jax.Array,
-    train_state: JaxTrainState,
-    policy: object,
-    cfg: TrainConfig,
-    opponent_params_by_player: tuple[dict, ...] | None,
-    stage_view: StageView,
-    historical_params_pool: dict | None,
-) -> JaxAction:
-    """Sample one 4p player's batched actions with per-env lax.switch."""
-
-    env_count = int(slot_type.shape[0])
-    env_indices = jnp.arange(env_count, dtype=jnp.int32)
-    per_env = jax.vmap(
-        lambda env_index: _sample_single_family_4p_action(
-            jax.random.fold_in(player_key, env_index),
-            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
-            player_id,
-            _slice_env_axis(player_game, env_index),
-            _slice_env_axis(player_batch, env_index),
-            train_state,
-            policy,
-            cfg,
-            opponent_params_by_player,
-            stage_view,
-            historical_params_pool,
-        )
-    )(env_indices)
-    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)

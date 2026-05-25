@@ -1259,7 +1259,7 @@ def apply_trajectory_shield_to_turn_batch_v2(
     env_cfg: Any,
     remaining_planet_ships: jax.Array | None = None,
 ) -> ShieldedBatchResult:
-    from src.features.registry_v2 import edge_k
+    from src.features.registry import edge_k
 
     k = edge_k(env_cfg)
     edge_count = MAX_PLANETS * k + 1

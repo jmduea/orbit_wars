@@ -410,7 +410,7 @@ def test_four_player_step_processes_all_player_action_lists_before_production():
     )
     assert int(np.asarray(next_state.game.fleets.active).sum()) == 4
     assert set(np.asarray(next_state.game.fleets.owner[:4]).tolist()) == {0, 1, 2, 3}
-    assert result.batch.self_features.shape[0] == MAX_PLANETS
+    assert result.batch.planet_features.shape[0] == MAX_PLANETS
 
 
 def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player():

@@ -8,7 +8,7 @@ test:
 test-fast:
 	uv run --group dev pytest -m "not slow and not jax"
 
-# JAX tests outside the slow tier; always serial to avoid multi-process CUDA init.
+# Lightweight JAX checks (metric math, action builders) — no rollout/training smokes.
 test-jax:
 	uv run --group dev pytest -m "jax and not slow"
 
@@ -18,16 +18,13 @@ test-domain-config:
 	uv run --group dev pytest tests/test_config_consolidation.py tests/test_telemetry.py tests/test_metric_registry.py tests/test_run_paths.py -m "not slow and not jax"
 
 test-domain-features:
-	uv run --group dev pytest tests/test_features.py tests/test_feature_history.py tests/test_feature_registry.py tests/test_feature_registry_v2.py tests/test_feature_encoding_v2_golden.py tests/test_normalization.py -m "not slow and not jax"
-
-test-domain-jax-env:
-	uv run --group dev pytest tests/test_jax_env.py tests/test_jax_env_v2_dispatch.py -m "jax and not slow"
+	uv run --group dev pytest tests/test_feature_registry.py tests/test_feature_encoding_golden.py tests/test_normalization.py -m "not slow and not jax"
 
 test-domain-policy:
-	uv run --group dev pytest tests/test_jax_policy.py tests/test_jax_policy_v2.py tests/test_jax_rollout_v2.py tests/test_jax_scripted_opponents_v2.py tests/test_jax_ppo.py tests/test_trajectory_shield.py -m "jax and not slow"
+	uv run --group dev pytest tests/test_jax_ppo.py tests/test_trajectory_shield.py -m "jax and not slow"
 
 test-domain-artifacts:
-	uv run --group dev pytest tests/test_artifact_pipeline.py tests/test_replay.py tests/test_kaggle_submission_packager.py -m "not slow and not jax"
+	uv run --group dev pytest tests/test_artifact_pipeline.py tests/test_replay.py tests/test_kaggle_submission_packager.py tests/test_checkpoint_compat.py -m "not slow and not jax"
 
 test-domain-curriculum:
 	uv run --group dev pytest tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"

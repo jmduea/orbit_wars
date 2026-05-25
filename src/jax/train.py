@@ -47,7 +47,7 @@ import jax.numpy as jnp  # noqa: E402
 import jax  # noqa: E402
 
 from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
-from .features import JaxTurnBatch  # noqa: E402
+from .features import TurnBatch  # noqa: E402
 from .policy import build_jax_policy  # noqa: E402
 from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
 from .rollout.collect import collect_rollout_jax  # noqa: E402
@@ -62,7 +62,7 @@ class JaxRolloutGroup:
     name: str
     cfg: TrainConfig
     env_state: JaxEnvState
-    turn_batch: JaxTurnBatch
+    turn_batch: TurnBatch
     collect_fn: Callable
 
 
@@ -517,7 +517,7 @@ def _build_per_format_timing_metrics(
 def _collect_rollout_microbatched(
     rollout_key: jax.Array,
     state: JaxEnvState,
-    batch: JaxTurnBatch,
+    batch: TurnBatch,
     train_state: object,
     policy: object,
     cfg: TrainConfig,
@@ -526,7 +526,7 @@ def _collect_rollout_microbatched(
     stage_view=None,
     historical_params_pool=None,
     update=jnp.asarray(0, dtype=jnp.int32),
-) -> tuple[jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
+) -> tuple[jax.Array, JaxEnvState, TurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
     env_count = int(cfg.training.num_envs)
     micro = int(microbatch_envs)
     chunk_count = env_count // micro
@@ -638,7 +638,7 @@ def init_rollout_groups(
 
 
 def _replace_rollout_group_state(
-    group: JaxRolloutGroup, env_state: JaxEnvState, turn_batch: JaxTurnBatch
+    group: JaxRolloutGroup, env_state: JaxEnvState, turn_batch: TurnBatch
 ) -> JaxRolloutGroup:
     return JaxRolloutGroup(
         name=group.name,

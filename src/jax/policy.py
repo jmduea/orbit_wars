@@ -7,7 +7,14 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.features.registry import candidate_feature_schema
+from src.features.registry import (
+    edge_feature_dim,
+    edge_k,
+    global_feature_dim,
+    planet_feature_dim,
+)
+from src.game.constants import MAX_PLANETS
+from src.jax.features import TurnBatch
 
 
 # --- Contracts ---
@@ -50,231 +57,8 @@ class EncoderOutput(NamedTuple):
     context_query: jax.Array
     value_input: jax.Array
 
-# --- Encoders ---
-class MLPBackboneEncoder(nn.Module):
-    """Lightweight, fast MLP feature extractor."""
-
-    hidden_size: int = 128
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-    ) -> EncoderOutput:
-        self_hidden = mlp(
-            self_features, self.hidden_size, self.hidden_size, "self_encoder"
-        )
-        global_hidden = mlp(
-            global_features, self.hidden_size, self.hidden_size, "global_encoder"
-        )
-        candidate_hidden = mlp(
-            candidate_features, self.hidden_size, self.hidden_size, "candidate_encoder"
-        )
-
-        pooled_candidates = masked_mean(candidate_hidden, candidate_mask)
-        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
-        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
-
-        return EncoderOutput(
-            attended_candidates=candidate_hidden,
-            context_query=context_query,
-            value_input=value_input,
-        )
-
-
-class TransformerBackboneEncoder(nn.Module):
-    """Attention-based graph feature extractor."""
-
-    hidden_size: int = 128
-    attention_heads: int = 4
-    enable_gradient_checkpointing: bool = False
-
-    def setup(self) -> None:
-        """Validate attention hyperparameters before parameter initialization."""
-
-        if self.hidden_size % self.attention_heads != 0:
-            raise ValueError(
-                f"hidden_size ({self.hidden_size}) must be divisible by "
-                f"attention_heads ({self.attention_heads})."
-            )
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-    ) -> EncoderOutput:
-        batch_size = self_features.shape[0]
-        safe_mask = safe_attention_mask(candidate_mask)
-
-        self_hidden = mlp(self_features, self.hidden_size, self.hidden_size, "self_enc")
-        global_hidden = mlp(
-            global_features, self.hidden_size, self.hidden_size, "global_enc"
-        )
-        candidate_hidden = mlp(
-            candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
-        )
-
-        attention_module = (
-            nn.remat(nn.MultiHeadDotProductAttention)
-            if self.enable_gradient_checkpointing
-            else nn.MultiHeadDotProductAttention
-        )
-
-        attended_candidates = attention_module(
-            num_heads=self.attention_heads,
-            qkv_features=self.hidden_size,
-            out_features=self.hidden_size,
-            name="mp_attn",
-        )(
-            candidate_hidden,
-            candidate_hidden,
-            mask=jnp.broadcast_to(
-                safe_mask[:, None, None, :],
-                (
-                    batch_size,
-                    self.attention_heads,
-                    candidate_hidden.shape[1],
-                    candidate_hidden.shape[1],
-                ),
-            ),
-        )
-        attended_candidates = nn.LayerNorm(name="cand_norm")(
-            candidate_hidden + attended_candidates
-        )
-
-        context_query = mlp(
-            jnp.concatenate([self_hidden, global_hidden], axis=-1),
-            self.hidden_size,
-            self.hidden_size,
-            "context_query",
-        )[:, None, :]
-        attended_context = attention_module(
-            num_heads=self.attention_heads,
-            qkv_features=self.hidden_size,
-            out_features=self.hidden_size,
-            name="context_attention",
-        )(
-            context_query,
-            attended_candidates,
-            mask=jnp.broadcast_to(
-                safe_mask[:, None, None, :],
-                (batch_size, self.attention_heads, 1, candidate_hidden.shape[1]),
-            ),
-        )
-        attended_context = nn.LayerNorm(name="context_norm")(
-            context_query + attended_context
-        ).squeeze(axis=1)
-
-        pooled_candidates = masked_mean(attended_candidates, candidate_mask)
-        value_input = jnp.concatenate(
-            [self_hidden, global_hidden, attended_context, pooled_candidates], axis=-1
-        )
-
-        return EncoderOutput(
-            attended_candidates=attended_candidates,
-            context_query=attended_context,
-            value_input=value_input,
-        )
-
-
-class GNNBackboneEncoder(nn.Module):
-    """Graph Neural Network feature extractor using K-Nearest Neighbor message passing.
-
-    This encoder treats the Orbit Wars map as a geometric network graph, allowing
-    planets to exchange state information with their closest neighbors.
-    """
-
-    hidden_size: int = 128
-    k_neighbors: int = 5
-    msg_passing_layers: int = 2
-    target_coords_span: tuple[int, int] = (4, 6)
-
-    def setup(self) -> None:
-        if self.k_neighbors < 1:
-            raise ValueError("k_neighbors must be at least 1.")
-        if self.msg_passing_layers < 1:
-            raise ValueError("msg_passing_layers must be at least 1.")
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-    ) -> EncoderOutput:
-        num_planets = candidate_features.shape[1]
-
-        # 1. Encode base entity representations
-        self_hidden = mlp(self_features, self.hidden_size, self.hidden_size, "self_enc")
-        global_hidden = mlp(
-            global_features, self.hidden_size, self.hidden_size, "global_enc"
-        )
-        candidate_hidden = mlp(
-            candidate_features, self.hidden_size, self.hidden_size, "candidate_enc"
-        )
-
-        # 2. Extract current-frame normalized spatial coordinates
-        coords = candidate_features[..., slice(*self.target_coords_span)]
-
-        # 3. Pairwise Euclidean distance tracking via implicit broadcasting
-        diffs = coords[:, :, None, :] - coords[:, None, :, :]
-        dist_matrix = jnp.sum(diffs**2, axis=-1)
-
-        # 4. Extract neighbor connections and mask out dead padded elements
-        neighbor_count = min(self.k_neighbors, num_planets)
-        _, topk_indices = jax.lax.top_k(-dist_matrix, k=neighbor_count)
-        adj_matrix = jnp.sum(jax.nn.one_hot(topk_indices, num_planets), axis=-2).astype(
-            bool
-        )
-
-        final_adj_mask = adj_matrix & (
-            candidate_mask[:, :, None] & candidate_mask[:, None, :]
-        )
-
-        # 5. Message Passing Execution Loop
-        current_node_states = candidate_hidden
-        for layer_idx in range(self.msg_passing_layers):
-            msg_proj = nn.Dense(self.hidden_size, name=f"msg_proj_{layer_idx}")(
-                current_node_states
-            )
-            masked_messages = jnp.where(
-                final_adj_mask[..., None], msg_proj[:, None, :, :], 0.0
-            )
-            aggregated_messages = jnp.sum(masked_messages, axis=2)
-
-            combined_node_input = jnp.concatenate(
-                [current_node_states, aggregated_messages], axis=-1
-            )
-            current_node_states = mlp(
-                combined_node_input,
-                self.hidden_size,
-                self.hidden_size,
-                f"gnn_layer_{layer_idx}",
-            )
-            current_node_states = nn.LayerNorm(name=f"gnn_norm_{layer_idx}")(
-                candidate_hidden + current_node_states
-            )
-
-        # 6. Contract Assembly
-        pooled_candidates = masked_mean(current_node_states, candidate_mask)
-        context_query = jnp.concatenate([self_hidden, global_hidden], axis=-1)
-        value_input = jnp.concatenate([context_query, pooled_candidates], axis=-1)
-
-        return EncoderOutput(
-            attended_candidates=current_node_states,
-            context_query=context_query,
-            value_input=value_input,
-        )
-
-
 # --- Decoders ---
+
 
 
 class FeedForwardActionDecoder(nn.Module):
@@ -466,152 +250,9 @@ class FormatRoutedValueHead(nn.Module):
         return jnp.where(player_count == 2, two_player_value, four_player_value)
 
 
-# --- Composable Policy Wrapper ---
-class ComposablePlanetPolicy(nn.Module):
-    """The master framework container that unifies injected backbones and decoders."""
-
-    encoder_module: nn.Module
-    decoder_module: nn.Module
-    value_head_module: nn.Module | None = None
-    hidden_size: int = 128
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-        player_count: jax.Array | None = None,
-        target_sequence: jax.Array | None = None,
-        rng: jax.Array | None = None,
-        deterministic: bool = False,
-    ) -> JaxPolicyOutput:
-
-        # Route raw arrays through selected encoder backbone to produce structured intermediate representations
-        encoder_out = self.encoder_module(
-            self_features, candidate_features, global_features, candidate_mask
-        )
-
-        # Route encoder outputs through selected decoder head to produce final action logits
-        target_logits, ship_logits, decoded_target_sequence = self.decoder_module(
-            encoder_out,
-            candidate_mask,
-            target_sequence=target_sequence,
-            rng=rng,
-            deterministic=deterministic,
-        )
-
-        value_head_module = self.value_head_module
-        if value_head_module is None:
-            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        value = value_head_module(encoder_out.value_input, player_count=player_count)
-
-        return JaxPolicyOutput(
-            target_logits=target_logits,
-            ship_logits=ship_logits,
-            value=value,
-            decoded_target_sequence=decoded_target_sequence,
-        )
-
-
-class JaxPlanetPolicy(nn.Module):
-    """Composable MLP policy/value network for fixed-shape JAX decisions."""
-
-    candidate_count: int
-    ship_bucket_count: int
-    value_head_module: nn.Module | None = None
-    hidden_size: int = 128
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-        player_count: jax.Array | None = None,
-        target_sequence: jax.Array | None = None,
-        rng: jax.Array | None = None,
-        deterministic: bool = False,
-    ) -> JaxPolicyOutput:
-        del self.candidate_count
-
-        return ComposablePlanetPolicy(
-            encoder_module=MLPBackboneEncoder(hidden_size=self.hidden_size),
-            decoder_module=FeedForwardActionDecoder(
-                ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
-            ),
-            value_head_module=self.value_head_module,
-            hidden_size=self.hidden_size,
-        )(
-            self_features,
-            candidate_features,
-            global_features,
-            candidate_mask,
-            player_count=player_count,
-            target_sequence=target_sequence,
-            rng=rng,
-            deterministic=deterministic,
-        )
-
-
-class JaxAttentionPlanetPolicy(nn.Module):
-    """Composable attention/transformer policy for fixed-shape JAX batches."""
-
-    candidate_count: int
-    ship_bucket_count: int
-    value_head_module: nn.Module | None = None
-    hidden_size: int = 128
-    attention_heads: int = 4
-    enable_gradient_checkpointing: bool = False
-
-    def setup(self) -> None:
-        """Validate attention hyperparameters before parameter initialization."""
-
-        if self.hidden_size % self.attention_heads != 0:
-            raise ValueError(
-                f"hidden_size ({self.hidden_size}) must be divisible by "
-                f"attention_heads ({self.attention_heads})."
-            )
-
-    @nn.compact
-    def __call__(
-        self,
-        self_features: jax.Array,
-        candidate_features: jax.Array,
-        global_features: jax.Array,
-        candidate_mask: jax.Array,
-        player_count: jax.Array | None = None,
-        target_sequence: jax.Array | None = None,
-        rng: jax.Array | None = None,
-        deterministic: bool = False,
-    ) -> JaxPolicyOutput:
-        del self.candidate_count
-
-        return ComposablePlanetPolicy(
-            encoder_module=TransformerBackboneEncoder(
-                hidden_size=self.hidden_size,
-                attention_heads=self.attention_heads,
-                enable_gradient_checkpointing=self.enable_gradient_checkpointing,
-            ),
-            decoder_module=FeedForwardActionDecoder(
-                ship_bucket_count=self.ship_bucket_count, hidden_size=self.hidden_size
-            ),
-            value_head_module=self.value_head_module,
-            hidden_size=self.hidden_size,
-        )(
-            self_features,
-            candidate_features,
-            global_features,
-            candidate_mask.astype(bool),
-            player_count=player_count,
-            target_sequence=target_sequence,
-            rng=rng,
-            deterministic=deterministic,
-        )
-
 # --- Helper Functions ---
+
+
 
 def mlp(x: jax.Array, hidden_size: int, output_size: int, name: str) -> jax.Array:
     """Apply a named two-layer ReLU MLP block."""
@@ -650,85 +291,307 @@ def build_value_head(cfg: TrainConfig) -> nn.Module:
         f"Unsupported value head '{cfg.model.value_head}'. Expected 'shared' or 'format_routed'."
     )
 
-def build_jax_policy(
-    cfg: TrainConfig,
-) -> nn.Module:
-    """Construct a JAX policy module for the requested architecture.
+# --- Planet-Edge GNN Policy ---
 
-    ``architecture='transformer'`` is accepted as an alias for the attention
-    implementation.
-    """
-    hidden = cfg.model.hidden_size
-    buckets = cfg.task.ship_bucket_count
-    attention_heads = cfg.model.attention_heads
-    k_steps = cfg.model.max_moves_k
-    value_head_module = build_value_head(cfg)
-    target_coords_slice = candidate_feature_schema(cfg.task).slice("target_coords")
+class PlanetEdgeEncoderOutput(NamedTuple):
+    """Policy encoder contract for ``TurnBatch`` inputs."""
+
+    attended_edges: jax.Array
+    edge_action_mask: jax.Array
+    context_query: jax.Array
+    value_input: jax.Array
+
+
+class PlanetEdgeBackboneEncoder(nn.Module):
+    """Planet GNN with top-K edge message passing on v2 turn batches."""
+
+    hidden_size: int = 128
+    k_neighbors: int = 5
+    msg_passing_layers: int = 2
+    planet_feature_dim: int = 13
+    edge_feature_dim: int = 12
+    global_feature_dim: int = 46
+    edge_k: int = 3
+
+    def setup(self) -> None:
+        if self.k_neighbors < 1:
+            raise ValueError("k_neighbors must be at least 1.")
+        if self.msg_passing_layers < 1:
+            raise ValueError("msg_passing_layers must be at least 1.")
+        if self.edge_k < 0:
+            raise ValueError("edge_k must be non-negative.")
+
+    @nn.compact
+    def __call__(self, batch: TurnBatch) -> PlanetEdgeEncoderOutput:
+        planet_mask = batch.planet_mask.astype(bool)
+        edge_mask = batch.edge_mask.astype(bool)
+
+        planet_hidden = mlp(
+            batch.planet_features,
+            self.hidden_size,
+            self.hidden_size,
+            "planet_enc",
+        )
+        global_hidden = mlp(
+            batch.global_features,
+            self.hidden_size,
+            self.hidden_size,
+            "global_enc",
+        )
+
+        if self.edge_k == 0:
+            edge_hidden = jnp.zeros(
+                (batch.planet_features.shape[0], MAX_PLANETS, 0, self.hidden_size),
+                dtype=jnp.float32,
+            )
+        else:
+            edge_hidden = mlp(
+                batch.edge_features,
+                self.hidden_size,
+                self.hidden_size,
+                "edge_enc",
+            )
+
+        orbit_radius = batch.planet_features[..., 1]
+        orbit_angle = batch.planet_features[..., 2] * jnp.pi
+        coords = jnp.stack(
+            [
+                orbit_radius * jnp.cos(orbit_angle),
+                orbit_radius * jnp.sin(orbit_angle),
+            ],
+            axis=-1,
+        )
+
+        num_planets = planet_hidden.shape[-2]
+        diffs = coords[:, :, None, :] - coords[:, None, :, :]
+        dist_matrix = jnp.sum(diffs**2, axis=-1)
+        neighbor_count = min(self.k_neighbors, num_planets)
+        _, topk_indices = jax.lax.top_k(-dist_matrix, k=neighbor_count)
+        adj_matrix = jnp.sum(jax.nn.one_hot(topk_indices, num_planets), axis=-2).astype(
+            bool
+        )
+        final_adj_mask = adj_matrix & (
+            planet_mask[:, :, None] & planet_mask[:, None, :]
+        )
+
+        current_planet_states = planet_hidden
+        for layer_idx in range(self.msg_passing_layers):
+            msg_proj = nn.Dense(self.hidden_size, name=f"planet_msg_proj_{layer_idx}")(
+                current_planet_states
+            )
+            masked_messages = jnp.where(
+                final_adj_mask[..., None], msg_proj[:, None, :, :], 0.0
+            )
+            aggregated_messages = jnp.sum(masked_messages, axis=2)
+            combined_planet_input = jnp.concatenate(
+                [current_planet_states, aggregated_messages], axis=-1
+            )
+            current_planet_states = mlp(
+                combined_planet_input,
+                self.hidden_size,
+                self.hidden_size,
+                f"planet_gnn_layer_{layer_idx}",
+            )
+            current_planet_states = nn.LayerNorm(name=f"planet_gnn_norm_{layer_idx}")(
+                planet_hidden + current_planet_states
+            )
+
+        if self.edge_k > 0:
+            src_planet = jnp.broadcast_to(
+                current_planet_states[:, :, None, :],
+                (*edge_hidden.shape[:3], self.hidden_size),
+            )
+            edge_input = jnp.concatenate([src_planet, edge_hidden], axis=-1)
+            edge_hidden = mlp(
+                edge_input, self.hidden_size, self.hidden_size, "edge_fuse"
+            )
+            edge_hidden = nn.LayerNorm(name="edge_fuse_norm")(edge_hidden)
+            batch_size = edge_hidden.shape[0]
+            attended_edges = edge_hidden.reshape(
+                batch_size, MAX_PLANETS * self.edge_k, -1
+            )
+            edge_action_mask = edge_mask.reshape(batch_size, MAX_PLANETS * self.edge_k)
+        else:
+            batch_size = planet_hidden.shape[0]
+            attended_edges = jnp.zeros(
+                (batch_size, 0, self.hidden_size), dtype=jnp.float32
+            )
+            edge_action_mask = jnp.zeros((batch_size, 0), dtype=bool)
+
+        pooled_planets = masked_mean(current_planet_states, planet_mask)
+        pooled_edges = masked_mean(attended_edges, edge_action_mask)
+        context_query = mlp(
+            jnp.concatenate([global_hidden, pooled_planets], axis=-1),
+            self.hidden_size,
+            self.hidden_size,
+            "context_query",
+        )
+        value_input = jnp.concatenate(
+            [context_query, global_hidden, pooled_planets, pooled_edges], axis=-1
+        )
+
+        return PlanetEdgeEncoderOutput(
+            attended_edges=attended_edges,
+            edge_action_mask=edge_action_mask,
+            context_query=context_query,
+            value_input=value_input,
+        )
+
+
+class ComposablePlanetPolicy(nn.Module):
+    """Encoder/decoder wrapper for v2 planet-edge batches."""
+
+    encoder_module: nn.Module
+    decoder_module: nn.Module
+    value_head_module: nn.Module | None = None
+    hidden_size: int = 128
+    edge_k: int = 3
+
+    @nn.compact
+    def __call__(
+        self,
+        batch: TurnBatch,
+        player_count: jax.Array | None = None,
+        target_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> JaxPolicyOutput:
+        encoder_out = self.encoder_module(batch)
+        batch_size = encoder_out.attended_edges.shape[0]
+        noop_embedding = self.param(
+            "noop_edge_embedding",
+            nn.initializers.normal(stddev=0.02),
+            (1, 1, self.hidden_size),
+        )
+        noop_embedding = jnp.broadcast_to(
+            noop_embedding, (batch_size, 1, self.hidden_size)
+        )
+        attended_candidates = jnp.concatenate(
+            [encoder_out.attended_edges, noop_embedding], axis=1
+        )
+        noop_mask = jnp.ones((batch_size, 1), dtype=bool)
+        action_mask = jnp.concatenate([encoder_out.edge_action_mask, noop_mask], axis=1)
+
+        decoder_encoder = EncoderOutput(
+            attended_candidates=attended_candidates,
+            context_query=encoder_out.context_query,
+            value_input=encoder_out.value_input,
+        )
+        target_logits, ship_logits, decoded_target_sequence = self.decoder_module(
+            decoder_encoder,
+            action_mask,
+            target_sequence=target_sequence,
+            rng=rng,
+            deterministic=deterministic,
+        )
+
+        value_head_module = self.value_head_module
+        if value_head_module is None:
+            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
+        value = value_head_module(encoder_out.value_input, player_count=player_count)
+
+        return JaxPolicyOutput(
+            target_logits=target_logits,
+            ship_logits=ship_logits,
+            value=value,
+            decoded_target_sequence=decoded_target_sequence,
+        )
+
+
+def edge_action_count(task_cfg) -> int:
+    """Flat edge logits including the always-legal NO_OP slot."""
+
+    return MAX_PLANETS * edge_k(task_cfg) + 1
+
+
+def build_jax_policy(cfg: TrainConfig) -> nn.Module:
+    """Construct the planet-edge GNN pointer policy."""
     normalized_architecture = cfg.model.architecture.strip().lower()
-    if normalized_architecture == "mlp":
-        return JaxPlanetPolicy(
-            candidate_count=cfg.task.candidate_count,
+    if normalized_architecture in {"gnn_pointer", "gnn_pointer_v2"}:
+        return build_gnn_pointer_policy(cfg)
+    raise ValueError(
+        f"Unsupported JAX model architecture '{cfg.model.architecture}'. "
+        "Expected 'gnn_pointer'."
+    )
+
+
+def build_gnn_pointer_policy(cfg: TrainConfig) -> ComposablePlanetPolicy:
+    """Construct the v2 GNN pointer policy for ``TurnBatch`` inputs."""
+
+    hidden = cfg.model.hidden_size
+    k_slots = edge_k(cfg.task)
+    return ComposablePlanetPolicy(
+        encoder_module=PlanetEdgeBackboneEncoder(
+            hidden_size=hidden,
+            k_neighbors=cfg.model.gnn_k_neighbors,
+            msg_passing_layers=cfg.model.gnn_message_passing_layers,
+            planet_feature_dim=planet_feature_dim(cfg.task),
+            edge_feature_dim=edge_feature_dim(cfg.task),
+            global_feature_dim=global_feature_dim(cfg.task),
+            edge_k=k_slots,
+        ),
+        decoder_module=AutoregressivePointerDecoder(
             ship_bucket_count=cfg.task.ship_bucket_count,
-            value_head_module=value_head_module,
-            hidden_size=cfg.model.hidden_size,
-        )
-    elif normalized_architecture in {"attention", "transformer"}:
-        return JaxAttentionPlanetPolicy(
-            candidate_count=cfg.task.candidate_count,
-            ship_bucket_count=cfg.task.ship_bucket_count,
-            value_head_module=value_head_module,
-            hidden_size=cfg.model.hidden_size,
-            attention_heads=cfg.model.attention_heads,
-            enable_gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
-        )
-    elif normalized_architecture == "mlp_pointer":
-        return ComposablePlanetPolicy(
-            encoder_module=MLPBackboneEncoder(hidden_size=hidden),
-            decoder_module=AutoregressivePointerDecoder(
-                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
-            ),
-            value_head_module=value_head_module,
+            max_moves_k=cfg.model.max_moves_k,
             hidden_size=hidden,
-        )
-    elif normalized_architecture == "transformer_pointer":
-        return ComposablePlanetPolicy(
-            encoder_module=TransformerBackboneEncoder(
-                hidden_size=hidden,
-                attention_heads=attention_heads,
-                enable_gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
-            ),
-            decoder_module=AutoregressivePointerDecoder(
-                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
-            ),
-            value_head_module=value_head_module,
-            hidden_size=hidden,
-        )
-    elif normalized_architecture == "gnn_pointer":
-        return ComposablePlanetPolicy(
-            encoder_module=GNNBackboneEncoder(
-                hidden_size=hidden,
-                k_neighbors=cfg.model.gnn_k_neighbors,
-                msg_passing_layers=cfg.model.gnn_message_passing_layers,
-                target_coords_span=(target_coords_slice.start, target_coords_slice.stop),
-            ),
-            decoder_module=AutoregressivePointerDecoder(
-                ship_bucket_count=buckets, max_moves_k=k_steps, hidden_size=hidden
-            ),
-            value_head_module=value_head_module,
-            hidden_size=hidden,
-        )
-    elif normalized_architecture == "gnn_pointer_v2":
-        from .policy_v2 import build_gnn_pointer_v2_policy
-
-        return build_gnn_pointer_v2_policy(cfg)
-    else:
-        raise ValueError(
-            f"Unsupported JAX model architecture '{cfg.model.architecture}'. Expected 'mlp', "
-            "'attention', 'transformer', 'mlp_pointer', 'transformer_pointer', "
-            "'gnn_pointer', or 'gnn_pointer_v2'."
-        )
+        ),
+        value_head_module=build_value_head(cfg),
+        hidden_size=hidden,
+        edge_k=k_slots,
+    )
 
 
+def make_synthetic_turn_batch(
+    batch_size: int,
+    task_cfg,
+    *,
+    key: jax.Array | None = None,
+) -> TurnBatch:
+    """Build a random ``TurnBatch`` for policy smoke tests."""
+
+    if key is None:
+        key = jax.random.PRNGKey(0)
+    k1, k2, k3, k4 = jax.random.split(key, 4)
+    k_slots = edge_k(task_cfg)
+    planet_dim = planet_feature_dim(task_cfg)
+    global_dim = global_feature_dim(task_cfg)
+    edge_dim = edge_feature_dim(task_cfg)
+
+    planet_features = jax.random.normal(
+        k1, (batch_size, MAX_PLANETS, planet_dim), dtype=jnp.float32
+    )
+    planet_mask = jnp.ones((batch_size, MAX_PLANETS), dtype=bool)
+    edge_features = jax.random.normal(
+        k2, (batch_size, MAX_PLANETS, k_slots, edge_dim), dtype=jnp.float32
+    )
+    edge_mask = jnp.ones((batch_size, MAX_PLANETS, k_slots), dtype=bool)
+    edge_src_ids = jnp.broadcast_to(
+        jnp.arange(MAX_PLANETS, dtype=jnp.int32)[None, :], (batch_size, MAX_PLANETS)
+    )
+    edge_tgt_ids = jnp.broadcast_to(
+        jnp.arange(k_slots, dtype=jnp.int32)[None, None, :],
+        (batch_size, MAX_PLANETS, k_slots),
+    )
+    global_features = jax.random.normal(k3, (batch_size, global_dim), dtype=jnp.float32)
+    theta_ref = jax.random.uniform(k4, (batch_size,), dtype=jnp.float32)
+
+    if k_slots == 0:
+        edge_features = jnp.zeros(
+            (batch_size, MAX_PLANETS, 0, edge_dim), dtype=jnp.float32
+        )
+        edge_mask = jnp.zeros((batch_size, MAX_PLANETS, 0), dtype=bool)
+        edge_tgt_ids = jnp.zeros((batch_size, MAX_PLANETS, 0), dtype=jnp.int32)
+
+    return TurnBatch(
+        planet_features=planet_features,
+        planet_mask=planet_mask,
+        edge_features=edge_features,
+        edge_mask=edge_mask,
+        edge_src_ids=edge_src_ids,
+        edge_tgt_ids=edge_tgt_ids,
+        global_features=global_features,
+        theta_ref=theta_ref,
+    )
 def sample_actions(
     key: jax.Array,
     output: JaxPolicyOutput,

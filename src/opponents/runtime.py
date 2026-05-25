@@ -11,13 +11,20 @@ import jax
 import jax.numpy as jnp
 
 from src.config import TrainConfig
-from src.features import encode_turn, ship_count_for_bucket
+from src.game.types import parse_observation
+from src.features import FeatureExtractor
+from src.jax.submission_runtime import (
+    batch_game,
+    batch_turn,
+    jax_game_from_observation,
+    moves_from_jax_action,
+    select_runtime_shielded_policy_actions,
+)
 from src.jax.policy import build_jax_policy
 from src.features.normalization import ObservationNormalizer
 from src.game.trajectory_shield import (
     filter_moves_with_trajectory_shield,
     is_trajectory_safe_for_launch,
-    select_runtime_shielded_policy_actions,
 )
 
 Planet = namedtuple(
@@ -33,7 +40,7 @@ class OpponentPolicy(Protocol):
 class SniperOpponent:
     def act(self, observation: Any) -> list[list[float | int]]:
         moves: list[list[float | int]] = []
-        batch = encode_turn(observation, DEFAULT_RUNTIME_ENV, env_index=0)
+        state = parse_observation(observation)
         player = obs_get(observation, "player", 0)
         raw_planets = obs_get(observation, "planets", [])
         planets = [Planet(*planet) for planet in raw_planets]
@@ -51,7 +58,7 @@ class SniperOpponent:
                 continue
             angle = math.atan2(nearest.y - source.y, nearest.x - source.x)
             if not is_trajectory_safe_for_launch(
-                batch.state,
+                state,
                 int(source.id),
                 int(nearest.id),
                 angle,
@@ -74,7 +81,7 @@ class KaggleRandomOpponent:
             "player": obs_get(observation, "player", 0),
             "planets": list(obs_get(observation, "planets", [])),
         }
-        state = encode_turn(observation, DEFAULT_RUNTIME_ENV, env_index=0).state
+        state = parse_observation(observation)
         return filter_moves_with_trajectory_shield(
             list(self._agent(payload)), state, DEFAULT_RUNTIME_ENV
         )
@@ -92,6 +99,7 @@ class SelfPlayOpponent:
         self.policy = build_jax_policy(cfg=self.cfg)
         self.params: dict[str, Any] | None = None
         self.normalizer: ObservationNormalizer | None = None
+        self._feature_extractor = FeatureExtractor(cfg.task)
 
     def sync_from(
         self,
@@ -102,66 +110,25 @@ class SelfPlayOpponent:
         self.normalizer = clone_normalizer(normalizer)
 
     def act(self, observation: Any) -> list[list[float | int]]:
-        batch = encode_turn(observation, self.cfg.task, env_index=0)
-        if batch.self_features.shape[0] == 0:
-            return []
-        policy_batch = (
-            self.normalizer.normalize_batch(batch)
-            if self.normalizer is not None
-            else batch
-        )
         if self.params is None:
             raise ValueError("SelfPlayOpponent params are not initialized; call sync_from first.")
+        extracted = self._feature_extractor.extract(
+            observation,
+            max_fleet_slots=int(self.cfg.task.max_fleets),
+        )
+        game = extracted.game
+        batch = extracted.batch
         self.rng, step_key = jax.random.split(self.rng)
-        sampled = select_runtime_shielded_policy_actions(
+        action = select_runtime_shielded_policy_actions(
             step_key,
             self.policy,
             {"params": self.params},
-            batch,
-            self.cfg.task,
+            batch_game(game),
+            batch_turn(batch),
+            self.cfg,
             deterministic=self.deterministic,
-            self_features=policy_batch.self_features,
-            candidate_features=policy_batch.candidate_features,
-            global_features=policy_batch.global_features,
-            candidate_mask=policy_batch.candidate_mask,
         )
-        target_indices = sampled.target_index
-        ship_buckets = sampled.ship_bucket
-        target_indices = jax.device_get(target_indices)
-        ship_buckets = jax.device_get(ship_buckets)
-        moves: list[list[float | int]] = []
-        for row_idx, context in enumerate(batch.contexts):
-            remaining_ships = int(context.source_ships)
-            for step_idx in range(target_indices.shape[1]):
-                if len(moves) >= int(self.cfg.task.max_fleets):
-                    break
-                target_idx = int(target_indices[row_idx, step_idx])
-                bucket_idx = int(ship_buckets[row_idx, step_idx])
-                if target_idx == 0 or bucket_idx == 0:
-                    continue
-                if target_idx >= len(context.candidate_ids):
-                    continue
-                if not context.candidate_mask[target_idx]:
-                    continue
-                ships = ship_count_for_bucket(
-                    remaining_ships, bucket_idx, self.cfg.task.ship_bucket_count
-                )
-                if ships <= 0:
-                    continue
-                target_id = int(context.candidate_ids[target_idx])
-                angle = float(context.target_angles[target_idx])
-                if not is_trajectory_safe_for_launch(
-                    batch.state,
-                    int(context.source_id),
-                    target_id,
-                    angle,
-                    ships,
-                    self.cfg.task,
-                ):
-                    continue
-                remaining_ships = max(0, remaining_ships - ships)
-                moves.append([context.source_id, angle, ships])
-        return moves
+        return moves_from_jax_action(action)
 
 
 @dataclass(slots=True)

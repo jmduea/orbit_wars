@@ -145,8 +145,6 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         raise ValueError("task.trajectory_shield_horizon must be a positive integer.")
     if float(task.trajectory_shield_epsilon) < 0.0:
         raise ValueError("task.trajectory_shield_epsilon must be non-negative.")
-    if task.encoding_version not in {"v1", "v2"}:
-        raise ValueError("task.encoding_version must be 'v1' or 'v2'.")
     if float(task.ship_feature_scale) <= 0.0:
         raise ValueError("task.ship_feature_scale must be positive.")
 

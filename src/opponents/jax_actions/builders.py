@@ -4,17 +4,17 @@ import jax
 import jax.numpy as jnp
 
 from src.config import TrainConfig
-from src.features.registry import candidate_feature_schema
+from src.features.registry import edge_k
+from src.game.constants import MAX_PLANETS
 from src.game.trajectory_shield import (
     ShieldDiagnostics,
-    apply_trajectory_shield_to_turn_batch,
-    default_ship_bucket_mask,
+    apply_trajectory_shield_to_turn_batch_v2,
+    default_edge_action_bucket_mask,
 )
 from src.jax.env import JaxAction
-from src.jax.features import JaxTurnBatch
-from src.jax.ppo_update import flatten_batch
-from src.jax.rollout.types import JaxTrainState, ShieldedSequenceSample
-
+from src.jax.features import TurnBatch
+from src.jax.policy import edge_action_count
+from src.jax.rollout.types import ShieldedSequenceSample
 
 def ship_count_for_bucket_jax(
     available_ships: jax.Array, bucket: jax.Array, bucket_count: int
@@ -29,116 +29,121 @@ def ship_count_for_bucket_jax(
     return jnp.where((available_ships <= 0.0) | (fraction <= 0.0), 0.0, ships)
 
 
-def build_action_from_batch(
-    batch: JaxTurnBatch,
+
+
+def noop_edge_index(task_cfg) -> int:
+    return MAX_PLANETS * edge_k(task_cfg)
+
+
+def owned_planet_ships(game) -> jax.Array:
+    player = game.player
+    if player.ndim > 0:
+        player = player[:, None]
+    owned = game.planets.active & (game.planets.owner == player)
+    return jnp.where(owned, game.planets.ships, 0.0)
+
+
+def _launch_angle_for_edge(game, batch: TurnBatch, src_row, slot):
+    src_x = game.planets.x[src_row]
+    src_y = game.planets.y[src_row]
+    tgt_id = batch.edge_tgt_ids[src_row, slot]
+    match = game.planets.id == tgt_id
+    tgt_x = jnp.sum(jnp.where(match, game.planets.x, 0.0))
+    tgt_y = jnp.sum(jnp.where(match, game.planets.y, 0.0))
+    return jnp.arctan2(tgt_y - src_y, tgt_x - src_x)
+
+
+def build_action_from_edge_batch(
+    game,
+    batch: TurnBatch,
     target_index: jax.Array,
     ship_bucket: jax.Array,
     cfg: TrainConfig,
 ) -> JaxAction:
-    """Build fixed-size JAX action buffers from per-source policy choices.
-
-    Only valid source rows with non-no-op targets and positive ship buckets are
-    emitted. If ``max_fleets`` is smaller than ``max_planets``, extra source rows
-    are clipped so the returned arrays always match the configured fleet buffer.
-    """
-
-    env_count = batch.self_features.shape[0]
-    planet_count = batch.self_features.shape[1]
-    target_index = target_index.reshape(env_count, planet_count, -1)
-    ship_bucket = ship_bucket.reshape(env_count, planet_count, -1)
+    env_count = batch.planet_features.shape[0]
+    k = edge_k(cfg.task)
+    noop_idx = noop_edge_index(cfg.task)
+    target_index = target_index.reshape(env_count, -1)
+    ship_bucket = ship_bucket.reshape(env_count, -1)
     launch_steps = target_index.shape[-1]
-    chosen_mask = jnp.take_along_axis(
-        batch.candidate_mask[..., None, :], target_index[..., None], axis=-1
-    ).squeeze(-1)
-    chosen_angle = jnp.take_along_axis(
-        batch.target_angles[..., None, :], target_index[..., None], axis=-1
-    ).squeeze(-1)
-    step_valid = (
-        batch.decision_mask[..., None]
-        & chosen_mask
-        & (target_index > 0)
-        & (ship_bucket > 0)
-    )
-
-    def allocate_step(remaining_ships, step_inputs):
-        step_bucket, step_is_valid = step_inputs
-        requested = ship_count_for_bucket_jax(
-            remaining_ships, step_bucket, cfg.task.ship_bucket_count
-        )
-        launched = jnp.where(
-            step_is_valid, jnp.minimum(remaining_ships, requested), 0.0
-        )
-        return jnp.maximum(remaining_ships - launched, 0.0), launched
-
-    _remaining_ships, ships_by_step = jax.lax.scan(
-        allocate_step,
-        batch.source_ships,
-        (jnp.moveaxis(ship_bucket, -1, 0), jnp.moveaxis(step_valid, -1, 0)),
-    )
-    ships = jnp.moveaxis(ships_by_step, 0, -1)
-    valid = step_valid & (ships > 0.0)
     fleet_slots = cfg.task.max_fleets
-    action_width = min(planet_count * launch_steps, fleet_slots)
-    pad = fleet_slots - action_width
-    source_ids = jnp.broadcast_to(
-        batch.source_ids[..., None], (env_count, planet_count, launch_steps)
-    )
-    source_id = jnp.pad(
-        source_ids.reshape(env_count, planet_count * launch_steps)[:, :action_width],
-        ((0, 0), (0, pad)),
-        constant_values=-1,
-    )
-    angle = jnp.pad(
-        chosen_angle.reshape(env_count, planet_count * launch_steps)[:, :action_width],
-        ((0, 0), (0, pad)),
-        constant_values=0.0,
-    )
-    ships = jnp.pad(
-        ships.reshape(env_count, planet_count * launch_steps)[:, :action_width],
-        ((0, 0), (0, pad)),
-        constant_values=0.0,
-    )
-    valid = jnp.pad(
-        valid.reshape(env_count, planet_count * launch_steps)[:, :action_width],
-        ((0, 0), (0, pad)),
-        constant_values=False,
-    )
-    return JaxAction(source_id=source_id, angle=angle, ships=ships, valid=valid)
+
+    def build_env_action(game_row, batch_row, targets, buckets):
+        def step_fn(remaining, step_inputs):
+            flat_idx, bucket = step_inputs
+            src_row = flat_idx // k
+            valid = (flat_idx < noop_idx) & (bucket > 0) & (remaining[src_row] > 0.0)
+            requested = ship_count_for_bucket_jax(
+                remaining[src_row], bucket, cfg.task.ship_bucket_count
+            )
+            launched = jnp.where(valid, jnp.minimum(remaining[src_row], requested), 0.0)
+            remaining = remaining.at[src_row].set(
+                jnp.maximum(remaining[src_row] - launched, 0.0)
+            )
+            src_id = batch_row.edge_src_ids[src_row]
+            angle = _launch_angle_for_edge(game_row, batch_row, src_row, flat_idx % k)
+            return remaining, (src_id, angle, launched, valid)
+
+        remaining = owned_planet_ships(game_row)
+        _, steps = jax.lax.scan(
+            step_fn,
+            remaining,
+            (jnp.moveaxis(targets, -1, 0), jnp.moveaxis(buckets, -1, 0)),
+        )
+        source_id, angle, ships, valid = steps
+        source_id = jnp.moveaxis(source_id, 0, -1)
+        angle = jnp.moveaxis(angle, 0, -1)
+        ships = jnp.moveaxis(ships, 0, -1)
+        valid = jnp.moveaxis(valid, 0, -1)
+        flat_source = source_id.reshape(launch_steps)
+        flat_angle = angle.reshape(launch_steps)
+        flat_ships = ships.reshape(launch_steps)
+        flat_valid = valid.reshape(launch_steps)
+        action_width = min(launch_steps, fleet_slots)
+        pad = fleet_slots - action_width
+        return JaxAction(
+            source_id=jnp.pad(flat_source[:action_width], (0, pad), constant_values=-1),
+            angle=jnp.pad(flat_angle[:action_width], (0, pad), constant_values=0.0),
+            ships=jnp.pad(flat_ships[:action_width], (0, pad), constant_values=0.0),
+            valid=jnp.pad(flat_valid[:action_width], (0, pad), constant_values=False),
+        )
+
+    return jax.vmap(build_env_action)(game, batch, target_index, ship_bucket)
 
 
-def build_random_action_from_batch(
+def build_random_action_from_edge_batch(
     key: jax.Array,
-    batch: JaxTurnBatch,
+    game,
+    batch: TurnBatch,
     cfg: TrainConfig,
     ship_bucket_mask: jax.Array | None = None,
 ) -> JaxAction:
-    """Sample a JAX-native random opponent action for each environment."""
-
-    env_count = batch.self_features.shape[0]
-    planet_count = batch.self_features.shape[1]
+    env_count = batch.planet_features.shape[0]
+    k = edge_k(cfg.task)
+    edge_count = edge_action_count(cfg.task)
     key_target, key_bucket = jax.random.split(key)
-    flat_mask = batch.candidate_mask.reshape(-1, cfg.task.candidate_count)
-    flat_bucket_mask = (
-        default_ship_bucket_mask(flat_mask, cfg.task.ship_bucket_count)
-        if ship_bucket_mask is None
-        else ship_bucket_mask.reshape(
-            -1, cfg.task.candidate_count, cfg.task.ship_bucket_count
-        )
+    flat_mask = jnp.concatenate(
+        [batch.edge_mask.reshape(env_count, MAX_PLANETS * k), jnp.ones((env_count, 1), dtype=bool)],
+        axis=1,
     )
+    if ship_bucket_mask is None:
+        flat_bucket_mask = default_edge_action_bucket_mask(flat_mask, cfg.task.ship_bucket_count)
+    else:
+        flat_bucket_mask = ship_bucket_mask
     real_bucket_mask = flat_bucket_mask & (
         jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)[None, None, :] > 0
     )
-    real_candidate = (
+    real_edge = (
         flat_mask
         & real_bucket_mask.any(axis=-1)
-        & (jnp.arange(cfg.task.candidate_count, dtype=jnp.int32)[None, :] > 0)
+        & (jnp.arange(edge_count, dtype=jnp.int32)[None, :] < noop_edge_index(cfg.task))
     )
-    has_target = real_candidate.any(axis=-1)
-    target_logits = jnp.where(real_candidate, 0.0, jnp.finfo(jnp.float32).min)
+    has_target = real_edge.any(axis=-1)
+    target_logits = jnp.where(real_edge, 0.0, jnp.finfo(jnp.float32).min)
     target = jnp.where(
         has_target,
         jax.random.categorical(key_target, target_logits, axis=-1),
-        jnp.zeros((env_count * planet_count,), dtype=jnp.int32),
+        jnp.full((env_count,), noop_edge_index(cfg.task), dtype=jnp.int32),
     )
     selected_bucket_mask = jnp.take_along_axis(
         flat_bucket_mask,
@@ -148,134 +153,10 @@ def build_random_action_from_batch(
     bucket_logits = jnp.where(selected_bucket_mask, 0.0, jnp.finfo(jnp.float32).min)
     bucket = jax.random.categorical(key_bucket, bucket_logits, axis=-1)
     bucket = jnp.where(has_target, bucket, jnp.zeros_like(bucket))
-    return build_action_from_batch(batch, target, bucket, cfg)
-
-
-def build_sniper_action_from_batch(
-    batch: JaxTurnBatch,
-    cfg: TrainConfig,
-    ship_bucket_mask: jax.Array | None = None,
-) -> JaxAction:
-    """JAX-compatible scripted sniper: use nearest candidate slot aggressively."""
-
-    bucket_mask = (
-        default_ship_bucket_mask(batch.candidate_mask, cfg.task.ship_bucket_count)
-        if ship_bucket_mask is None
-        else ship_bucket_mask
+    return build_action_from_edge_batch(
+        game, batch, target[:, None], bucket[:, None], cfg
     )
-    nonzero_bucket_mask = bucket_mask[..., 1:].any(axis=-1)
-    real_candidate_mask = (
-        batch.candidate_mask
-        & nonzero_bucket_mask
-        & (
-            jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :]
-            > 0
-        )
-    )
-    nearest_slot = jnp.argmax(real_candidate_mask.astype(jnp.int32), axis=-1)
-    has_target = real_candidate_mask.any(axis=-1)
-    target = jnp.where(has_target, nearest_slot, 0).reshape(-1)
-    selected_bucket_mask = jnp.take_along_axis(
-        bucket_mask.reshape(-1, cfg.task.candidate_count, cfg.task.ship_bucket_count),
-        target[:, None, None].repeat(cfg.task.ship_bucket_count, axis=-1),
-        axis=1,
-    ).squeeze(axis=1)
-    bucket_ids = jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)
-    bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
-    bucket = jnp.where(has_target.reshape(-1), bucket, 0)
-    return build_action_from_batch(batch, target, bucket, cfg)
 
-
-def build_turtle_action_from_batch(
-    batch: JaxTurnBatch,
-    cfg: TrainConfig,
-    ship_bucket_mask: jax.Array | None = None,
-) -> JaxAction:
-    """Conservative scripted policy: small neutral expansion, otherwise no-op."""
-
-    bucket_mask = (
-        default_ship_bucket_mask(batch.candidate_mask, cfg.task.ship_bucket_count)
-        if ship_bucket_mask is None
-        else ship_bucket_mask
-    )
-    ownership = batch.candidate_features[
-        ..., candidate_feature_schema(cfg.task).slice("target_ownership_flags")
-    ]
-    neutral = ownership[..., 0] > 0.5
-    real_bucket = bucket_mask[..., 1:].any(axis=-1)
-    valid_neutral = (
-        batch.candidate_mask
-        & neutral
-        & real_bucket
-        & (
-            jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :]
-            > 0
-        )
-    )
-    target = jnp.argmax(valid_neutral.astype(jnp.int32), axis=-1)
-    has_target = valid_neutral.any(axis=-1)
-    target = jnp.where(has_target, target, 0).reshape(-1)
-    selected_bucket_mask = jnp.take_along_axis(
-        bucket_mask.reshape(-1, cfg.task.candidate_count, cfg.task.ship_bucket_count),
-        target[:, None, None].repeat(cfg.task.ship_bucket_count, axis=-1),
-        axis=1,
-    ).squeeze(axis=1)
-    bucket_ids = jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)
-    nonzero_bucket_mask = selected_bucket_mask & (bucket_ids[None, :] > 0)
-    bucket = jnp.argmax(nonzero_bucket_mask.astype(jnp.int32), axis=-1)
-    bucket = jnp.where(
-        has_target.reshape(-1) & nonzero_bucket_mask.any(axis=-1), bucket, 0
-    )
-    return build_action_from_batch(batch, target, bucket, cfg)
-
-
-def build_opportunistic_action_from_batch(
-    batch: JaxTurnBatch,
-    cfg: TrainConfig,
-    ship_bucket_mask: jax.Array | None = None,
-) -> JaxAction:
-    """Scripted policy that prioritizes immediately attackable enemy candidates."""
-
-    bucket_mask = (
-        default_ship_bucket_mask(batch.candidate_mask, cfg.task.ship_bucket_count)
-        if ship_bucket_mask is None
-        else ship_bucket_mask
-    )
-    ownership = batch.candidate_features[
-        ..., candidate_feature_schema(cfg.task).slice("target_ownership_flags")
-    ]
-    enemy = ownership[..., 2] > 0.5
-    real_bucket = bucket_mask[..., 1:].any(axis=-1)
-    valid_enemy = (
-        batch.candidate_mask
-        & enemy
-        & real_bucket
-        & (
-            jnp.arange(batch.candidate_mask.shape[-1], dtype=jnp.int32)[None, None, :]
-            > 0
-        )
-    )
-    target = jnp.argmax(valid_enemy.astype(jnp.int32), axis=-1)
-    has_target = valid_enemy.any(axis=-1)
-    target = jnp.where(has_target, target, 0).reshape(-1)
-    selected_bucket_mask = jnp.take_along_axis(
-        bucket_mask.reshape(-1, cfg.task.candidate_count, cfg.task.ship_bucket_count),
-        target[:, None, None].repeat(cfg.task.ship_bucket_count, axis=-1),
-        axis=1,
-    ).squeeze(axis=1)
-    bucket_ids = jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)
-    bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
-    bucket = jnp.where(has_target.reshape(-1), bucket, 0)
-    return build_action_from_batch(batch, target, bucket, cfg)
-
-
-def build_noop_action_from_batch(batch: JaxTurnBatch, cfg: TrainConfig) -> JaxAction:
-    """Build a pass/no-op action that launches no fleets."""
-
-    env_count = batch.self_features.shape[0]
-    planet_count = batch.self_features.shape[1]
-    zeros = jnp.zeros((env_count * planet_count,), dtype=jnp.int32)
-    return build_action_from_batch(batch, zeros, zeros, cfg)
 
 
 def _noop_bucket_mask(
@@ -350,37 +231,30 @@ def _sample_step_from_logits(
 def _sample_shielded_sequence_with_params(
     key: jax.Array,
     game,
-    batch: JaxTurnBatch,
+    batch: TurnBatch,
     params: dict,
     policy: object,
     cfg: TrainConfig,
     *,
     deterministic: bool,
 ) -> ShieldedSequenceSample:
-    flat_self, flat_candidate, flat_global, flat_mask, flat_decision = flatten_batch(
-        batch
-    )
-    flat_player_count = jnp.full(
-        (flat_mask.shape[0],), cfg.task.player_count, dtype=jnp.int32
-    )
+    env_count = batch.planet_features.shape[0]
+    player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
     probe_output = policy.apply(
         params,
-        flat_self,
-        flat_candidate,
-        flat_global,
-        flat_mask,
-        player_count=flat_player_count,
+        batch,
+        player_count=player_count,
         rng=key,
         deterministic=deterministic,
     )
     sequence_k = probe_output.target_logits.shape[1]
-    row_count = flat_mask.shape[0]
-    target_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.int32)
-    bucket_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.int32)
-    log_prob_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.float32)
-    entropy_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.float32)
-    remaining_ships = batch.source_ships.reshape(-1)
-    env_count = batch.source_ships.shape[0]
+    edge_count = probe_output.target_logits.shape[2]
+    noop_idx = noop_edge_index(cfg.task)
+    target_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
+    bucket_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
+    log_prob_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    entropy_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    remaining_ships = owned_planet_ships(game)
     diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
     diagnostics = ShieldDiagnostics(
         blocked_count=diagnostic_zero,
@@ -393,9 +267,8 @@ def _sample_shielded_sequence_with_params(
         original_non_noop_count=diagnostic_zero,
         legal_non_noop_rate=diagnostic_zero,
     )
-
     bucket_mask_stack = jnp.zeros(
-        (row_count, sequence_k, cfg.task.candidate_count, cfg.task.ship_bucket_count),
+        (env_count, sequence_k, edge_count, cfg.task.ship_bucket_count),
         dtype=jnp.bool_,
     )
 
@@ -411,24 +284,18 @@ def _sample_shielded_sequence_with_params(
         ) = carry
         step_output = policy.apply(
             params,
-            flat_self,
-            flat_candidate,
-            flat_global,
-            flat_mask,
-            player_count=flat_player_count,
+            batch,
+            player_count=player_count,
             target_sequence=target_sequence,
             rng=jax.random.fold_in(key, step_idx),
             deterministic=deterministic,
         )
-        remaining_by_source = remaining_ships.reshape(batch.source_ships.shape)
-        shielded_step = jax.vmap(
-            lambda game_row, turn_row, source_ships: (
-                apply_trajectory_shield_to_turn_batch(
-                    game_row, turn_row, cfg.task, source_ships_override=source_ships
-                )
+        shielded = jax.vmap(
+            lambda game_row, batch_row, ships: apply_trajectory_shield_to_turn_batch_v2(
+                game_row, batch_row, cfg.task, remaining_planet_ships=ships
             )
-        )(game, batch, remaining_by_source)
-        step_diagnostics = shielded_step.diagnostics
+        )(game, batch, remaining_ships)
+        step_diagnostics = shielded.diagnostics
         diagnostics = ShieldDiagnostics(
             blocked_count=diagnostics.blocked_count + step_diagnostics.blocked_count,
             blocked_sun_count=diagnostics.blocked_sun_count
@@ -447,11 +314,20 @@ def _sample_shielded_sequence_with_params(
             + step_diagnostics.original_non_noop_count,
             legal_non_noop_rate=diagnostic_zero,
         )
-        step_bucket_mask = shielded_step.ship_bucket_mask.reshape(
-            -1, cfg.task.candidate_count, cfg.task.ship_bucket_count
+        edge_action_mask = jnp.concatenate(
+            [
+                shielded.batch.edge_mask.reshape(env_count, MAX_PLANETS * edge_k(cfg.task)),
+                jnp.ones((env_count, 1), dtype=bool),
+            ],
+            axis=1,
         )
-        step_bucket_mask = _ensure_bucket_mask_has_choice(
-            step_bucket_mask, flat_decision
+        step_bucket_mask = shielded.ship_bucket_mask.reshape(
+            env_count, edge_count, cfg.task.ship_bucket_count
+        )
+        env_active = jnp.ones((env_count,), dtype=bool)
+        step_bucket_mask = _ensure_bucket_mask_has_choice(step_bucket_mask.reshape(-1, edge_count, cfg.task.ship_bucket_count), env_active)
+        step_bucket_mask = step_bucket_mask.reshape(
+            env_count, edge_count, cfg.task.ship_bucket_count
         )
         target, bucket, log_prob, entropy = _sample_step_from_logits(
             key=jax.random.fold_in(key, 10_000 + step_idx),
@@ -460,14 +336,20 @@ def _sample_shielded_sequence_with_params(
             ship_bucket_mask=step_bucket_mask,
             deterministic=deterministic,
         )
-        target = jnp.where(flat_decision, target, 0)
-        bucket = jnp.where(flat_decision, bucket, 0)
+        src_rows = target // edge_k(cfg.task)
+        current_source_ships = remaining_ships[jnp.arange(env_count), src_rows]
         launched = ship_count_for_bucket_jax(
-            remaining_ships, bucket, cfg.task.ship_bucket_count
+            current_source_ships,
+            bucket,
+            cfg.task.ship_bucket_count,
         )
-        launch_valid = flat_decision & (target > 0) & (bucket > 0) & (launched > 0.0)
-        remaining_ships = jnp.where(
-            launch_valid, jnp.maximum(remaining_ships - launched, 0.0), remaining_ships
+        launch_valid = (target < noop_idx) & (bucket > 0) & (launched > 0.0)
+        remaining_ships = remaining_ships.at[jnp.arange(env_count), src_rows].set(
+            jnp.where(
+                launch_valid,
+                jnp.maximum(current_source_ships - launched, 0.0),
+                current_source_ships,
+            )
         )
         target_sequence = target_sequence.at[:, step_idx].set(target)
         bucket_sequence = bucket_sequence.at[:, step_idx].set(bucket)
@@ -490,7 +372,7 @@ def _sample_shielded_sequence_with_params(
             bucket_sequence,
             log_prob_sequence,
             entropy_sequence,
-            remaining_ships,
+            _remaining_ships,
             diagnostics,
             bucket_mask_stack,
         ),
@@ -508,7 +390,6 @@ def _sample_shielded_sequence_with_params(
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-
     diagnostics = ShieldDiagnostics(
         blocked_count=diagnostics.blocked_count,
         blocked_sun_count=diagnostics.blocked_sun_count,
@@ -535,18 +416,183 @@ def _sample_shielded_sequence_with_params(
     )
 
 
+def _edge_scripted_context(
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None,
+):
+    from src.features.registry import EDGE_FEATURE_SCHEMA, edge_k
+
+    env_count = batch.planet_features.shape[0]
+    k = edge_k(cfg.task)
+    flat_count = MAX_PLANETS * k
+    flat_mask = batch.edge_mask.reshape(env_count, flat_count)
+    owner_slice = EDGE_FEATURE_SCHEMA.slice("target_owner_slot")
+    owner_slots = batch.edge_features[..., owner_slice].reshape(env_count, flat_count, 4)
+    distance = batch.edge_features[..., EDGE_FEATURE_SCHEMA.slice("distance")].reshape(
+        env_count, flat_count
+    )
+    if ship_bucket_mask is None:
+        full_mask = jnp.concatenate(
+            [flat_mask, jnp.ones((env_count, 1), dtype=bool)], axis=1
+        )
+        bucket_mask = default_edge_action_bucket_mask(
+            full_mask, cfg.task.ship_bucket_count
+        )
+    else:
+        bucket_mask = ship_bucket_mask
+    real_bucket = bucket_mask[:, :flat_count, :][..., 1:].any(axis=-1)
+    valid = flat_mask & real_bucket
+    owner_sum = owner_slots.sum(axis=-1)
+    neutral = valid & (owner_sum < 0.5)
+    enemy = valid & (owner_sum > 0.5) & (owner_slots[..., 0] < 0.5)
+    return {
+        "env_count": env_count,
+        "flat_count": flat_count,
+        "valid": valid,
+        "neutral": neutral,
+        "enemy": enemy,
+        "distance": distance,
+        "bucket_mask": bucket_mask,
+    }
+
+
+def _bucket_for_flat_target(
+    flat_target: jax.Array,
+    bucket_mask: jax.Array,
+    has_target: jax.Array,
+    cfg: TrainConfig,
+    *,
+    conservative: bool,
+) -> jax.Array:
+    selected_bucket_mask = jnp.take_along_axis(
+        bucket_mask,
+        flat_target[:, None, None].repeat(cfg.task.ship_bucket_count, axis=-1),
+        axis=1,
+    ).squeeze(axis=1)
+    bucket_ids = jnp.arange(cfg.task.ship_bucket_count, dtype=jnp.int32)
+    if conservative:
+        nonzero = selected_bucket_mask & (bucket_ids[None, :] > 0)
+        bucket = jnp.argmax(nonzero.astype(jnp.int32), axis=-1)
+        bucket = jnp.where(has_target & nonzero.any(axis=-1), bucket, 0)
+    else:
+        bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
+        bucket = jnp.where(has_target, bucket, 0)
+    return bucket
+
+
+def _build_scripted_edge_action(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    pick_mask: jax.Array,
+    distance: jax.Array,
+    bucket_mask: jax.Array,
+    use_nearest: bool,
+    conservative_bucket: bool,
+) -> JaxAction:
+    noop_idx = noop_edge_index(cfg.task)
+    if use_nearest:
+        masked_distance = jnp.where(pick_mask, distance, jnp.inf)
+        flat_target = jnp.argmin(masked_distance, axis=-1)
+    else:
+        flat_target = jnp.argmax(pick_mask.astype(jnp.int32), axis=-1)
+    has_target = pick_mask.any(axis=-1)
+    bucket = _bucket_for_flat_target(
+        flat_target,
+        bucket_mask,
+        has_target,
+        cfg,
+        conservative=conservative_bucket,
+    )
+    target = jnp.where(has_target, flat_target, noop_idx)
+    bucket = jnp.where(has_target, bucket, 0)
+    return build_action_from_edge_batch(
+        game, batch, target[:, None], bucket[:, None], cfg
+    )
+
+
+def build_sniper_action_from_edge_batch(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["valid"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=True,
+        conservative_bucket=False,
+    )
+
+
+def build_turtle_action_from_edge_batch(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["neutral"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=False,
+        conservative_bucket=True,
+    )
+
+
+def build_opportunistic_action_from_edge_batch(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxAction:
+    ctx = _edge_scripted_context(batch, cfg, ship_bucket_mask)
+    return _build_scripted_edge_action(
+        game,
+        batch,
+        cfg,
+        pick_mask=ctx["enemy"],
+        distance=ctx["distance"],
+        bucket_mask=ctx["bucket_mask"],
+        use_nearest=False,
+        conservative_bucket=False,
+    )
+
+def build_noop_action_from_edge_batch(
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+) -> JaxAction:
+    """Build a pass/no-op action that launches no fleets."""
+
+    env_count = batch.planet_features.shape[0]
+    noop_idx = noop_edge_index(cfg.task)
+    noop_target = jnp.full((env_count, 1), noop_idx, dtype=jnp.int32)
+    noop_bucket = jnp.zeros((env_count, 1), dtype=jnp.int32)
+    return build_action_from_edge_batch(game, batch, noop_target, noop_bucket, cfg)
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     game,
-    batch: JaxTurnBatch,
+    batch: TurnBatch,
     params: dict,
     policy: object,
     cfg: TrainConfig,
     *,
     deterministic: bool,
 ) -> JaxAction:
-    """Sample a fixed-size action buffer from a JAX policy parameter set."""
-
     sample = _sample_shielded_sequence_with_params(
         key,
         game,
@@ -556,21 +602,21 @@ def _sample_policy_action_with_params(
         cfg,
         deterministic=deterministic,
     )
-    return build_action_from_batch(batch, sample.target_index, sample.ship_bucket, cfg)
+    return build_action_from_edge_batch(
+        game, batch, sample.target_index, sample.ship_bucket, cfg
+    )
 
 
 def _sample_policy_action(
     key: jax.Array,
     game,
-    batch: JaxTurnBatch,
-    train_state: JaxTrainState,
+    batch: TurnBatch,
+    train_state,
     policy: object,
     cfg: TrainConfig,
     *,
     deterministic: bool,
 ) -> JaxAction:
-    """Sample a fixed-size action buffer from the trainable JAX policy."""
-
     return _sample_policy_action_with_params(
         key,
         game,
@@ -580,3 +626,4 @@ def _sample_policy_action(
         cfg,
         deterministic=deterministic,
     )
+

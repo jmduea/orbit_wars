@@ -6,15 +6,14 @@ from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.rollout.types import JaxTransitionBatchV2
+from src.jax.rollout.types import JaxTransitionBatch
 from src.jax.train_state import init_train_state
 from src.training.curriculum import CurriculumController
 
 
 def _v2_smoke_cfg(*, rollout_steps: int) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer_v2"
-    cfg.task.encoding_version = "v2"
+    cfg.model.architecture = "gnn_pointer"
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16
     cfg.model.hidden_size = 16
@@ -39,7 +38,7 @@ def test_v2_rollout_and_ppo_update_smoke():
     _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
         jax.random.PRNGKey(2), env_state, turn_batch, train_state, policy, cfg
     )
-    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert isinstance(transitions, JaxTransitionBatch)
     next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(rollout_metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
@@ -64,7 +63,7 @@ def test_v2_ten_update_training_smoke():
         key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
             rollout_key, env_state, turn_batch, train_state, policy, cfg
         )
-        assert isinstance(transitions, JaxTransitionBatchV2)
+        assert isinstance(transitions, JaxTransitionBatch)
         train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
         assert float(rollout_metrics["env_steps"]) == (
             cfg.training.rollout_steps * cfg.training.num_envs
@@ -84,7 +83,7 @@ def test_v2_four_player_random_rollout_smoke():
     _key, env_state, turn_batch, transitions, rollout_metrics = collect_rollout_jax(
         jax.random.PRNGKey(22), env_state, turn_batch, train_state, policy, cfg
     )
-    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert isinstance(transitions, JaxTransitionBatch)
     next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(rollout_metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
@@ -131,7 +130,7 @@ def test_v2_two_player_self_play_latest_rollout_smoke():
         cfg,
         stage_view=_stage_view(cfg),
     )
-    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert isinstance(transitions, JaxTransitionBatch)
     assert float(rollout_metrics["opponent_slots_total"]) == 2.0
     assert float(rollout_metrics["opponent_slots_latest"]) == 2.0
     assert float(rollout_metrics["opponent_slots_random"]) == 0.0
@@ -154,43 +153,7 @@ def test_v2_four_player_self_play_random_family_rollout_smoke():
         cfg,
         stage_view=_stage_view(cfg),
     )
-    assert isinstance(transitions, JaxTransitionBatchV2)
+    assert isinstance(transitions, JaxTransitionBatch)
     assert float(rollout_metrics["opponent_slots_total"]) == 6.0
     assert float(rollout_metrics["opponent_slots_random"]) == 6.0
     assert float(rollout_metrics["opponent_slots_latest"]) == 0.0
-
-
-@pytest.mark.jax
-def test_v2_shield_legal_non_noop_rate_within_v1_parity_band():
-    """Phase 3 gate: v2 learner shield rate within ±5pp of v1 on matched rollout."""
-    v1_cfg = TrainConfig()
-    v1_cfg.model.architecture = "gnn_pointer"
-    v1_cfg.task.encoding_version = "v1"
-    v1_cfg.task.candidate_count = 4
-    v1_cfg.task.max_fleets = 16
-    v1_cfg.model.hidden_size = 16
-    v1_cfg.model.max_moves_k = 2
-    v1_cfg.training.num_envs = 2
-    v1_cfg.training.rollout_steps = 4
-    v1_cfg.opponents.mode.opponent = "random"
-
-    v2_cfg = _v2_smoke_cfg(rollout_steps=4)
-    reset_keys = jax.random.split(jax.random.PRNGKey(50), v1_cfg.training.num_envs)
-
-    v1_state, v1_batch = batched_reset(reset_keys, v1_cfg.task)
-    v1_policy = build_jax_policy(v1_cfg)
-    v1_train = init_train_state(jax.random.PRNGKey(51), v1_policy, v1_cfg)
-    _, _, _, _, v1_metrics = collect_rollout_jax(
-        jax.random.PRNGKey(52), v1_state, v1_batch, v1_train, v1_policy, v1_cfg
-    )
-
-    v2_state, v2_batch = batched_reset(reset_keys, v2_cfg.task)
-    v2_policy = build_jax_policy(v2_cfg)
-    v2_train = init_train_state(jax.random.PRNGKey(53), v2_policy, v2_cfg)
-    _, _, _, _, v2_metrics = collect_rollout_jax(
-        jax.random.PRNGKey(54), v2_state, v2_batch, v2_train, v2_policy, v2_cfg
-    )
-
-    v1_rate = float(v1_metrics["trajectory_shield_legal_non_noop_rate"])
-    v2_rate = float(v2_metrics["trajectory_shield_legal_non_noop_rate"])
-    assert abs(v2_rate - v1_rate) <= 0.05

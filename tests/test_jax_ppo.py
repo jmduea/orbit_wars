@@ -14,12 +14,10 @@ from src.jax.train_state import init_train_state
 from src.jax.train import _sum_metric_dicts, init_rollout_groups
 
 
-@pytest.mark.parametrize(
-    "architecture", ["mlp", "attention", "transformer", "gnn_pointer"]
-)
-def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
+
+def test_end_to_end_jax_rollout_and_update_smoke():
     cfg = TrainConfig()
-    cfg.model.architecture = architecture
+    cfg.model.architecture = "gnn_pointer"
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -36,7 +34,7 @@ def test_end_to_end_jax_rollout_and_update_smoke(architecture: str):
     )
     next_train_state, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
-    assert transitions.self_features.shape[:3] == (
+    assert transitions.planet_features.shape[:3] == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         MAX_PLANETS,
@@ -75,8 +73,8 @@ def test_rollout_microbatching_preserves_full_environment_axis():
     )
 
     assert env_state.game.step.shape == (cfg.training.num_envs,)
-    assert turn_batch.self_features.shape[:2] == (cfg.training.num_envs, MAX_PLANETS)
-    assert transitions.self_features.shape[:3] == (
+    assert turn_batch.planet_features.shape[:2] == (cfg.training.num_envs, MAX_PLANETS)
+    assert transitions.planet_features.shape[:3] == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         MAX_PLANETS,
@@ -167,25 +165,30 @@ def _metric_chunk(**overrides: float) -> dict[str, jax.Array]:
 
 
 def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
-    from src.opponents.jax_actions.builders import build_action_from_batch, build_random_action_from_batch
+    from src.opponents.jax_actions.builders import (
+        build_action_from_edge_batch,
+        build_random_action_from_edge_batch,
+    )
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 4
     cfg.task.candidate_count = 4
     cfg.training.num_envs = 2
-    _env_state, turn_batch = batched_reset(
+    env_state, turn_batch = batched_reset(
         jax.random.split(jax.random.PRNGKey(42), cfg.training.num_envs), cfg.task
     )
-    target = jax.numpy.zeros((cfg.training.num_envs * MAX_PLANETS,), dtype=jax.numpy.int32)
-    bucket = jax.numpy.zeros_like(target)
+    target = jax.numpy.zeros((cfg.training.num_envs, 1), dtype=jax.numpy.int32)
+    bucket = jax.numpy.zeros((cfg.training.num_envs, 1), dtype=jax.numpy.int32)
 
-    action = build_action_from_batch(turn_batch, target, bucket, cfg)
+    action = build_action_from_edge_batch(
+        env_state.game, turn_batch, target, bucket, cfg
+    )
 
     assert action.source_id.shape == (cfg.training.num_envs, cfg.task.max_fleets)
     assert action.valid.shape == (cfg.training.num_envs, cfg.task.max_fleets)
 
-    random_action = build_random_action_from_batch(
-        jax.random.PRNGKey(7), turn_batch, cfg
+    random_action = build_random_action_from_edge_batch(
+        jax.random.PRNGKey(7), env_state.game, turn_batch, cfg
     )
 
     assert random_action.source_id.shape == (cfg.training.num_envs, cfg.task.max_fleets)
@@ -193,19 +196,28 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
 
 
 def test_jax_action_builder_emits_multiple_launch_slots_per_source():
-    from src.opponents.jax_actions.builders import build_action_from_batch
+    from src.features.registry import edge_k
+    from src.opponents.jax_actions.builders import build_action_from_edge_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 32
     cfg.task.candidate_count = 4
     cfg.training.num_envs = 1
-    _env_state, turn_batch = batched_reset(
+    env_state, turn_batch = batched_reset(
         jax.random.split(jax.random.PRNGKey(43), cfg.training.num_envs), cfg.task
     )
-    target = jax.numpy.ones((cfg.training.num_envs * MAX_PLANETS, 3), dtype=jax.numpy.int32)
-    bucket = jax.numpy.ones_like(target)
+    k = edge_k(cfg.task)
+    owned = env_state.game.planets.active & (
+        env_state.game.planets.owner == env_state.game.player
+    )
+    src_row = int(jax.numpy.argmax(owned.astype(jax.numpy.int32)))
+    flat_idx = src_row * k
+    target = jax.numpy.full((cfg.training.num_envs, 3), flat_idx, dtype=jax.numpy.int32)
+    bucket = jax.numpy.ones((cfg.training.num_envs, 3), dtype=jax.numpy.int32)
 
-    action = build_action_from_batch(turn_batch, target, bucket, cfg)
+    action = build_action_from_edge_batch(
+        env_state.game, turn_batch, target, bucket, cfg
+    )
 
     assert action.source_id.shape == (cfg.training.num_envs, cfg.task.max_fleets)
     assert action.valid.shape == (cfg.training.num_envs, cfg.task.max_fleets)
@@ -213,31 +225,42 @@ def test_jax_action_builder_emits_multiple_launch_slots_per_source():
 
 
 def test_jax_action_builder_invalid_step_does_not_consume_later_ships():
-    from src.opponents.jax_actions.builders import build_action_from_batch
+    from src.features.registry import edge_k
+    from src.opponents.jax_actions.builders import (
+        build_action_from_edge_batch,
+        noop_edge_index,
+        owned_planet_ships,
+    )
 
     cfg = TrainConfig()
     cfg.task.max_fleets = MAX_PLANETS * 2
     cfg.task.candidate_count = 4
     cfg.task.ship_bucket_count = 4
     cfg.training.num_envs = 1
-    _env_state, turn_batch = batched_reset(
+    env_state, turn_batch = batched_reset(
         jax.random.split(jax.random.PRNGKey(44), cfg.training.num_envs), cfg.task
     )
-    flat_decision = turn_batch.decision_mask.reshape(-1)
-    row_idx = int(jax.numpy.argmax(flat_decision))
-    source_ships = float(turn_batch.source_ships.reshape(-1)[row_idx])
-    target = jax.numpy.zeros((cfg.training.num_envs * MAX_PLANETS, 2), dtype=jax.numpy.int32)
-    bucket = jax.numpy.zeros_like(target)
-    target = target.at[row_idx, 0].set(0)
-    bucket = bucket.at[row_idx, 0].set(3)
-    target = target.at[row_idx, 1].set(1)
-    bucket = bucket.at[row_idx, 1].set(3)
+    k = edge_k(cfg.task)
+    owned = env_state.game.planets.active[0] & (
+        env_state.game.planets.owner[0] == env_state.game.player[0]
+    )
+    src_row = int(jax.numpy.argmax(owned.astype(jax.numpy.int32)))
+    source_ships = float(owned_planet_ships(env_state.game)[0, src_row])
+    noop_idx = noop_edge_index(cfg.task)
+    valid_edge = src_row * k
+    target = jax.numpy.zeros((cfg.training.num_envs, 2), dtype=jax.numpy.int32)
+    bucket = jax.numpy.zeros((cfg.training.num_envs, 2), dtype=jax.numpy.int32)
+    target = target.at[0, 0].set(noop_idx)
+    bucket = bucket.at[0, 0].set(3)
+    target = target.at[0, 1].set(valid_edge)
+    bucket = bucket.at[0, 1].set(3)
 
-    action = build_action_from_batch(turn_batch, target, bucket, cfg)
+    action = build_action_from_edge_batch(
+        env_state.game, turn_batch, target, bucket, cfg
+    )
 
-    fleet_slot = (row_idx % MAX_PLANETS) * 2 + 1
-    assert bool(action.valid[0, fleet_slot])
-    assert float(action.ships[0, fleet_slot]) == source_ships
+    assert bool(action.valid[0, 1])
+    assert float(action.ships[0, 1]) == source_ships
 
 
 def test_jax_checkpoint_roundtrip_restores_resume_metadata(tmp_path):
@@ -318,15 +341,14 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
         jax.random.PRNGKey(12), env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert transitions.self_features.shape[:3] == (
+    assert transitions.planet_features.shape[:3] == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         MAX_PLANETS,
     )
-    assert transitions.decision_mask.shape == (
+    assert transitions.target_index.shape == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
-        MAX_PLANETS,
         cfg.model.max_moves_k,
     )
     assert (
@@ -357,13 +379,13 @@ def test_collect_rollout_jax_two_player_static_shapes():
         jax.random.PRNGKey(62), env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert transitions.self_features.shape == (
+    assert transitions.planet_features.shape == (
         1,
         3,
         60,
-        transitions.self_features.shape[-1],
+        transitions.planet_features.shape[-1],
     )
-    assert transitions.decision_mask.shape == (1, 3, 60, cfg.model.max_moves_k)
+    assert transitions.target_index.shape == (1, 3, cfg.model.max_moves_k)
     assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
     from src.jax.env import assign_learner_players
@@ -384,7 +406,7 @@ def test_assign_learner_players_uses_env_index_and_episode_count():
     expected = (env_indices + episode_counts) % cfg.task.player_count
     assert jax.numpy.array_equal(env_state.learner_player, expected)
     assert jax.numpy.array_equal(env_state.episode_count, episode_counts)
-    assert turn_batch.self_features.shape[:2] == (cfg.training.num_envs, MAX_PLANETS)
+    assert turn_batch.planet_features.shape[:2] == (cfg.training.num_envs, MAX_PLANETS)
 
 
 def test_collect_rollout_jax_rotates_learner_after_reset_done():
@@ -476,13 +498,13 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
         jax.random.PRNGKey(92), env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert transitions.decision_mask.shape[-1] == cfg.model.max_moves_k
-    assert jax.numpy.array_equal(
-        transitions.decision_mask[..., 0], transitions.decision_mask[..., 1]
-    )
+    assert transitions.target_index.shape[-1] == cfg.model.max_moves_k
+    from src.jax.policy import edge_action_count
+
+    edge_count = edge_action_count(cfg.task)
     assert transitions.ship_bucket_mask.shape[-3:] == (
         cfg.model.max_moves_k,
-        cfg.task.candidate_count,
+        edge_count,
         cfg.task.ship_bucket_count,
     )
     assert "trajectory_shield_blocked_count" in rollout_metrics
@@ -522,7 +544,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
             train_state,
         )
         transitions_by_group.append(transitions)
-        assert transitions.self_features.shape[:3] == (
+        assert transitions.planet_features.shape[:3] == (
             cfg.training.rollout_steps,
             group.cfg.training.num_envs,
             MAX_PLANETS,
@@ -536,15 +558,14 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
 
     assert [group.cfg.task.player_count for group in groups] == [2, 4]
     assert set(jax.numpy.unique(combined.player_count).tolist()) == {2, 4}
-    assert combined.self_features.shape[:3] == (
+    assert combined.planet_features.shape[:3] == (
         cfg.training.rollout_steps,
         4,
         MAX_PLANETS,
     )
-    assert combined.decision_mask.shape == (
+    assert combined.target_index.shape == (
         cfg.training.rollout_steps,
         4,
-        MAX_PLANETS,
         cfg.model.max_moves_k,
     )
 

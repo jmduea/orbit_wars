@@ -162,23 +162,24 @@ def test_validate_tarball_layout_rejects_symlink(tmp_path: Path) -> None:
 def test_embedded_runtime_templates_compile() -> None:
     compile(MAIN_TEMPLATE, "generated_main.py", "exec")
     compile(IN_CONTAINER_VALIDATOR, "validate_submission.py", "exec")
-    assert "encoding_version_v2" in MAIN_TEMPLATE or "_encoding_version_v2" in MAIN_TEMPLATE
-    assert "_agent_v2" in MAIN_TEMPLATE
-    assert "encode_turn_dispatch" in MAIN_TEMPLATE
+    assert "_agent_v1" not in MAIN_TEMPLATE
+    assert "encoding_version" not in MAIN_TEMPLATE
+    assert "empty_feature_history" in MAIN_TEMPLATE
+    assert "FeatureExtractor" in MAIN_TEMPLATE
 
 
-def test_export_runtime_artifact_accepts_gnn_pointer_v2(tmp_path: Path) -> None:
+def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
     checkpoint = tmp_path / "jax_ckpt_v2.pkl"
     config = _fake_config()
-    config.model.architecture = "gnn_pointer_v2"
-    config.task.encoding_version = "v2"
+    config.model.architecture = "gnn_pointer"
     payload = {
         "update": 3,
-        "params": {"params": {"planet_enc_0": {"kernel": np.zeros((13, 16), dtype=np.float32)}}},
+        "params": {
+            "params": {"planet_enc_0": {"kernel": np.zeros((13, 16), dtype=np.float32)}}
+        },
         "config": config,
         "feature_metadata": {
             "schema_version": 2,
-            "encoding_version": "v2",
             "planet_feature_dim": 13,
             "edge_feature_dim": 12,
             "global_feature_dim": 46,
@@ -193,5 +194,5 @@ def test_export_runtime_artifact_accepts_gnn_pointer_v2(tmp_path: Path) -> None:
 
     artifact = export_runtime_artifact(checkpoint)
 
-    assert artifact["config"]["model"]["architecture"] == "gnn_pointer_v2"
-    assert artifact["config"]["task"]["encoding_version"] == "v2"
+    assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
+    assert artifact["feature_metadata"]["schema_version"] == 2
