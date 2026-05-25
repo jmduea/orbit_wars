@@ -4,7 +4,7 @@ defaults:
   - reward: terminal_only
   - training: default
   - format: 2p_32env
-  - curriculum: default
+  - curriculum: self_play_staged
   - opponents: self_play_curriculum
   - telemetry: default
   - artifacts: default
