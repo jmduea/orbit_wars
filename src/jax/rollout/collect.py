@@ -31,7 +31,7 @@ from src.opponents.jax_actions.sampling import (
 from src.opponents.pool import OPPONENT_HISTORICAL, OPPONENT_LATEST, sample_opponent_type_ids_jax
 from src.training.curriculum import StageView, default_stage_view
 
-from .metrics import rollout_metrics
+from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
 
 
 def collect_rollout_jax(
@@ -247,15 +247,14 @@ def collect_rollout_jax(
             "terminal_placement": result.terminal_placement,
             "terminal_survival_time": result.terminal_survival_time,
             "terminal_score_share": result.terminal_score_share,
-            "opponent_slots_total": family_counts["opponent_slots_total"],
-            "opponent_slots_latest": family_counts["opponent_slots_latest"],
-            "opponent_slots_historical": family_counts["opponent_slots_historical"],
-            "opponent_slots_random": family_counts["opponent_slots_random"],
-            "opponent_slots_noop": family_counts["opponent_slots_noop"],
-            "opponent_slots_nearest_sniper": family_counts["opponent_slots_nearest_sniper"],
-            "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
-            "opponent_slots_opportunistic": family_counts["opponent_slots_opportunistic"],
-            "opponent_historical_fallback_latest_slots": historical_fallback_slots,
+            **{
+                key: (
+                    historical_fallback_slots
+                    if key == "opponent_historical_fallback_latest_slots"
+                    else family_counts[key]
+                )
+                for key in OPPONENT_SLOT_METRIC_KEYS
+            },
             "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
             "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
             "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,

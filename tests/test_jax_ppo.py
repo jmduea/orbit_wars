@@ -448,7 +448,7 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
 
 
 def test_collect_rollout_jax_emits_training_scalar_metric_contract():
-    from src.jax.train import _BASE_ROLLOUT_SCALAR_KEYS
+    from src.jax.rollout.metrics import BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS
 
     cfg = TrainConfig()
     cfg.model.hidden_size = 16

@@ -108,6 +108,18 @@ def _opponent_count_metrics(
     }
 
 
+OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
+    "opponent_slots_total",
+    "opponent_slots_latest",
+    "opponent_slots_historical",
+    "opponent_slots_random",
+    "opponent_slots_noop",
+    "opponent_slots_nearest_sniper",
+    "opponent_slots_turtle",
+    "opponent_slots_opportunistic",
+)
+
+
 def _single_stage_family_id(stage_view: StageView) -> jax.Array:
     """Return the sole configured opponent family id, or -1 for true mixtures."""
 

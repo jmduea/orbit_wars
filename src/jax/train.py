@@ -54,6 +54,11 @@ from .rollout.collect import collect_rollout_jax  # noqa: E402
 from .rollout.types import JaxTransitionBatch  # noqa: E402
 from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
 
+from src.jax.rollout.metrics import (  # noqa: E402
+    BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS,
+    trajectory_shield_legal_rate,
+)
+
 
 @dataclass(slots=True)
 class JaxRolloutGroup:
@@ -75,70 +80,6 @@ class HistoricalSnapshotPool:
     next_slot: int = 0
     next_id: int = 1
 
-
-_BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
-    "samples",
-    "env_steps",
-    "episode_done",
-    "average_reward",
-    "episode_reward_mean",
-    "episodes_2p",
-    "episodes_4p",
-    "wins_2p",
-    "first_places_4p",
-    "placement_4p_sum",
-    "survival_time_sum",
-    "score_share_sum",
-    "decision_count",
-    "noop_count",
-    "friendly_target_count",
-    "enemy_target_count",
-    "neutral_target_count",
-    "trajectory_shield_blocked_count",
-    "trajectory_shield_blocked_sun_count",
-    "trajectory_shield_blocked_bounds_count",
-    "trajectory_shield_blocked_unintended_hit_count",
-    "trajectory_shield_blocked_horizon_count",
-    "trajectory_shield_fallback_noop_count",
-    "trajectory_shield_legal_non_noop_count",
-    "trajectory_shield_original_non_noop_count",
-    "trajectory_shield_legal_non_noop_rate",
-    "overall_win_rate",
-    "noop_percent",
-    "friendly_target_percent",
-    "enemy_target_percent",
-    "neutral_target_percent",
-    "opponent_current_slots",
-    "opponent_random_slots",
-    "opponent_snapshot_slots",
-    "opponent_slots_total",
-    "opponent_slots_latest",
-    "opponent_slots_historical",
-    "opponent_slots_random",
-    "opponent_slots_noop",
-    "opponent_slots_nearest_sniper",
-    "opponent_slots_turtle",
-    "opponent_slots_opportunistic",
-    "opponent_historical_fallback_latest_slots",
-    "won_non_noop_actions_per_step",
-    "lost_non_noop_actions_per_step",
-    "won_avg_fleet_launch_size",
-    "lost_avg_fleet_launch_size",
-    "won_avg_planets_owned",
-    "lost_avg_planets_owned",
-    "won_avg_planets_lost",
-    "lost_avg_planets_lost",
-    "won_avg_planets_taken",
-    "lost_avg_planets_taken",
-    "won_avg_garrisoned_ships_per_planet",
-    "lost_avg_garrisoned_ships_per_planet",
-    "won_avg_planet_diff",
-    "lost_avg_planet_diff",
-    "won_avg_production_diff",
-    "lost_avg_production_diff",
-    "won_avg_launch_fleet_speed",
-    "lost_avg_launch_fleet_speed",
-)
 
 
 def _copy_config_for_rollout_group(
@@ -332,11 +273,9 @@ def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str,
         metrics["only_noop_rows"] / metrics["valid_non_noop_target_rows"],
         0.0,
     )
-    metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
-        metrics["trajectory_shield_original_non_noop_count"] > 0.0,
-        metrics["trajectory_shield_legal_non_noop_count"]
-        / metrics["trajectory_shield_original_non_noop_count"],
-        0.0,
+    metrics["trajectory_shield_legal_non_noop_rate"] = trajectory_shield_legal_rate(
+        legal=metrics["trajectory_shield_legal_non_noop_count"],
+        original=metrics["trajectory_shield_original_non_noop_count"],
     )
     metrics["overall_win_rate"] = jnp.where(
         metrics["episode_done"] > 0.0,
@@ -1181,17 +1120,6 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             rollout_groups = merged_groups
             transitions = concatenate_transition_batches(transitions_by_group)
             rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
-            shield_original_count = rollout_metrics.get(
-                "trajectory_shield_original_non_noop_count", 0.0
-            )
-            shield_legal_count = rollout_metrics.get(
-                "trajectory_shield_legal_non_noop_count", 0.0
-            )
-            rollout_metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
-                shield_original_count > 0.0,
-                shield_legal_count / shield_original_count,
-                0.0,
-            )
             rollout_scalar_keys = (
                 *_BASE_ROLLOUT_SCALAR_KEYS,
                 cfg.training.plateau_metric,
