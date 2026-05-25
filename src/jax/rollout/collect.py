@@ -13,11 +13,13 @@ from src.jax.env import (
     batched_step_multi_player,
 )
 from src.jax.features import TurnBatch
-from src.jax.ppo_update import discounted_returns
+from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.artifacts.checkpoint_compat import is_factorized_pointer_decoder
 from src.opponents.jax_actions.builders import (
     _sample_shielded_sequence_with_params,
     build_action_from_edge_batch,
+    build_action_from_factored_batch,
 )
 from src.opponents.jax_actions.sampling import (
     _maybe_effective_single_family_id,
@@ -77,9 +79,21 @@ def collect_rollout_jax(
             cfg,
             deterministic=False,
         )
-        learner_action = build_action_from_edge_batch(
-            state.game, batch, sample.target_index, sample.ship_bucket, cfg
-        )
+        if is_factorized_pointer_decoder(cfg.model):
+            learner_action = build_action_from_factored_batch(
+                state.game,
+                batch,
+                sample.source_index,
+                sample.target_slot,
+                sample.ship_bucket,
+                sample.stop_flag,
+                sample.step_mask,
+                cfg,
+            )
+        else:
+            learner_action = build_action_from_edge_batch(
+                state.game, batch, sample.target_index, sample.ship_bucket, cfg
+            )
 
         single_family_id = _single_stage_family_id(active_stage_view)
         effective_single_family_id = _maybe_effective_single_family_id(
@@ -239,6 +253,10 @@ def collect_rollout_jax(
             "ship_bucket_mask": sample.ship_bucket_mask,
             "target_index": sample.target_index,
             "ship_bucket": sample.ship_bucket,
+            "source_index": sample.source_index,
+            "target_slot": sample.target_slot,
+            "stop_flag": sample.stop_flag,
+            "step_mask": sample.step_mask,
             "log_prob": sample.log_prob,
             "value": sample.value,
             "reward": result.reward,
@@ -282,11 +300,19 @@ def collect_rollout_jax(
         None,
         length=cfg.training.rollout_steps,
     )
-    returns_step = discounted_returns(data["reward"], data["done"], cfg.training.gamma)
+    returns_step, advantages_step = gae_returns_and_advantages(
+        data["reward"],
+        data["value"],
+        data["done"],
+        gamma=cfg.training.gamma,
+        gae_lambda=cfg.training.gae_lambda,
+    )
     returns = jnp.broadcast_to(
         returns_step[..., None], data["target_index"].shape
     )
-    advantages = returns - data["value"][..., None]
+    advantages = jnp.broadcast_to(
+        advantages_step[..., None], data["target_index"].shape
+    )
     transitions = JaxTransitionBatch(
         planet_features=data["planet_features"],
         planet_mask=data["planet_mask"],
@@ -303,6 +329,10 @@ def collect_rollout_jax(
         log_prob=data["log_prob"],
         returns=returns,
         advantages=advantages,
+        source_index=data["source_index"],
+        target_slot=data["target_slot"],
+        stop_flag=data["stop_flag"],
+        step_mask=data["step_mask"],
     )
     metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     return key, env_state, turn_batch, transitions, metrics

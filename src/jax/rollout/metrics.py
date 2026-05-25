@@ -71,6 +71,8 @@ BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     "lost_avg_production_diff",
     "won_avg_launch_fleet_speed",
     "lost_avg_launch_fleet_speed",
+    "stop_rate",
+    "mean_active_launches_per_turn",
 )
 
 # Backward-compatible alias for train/tests imports.
@@ -217,6 +219,8 @@ def _core_metric_fields(
         "lost_avg_production_diff": ZERO_F32,
         "won_avg_launch_fleet_speed": ZERO_F32,
         "lost_avg_launch_fleet_speed": ZERO_F32,
+        "stop_rate": ZERO_F32,
+        "mean_active_launches_per_turn": ZERO_F32,
         "loss_sample_count_2p": ZERO_F32,
         "loss_sample_count_4p": ZERO_F32,
     }
@@ -236,6 +240,27 @@ def _apply_shield_metrics(metrics: dict[str, jax.Array], data: dict[str, jax.Arr
     )
     for key in TRAJECTORY_SHIELD_COUNT_KEYS:
         metrics[key] = data[key].sum()
+
+
+
+
+def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax.Array]) -> None:
+    stop_flag = data.get("stop_flag")
+    step_mask = data.get("step_mask")
+    ship_bucket = data.get("ship_bucket")
+    if stop_flag is None or step_mask is None or ship_bucket is None:
+        return
+    active = step_mask.astype(jnp.float32)
+    active_sum = active.sum()
+    stop_sum = (stop_flag.astype(jnp.float32) * active).sum()
+    launch_sum = (
+        active
+        * (1.0 - stop_flag.astype(jnp.float32))
+        * (ship_bucket.astype(jnp.float32) > 0.0)
+    ).sum()
+    turn_count = jnp.asarray(stop_flag.shape[0] * stop_flag.shape[1], dtype=jnp.float32)
+    metrics["stop_rate"] = _safe_rate(stop_sum, active_sum)
+    metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
 
 
 def rollout_metrics(
@@ -258,4 +283,5 @@ def rollout_metrics(
     )
     if not cfg.training.lean_rollout_metrics:
         _apply_shield_metrics(metrics, data)
+    _apply_factorized_metrics(metrics, data)
     return metrics

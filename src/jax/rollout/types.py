@@ -29,6 +29,10 @@ class JaxTransitionBatch(NamedTuple):
     log_prob: jax.Array
     returns: jax.Array
     advantages: jax.Array
+    source_index: jax.Array
+    target_slot: jax.Array
+    stop_flag: jax.Array
+    step_mask: jax.Array
 
 
 @flax.struct.dataclass
@@ -48,3 +52,7 @@ class ShieldedSequenceSample(NamedTuple):
     value: jax.Array
     ship_bucket_mask: jax.Array
     diagnostics: ShieldDiagnostics
+    source_index: jax.Array
+    target_slot: jax.Array
+    stop_flag: jax.Array
+    step_mask: jax.Array
