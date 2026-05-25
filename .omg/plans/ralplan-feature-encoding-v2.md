@@ -138,40 +138,41 @@ uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "jax and n
 
 ---
 
-## Phase 2 — Policy v2 (GNN only)
+## Phase 2 — Policy v2 (GNN only) — COMPLETE (2026-05-25)
 
 **Prerequisite:** Phase 1 exit criteria met.
 
 **Scope:**
-- `PlanetEdgeBackboneEncoder` + `gnn_pointer_v2` in `src/jax/policy.py` (or `policy_v2.py`)
+- `PlanetEdgeBackboneEncoder` + `gnn_pointer_v2` in `src/jax/policy_v2.py`
 - `EncoderOutputV2` contract
 - `build_jax_policy` version branch
 - `train_state.py` dummy init + shape validation for v2 weights
 
 **Exit:**
-- [ ] Forward + sample on synthetic `JaxTurnBatchV2`
-- [ ] `make test-domain-policy` + relevant `test-jax` green
-- [ ] 10-update training smoke with `encoding_version=v2`
+- [x] Forward + sample on synthetic `JaxTurnBatchV2`
+- [x] `make test-domain-policy` + relevant `test-jax` green
+- [x] 10-update training smoke with `encoding_version=v2` (`test_v2_ten_update_training_smoke`)
 
 **Deferred:** `transformer_v2` (post-ablation).
 
 ---
 
-## Phase 3 — Joint Pointer + Shield + Rollout
+## Phase 3 — Joint Pointer + Shield + Rollout — IN PROGRESS
 
 **Prerequisite:** Phase 2 forward/sample smoke green.
 
 **Scope:**
-- Joint edge pointer decoder (not adapted slot decoder)
+- Joint edge pointer decoder (adapted slot decoder over flat edge list + NO_OP)
 - `trajectory_shield` edge-batch variant
-- `opponents/jax_actions/builders.py` — `build_action_from_edge_batch`
-- `rollout/types.py`, `collect.py`, `ppo_update.py` — v2 transitions + flatten
-- `env.py` — encode dispatch + history type
+- `opponents/jax_actions/builders_v2.py` — `build_action_from_edge_batch`
+- `rollout/types.py`, `collect_v2.py`, `ppo_update_v2.py` — v2 transitions + flatten
+- `env.py` — encode dispatch + history type (`encode_dispatch.py`)
 
 **Exit:**
+- [x] 2p random-opponent rollout + PPO smoke (`test_v2_rollout_and_ppo_update_smoke`)
 - [ ] End-to-end rollout smoke 2p + 4p (500 updates)
 - [ ] Shield diagnostics within ±5pp of v1 baseline
-- [ ] `make test-domain-jax-env` green
+- [x] `make test-domain-jax-env` green
 
 **Gate:** `jax-ppo-split` complete.
 
@@ -256,7 +257,7 @@ uv run --group dev pytest tests/test_feature_encoding_v2_golden.py -m "jax and n
 
 **User selections:** Option A (top-K edges); Phase 0 complete; Phase 1 interview locks side-by-side + H>1.
 
-**Status:** Phase 0 **COMPLETE** · Phase 1 **COMPLETE** (2026-05-25) — Phase 2 policy next.
+**Status:** Phase 0 **COMPLETE** · Phase 1 **COMPLETE** · Phase 2 **COMPLETE** (2026-05-25) · Phase 3 **IN PROGRESS** (2p random rollout wired).
 
 ---
 

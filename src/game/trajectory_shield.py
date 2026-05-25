@@ -3,8 +3,14 @@ from __future__ import annotations
 import math
 from typing import Any, NamedTuple
 
-import jax
 import jax.numpy as jnp
+
+import jax
+from src.jax.policy import (
+    JaxPolicyOutput,
+    action_log_prob_and_entropy,
+    ensure_policy_sequence,
+)
 
 from .constants import (
     BOARD_CENTER,
@@ -17,11 +23,6 @@ from .constants import (
     SUN_RADIUS,
 )
 from .types import GameState, PlanetState
-from src.jax.policy import (
-    JaxPolicyOutput,
-    action_log_prob_and_entropy,
-    ensure_policy_sequence,
-)
 
 SAFE_REASON = "safe"
 SUN_REASON = "sun"
@@ -1173,6 +1174,214 @@ def apply_trajectory_shield_to_turn_batch(
     )
     return ShieldedBatchResult(
         batch=batch._replace(candidate_mask=shielded_candidate_mask),
+        ship_bucket_mask=ship_bucket_mask,
+        diagnostics=diagnostics,
+    )
+
+
+def default_edge_action_bucket_mask(
+    edge_action_mask: jax.Array, ship_bucket_count: int
+) -> jax.Array:
+    """Default bucket legality for flat edge actions including trailing NO_OP."""
+
+    if edge_action_mask.ndim == 1:
+        edge_action_mask = edge_action_mask[None, :]
+    bucket_ids = jnp.arange(max(int(ship_bucket_count), 1), dtype=jnp.int32)
+    bucket_is_noop = bucket_ids == 0
+    edge_count = edge_action_mask.shape[-1]
+    edge_ids = jnp.arange(edge_count, dtype=jnp.int32)
+    noop_edge = edge_ids == jnp.maximum(edge_count - 1, 0)
+    per_edge_bucket = jnp.where(
+        noop_edge[:, None],
+        bucket_is_noop[None, :],
+        ~bucket_is_noop[None, :],
+    )
+    return edge_action_mask.astype(bool)[..., None] & per_edge_bucket
+
+
+def mask_policy_output_for_shield_v2(
+    output: JaxPolicyOutput,
+    edge_action_mask: jax.Array,
+    ship_bucket_count: int,
+    ship_bucket_mask: jax.Array | None = None,
+) -> JaxPolicyOutput:
+    target_logits = ensure_policy_sequence(output.target_logits)
+    ship_logits = output.ship_logits
+    if ship_logits.ndim == 3:
+        ship_logits = ship_logits[:, None, :, :]
+    base_mask = edge_action_mask.astype(bool)
+    if base_mask.ndim == 1:
+        base_mask = base_mask[None, :]
+    if ship_bucket_mask is None:
+        ship_bucket_mask = default_edge_action_bucket_mask(base_mask, ship_bucket_count)
+    elif ship_bucket_mask.ndim == 4 and ship_bucket_mask.shape[0] != base_mask.shape[0]:
+        ship_bucket_mask = ship_bucket_mask.reshape(
+            -1, ship_bucket_mask.shape[-2], ship_bucket_mask.shape[-1]
+        )
+    ship_bucket_mask = ship_bucket_mask.astype(bool)
+    sequence_k = target_logits.shape[1]
+    if ship_bucket_mask.ndim == 3:
+        sequence_ship_bucket_mask = jnp.broadcast_to(
+            ship_bucket_mask[:, None, :, :],
+            (
+                base_mask.shape[0],
+                sequence_k,
+                ship_logits.shape[-2],
+                ship_logits.shape[-1],
+            ),
+        )
+    else:
+        sequence_ship_bucket_mask = ship_bucket_mask
+    target_mask = base_mask[:, None, :] & sequence_ship_bucket_mask.any(axis=-1)
+    illegal_logit = jnp.finfo(jnp.float32).min
+    masked_target_logits = jnp.where(target_mask, target_logits, illegal_logit)
+    masked_ship_logits = jnp.where(
+        sequence_ship_bucket_mask, ship_logits, illegal_logit
+    )
+    return output._replace(
+        target_logits=masked_target_logits, ship_logits=masked_ship_logits
+    )
+
+
+def _launch_angle_for_edge(game, edge_tgt_ids, src_row, slot):
+    src_x = game.planets.x[src_row]
+    src_y = game.planets.y[src_row]
+    tgt_id = edge_tgt_ids[src_row, slot]
+    match = game.planets.id == tgt_id
+    tgt_x = jnp.sum(jnp.where(match, game.planets.x, 0.0))
+    tgt_y = jnp.sum(jnp.where(match, game.planets.y, 0.0))
+    return jnp.arctan2(tgt_y - src_y, tgt_x - src_x)
+
+
+def apply_trajectory_shield_to_turn_batch_v2(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    from src.features.registry_v2 import edge_k
+
+    k = edge_k(env_cfg)
+    edge_count = MAX_PLANETS * k + 1
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    edge_action_mask = jnp.concatenate(
+        [batch.edge_mask.reshape(MAX_PLANETS * k), jnp.ones((1,), dtype=bool)], axis=0
+    )
+    default_bucket_mask = default_edge_action_bucket_mask(
+        edge_action_mask[None, :], bucket_count
+    ).squeeze(0)
+    original_real_mask = batch.edge_mask.reshape(MAX_PLANETS * k)
+    original_legal_total = original_real_mask.astype(jnp.float32).sum()
+    planet_ships = (
+        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
+    )
+
+    if not trajectory_shield_enabled(env_cfg) or k == 0:
+        diagnostics = ShieldDiagnostics(
+            blocked_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_sun_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_bounds_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_unintended_hit_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_horizon_count=jnp.asarray(0.0, dtype=jnp.float32),
+            fallback_noop_count=jnp.asarray(0.0, dtype=jnp.float32),
+            legal_non_noop_count=original_legal_total,
+            original_non_noop_count=original_legal_total,
+            legal_non_noop_rate=jnp.where(original_legal_total > 0.0, 1.0, 0.0),
+        )
+        return ShieldedBatchResult(
+            batch=batch,
+            ship_bucket_mask=default_bucket_mask,
+            diagnostics=diagnostics,
+        )
+
+    bucket_ids = jnp.arange(1, bucket_count, dtype=jnp.int32)
+
+    def evaluate_flat_edge(flat_idx):
+        src_row = flat_idx // k
+        slot = flat_idx % k
+        original_mask = batch.edge_mask[src_row, slot]
+        target_id = batch.edge_tgt_ids[src_row, slot]
+        source_id = batch.edge_src_ids[src_row]
+        angle = _launch_angle_for_edge(game, batch.edge_tgt_ids, src_row, slot)
+        source_ships = planet_ships[src_row]
+        ship_counts = ship_count_for_bucket_jax(
+            jnp.broadcast_to(source_ships, bucket_ids.shape), bucket_ids, bucket_count
+        )
+        static_fast_path_enabled = _static_pair_fast_path_enabled_jax(
+            game, source_id, target_id, angle
+        )
+
+        def evaluate_static(_):
+            return _static_trajectory_reason_codes_jax(
+                game,
+                source_id,
+                target_id,
+                angle,
+                ship_counts,
+                game.player,
+                env_cfg,
+            )
+
+        def evaluate_dynamic(_):
+            return jax.vmap(
+                lambda ships: _trajectory_reason_code_jax(
+                    game,
+                    source_id,
+                    target_id,
+                    angle,
+                    ships,
+                    game.player,
+                    env_cfg,
+                )
+            )(ship_counts)
+
+        reason_codes = jax.lax.cond(
+            static_fast_path_enabled, evaluate_static, evaluate_dynamic, operand=None
+        )
+        bucket_legal = reason_codes == _REASON_TO_CODE[SAFE_REASON]
+        bucket_legal = bucket_legal & (ship_counts <= source_ships)
+        legal = jnp.any(bucket_legal)
+        legal = original_mask & (target_id >= 0) & legal
+        return legal, bucket_legal
+
+    shielded_real_mask, legal_bucket_mask = jax.vmap(evaluate_flat_edge)(
+        jnp.arange(MAX_PLANETS * k, dtype=jnp.int32)
+    )
+    real_bucket_rows = jnp.concatenate(
+        [
+            jnp.zeros((MAX_PLANETS * k, 1), dtype=bool),
+            legal_bucket_mask,
+        ],
+        axis=-1,
+    )
+    ship_bucket_mask = jnp.concatenate(
+        [default_bucket_mask[: MAX_PLANETS * k], default_bucket_mask[-1:]], axis=0
+    )
+    ship_bucket_mask = ship_bucket_mask.at[: MAX_PLANETS * k].set(real_bucket_rows)
+
+    blocked_slots = original_real_mask & (~shielded_real_mask)
+    shielded_legal_total = shielded_real_mask.astype(jnp.float32).sum()
+    legal_non_noop_rate = jnp.where(
+        original_legal_total > 0.0,
+        shielded_legal_total / original_legal_total,
+        0.0,
+    )
+    diagnostics = ShieldDiagnostics(
+        blocked_count=blocked_slots.astype(jnp.float32).sum(),
+        blocked_sun_count=(blocked_slots).astype(jnp.float32).sum() * 0.0,
+        blocked_bounds_count=(blocked_slots).astype(jnp.float32).sum() * 0.0,
+        blocked_unintended_hit_count=(blocked_slots).astype(jnp.float32).sum() * 0.0,
+        blocked_horizon_count=(blocked_slots).astype(jnp.float32).sum() * 0.0,
+        fallback_noop_count=(
+            (original_real_mask.any()) & (~shielded_real_mask.any())
+        ).astype(jnp.float32),
+        legal_non_noop_count=shielded_legal_total,
+        original_non_noop_count=original_legal_total,
+        legal_non_noop_rate=legal_non_noop_rate,
+    )
+    shielded_edge_mask = shielded_real_mask.reshape(batch.edge_mask.shape)
+    return ShieldedBatchResult(
+        batch=batch._replace(edge_mask=shielded_edge_mask),
         ship_bucket_mask=ship_bucket_mask,
         diagnostics=diagnostics,
     )

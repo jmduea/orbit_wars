@@ -1,4 +1,4 @@
-# Phase 0 config sketch — not wired until Phase 1+.
+# Phase 2 policy preset — pair with task.encoding_version=v2 (env wiring is Phase 3).
 # Side-by-side with model=gnn_pointer (v1 encoding).
 architecture: gnn_pointer_v2
 hidden_size: 224

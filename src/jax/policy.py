@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import flax.linen as nn
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import TrainConfig
 from src.features.registry import candidate_feature_schema
 
@@ -717,10 +717,15 @@ def build_jax_policy(
             value_head_module=value_head_module,
             hidden_size=hidden,
         )
+    elif normalized_architecture == "gnn_pointer_v2":
+        from .policy_v2 import build_gnn_pointer_v2_policy
+
+        return build_gnn_pointer_v2_policy(cfg)
     else:
         raise ValueError(
             f"Unsupported JAX model architecture '{cfg.model.architecture}'. Expected 'mlp', "
-            "'attention', 'transformer', 'mlp_pointer', 'transformer_pointer', or 'gnn_pointer'."
+            "'attention', 'transformer', 'mlp_pointer', 'transformer_pointer', "
+            "'gnn_pointer', or 'gnn_pointer_v2'."
         )
 
 

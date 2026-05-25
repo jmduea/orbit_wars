@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import jax.numpy as jnp
 import optax
 
 import jax
-import jax.numpy as jnp
-
 from src.config import TrainConfig
 from src.features.registry import (
     candidate_feature_dim,
@@ -15,7 +14,7 @@ from src.game.trajectory_shield import mask_policy_output_for_shield
 
 from .features import JaxTurnBatch
 from .policy import action_log_prob_and_entropy
-from .rollout.types import JaxTransitionBatch, JaxTrainState
+from .rollout.types import JaxTrainState, JaxTransitionBatch
 
 
 def flatten_batch(
@@ -92,6 +91,12 @@ def ppo_update_jax(
     and the ``training.update_chunk_rows_min``/``training.update_chunk_rows_max``
     limits so rollouts can trade memory pressure for throughput.
     """
+    from src.jax.train_state import uses_v2_policy_batch
+
+    if uses_v2_policy_batch(cfg):
+        from .ppo_update_v2 import ppo_update_jax_v2
+
+        return ppo_update_jax_v2(train_state, policy, batch, cfg)
 
     sequence_k = batch.target_index.shape[-1]
     mask = batch.decision_mask.reshape(-1, sequence_k).astype(jnp.float32)

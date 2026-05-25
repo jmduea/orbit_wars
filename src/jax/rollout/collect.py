@@ -61,6 +61,24 @@ def collect_rollout_jax(
     advances the vectorized JAX environment, resets completed episodes, and
     returns PPO transitions plus rollout metrics.
     """
+    from src.jax.train_state import uses_v2_policy_batch
+
+    if uses_v2_policy_batch(cfg):
+        from .collect_v2 import collect_rollout_jax_v2
+
+        return collect_rollout_jax_v2(
+            key,
+            env_state,
+            turn_batch,
+            train_state,
+            policy,
+            cfg,
+            opponent_params_by_player=opponent_params_by_player,
+            stage_view=stage_view,
+            historical_params_pool=historical_params_pool,
+            update=update,
+            env_index_offset=env_index_offset,
+        )
 
     env_indices = jnp.arange(turn_batch.self_features.shape[0], dtype=jnp.int32) + jnp.asarray(
         env_index_offset, dtype=jnp.int32

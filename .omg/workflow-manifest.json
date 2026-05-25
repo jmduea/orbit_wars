@@ -584,7 +584,7 @@
       "supersedes_id": null,
       "completed_at": null,
       "evidence": "Phase 0 complete 2026-05-25: docs/feature-encoding-v2-phase0-results.md; spike script; P=13 E=12 G=46 locked; jax-ppo-split gate cleared",
-      "notes": "v2 greenfield: planet+edge encoder, joint pointer, side-by-side v1; Phase 1 encoder next"
+      "notes": "Phase 1 encoder complete; Phase 2 policy complete; Phase 3 rollout in progress"
     },
     {
       "id": "feature-encoding-v2-plan",
@@ -593,15 +593,13 @@
       "workflow": "ralplan",
       "status": "executing",
       "title": "Feature encoding v2 implementation plan",
-      "spec_id": null,
-      "plan_id": null,
       "related_ids": [
         "feature-encoding-trace"
       ],
       "supersedes_id": null,
       "completed_at": null,
-      "evidence": "ralplan iteration 3: Phase 1 expanded with JaxTurnBatchV2 contract, boundary matrix, interview locks",
-      "notes": "Phase 0 complete; Phase 1 ready for execution"
+      "evidence": "Phase 2 complete: policy_v2 (PlanetEdgeBackboneEncoder, gnn_pointer_v2), train_state v2 init, test_jax_policy_v2 + test_v2_ten_update_training_smoke. Phase 3 partial: encode_dispatch, builders_v2, trajectory_shield v2, collect_v2, ppo_update_v2; 2p random rollout smoke; make test-domain-policy 22 passed, test-jax green",
+      "notes": "Phase 3 remaining: 4p/self-play rollout, 500-update smoke, shield parity gates"
     },
     {
       "id": "feature-encoding-v2-phase1",
@@ -610,13 +608,16 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Feature encoding v2 Phase 1 encoder",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "feature-encoding",
         "feature-encoding-v2-plan"
       ],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "registry_v2, features_v2, TaskConfig encoding_version/ship_feature_scale; make test-domain-features 22 passed; jax vmap smoke 1 passed"
+      "evidence": "registry_v2, features_v2, TaskConfig encoding_version/ship_feature_scale; make test-domain-features 22 passed; jax vmap smoke 1 passed",
+      "notes": null
     }
   ]
 }

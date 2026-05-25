@@ -40,6 +40,26 @@ class JaxTrainState:
     optimizer: optax.GradientTransformation = flax.struct.field(pytree_node=False)
 
 
+class JaxTransitionBatchV2(NamedTuple):
+    """Rollout data for v2 planet-edge encoding."""
+
+    planet_features: jax.Array
+    planet_mask: jax.Array
+    edge_features: jax.Array
+    edge_mask: jax.Array
+    edge_src_ids: jax.Array
+    edge_tgt_ids: jax.Array
+    global_features: jax.Array
+    theta_ref: jax.Array
+    player_count: jax.Array
+    ship_bucket_mask: jax.Array
+    target_index: jax.Array
+    ship_bucket: jax.Array
+    log_prob: jax.Array
+    returns: jax.Array
+    advantages: jax.Array
+
+
 class ShieldedSequenceSample(NamedTuple):
     target_index: jax.Array
     ship_bucket: jax.Array

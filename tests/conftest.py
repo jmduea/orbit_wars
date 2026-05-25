@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -22,9 +22,12 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_feature_registry.py": "features",
     "test_normalization.py": "features",
     "test_jax_env.py": "jax_env",
+    "test_jax_env_v2_dispatch.py": "jax_env",
     "test_jax_env_parity.py": "jax_env",
     "test_jax_policy.py": "policy",
+    "test_jax_policy_v2.py": "policy",
     "test_jax_ppo.py": "policy",
+    "test_jax_rollout_v2.py": "policy",
     "test_trajectory_shield.py": "policy",
     "test_artifact_pipeline.py": "artifacts",
     "test_replay.py": "artifacts",
@@ -36,9 +39,12 @@ DOMAIN_BY_FILE: dict[str, str] = {
 FULL_JAX_FILES = frozenset(
     {
         "test_jax_env.py",
+        "test_jax_env_v2_dispatch.py",
         "test_jax_env_parity.py",
         "test_jax_policy.py",
+        "test_jax_policy_v2.py",
         "test_jax_ppo.py",
+        "test_jax_rollout_v2.py",
     }
 )
 
