@@ -6,9 +6,11 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 import jax
-from src.jax.policy import (
+from src.jax.action_codec import (
+    FactoredPolicyOutput,
     JaxPolicyOutput,
     action_log_prob_and_entropy,
+    ensure_action_sequence,
     ensure_policy_sequence,
 )
 
@@ -1253,6 +1255,265 @@ def _launch_angle_for_edge(game, edge_tgt_ids, src_row, slot):
     return jnp.arctan2(tgt_y - src_y, tgt_x - src_x)
 
 
+def evaluate_edge_pair(
+    game,
+    batch,
+    env_cfg: Any,
+    planet_ships: jax.Array,
+    src_row: jax.Array,
+    slot: jax.Array,
+    *,
+    bucket_count: int,
+) -> tuple[jax.Array, jax.Array]:
+    """Evaluate trajectory legality for one ``(source row, target slot)`` edge."""
+
+    original_mask = batch.edge_mask[src_row, slot]
+    target_id = batch.edge_tgt_ids[src_row, slot]
+    source_id = batch.edge_src_ids[src_row]
+    angle = _launch_angle_for_edge(game, batch.edge_tgt_ids, src_row, slot)
+    source_ships = planet_ships[src_row]
+    bucket_ids = jnp.arange(1, bucket_count, dtype=jnp.int32)
+    ship_counts = ship_count_for_bucket_jax(
+        jnp.broadcast_to(source_ships, bucket_ids.shape), bucket_ids, bucket_count
+    )
+    static_fast_path_enabled = _static_pair_fast_path_enabled_jax(
+        game, source_id, target_id, angle
+    )
+
+    def evaluate_static(_):
+        return _static_trajectory_reason_codes_jax(
+            game,
+            source_id,
+            target_id,
+            angle,
+            ship_counts,
+            game.player,
+            env_cfg,
+        )
+
+    def evaluate_dynamic(_):
+        return jax.vmap(
+            lambda ships: _trajectory_reason_code_jax(
+                game,
+                source_id,
+                target_id,
+                angle,
+                ships,
+                game.player,
+                env_cfg,
+            )
+        )(ship_counts)
+
+    reason_codes = jax.lax.cond(
+        static_fast_path_enabled, evaluate_static, evaluate_dynamic, operand=None
+    )
+    bucket_legal = reason_codes == _REASON_TO_CODE[SAFE_REASON]
+    bucket_legal = bucket_legal & (ship_counts <= source_ships)
+    legal = jnp.any(bucket_legal)
+    legal = original_mask & (target_id >= 0) & legal
+    return legal, bucket_legal
+
+
+def apply_trajectory_shield_factorized_topk(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """Shield factorized top-K actions with a ``(P, K, buckets)`` bucket mask."""
+
+    from src.features.registry import edge_k
+
+    k = edge_k(env_cfg)
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    planet_ships = (
+        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
+    )
+    original_real_mask = batch.edge_mask
+    original_legal_total = original_real_mask.astype(jnp.float32).sum()
+
+    default_bucket_mask = jnp.zeros((MAX_PLANETS, k, bucket_count), dtype=bool)
+    default_bucket_mask = default_bucket_mask.at[..., 0].set(True)
+
+    if not trajectory_shield_enabled(env_cfg) or k == 0:
+        diagnostics = ShieldDiagnostics(
+            blocked_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_sun_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_bounds_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_unintended_hit_count=jnp.asarray(0.0, dtype=jnp.float32),
+            blocked_horizon_count=jnp.asarray(0.0, dtype=jnp.float32),
+            fallback_noop_count=jnp.asarray(0.0, dtype=jnp.float32),
+            legal_non_noop_count=original_legal_total,
+            original_non_noop_count=original_legal_total,
+            legal_non_noop_rate=jnp.where(original_legal_total > 0.0, 1.0, 0.0),
+        )
+        return ShieldedBatchResult(
+            batch=batch,
+            ship_bucket_mask=default_bucket_mask,
+            diagnostics=diagnostics,
+        )
+
+    slots = jnp.arange(k, dtype=jnp.int32)
+
+    def evaluate_row(src_row: jax.Array) -> tuple[jax.Array, jax.Array]:
+        legal, bucket_legal = jax.vmap(
+            lambda slot: evaluate_edge_pair(
+                game,
+                batch,
+                env_cfg,
+                planet_ships,
+                src_row,
+                slot,
+                bucket_count=bucket_count,
+            )
+        )(slots)
+        return legal, bucket_legal
+
+    src_rows = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
+    shielded_edge_mask, legal_bucket_mask = jax.vmap(evaluate_row)(src_rows)
+    ship_bucket_mask = jnp.zeros((MAX_PLANETS, k, bucket_count), dtype=bool)
+    if bucket_count > 1:
+        ship_bucket_mask = ship_bucket_mask.at[..., 1:].set(legal_bucket_mask)
+
+    blocked_slots = original_real_mask & (~shielded_edge_mask)
+    shielded_legal_total = shielded_edge_mask.astype(jnp.float32).sum()
+    legal_non_noop_rate = jnp.where(
+        original_legal_total > 0.0,
+        shielded_legal_total / original_legal_total,
+        0.0,
+    )
+    diagnostics = ShieldDiagnostics(
+        blocked_count=blocked_slots.astype(jnp.float32).sum(),
+        blocked_sun_count=blocked_slots.astype(jnp.float32).sum() * 0.0,
+        blocked_bounds_count=blocked_slots.astype(jnp.float32).sum() * 0.0,
+        blocked_unintended_hit_count=blocked_slots.astype(jnp.float32).sum() * 0.0,
+        blocked_horizon_count=blocked_slots.astype(jnp.float32).sum() * 0.0,
+        fallback_noop_count=(
+            (original_real_mask.any()) & (~shielded_edge_mask.any())
+        ).astype(jnp.float32),
+        legal_non_noop_count=shielded_legal_total,
+        original_non_noop_count=original_legal_total,
+        legal_non_noop_rate=legal_non_noop_rate,
+    )
+    return ShieldedBatchResult(
+        batch=batch._replace(edge_mask=shielded_edge_mask),
+        ship_bucket_mask=ship_bucket_mask,
+        diagnostics=diagnostics,
+    )
+
+
+def factorized_source_mask_from_shield(
+    shielded_edge_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    planet_ships: jax.Array,
+) -> jax.Array:
+    """Owned planets with ships and at least one shielded non-noop bucket."""
+
+    has_real_bucket = ship_bucket_mask[..., 1:].any(axis=-1)
+    row_has_legal = shielded_edge_mask & has_real_bucket
+    return (planet_ships > 0.0) & row_has_legal.any(axis=-1)
+
+
+def mask_factored_policy_output_for_shield(
+    output: FactoredPolicyOutput,
+    source_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    *,
+    source_index: jax.Array | None = None,
+    target_slot: jax.Array | None = None,
+    ship_bucket: jax.Array | None = None,
+) -> FactoredPolicyOutput:
+    """Mask factorized logits using per-step source and bucket legality.
+
+    When ``source_index`` is provided with shape ``(batch, sequence_k)``, target
+    and ship masks are gathered for the teacher-forced source planet at each
+    step. This must match rollout sampling in ``_sample_factored_step_from_logits``.
+
+    During PPO replay, pass the stored ``target_slot`` and ``ship_bucket`` so
+    teacher-forced actions stay legal even when coarse ``source_mask`` omits them.
+    """
+
+    source_logits = ensure_policy_sequence(output.source_logits)
+    target_logits = ensure_policy_sequence(output.target_logits)
+    stop_logits = output.stop_logits
+    if stop_logits.ndim == 1:
+        stop_logits = stop_logits[:, None]
+    ship_logits = output.ship_logits
+    if ship_logits.ndim == 3:
+        ship_logits = ship_logits[:, None, :, :]
+    illegal_logit = jnp.finfo(jnp.float32).min
+
+    if source_mask.ndim == 1:
+        source_mask = source_mask[None, :]
+    if ship_bucket_mask.ndim == 3:
+        ship_bucket_mask = ship_bucket_mask[None, None, ...]
+    elif ship_bucket_mask.ndim == 4:
+        ship_bucket_mask = ship_bucket_mask[:, None, ...]
+
+    sequence_k = source_logits.shape[1]
+    if source_mask.ndim == 3:
+        source_step_mask = source_mask.astype(bool)
+    else:
+        source_step_mask = jnp.broadcast_to(
+            source_mask[:, None, :],
+            (source_mask.shape[0], sequence_k, source_mask.shape[-1]),
+        )
+    bucket_step_mask = jnp.broadcast_to(
+        ship_bucket_mask,
+        (
+            source_mask.shape[0],
+            sequence_k,
+            ship_bucket_mask.shape[-3],
+            ship_bucket_mask.shape[-2],
+            ship_bucket_mask.shape[-1],
+        ),
+    )
+    if source_index is not None and bucket_step_mask.ndim >= 5:
+        source_rows = ensure_action_sequence(source_index.astype(jnp.int32))
+        batch_size = bucket_step_mask.shape[0]
+        batch_idx = jnp.arange(batch_size, dtype=jnp.int32)[:, None]
+        seq_idx = jnp.arange(sequence_k, dtype=jnp.int32)[None, :]
+        row_bucket_mask = bucket_step_mask[batch_idx, seq_idx, source_rows, :, :]
+        target_step_mask = row_bucket_mask.any(axis=-1)
+        ship_step_mask = row_bucket_mask
+    elif bucket_step_mask.ndim >= 5:
+        target_step_mask = bucket_step_mask.any(axis=(-3, -1))
+        ship_step_mask = bucket_step_mask.any(axis=-3)
+    elif bucket_step_mask.ndim == 4:
+        target_step_mask = bucket_step_mask.any(axis=-3)
+        ship_step_mask = bucket_step_mask
+    else:
+        target_step_mask = bucket_step_mask.any(axis=-1)
+        ship_step_mask = bucket_step_mask
+    if source_index is not None:
+        source_rows = ensure_action_sequence(source_index.astype(jnp.int32))
+        batch_size = source_logits.shape[0]
+        batch_idx = jnp.arange(batch_size, dtype=jnp.int32)[:, None]
+        seq_idx = jnp.arange(sequence_k, dtype=jnp.int32)[None, :]
+        source_step_mask = source_step_mask.at[batch_idx, seq_idx, source_rows].set(
+            True
+        )
+        if target_slot is not None:
+            target_rows = ensure_action_sequence(target_slot.astype(jnp.int32))
+            target_step_mask = target_step_mask.at[batch_idx, seq_idx, target_rows].set(
+                True
+            )
+        if target_slot is not None and ship_bucket is not None:
+            bucket_rows = ensure_action_sequence(ship_bucket.astype(jnp.int32))
+            ship_step_mask = ship_step_mask.at[
+                batch_idx, seq_idx, target_rows, bucket_rows
+            ].set(True)
+    masked_source_logits = jnp.where(source_step_mask, source_logits, illegal_logit)
+    masked_target_logits = jnp.where(target_step_mask, target_logits, illegal_logit)
+    masked_ship_logits = jnp.where(ship_step_mask, ship_logits, illegal_logit)
+    return output._replace(
+        source_logits=masked_source_logits,
+        target_logits=masked_target_logits,
+        ship_logits=masked_ship_logits,
+        stop_logits=stop_logits,
+    )
+
+
 def apply_trajectory_shield_to_turn_batch_v2(
     game,
     batch,
@@ -1294,55 +1555,18 @@ def apply_trajectory_shield_to_turn_batch_v2(
             diagnostics=diagnostics,
         )
 
-    bucket_ids = jnp.arange(1, bucket_count, dtype=jnp.int32)
-
     def evaluate_flat_edge(flat_idx):
         src_row = flat_idx // k
         slot = flat_idx % k
-        original_mask = batch.edge_mask[src_row, slot]
-        target_id = batch.edge_tgt_ids[src_row, slot]
-        source_id = batch.edge_src_ids[src_row]
-        angle = _launch_angle_for_edge(game, batch.edge_tgt_ids, src_row, slot)
-        source_ships = planet_ships[src_row]
-        ship_counts = ship_count_for_bucket_jax(
-            jnp.broadcast_to(source_ships, bucket_ids.shape), bucket_ids, bucket_count
+        return evaluate_edge_pair(
+            game,
+            batch,
+            env_cfg,
+            planet_ships,
+            src_row,
+            slot,
+            bucket_count=bucket_count,
         )
-        static_fast_path_enabled = _static_pair_fast_path_enabled_jax(
-            game, source_id, target_id, angle
-        )
-
-        def evaluate_static(_):
-            return _static_trajectory_reason_codes_jax(
-                game,
-                source_id,
-                target_id,
-                angle,
-                ship_counts,
-                game.player,
-                env_cfg,
-            )
-
-        def evaluate_dynamic(_):
-            return jax.vmap(
-                lambda ships: _trajectory_reason_code_jax(
-                    game,
-                    source_id,
-                    target_id,
-                    angle,
-                    ships,
-                    game.player,
-                    env_cfg,
-                )
-            )(ship_counts)
-
-        reason_codes = jax.lax.cond(
-            static_fast_path_enabled, evaluate_static, evaluate_dynamic, operand=None
-        )
-        bucket_legal = reason_codes == _REASON_TO_CODE[SAFE_REASON]
-        bucket_legal = bucket_legal & (ship_counts <= source_ships)
-        legal = jnp.any(bucket_legal)
-        legal = original_mask & (target_id >= 0) & legal
-        return legal, bucket_legal
 
     shielded_real_mask, legal_bucket_mask = jax.vmap(evaluate_flat_edge)(
         jnp.arange(MAX_PLANETS * k, dtype=jnp.int32)
