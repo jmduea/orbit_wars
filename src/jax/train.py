@@ -239,7 +239,44 @@ def _concat_env_axis(trees: list[object]) -> object:
     return jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=0), *trees)
 
 
-def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str, jax.Array]:
+def _finalize_cross_chunk_rate_metrics(
+    metrics: dict[str, jax.Array],
+) -> dict[str, jax.Array]:
+    """Derived rates that exist only after cross-chunk or cross-group aggregation."""
+
+    metrics["win_rate_2p"] = jnp.where(
+        metrics["episodes_2p"] > 0.0,
+        metrics["wins_2p"] / metrics["episodes_2p"],
+        0.0,
+    )
+    metrics["first_place_rate_4p"] = jnp.where(
+        metrics["episodes_4p"] > 0.0,
+        metrics["first_places_4p"] / metrics["episodes_4p"],
+        0.0,
+    )
+    metrics["average_placement_4p"] = jnp.where(
+        metrics["episodes_4p"] > 0.0,
+        metrics["placement_4p_sum"] / metrics["episodes_4p"],
+        0.0,
+    )
+    metrics["survival_time"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        metrics["survival_time_sum"] / metrics["episode_done"],
+        0.0,
+    )
+    metrics["score_share"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        metrics["score_share_sum"] / metrics["episode_done"],
+        0.0,
+    )
+    return metrics
+
+
+def _merge_metric_dicts(
+    metrics_by_chunk: list[dict[str, jax.Array]],
+) -> dict[str, jax.Array]:
+    """Sum per-chunk rollout metrics while preserving the per-chunk key set."""
+
     if len(metrics_by_chunk) == 1:
         return metrics_by_chunk[0]
     metrics = jax.tree.map(
@@ -282,21 +319,6 @@ def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str,
         (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
         0.0,
     )
-    metrics["win_rate_2p"] = jnp.where(
-        metrics["episodes_2p"] > 0.0,
-        metrics["wins_2p"] / metrics["episodes_2p"],
-        0.0,
-    )
-    metrics["first_place_rate_4p"] = jnp.where(
-        metrics["episodes_4p"] > 0.0,
-        metrics["first_places_4p"] / metrics["episodes_4p"],
-        0.0,
-    )
-    metrics["average_placement_4p"] = jnp.where(
-        metrics["episodes_4p"] > 0.0,
-        metrics["placement_4p_sum"] / metrics["episodes_4p"],
-        0.0,
-    )
     metrics["noop_percent"] = jnp.where(
         metrics["decision_count"] > 0.0,
         (metrics["noop_count"] / metrics["decision_count"]) * 100.0,
@@ -315,16 +337,6 @@ def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str,
     metrics["neutral_target_percent"] = jnp.where(
         metrics["decision_count"] > 0.0,
         (metrics["neutral_target_count"] / metrics["decision_count"]) * 100.0,
-        0.0,
-    )
-    metrics["survival_time"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        metrics["survival_time_sum"] / metrics["episode_done"],
-        0.0,
-    )
-    metrics["score_share"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        metrics["score_share_sum"] / metrics["episode_done"],
         0.0,
     )
     metrics["won_non_noop_actions_per_step"] = jnp.where(
@@ -420,6 +432,12 @@ def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str,
         0.0,
     )
     return metrics
+
+
+def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str, jax.Array]:
+    if len(metrics_by_chunk) == 1:
+        return metrics_by_chunk[0]
+    return _finalize_cross_chunk_rate_metrics(_merge_metric_dicts(metrics_by_chunk))
 
 
 def _empty_per_format_rollout_stats() -> dict[int, dict[str, float]]:
@@ -534,7 +552,7 @@ def _collect_rollout_microbatched(
             ),
             chunk_metrics,
         )
-        return _sum_metric_dicts([acc, chunk_metric]), None
+        return _merge_metric_dicts([acc, chunk_metric]), None
 
     merged_metrics = jax.tree.map(
         lambda x: jax.lax.dynamic_index_in_dim(x, 0, axis=0, keepdims=False),
@@ -546,6 +564,7 @@ def _collect_rollout_microbatched(
             merged_metrics,
             jnp.arange(1, chunk_count, dtype=jnp.int32),
         )
+    merged_metrics = _finalize_cross_chunk_rate_metrics(merged_metrics)
     return (
         rollout_key,
         merged_states,

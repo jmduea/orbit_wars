@@ -11,7 +11,12 @@ from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.train_state import init_train_state
-from src.jax.train import _sum_metric_dicts, init_rollout_groups
+from src.jax.train import (
+    _finalize_cross_chunk_rate_metrics,
+    _merge_metric_dicts,
+    _sum_metric_dicts,
+    init_rollout_groups,
+)
 
 
 
@@ -115,6 +120,36 @@ def test_rollout_metric_aggregation_recomputes_rate_metrics():
     assert float(metrics["win_rate_2p"]) == pytest.approx(0.75)
     assert float(metrics["first_place_rate_4p"]) == pytest.approx(0.5)
     assert float(metrics["average_placement_4p"]) == pytest.approx(2.5)
+
+
+def test_merge_metric_dicts_defers_finalize_only_rates():
+    first_chunk = _metric_chunk(
+        episodes_2p=2.0,
+        wins_2p=1.0,
+        episodes_4p=2.0,
+        first_places_4p=1.0,
+        placement_4p_sum=4.0,
+    )
+    second_chunk = _metric_chunk(
+        episodes_2p=2.0,
+        wins_2p=2.0,
+        episodes_4p=2.0,
+        first_places_4p=1.0,
+        placement_4p_sum=6.0,
+    )
+
+    merged = _merge_metric_dicts([first_chunk, second_chunk])
+    for key in (
+        "win_rate_2p",
+        "first_place_rate_4p",
+        "average_placement_4p",
+        "survival_time",
+        "score_share",
+    ):
+        assert key not in merged
+
+    finalized = _finalize_cross_chunk_rate_metrics(dict(merged))
+    assert float(finalized["win_rate_2p"]) == pytest.approx(0.75)
 
 
 def _metric_chunk(**overrides: float) -> dict[str, jax.Array]:
