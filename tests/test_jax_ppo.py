@@ -8,7 +8,9 @@ from src.config import TrainConfig
 from src.game.constants import MAX_PLANETS, MAX_STEPS
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
-from src.jax.ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+from src.jax.ppo_update import ppo_update_jax
+from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.train_state import init_train_state
 from src.jax.train import _sum_metric_dicts, init_rollout_groups
 
 
@@ -165,7 +167,7 @@ def _metric_chunk(**overrides: float) -> dict[str, jax.Array]:
 
 
 def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
-    from src.jax.ppo import build_action_from_batch, build_random_action_from_batch
+    from src.opponents.jax_actions.builders import build_action_from_batch, build_random_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 4
@@ -191,7 +193,7 @@ def test_jax_action_builder_allows_fewer_fleet_slots_than_planets():
 
 
 def test_jax_action_builder_emits_multiple_launch_slots_per_source():
-    from src.jax.ppo import build_action_from_batch
+    from src.opponents.jax_actions.builders import build_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = 32
@@ -211,7 +213,7 @@ def test_jax_action_builder_emits_multiple_launch_slots_per_source():
 
 
 def test_jax_action_builder_invalid_step_does_not_consume_later_ships():
-    from src.jax.ppo import build_action_from_batch
+    from src.opponents.jax_actions.builders import build_action_from_batch
 
     cfg = TrainConfig()
     cfg.task.max_fleets = MAX_PLANETS * 2
@@ -492,7 +494,7 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
 
 
 def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
-    from src.jax.ppo import concatenate_transition_batches
+    from src.jax.ppo_update import concatenate_transition_batches
     from src.jax.train import init_rollout_groups
 
     cfg = TrainConfig()

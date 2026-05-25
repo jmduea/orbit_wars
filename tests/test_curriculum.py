@@ -11,7 +11,8 @@ from src.config import (
 )
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
-from src.jax.ppo import collect_rollout_jax, init_train_state
+from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.train_state import init_train_state
 from src.training.curriculum import CurriculumController
 
 

@@ -50,7 +50,9 @@ def main() -> None:
 
     from src.jax.env import batched_reset
     from src.jax.policy import build_jax_policy
-    from src.jax.ppo import collect_rollout_jax, init_train_state, ppo_update_jax
+    from src.jax.ppo_update import ppo_update_jax
+    from src.jax.rollout.collect import collect_rollout_jax
+    from src.jax.train_state import init_train_state
 
     cfg = deepcopy(compose_hydra_train_config(list(args.overrides)))
     if args.num_envs is not None:

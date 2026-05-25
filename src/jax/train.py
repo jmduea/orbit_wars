@@ -49,14 +49,10 @@ import jax  # noqa: E402
 from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
 from .features import JaxTurnBatch  # noqa: E402
 from .policy import build_jax_policy  # noqa: E402
-from .ppo import (  # noqa: E402
-    JaxTransitionBatch,
-    collect_rollout_jax,
-    concatenate_transition_batches,
-    init_train_state,
-    ppo_update_jax,
-    validate_policy_param_shapes,
-)
+from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
+from .rollout.collect import collect_rollout_jax  # noqa: E402
+from .rollout.types import JaxTransitionBatch  # noqa: E402
+from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
 
 
 @dataclass(slots=True)
