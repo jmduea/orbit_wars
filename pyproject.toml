@@ -23,6 +23,19 @@ package = false
 testpaths = [
     "tests"
 ]
+addopts = [
+    "--strict-markers",
+]
+markers = [
+    "slow: integration or expensive tests excluded from the fast dev loop",
+    "jax: tests that import or execute JAX code",
+    "config: Hydra config, telemetry, and schema tests",
+    "features: Python/JAX feature encoding and registry tests",
+    "jax_env: JAX environment and parity tests",
+    "policy: policy, PPO, rollout, and trajectory shield tests",
+    "artifacts: artifact pipeline, replay, and packaging tests",
+    "curriculum: curriculum controller and training-loop tests",
+]
 
 [tool.ty.environment]
 root = ["."]

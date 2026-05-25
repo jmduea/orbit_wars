@@ -97,7 +97,22 @@ def test_output_paths_reject_traversal(override: str) -> None:
     with pytest.raises(ValueError, match="\.\.|run_id"):
         compose_hydra_train_config([override])
 
-def test_wandb_sweep_campaign_samples_compose() -> None:
+def test_wandb_sweep_yaml_smoke_compose() -> None:
+    for overrides in _iter_sweep_compose_cases(full_grid=False):
+        cfg = compose_hydra_train_config(overrides)
+        assert cfg.telemetry.wandb.group
+        assert cfg.telemetry.wandb.tags
+
+
+@pytest.mark.slow
+def test_wandb_sweep_campaign_samples_compose_full() -> None:
+    for overrides in _iter_sweep_compose_cases(full_grid=True):
+        cfg = compose_hydra_train_config(overrides)
+        assert cfg.telemetry.wandb.group
+        assert cfg.telemetry.wandb.tags
+
+
+def _iter_sweep_compose_cases(*, full_grid: bool):
     sweep_dir = Path("conf/sweeps/wandb")
     for path in sorted(sweep_dir.glob("*.yaml")):
         sweep = OmegaConf.to_container(OmegaConf.load(path), resolve=False)
@@ -112,14 +127,16 @@ def test_wandb_sweep_campaign_samples_compose() -> None:
             keys.append(key)
             value_sets.append(values)
 
-        for values in product(*value_sets):
-            overrides = [
+        if full_grid:
+            value_products = product(*value_sets)
+        else:
+            value_products = [tuple(values[0] for values in value_sets)]
+
+        for values in value_products:
+            yield [
                 f"{key}={_hydra_value(value)}"
                 for key, value in zip(keys, values, strict=True)
             ]
-            cfg = compose_hydra_train_config(overrides)
-            assert cfg.telemetry.wandb.group
-            assert cfg.telemetry.wandb.tags
 
 
 def test_baseline_sweep_scaffolding_is_discoverable() -> None:

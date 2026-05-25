@@ -111,7 +111,7 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 | **3** | JAX Training Orchestrator | `src/jax/train.py` — devices, vectorized envs, PPO loop, curriculum, logging, artifacts |
 | **4** | Game Rules & Reference Env | `src/game/constants.py`, `types.py`, `env.py` — ground truth for game dynamics |
 | **5** | Observation Features | `src/features/registry.py`, `encoding.py`, `src/jax/features.py` — observation layout for policies |
-| **6** | JAX Environment & PPO | `src/jax/env.py`, `src/jax/ppo.py` — batched stepping and policy updates |
+| **6** | JAX Environment & PPO | `src/jax/env.py`, `src/jax/rollout/`, `src/jax/ppo_update.py` — batched stepping and policy updates |
 | **7** | Policy Architectures | `src/jax/policy.py` — Flax modules selected by `conf/model/*.yaml` |
 | **8** | Safe Launches & Opponents | `src/game/trajectory_shield.py`, `src/opponents/*`, `src/training/curriculum.py` |
 | **9** | Telemetry & Experiment Logging | `src/telemetry/metric_registry.py`, `logger.py` |
@@ -141,7 +141,8 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 | `src/jax/env.py` | Vectorized game simulation |
 | `src/jax/features.py` | JIT feature encoder matching Python layout |
 | `src/jax/policy.py` | MLP, attention, entity transformer, GNN pointer |
-| `src/jax/ppo.py` | Rollout collection and PPO updates |
+| `src/jax/rollout/` | Rollout collection, transition types, diagnostics |
+| `src/jax/ppo_update.py` | PPO loss and batch utilities |
 | `src/jax/device.py` | Device selection utilities |
 | `src/opponents/pool.py` | Opponent source definitions |
 | `src/opponents/runtime.py` | Mixing random, scripted, self-play, snapshots |
@@ -213,7 +214,7 @@ Files marked **complex** in the graph — read tests alongside code before chang
 - `src/config/schema.py`, `src/config/runtime.py` — schema and validation ripple through training
 - `src/game/env.py`, `src/jax/env.py` — game dynamics and vectorization
 - `src/features/registry.py`, `src/features/encoding.py`, `src/jax/features.py` — observation contract (checkpoint-breaking)
-- `src/jax/train.py`, `src/jax/policy.py`, `src/jax/ppo.py` — training loop and learning
+- `src/jax/train.py`, `src/jax/policy.py`, `src/jax/rollout/`, `src/jax/ppo_update.py` — training loop and learning
 - `src/game/trajectory_shield.py`, `src/opponents/runtime.py` — safety and opponent mixing
 - `src/telemetry/metric_registry.py` — metric surface area
 - `src/artifacts/pipeline.py`, `replay.py`, `checkpoint_compat.py`, `run_paths.py` — persistence and compatibility
@@ -235,13 +236,19 @@ Files marked **complex** in the graph — read tests alongside code before chang
 
 When you touch a subsystem, run focused tests from `AGENTS.md`:
 
-| Change area | Tests |
-|-------------|--------|
-| Config / schema | `test_config_consolidation.py`, `test_curriculum.py`, `test_telemetry.py` |
-| Env / features | `test_features.py`, `test_feature_history.py`, `test_jax_env.py`, `test_jax_env_parity.py` |
-| Policy / PPO | `test_jax_policy.py`, `test_jax_ppo.py` |
-| Artifacts | `test_artifact_pipeline.py`, `test_replay.py`, `test_run_paths.py` |
-| Full check | `uv run --group dev pytest` |
+| Change area | Quick command | Files / notes |
+|-------------|---------------|---------------|
+| Config / schema | `make test-domain-config` | `test_config_consolidation.py`, `test_telemetry.py`, `test_metric_registry.py`, `test_run_paths.py` |
+| Env / features | `make test-domain-features` | `test_features.py`, `test_feature_history.py`, `test_feature_registry.py`, `test_normalization.py` |
+| JAX env | `make test-domain-jax-env` | serial `-m "jax and not slow"`; parity stays in slow tier |
+| Policy / PPO | `make test-domain-policy` | serial `-m "jax and not slow"` |
+| Curriculum | `make test-domain-curriculum` | CPU subset of `test_curriculum.py`, `test_jax_train_timing.py` |
+| Artifacts | `make test-domain-artifacts` | `test_artifact_pipeline.py`, `test_replay.py`, `test_kaggle_submission_packager.py` |
+| Daily dev loop | `make test-fast` | CPU-only, serial, `-m "not slow and not jax"` |
+| JAX quick check | `make test-jax` | serial `-m "jax and not slow"` when editing JAX code |
+| Full check | `make test` | all tests including slow; serial only — **never use `-n auto` on WSL2** |
+
+IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.vscode/settings.json` so the test explorer defaults to the CPU-safe tier.
 
 ---
 

@@ -26,14 +26,17 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-jax-ppo-split.md",
       "workflow": "deep-interview",
-      "status": "approved",
+      "status": "executing",
       "title": "JAX PPO module split",
+      "spec_id": null,
+      "plan_id": "jax-ppo-split-plan",
       "related_ids": [
         "telemetry-metrics-cleanup"
       ],
       "supersedes_id": null,
       "completed_at": null,
-      "notes": "Spec re-approved 2026-05-25 after revision: no facade, train_state.py, no line budget. Ready for ralplan."
+      "evidence": null,
+      "notes": null
     },
     {
       "id": "rollout-optimization",
@@ -483,6 +486,101 @@
       "completed_at": "2026-05-21",
       "evidence": "Docker validation artifact jobs wired",
       "notes": null
+    },
+    {
+      "id": "jax-ppo-split-plan",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-jax-ppo-split.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "JAX PPO module split plan",
+      "spec_id": "jax-ppo-split",
+      "plan_id": null,
+      "related_ids": [],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "id": "jax-train-split",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-jax-train-split.md",
+      "workflow": "deep-interview",
+      "status": "draft",
+      "title": "JAX train module split",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "jax-ppo-split",
+        "src-reorganization",
+        "async-artifact-pipeline"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Follow-on to jax-ppo-split; deletes src/jax/train.py"
+    },
+    {
+      "id": "test-efficiency",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-test-efficiency.md",
+      "workflow": "deep-interview",
+      "status": "executing",
+      "title": "Test suite speed and dev-loop efficiency",
+      "related_ids": [
+        "jax-ppo-split"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "notes": "WSL2 incident: removed pytest-xdist from test-fast; CPU-only test-fast + serial test-jax; conftest blocks xdist"
+    },
+    {
+      "id": "test-efficiency-plan",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-test-efficiency.md",
+      "workflow": "ralplan",
+      "status": "executing",
+      "title": "Test suite speed and dev-loop efficiency plan",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": null
+    },
+    {
+      "id": "feature-encoding-trace",
+      "kind": "trace",
+      "path": ".omg/specs/deep-dive-trace-feature-encoding.md",
+      "workflow": "deep-dive",
+      "status": "draft",
+      "title": "Feature encoding trace findings",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Three-lane trace: redundancy, config/history, parity/measurement"
+    },
+    {
+      "id": "feature-encoding",
+      "kind": "spec",
+      "path": ".omg/specs/deep-dive-feature-encoding.md",
+      "workflow": "deep-dive",
+      "status": "draft",
+      "title": "Feature encoding optimization",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "feature-encoding-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Balanced scope: dedup + config leverage + parity/measurement"
     }
   ]
 }

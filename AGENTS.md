@@ -37,11 +37,15 @@
 
 ## Testing Expectations
 
-- For config/schema changes, run `uv run --group dev pytest tests/test_config_consolidation.py tests/test_curriculum.py tests/test_telemetry.py`.
-- For environment, feature, or reward changes, run the relevant `tests/test_env.py`, `tests/test_features.py`, `tests/test_feature_history.py`, `tests/test_jax_env.py`, and `tests/test_jax_env_parity.py` coverage.
-- For policy/PPO changes, run `tests/test_jax_policy.py` and `tests/test_jax_ppo.py`.
-- For evaluation script changes, run `tests/test_evaluate.py`.
-- Full Python verification is `uv run --group dev pytest`; expect JAX tests to be heavier than pure config/unit tests.
+- **Daily dev loop (CPU-safe):** `make test-fast` — `-m "not slow and not jax"`; no JAX imports, serial only. Safe on WSL2 with NVIDIA GPUs.
+- **JAX quick check:** `make test-jax` — `-m "jax and not slow"`; serial only (never use `pytest-xdist` here).
+- **Before sharing/merging:** `make test` — full suite including `@pytest.mark.slow`; serial only.
+- **Domain targets:** `make test-domain-config`, `test-domain-features`, `test-domain-jax-env`, `test-domain-policy`, `test-domain-artifacts`, `test-domain-curriculum`.
+- **Do not use `pytest-xdist` / `-n auto`:** parallel workers that each import JAX/CUDA have crashed WSL2 on this project. `tests/conftest.py` rejects xdist at collection time.
+- For config/schema changes, run `make test-domain-config`.
+- For environment, feature, or reward changes, run `make test-domain-features` plus `make test-domain-jax-env` when touching JAX env code.
+- For policy/PPO changes, run `make test-domain-policy`.
+- Full parity and rollout integration coverage lives in the slow tier (`@pytest.mark.slow`); run `make test` before merge.
 
 ## MCP Server Notes
 
