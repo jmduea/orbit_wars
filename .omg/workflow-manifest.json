@@ -3,8 +3,17 @@
   "_agent": {
     "canonical_source": "This manifest is the single source of truth for spec/plan lifecycle. Do not infer backlog from markdown Status lines, unchecked workflow-gate checkboxes, or cross-spec deferral prose.",
     "before_brownfield_scan": "Call omg_workflow_manifest_list with active_only=true before globbing or reading .omg/specs/ or .omg/plans/. Only entries returned there are active backlog.",
-    "active_statuses": ["draft", "approved", "planned", "executing"],
-    "terminal_statuses": ["complete", "superseded", "deferred"],
+    "active_statuses": [
+      "draft",
+      "approved",
+      "planned",
+      "executing"
+    ],
+    "terminal_statuses": [
+      "complete",
+      "superseded",
+      "deferred"
+    ],
     "on_spec_crystallized": "Add or update spec entry: status=draft until user approves, then approved.",
     "on_plan_consensus": "Add plan entry linked via spec_id; set plan status=planned and spec status=planned if not yet executing.",
     "on_execution_start": "Set linked spec/plan entries to executing.",
@@ -19,13 +28,12 @@
       "workflow": "deep-interview",
       "status": "approved",
       "title": "JAX PPO module split",
-      "plan_id": null,
       "related_ids": [
         "telemetry-metrics-cleanup"
       ],
+      "supersedes_id": null,
       "completed_at": null,
-      "evidence": null,
-      "notes": "Spec approved 2026-05-24; implementation not started. src/jax/ppo.py still monolithic. src-reorganization is complete separately."
+      "notes": "Spec re-approved 2026-05-25 after revision: no facade, train_state.py, no line budget. Ready for ralplan."
     },
     {
       "id": "rollout-optimization",
@@ -34,8 +42,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Rollout process optimization audit",
+      "spec_id": null,
       "plan_id": "rollout-optimization-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-22",
       "evidence": "ralplan-rollout-optimization.md phases 0-5 implemented; lean_rollout_metrics and format rotation in codebase",
       "notes": "Unchecked interview-gate checkboxes in spec markdown are stale."
@@ -48,7 +58,9 @@
       "status": "complete",
       "title": "Rollout optimization implementation plan",
       "spec_id": "rollout-optimization",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-22",
       "evidence": "Plan critic checklist marks phases 0-5 implemented",
       "notes": "One optional doc checkbox remains; not active backlog."
@@ -60,8 +72,12 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Source domain reorganization",
+      "spec_id": null,
       "plan_id": "src-reorganization-plan",
-      "related_ids": ["jax-ppo-split"],
+      "related_ids": [
+        "jax-ppo-split"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-24",
       "evidence": "Commit 9b0834a reorganized src into domain packages; print_resolved_config ok; 145 reorg acceptance tests passed 2026-05-25",
       "notes": "Monolithic src/jax/ppo.py split tracked separately as jax-ppo-split."
@@ -74,7 +90,9 @@
       "status": "complete",
       "title": "Source reorganization plan",
       "spec_id": "src-reorganization",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-24",
       "evidence": "Domain packages landed; imports updated in src/tests/scripts; uv run python -m src.train print_resolved_config=true; 145 targeted pytest pass",
       "notes": null
@@ -87,7 +105,11 @@
       "status": "complete",
       "title": "Trace: low env_steps_per_sec",
       "spec_id": "low-env-steps",
-      "related_ids": ["low-env-steps"],
+      "plan_id": null,
+      "related_ids": [
+        "low-env-steps"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Trace artifact; fed low-env-steps spec and telemetry ralplan",
       "notes": "Investigation output only."
@@ -99,8 +121,12 @@
       "workflow": "deep-dive",
       "status": "complete",
       "title": "Low env_steps_per_sec optimization",
+      "spec_id": null,
       "plan_id": "low-env-steps-plan",
-      "related_ids": ["trace-low-env-steps"],
+      "related_ids": [
+        "trace-low-env-steps"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Per-format rollout timing metrics in src/jax/train.py",
       "notes": null
@@ -113,7 +139,9 @@
       "status": "complete",
       "title": "Low env steps telemetry plan",
       "spec_id": "low-env-steps",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Per-format telemetry fields implemented",
       "notes": null
@@ -125,8 +153,12 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Baseline stage 1 comfort throughput sweep",
+      "spec_id": null,
       "plan_id": null,
-      "related_ids": ["baseline-sweep"],
+      "related_ids": [
+        "baseline-sweep"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-22",
       "evidence": "conf/sweeps/wandb/baseline_stage1_comfort.yaml",
       "notes": null
@@ -138,8 +170,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Output standardization",
+      "spec_id": null,
       "plan_id": "output-standardization-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "src/artifacts/run_paths.py campaign layout; output.campaign in schema",
       "notes": null
@@ -152,7 +186,9 @@
       "status": "complete",
       "title": "Output standardization plan",
       "spec_id": "output-standardization",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Campaign/run path plumbing landed",
       "notes": null
@@ -164,8 +200,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Workstation-friendly baseline sweep",
+      "spec_id": null,
       "plan_id": "baseline-sweep-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "W&B sweep configs under conf/sweeps/wandb/",
       "notes": null
@@ -178,7 +216,9 @@
       "status": "complete",
       "title": "Baseline sweep plan",
       "spec_id": "baseline-sweep",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Sweep yaml configs present",
       "notes": null
@@ -190,8 +230,12 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Remove legacy config fields",
+      "spec_id": null,
       "plan_id": "remove-legacy-config-fields-plan",
-      "related_ids": ["config-consolidation"],
+      "related_ids": [
+        "config-consolidation"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Hydra responsibility groups; legacy flat runtime config rejected in checkpoint_compat",
       "notes": null
@@ -204,7 +248,9 @@
       "status": "complete",
       "title": "Remove legacy config fields plan",
       "spec_id": "remove-legacy-config-fields",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Config consolidation tests pass",
       "notes": null
@@ -216,8 +262,12 @@
       "workflow": "deep-dive",
       "status": "complete",
       "title": "Config consolidation",
+      "spec_id": null,
       "plan_id": "config-consolidation-plan",
-      "related_ids": ["trace-config-consolidation"],
+      "related_ids": [
+        "trace-config-consolidation"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "conf/ responsibility groups; src/config/",
       "notes": null
@@ -230,7 +280,9 @@
       "status": "complete",
       "title": "Trace: config consolidation",
       "spec_id": "config-consolidation",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Trace artifact for config consolidation initiative",
       "notes": null
@@ -243,7 +295,9 @@
       "status": "complete",
       "title": "Config consolidation plan",
       "spec_id": "config-consolidation",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Architect and critic approved in plan; Hydra migration landed",
       "notes": null
@@ -255,8 +309,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Self-play curriculum",
+      "spec_id": null,
       "plan_id": "self-play-curriculum-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "curriculum.stages validation in src/config/runtime.py; src/training/curriculum.py",
       "notes": "Markdown Status 'Draft pending approval' is stale."
@@ -269,7 +325,9 @@
       "status": "complete",
       "title": "Self-play curriculum plan",
       "spec_id": "self-play-curriculum",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "curriculum.stages schema and tests",
       "notes": "Markdown Status 'pending execution' is stale."
@@ -281,8 +339,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Composable multi-value head",
+      "spec_id": null,
       "plan_id": "composable-multi-value-head-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "SharedValueHead and FormatRoutedValueHead in src/jax/policy.py; model.value_head config",
       "notes": null
@@ -295,7 +355,9 @@
       "status": "complete",
       "title": "Composable multi-value head plan",
       "spec_id": "composable-multi-value-head",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Policy value head modules and config routing",
       "notes": null
@@ -307,8 +369,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Telemetry metrics cleanup",
+      "spec_id": null,
       "plan_id": "telemetry-metrics-cleanup-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "src/telemetry/metric_registry.py; group filtering in telemetry logger",
       "notes": "Spec references pre-reorg paths; implementation uses src/telemetry/."
@@ -321,7 +385,9 @@
       "status": "complete",
       "title": "Telemetry metrics cleanup plan",
       "spec_id": "telemetry-metrics-cleanup",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Metric registry and telemetry tests",
       "notes": "Markdown Status 'awaiting second critic review' is stale."
@@ -333,8 +399,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Trajectory action shield",
+      "spec_id": null,
       "plan_id": "trajectory-action-shield-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "src/game/trajectory_shield.py; shield metrics in src/jax/train.py",
       "notes": "Markdown Status 'Pending approval' is stale."
@@ -347,7 +415,9 @@
       "status": "complete",
       "title": "Trajectory action shield plan",
       "spec_id": "trajectory-action-shield",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Shield implementation and telemetry fields",
       "notes": "Markdown Status 'pending final approval' is stale."
@@ -359,8 +429,10 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Async artifact pipeline",
+      "spec_id": null,
       "plan_id": "async-artifact-pipeline-plan",
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "src/artifacts/pipeline.py; async worker hooks in src/jax/train.py",
       "notes": null
@@ -373,7 +445,9 @@
       "status": "complete",
       "title": "Async artifact pipeline plan",
       "spec_id": "async-artifact-pipeline",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Artifact pipeline worker and retention protections",
       "notes": null
@@ -385,8 +459,12 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Kaggle Docker submission validation",
+      "spec_id": null,
       "plan_id": "kaggle-docker-validation-plan",
-      "related_ids": ["async-artifact-pipeline"],
+      "related_ids": [
+        "async-artifact-pipeline"
+      ],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "docker_validation jobs in artifact pipeline; train.py queue_docker_validation",
       "notes": null
@@ -399,7 +477,9 @@
       "status": "complete",
       "title": "Kaggle Docker validation plan",
       "spec_id": "kaggle-docker-validation",
+      "plan_id": null,
       "related_ids": [],
+      "supersedes_id": null,
       "completed_at": "2026-05-21",
       "evidence": "Docker validation artifact jobs wired",
       "notes": null
