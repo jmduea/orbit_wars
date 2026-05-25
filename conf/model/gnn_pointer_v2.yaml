@@ -1,6 +1,5 @@
-# Phase 2 policy preset — pair with task.encoding_version=v2 (env wiring is Phase 3).
-# Side-by-side with model=gnn_pointer (v1 encoding).
-architecture: gnn_pointer_v2
+# Alias for gnn_pointer; kept for backward-compatible Hydra overrides.
+architecture: gnn_pointer
 hidden_size: 224
 attention_heads: 7
 max_moves_k: 3

@@ -3,9 +3,9 @@ from typing import Sequence
 
 from src.config.schema import TaskConfig
 from src.game.constants import (
-    BASE_CANDIDATE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_DIM,
-    BASE_SELF_FEATURE_DIM,
+    BASE_EDGE_FEATURE_DIM,
+    BASE_GLOBAL_FEATURE_V2_DIM,
+    BASE_PLANET_FEATURE_DIM,
 )
 
 
@@ -97,69 +97,37 @@ class FeatureGroupRegistry:
         return frame
 
 
-# Self Features Schema (Base: 30 elements)
-SELF_FEATURE_REGISTRY = [
-    FeatureItem("bias", size=1, active=True),
-    FeatureItem(
-        "source_coords", size=2, active=True
-    ),  # Combines x and y position fields
-    FeatureItem("source_radius", size=1, active=True),
-    FeatureItem("source_ships", size=1, active=True),
-    FeatureItem("source_production", size=1, active=True),
-    FeatureItem("rotating_planet_flag", size=1, active=True),
-    FeatureItem("friendly_planet_count", size=1, active=True),
-    FeatureItem("enemy_planet_count", size=1, active=True),
-    FeatureItem("total_friendly_ships", size=1, active=True),
-    FeatureItem("total_enemy_ships", size=1, active=True),
-    FeatureItem("owner_relative_planet_counts", size=4, active=True),
-    FeatureItem("owner_relative_ship_totals", size=4, active=True),
-    FeatureItem("active_owner_mask", size=4, active=True),
-    FeatureItem("player_count", size=1, active=True),
+PLANET_FEATURE_REGISTRY = [
+    FeatureItem("active", size=1, active=True),
+    FeatureItem("orbit_radius", size=1, active=True),
+    FeatureItem("orbit_angle", size=1, active=True),
+    FeatureItem("radius", size=1, active=True),
+    FeatureItem("ships", size=1, active=True),
+    FeatureItem("production", size=1, active=True),
+    FeatureItem("rotating_flag", size=1, active=True),
+    FeatureItem("owner_slot", size=4, active=True),
+    FeatureItem("incoming_friendly_pressure", size=1, active=True),
     FeatureItem("ship_delta", size=1, active=True),
-    FeatureItem("history_present_flag", size=1, active=True),
-    FeatureItem("ownership_stable_flag", size=1, active=True),
-    FeatureItem("outgoing_friendly_ships", size=1, active=True),
-    FeatureItem("incoming_friendly_pressure", size=1, active=True),
-    FeatureItem("incoming_enemy_pressure", size=1, active=True),
 ]
-SELF_FEATURE_SCHEMA = FeatureGroupRegistry(SELF_FEATURE_REGISTRY)
+PLANET_FEATURE_SCHEMA = FeatureGroupRegistry(PLANET_FEATURE_REGISTRY)
 
-# Candidate Features Schema (Base: 24 elements)
-CANDIDATE_FEATURE_REGISTRY = [
-    FeatureItem("bias", size=1, active=True),
-    FeatureItem(
-        "target_ownership_flags", size=3, active=True
-    ),  # Neutral, Friendly, Enemy flags
-    FeatureItem("target_coords", size=2, active=True),  # Target x, y positions
-    FeatureItem("delta_coords", size=2, active=True),  # Delta x, y vectors
-    FeatureItem("distance_to_target", size=1, active=True),
+EDGE_FEATURE_REGISTRY = [
+    FeatureItem("delta_coords", size=2, active=True),
+    FeatureItem("distance", size=1, active=True),
+    FeatureItem("sun_crossing", size=1, active=True),
     FeatureItem("target_ships", size=1, active=True),
-    FeatureItem("target_production", size=1, active=True),
-    FeatureItem("target_is_rotating", size=1, active=True),
-    FeatureItem("shot_crosses_sun", size=1, active=True),
-    FeatureItem("source_ships", size=1, active=True),
-    FeatureItem("relative_owner_slots", size=4, active=True),
+    FeatureItem("target_owner_slot", size=4, active=True),
     FeatureItem("turns_to_arrival", size=1, active=True),
-    FeatureItem("incoming_friendly_pressure", size=1, active=True),
-    FeatureItem("incoming_enemy_pressure", size=1, active=True),
-    FeatureItem("target_ship_delta", size=1, active=True),
-    FeatureItem("owner_changed_flag", size=1, active=True),
-    FeatureItem("always_on_marker", size=1, active=True),
+    FeatureItem("target_incoming_friendly", size=1, active=True),
+    FeatureItem("target_incoming_enemy", size=1, active=True),
 ]
-CANDIDATE_FEATURE_SCHEMA = FeatureGroupRegistry(CANDIDATE_FEATURE_REGISTRY)
+EDGE_FEATURE_SCHEMA = FeatureGroupRegistry(EDGE_FEATURE_REGISTRY)
 
-# Global Features Schema (Base: 45 elements)
 GLOBAL_FEATURE_REGISTRY = [
     FeatureItem("step_fraction", size=1, active=True),
-    FeatureItem(
-        "planet_fractions", size=3, active=True
-    ),  # Friendly, Enemy, Neutral fractions
-    FeatureItem(
-        "ship_fractions", size=2, active=True
-    ),  # Friendly, Enemy ship fractions
-    FeatureItem(
-        "fleet_ship_fractions", size=2, active=True
-    ),  # Friendly, Enemy fleet fractions
+    FeatureItem("planet_fractions", size=3, active=True),
+    FeatureItem("ship_fractions", size=2, active=True),
+    FeatureItem("fleet_ship_fractions", size=2, active=True),
     FeatureItem("owner_relative_planet_counts", size=4, active=True),
     FeatureItem("owner_relative_ship_totals", size=4, active=True),
     FeatureItem("owner_relative_fleet_totals", size=4, active=True),
@@ -170,6 +138,7 @@ GLOBAL_FEATURE_REGISTRY = [
     FeatureItem("planet_delta_slots", size=4, active=True),
     FeatureItem("fleet_delta_slots", size=4, active=True),
     FeatureItem("production_delta_slots", size=4, active=True),
+    FeatureItem("angular_velocity", size=1, active=True),
 ]
 GLOBAL_FEATURE_SCHEMA = FeatureGroupRegistry(GLOBAL_FEATURE_REGISTRY)
 
@@ -183,36 +152,35 @@ def _validate_schema_dim(
         )
 
 
-_validate_schema_dim("self", SELF_FEATURE_SCHEMA, expected_dim=BASE_SELF_FEATURE_DIM)
 _validate_schema_dim(
-    "candidate", CANDIDATE_FEATURE_SCHEMA, expected_dim=BASE_CANDIDATE_FEATURE_DIM
+    "planet", PLANET_FEATURE_SCHEMA, expected_dim=BASE_PLANET_FEATURE_DIM
 )
+_validate_schema_dim("edge", EDGE_FEATURE_SCHEMA, expected_dim=BASE_EDGE_FEATURE_DIM)
 _validate_schema_dim(
-    "global", GLOBAL_FEATURE_SCHEMA, expected_dim=BASE_GLOBAL_FEATURE_DIM
+    "global", GLOBAL_FEATURE_SCHEMA, expected_dim=BASE_GLOBAL_FEATURE_V2_DIM
 )
 
 
-# -- env-aware factories --
 def feature_history_steps(env_cfg: TaskConfig | None = None) -> int:
     if env_cfg is None:
         return 1
     return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
 
 
-def self_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
-    return SELF_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
+def planet_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
+    return PLANET_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
 
 
-def self_feature_dim(env_cfg: TaskConfig | None = None) -> int:
-    return self_feature_schema(env_cfg).total_dim
+def planet_feature_dim(env_cfg: TaskConfig | None = None) -> int:
+    return planet_feature_schema(env_cfg).total_dim
 
 
-def candidate_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:
-    return CANDIDATE_FEATURE_SCHEMA.with_history(feature_history_steps(env_cfg))
+def edge_feature_dim(env_cfg: TaskConfig | None = None) -> int:
+    return EDGE_FEATURE_SCHEMA.base_dim
 
 
-def candidate_feature_dim(env_cfg: TaskConfig | None = None) -> int:
-    return candidate_feature_schema(env_cfg).total_dim
+def edge_k(env_cfg: TaskConfig) -> int:
+    return max(0, int(env_cfg.candidate_count) - 1)
 
 
 def global_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegistry:

@@ -1,4 +1,4 @@
-"""JAX feature encoder for fixed-shape Orbit Wars states."""
+"""JAX feature encoder: planet tensor + top-K edges + global vector."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from src.features.registry import CANDIDATE_FEATURE_SCHEMA, GLOBAL_FEATURE_SCHEMA
-
-from src.config import TaskConfig
+from src.config.schema import TaskConfig
+from src.features.registry import (
+    GLOBAL_FEATURE_SCHEMA,
+    feature_history_steps,
+)
 from src.game.constants import (
-    BASE_CANDIDATE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_DIM,
-    BASE_SELF_FEATURE_DIM,
+    ANGULAR_VELOCITY_NORM,
+    BASE_EDGE_FEATURE_DIM,
+    BASE_GLOBAL_FEATURE_V2_DIM,
     BOARD_CENTER,
     BOARD_SIZE,
     MAX_FLEET_SPEED,
@@ -21,594 +23,11 @@ from src.game.constants import (
     MAX_PLANETS,
     MAX_PRODUCTION,
     MAX_STEPS,
-    NO_OP_CANDIDATE_INDEX,
     PLANET_LAUNCH_RADIUS_OFFSET,
     ROTATION_RADIUS_LIMIT,
     SUN_RADIUS,
 )
 
-
-class JaxFeatureInterface:
-    """Interface for encoding game states for policy input"""
-
-    def __init__(self, env_cfg: TaskConfig):
-        self.max_planets = int(MAX_PLANETS)
-        self.candidate_count = int(env_cfg.candidate_count)
-        self.ship_bucket_count = int(env_cfg.ship_bucket_count)
-
-
-class JaxFeatureHistory(NamedTuple):
-    self_features: jax.Array
-    candidate_features: jax.Array
-    global_features: jax.Array
-    source_ids: jax.Array
-    candidate_ids: jax.Array
-    cursor: jax.Array
-    length: jax.Array
-
-
-class JaxTurnBatch(NamedTuple):
-    """Fixed-shape decision batch emitted by the JAX feature encoder.
-
-    Leading dimensions are ``(num_envs, max_planets, ...)`` after batching or
-    ``(max_planets, ...)`` for a single environment. ``decision_mask`` marks
-    rows that correspond to learner-owned source planets; padding and non-source
-    rows remain present to preserve static shapes.
-    """
-
-    self_features: jax.Array
-    candidate_features: jax.Array
-    global_features: jax.Array
-    candidate_mask: jax.Array
-    decision_mask: jax.Array
-    source_ids: jax.Array
-    source_ships: jax.Array
-    candidate_ids: jax.Array
-    target_angles: jax.Array
-
-
-def encode_turn(
-    game, env_cfg: TaskConfig, history: JaxFeatureHistory | None = None
-) -> JaxTurnBatch:
-    """Encode a JAX game state into fixed-shape policy inputs.
-
-    Candidate slot ``0`` is reserved for no-op and real targets are sorted
-    into the remaining candidate slots using a JAX-friendly distance key.
-    """
-
-    planets = game.planets
-    player = game.player
-    mine = planets.active & (planets.owner == player)
-    global_features = _global_features(game, env_cfg, history)
-    self_features = _self_features(planets, game.fleets, player, env_cfg, history)
-    candidate_ids, candidate_features, candidate_mask, target_angles = (
-        _candidate_features(planets, game.fleets, player, env_cfg, history)
-    )
-    return JaxTurnBatch(
-        self_features=_stack_self_history(self_features, history, env_cfg),
-        candidate_features=_stack_candidate_history(
-            candidate_features, planets.id, candidate_ids, history, env_cfg
-        ),
-        global_features=jnp.repeat(
-            _stack_global_history(global_features, history, env_cfg)[None, :],
-            MAX_PLANETS,
-            axis=0,
-        ),
-        candidate_mask=candidate_mask & mine[:, None],
-        decision_mask=mine,
-        source_ids=planets.id,
-        source_ships=jnp.maximum(planets.ships, 0.0),
-        candidate_ids=candidate_ids,
-        target_angles=target_angles,
-    )
-
-
-def feature_history_steps(env_cfg: TaskConfig) -> int:
-    return max(1, int(getattr(env_cfg, "feature_history_steps", 1)))
-
-
-def empty_feature_history(env_cfg: TaskConfig) -> JaxFeatureHistory:
-    steps = max(0, feature_history_steps(env_cfg) - 1)
-    return JaxFeatureHistory(
-        self_features=jnp.zeros(
-            (steps, MAX_PLANETS, BASE_SELF_FEATURE_DIM), dtype=jnp.float32
-        ),
-        candidate_features=jnp.zeros(
-            (
-                steps,
-                MAX_PLANETS,
-                env_cfg.candidate_count,
-                BASE_CANDIDATE_FEATURE_DIM,
-            ),
-            dtype=jnp.float32,
-        ),
-        global_features=jnp.zeros((steps, BASE_GLOBAL_FEATURE_DIM), dtype=jnp.float32),
-        source_ids=jnp.full((steps, MAX_PLANETS), -1, dtype=jnp.int32),
-        candidate_ids=jnp.full(
-            (steps, MAX_PLANETS, env_cfg.candidate_count),
-            -1,
-            dtype=jnp.int32,
-        ),
-        cursor=jnp.asarray(0, dtype=jnp.int32),
-        length=jnp.asarray(0, dtype=jnp.int32),
-    )
-
-
-def current_feature_snapshot(game, env_cfg: TaskConfig) -> JaxFeatureHistory:
-    candidate_ids, candidates, _candidate_mask, _target_angles = _candidate_features(
-        game.planets, game.fleets, game.player, env_cfg
-    )
-    return JaxFeatureHistory(
-        self_features=_self_features(game.planets, game.fleets, game.player, env_cfg)[
-            None, ...
-        ],
-        candidate_features=candidates[None, ...],
-        global_features=_global_features(game, env_cfg)[None, ...],
-        source_ids=game.planets.id[None, ...],
-        candidate_ids=candidate_ids[None, ...],
-        cursor=jnp.asarray(0, dtype=jnp.int32),
-        length=jnp.asarray(1, dtype=jnp.int32),
-    )
-
-
-def append_feature_history(
-    history: JaxFeatureHistory | None, game, env_cfg: TaskConfig
-) -> JaxFeatureHistory:
-    steps = max(0, feature_history_steps(env_cfg) - 1)
-    if steps == 0:
-        return empty_feature_history(env_cfg)
-    base = empty_feature_history(env_cfg) if history is None else history
-    current = current_feature_snapshot(game, env_cfg)
-    idx = base.cursor
-    next_cursor = (idx + 1) % steps
-    next_length = jnp.minimum(base.length + 1, steps)
-    return JaxFeatureHistory(
-        self_features=base.self_features.at[idx].set(current.self_features[0]),
-        candidate_features=base.candidate_features.at[idx].set(current.candidate_features[0]),
-        global_features=base.global_features.at[idx].set(current.global_features[0]),
-        source_ids=base.source_ids.at[idx].set(current.source_ids[0]),
-        candidate_ids=base.candidate_ids.at[idx].set(current.candidate_ids[0]),
-        cursor=next_cursor,
-        length=next_length,
-    )
-
-
-
-
-def _ordered_history_indices(history: JaxFeatureHistory, steps: int) -> jax.Array:
-    start = (history.cursor - history.length) % steps
-    return (start + jnp.arange(steps, dtype=jnp.int32)) % steps
-
-
-def _ordered_history(history: JaxFeatureHistory, env_cfg: TaskConfig) -> JaxFeatureHistory:
-    steps = max(0, feature_history_steps(env_cfg) - 1)
-    if steps == 0:
-        return history
-    indices = _ordered_history_indices(history, steps)
-    valid = jnp.arange(steps, dtype=jnp.int32) >= (steps - history.length)
-    return JaxFeatureHistory(
-        self_features=history.self_features[indices] * valid[:, None, None],
-        candidate_features=history.candidate_features[indices] * valid[:, None, None, None],
-        global_features=history.global_features[indices] * valid[:, None],
-        source_ids=jnp.where(valid[:, None], history.source_ids[indices], -1),
-        candidate_ids=jnp.where(valid[:, None, None], history.candidate_ids[indices], -1),
-        cursor=history.cursor,
-        length=history.length,
-    )
-
-def _stack_self_history(
-    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: TaskConfig
-) -> jax.Array:
-    if feature_history_steps(env_cfg) <= 1:
-        return current
-    base = empty_feature_history(env_cfg) if history is None else history
-    ordered = _ordered_history(base, env_cfg)
-    return jnp.transpose(
-        jnp.concatenate([ordered.self_features, current[None, ...]], axis=0), (1, 0, 2)
-    ).reshape(MAX_PLANETS, -1)
-
-
-def _stack_candidate_history(
-    current: jax.Array,
-    source_ids: jax.Array,
-    candidate_ids: jax.Array,
-    history: JaxFeatureHistory | None,
-    env_cfg: TaskConfig,
-) -> jax.Array:
-    if feature_history_steps(env_cfg) <= 1:
-        return current
-    base = empty_feature_history(env_cfg) if history is None else history
-    ordered = _ordered_history(base, env_cfg)
-    history_features = _target_aligned_candidate_history(
-        source_ids, candidate_ids, ordered
-    )
-    stacked = jnp.concatenate([history_features, current[None, ...]], axis=0)
-    return jnp.transpose(stacked, (1, 2, 0, 3)).reshape(
-        MAX_PLANETS, env_cfg.candidate_count, -1
-    )
-
-
-def _target_aligned_candidate_history(
-    source_ids: jax.Array,
-    candidate_ids: jax.Array,
-    history: JaxFeatureHistory,
-) -> jax.Array:
-    source_matches = (
-        history.source_ids[:, None, None, :, None]
-        == source_ids[None, :, None, None, None]
-    )
-    target_matches = (
-        history.candidate_ids[:, None, None, :, :]
-        == candidate_ids[None, :, :, None, None]
-    )
-    valid_targets = candidate_ids[None, :, :, None, None] != -1
-    matches = source_matches & target_matches & valid_targets
-    selected = jnp.where(
-        matches[..., None], history.candidate_features[:, None, None, :, :, :], 0.0
-    )
-    return selected.sum(axis=(3, 4))
-
-
-def _stack_global_history(
-    current: jax.Array, history: JaxFeatureHistory | None, env_cfg: TaskConfig
-) -> jax.Array:
-    if feature_history_steps(env_cfg) <= 1:
-        return current
-    base = empty_feature_history(env_cfg) if history is None else history
-    ordered = _ordered_history(base, env_cfg)
-    return jnp.concatenate([ordered.global_features, current[None, ...]], axis=0).reshape(
-        -1
-    )
-
-
-def _self_features(
-    planets,
-    fleets,
-    player,
-    env_cfg: TaskConfig,
-    history: JaxFeatureHistory | None = None,
-):
-    mine = planets.active & (planets.owner == player)
-    enemy = planets.active & (planets.owner != -1) & (planets.owner != player)
-    my_count = mine.astype(jnp.float32).sum()
-    enemy_count = enemy.astype(jnp.float32).sum()
-    my_ships = jnp.where(mine, planets.ships, 0.0).sum()
-    enemy_ships = jnp.where(enemy, planets.ships, 0.0).sum()
-    owner_counts, owner_ships, _owner_fleets, active_mask, player_count_feature = (
-        owner_relative_summary(planets, fleets, player, env_cfg)
-    )
-    p = MAX_PLANETS
-    owner_context = jnp.broadcast_to(
-        jnp.concatenate(
-            [
-                owner_counts,
-                owner_ships,
-                active_mask,
-                jnp.asarray([player_count_feature], dtype=jnp.float32),
-            ]
-        ),
-        (p, 13),
-    )
-    rotating = is_rotating_xy(planets.x, planets.y, planets.radius)
-    base_features = jnp.stack(
-        [
-            planets.active.astype(jnp.float32),
-            planets.x / BOARD_SIZE,
-            planets.y / BOARD_SIZE,
-            planets.radius / 5.0,
-            jnp.minimum(planets.ships, env_cfg.max_ships) / env_cfg.max_ships,
-            planets.production / MAX_PRODUCTION,
-            rotating.astype(jnp.float32),
-            jnp.full_like(planets.x, my_count / MAX_PLANETS),
-            jnp.full_like(planets.x, enemy_count / MAX_PLANETS),
-            jnp.full_like(planets.x, my_ships / (MAX_PLANETS * env_cfg.max_ships)),
-            jnp.full_like(planets.x, enemy_ships / (MAX_PLANETS * env_cfg.max_ships)),
-        ],
-        axis=-1,
-    )
-    previous_self, previous_present = _previous_self_features(
-        planets.id, history, env_cfg
-    )
-    previous_source_ships = jnp.where(
-        previous_present > 0.5, previous_self[:, 4] * env_cfg.max_ships, planets.ships
-    )
-    source_ship_delta = (planets.ships - previous_source_ships) / env_cfg.max_ships
-    outgoing_friendly = (
-        _outgoing_friendly_fleet_ships(planets.id, fleets, player) / env_cfg.max_ships
-    )
-    incoming_friendly, incoming_enemy = _incoming_fleet_pressure(
-        planets.x, planets.y, planets.radius, fleets, player
-    )
-    temporal_features = jnp.stack(
-        [
-            source_ship_delta,
-            previous_present,
-            previous_present,
-            outgoing_friendly,
-            incoming_friendly / env_cfg.max_ships,
-            incoming_enemy / env_cfg.max_ships,
-        ],
-        axis=-1,
-    )
-    features = jnp.concatenate(
-        [base_features, owner_context, temporal_features], axis=-1
-    )
-    return jnp.where(planets.active[:, None], features, jnp.zeros_like(features))
-
-
-def _candidate_features(
-    planets,
-    fleets,
-    player,
-    env_cfg: TaskConfig,
-    history: JaxFeatureHistory | None = None,
-):
-    p = MAX_PLANETS
-    c = env_cfg.candidate_count
-    src_x = planets.x[:, None]
-    src_y = planets.y[:, None]
-    dx = planets.x[None, :] - src_x
-    dy = planets.y[None, :] - src_y
-    dist = jnp.sqrt(dx * dx + dy * dy)
-    valid_target = planets.active[None, :] & (
-        planets.id[None, :] != planets.id[:, None]
-    )
-    angle_all = jnp.arctan2(dy, dx)
-    crosses_all = shot_crosses_sun_xy(
-        src_x, src_y, planets.radius[:, None], angle_all, planets.x[None, :], planets.y[None, :]
-    )
-    unblocked_valid = valid_target & (~crosses_all)
-    blocked_valid = valid_target & crosses_all
-
-    sort_distance = jnp.where(valid_target, dist, jnp.inf)
-    sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
-    sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
-    order = jnp.lexsort((sort_id, sort_distance, sort_blocked), axis=1)[:, : max(0, c - 1)]
-    pad_width = max(0, c - 1) - order.shape[1]
-    if pad_width:
-        order = jnp.pad(order, ((0, 0), (0, pad_width)), constant_values=0)
-    ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
-
-    selected_unblocked = jnp.take_along_axis(unblocked_valid, order, axis=1)
-    selected_blocked = ordered_valid & (~selected_unblocked)
-    has_any_unblocked = unblocked_valid.any(axis=1)
-    selected_count = selected_unblocked.shape[1]
-    all_selected_blocked = selected_count > 0
-    if selected_count > 0:
-        all_selected_blocked = (selected_blocked.sum(axis=1) == ordered_valid.sum(axis=1)) & (ordered_valid.sum(axis=1) > 0)
-    fallback_needed = has_any_unblocked & all_selected_blocked
-    first_unblocked = jnp.argmin(jnp.where(unblocked_valid, dist, jnp.inf), axis=1)
-    fallback_col = jnp.maximum(ordered_valid.sum(axis=1).astype(jnp.int32) - 1, 0)
-    row_idx = jnp.arange(p, dtype=jnp.int32)
-    order = order.at[row_idx, fallback_col].set(
-        jnp.where(fallback_needed, first_unblocked, order[row_idx, fallback_col])
-    )
-    ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
-
-    tgt_x = jnp.take(planets.x, order, axis=0)
-    tgt_y = jnp.take(planets.y, order, axis=0)
-    tgt_owner = jnp.take(planets.owner, order, axis=0)
-    tgt_ships = jnp.take(planets.ships, order, axis=0)
-    tgt_prod = jnp.take(planets.production, order, axis=0)
-    tgt_radius = jnp.take(planets.radius, order, axis=0)
-    tgt_active = jnp.take(planets.active, order, axis=0)
-    real_dx = tgt_x - src_x
-    real_dy = tgt_y - src_y
-    angle = jnp.arctan2(real_dy, real_dx)
-    crosses = shot_crosses_sun_xy(
-        src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
-    )
-    base_real_features = jnp.stack(
-        [
-            tgt_active.astype(jnp.float32),
-            (tgt_owner == -1).astype(jnp.float32),
-            (tgt_owner == player).astype(jnp.float32),
-            ((tgt_owner != -1) & (tgt_owner != player)).astype(jnp.float32),
-            tgt_x / BOARD_SIZE,
-            tgt_y / BOARD_SIZE,
-            real_dx / BOARD_SIZE,
-            real_dy / BOARD_SIZE,
-            jnp.sqrt(real_dx * real_dx + real_dy * real_dy) / BOARD_SIZE,
-            jnp.minimum(tgt_ships, env_cfg.max_ships) / env_cfg.max_ships,
-            tgt_prod / MAX_PRODUCTION,
-            is_rotating_xy(tgt_x, tgt_y, tgt_radius).astype(jnp.float32),
-            crosses.astype(jnp.float32),
-            jnp.broadcast_to(
-                jnp.minimum(planets.ships[:, None], env_cfg.max_ships)
-                / env_cfg.max_ships,
-                tgt_x.shape,
-            ),
-        ],
-        axis=-1,
-    )
-    current_owner = target_owner_one_hot(tgt_owner, player, env_cfg)
-    target_ids = jnp.take(planets.id, order, axis=0)
-    previous_candidate, previous_present = _previous_candidate_features(
-        planets.id, target_ids, history, env_cfg
-    )
-    incoming_friendly, incoming_enemy = _incoming_fleet_pressure(
-        tgt_x, tgt_y, tgt_radius, fleets, player
-    )
-    target_ships_slice = CANDIDATE_FEATURE_SCHEMA.base_slice("target_ships")
-    previous_target_ships = jnp.where(
-        previous_present > 0.5,
-        previous_candidate[..., target_ships_slice].squeeze(-1) * env_cfg.max_ships,
-        tgt_ships,
-    )
-    ship_delta = (tgt_ships - previous_target_ships) / env_cfg.max_ships
-
-    owner_slots_slice = CANDIDATE_FEATURE_SCHEMA.base_slice("relative_owner_slots")
-    previous_owner_slots = previous_candidate[..., owner_slots_slice]
-    owner_changed = (
-        (jnp.abs(current_owner - previous_owner_slots).sum(axis=-1) > 0.5)
-        & (previous_present > 0.5)
-    ).astype(jnp.float32)
-    temporal_features = jnp.stack(
-        [
-            jnp.sqrt(real_dx * real_dx + real_dy * real_dy)
-            / jnp.maximum(MAX_FLEET_SPEED, 1e-6)
-            / MAX_STEPS,
-            incoming_friendly / env_cfg.max_ships,
-            incoming_enemy / env_cfg.max_ships,
-            ship_delta,
-            owner_changed,
-        ],
-        axis=-1,
-    )
-    history_present = ordered_valid[..., None].astype(jnp.float32)
-    real_features = jnp.concatenate([
-            base_real_features,
-            current_owner,
-            temporal_features,
-            history_present,
-        ],axis=-1)
-    real_features = jnp.where(ordered_valid[..., None], real_features, 0.0)
-    noop_features = jnp.zeros((p, 1, BASE_CANDIDATE_FEATURE_DIM), dtype=jnp.float32)
-    features = jnp.concatenate([noop_features, real_features], axis=1)
-    noop_ids = jnp.full((p, 1), -1, dtype=jnp.int32)
-    real_ids = jnp.where(ordered_valid, jnp.take(planets.id, order, axis=0), -1)
-    ids = jnp.concatenate([noop_ids, real_ids], axis=1)
-    angles = jnp.concatenate([jnp.zeros((p, 1), dtype=jnp.float32), angle], axis=1)
-    noop_mask = (
-        jnp.ones((p, 1), dtype=bool)
-        if c > NO_OP_CANDIDATE_INDEX
-        else jnp.zeros((p, 0), dtype=bool)
-    )
-    real_mask = ordered_valid & (~crosses)
-    mask = jnp.concatenate([noop_mask, real_mask], axis=1)[:, :c]
-    return ids[:, :c], features[:, :c, :], mask, angles[:, :c]
-
-
-def _global_features(
-    game, env_cfg: TaskConfig, history: JaxFeatureHistory | None = None
-):
-    planets = game.planets
-    fleets = game.fleets
-    player = game.player
-    mine = planets.active & (planets.owner == player)
-    enemy = planets.active & (planets.owner != -1) & (planets.owner != player)
-    neutral = planets.active & (planets.owner == -1)
-    my_fleet = fleets.active & (fleets.owner == player)
-    enemy_fleet = fleets.active & (fleets.owner != player)
-    denom = MAX_PLANETS * env_cfg.max_ships
-    owner_counts, owner_ships, owner_fleets, active_mask, player_count_feature = (
-        owner_relative_summary(planets, fleets, player, env_cfg)
-    )
-    owner_production = owner_relative_production(planets, player, env_cfg)
-    previous_global, previous_global_present = _previous_global_features(
-        history, env_cfg
-    )
-    base_features = jnp.asarray(
-        [
-            game.step.astype(jnp.float32) / MAX_STEPS,
-            mine.astype(jnp.float32).sum() / MAX_PLANETS,
-            enemy.astype(jnp.float32).sum() / MAX_PLANETS,
-            neutral.astype(jnp.float32).sum() / MAX_PLANETS,
-            jnp.where(mine, planets.ships, 0.0).sum() / denom,
-            jnp.where(enemy, planets.ships, 0.0).sum() / denom,
-            jnp.where(my_fleet, fleets.ships, 0.0).sum() / denom,
-            jnp.where(enemy_fleet, fleets.ships, 0.0).sum() / denom,
-        ],
-        dtype=jnp.float32,
-    )
-    owner_ship_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_ship_totals"
-    )
-    owner_planet_counts_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_planet_counts"
-    )
-    owner_fleet_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_fleet_totals"
-    )
-    owner_production_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_production"
-    )
-
-    return jnp.concatenate(
-        [
-            base_features,
-            owner_counts,
-            owner_ships,
-            owner_fleets,
-            active_mask,
-            jnp.asarray([player_count_feature], dtype=jnp.float32),
-            owner_production,
-            (owner_ships - previous_global[owner_ship_totals_slice])
-            * previous_global_present,
-            (owner_counts - previous_global[owner_planet_counts_slice])
-            * previous_global_present,
-            (owner_fleets - previous_global[owner_fleet_totals_slice])
-            * previous_global_present,
-            (owner_production - previous_global[owner_production_slice])
-            * previous_global_present,
-        ]
-    )
-
-
-def _previous_self_features(source_ids, history, env_cfg: TaskConfig):
-    if history is None or feature_history_steps(env_cfg) <= 1:
-        return (
-            jnp.zeros((MAX_PLANETS, BASE_SELF_FEATURE_DIM), dtype=jnp.float32),
-            jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
-        )
-    previous_ids = history.source_ids[-1]
-    matches = previous_ids[None, :] == source_ids[:, None]
-    selected = jnp.where(
-        matches[..., None], history.self_features[-1][None, :, :], 0.0
-    ).sum(axis=1)
-    present = (selected[:, 0] > 0.5).astype(jnp.float32)
-    return selected, present
-
-
-def _previous_candidate_features(source_ids, target_ids, history, env_cfg: TaskConfig):
-    if history is None or feature_history_steps(env_cfg) <= 1:
-        return (
-            jnp.zeros(
-                (
-                    MAX_PLANETS,
-                    max(0, env_cfg.candidate_count - 1),
-                    BASE_CANDIDATE_FEATURE_DIM,
-                ),
-                dtype=jnp.float32,
-            ),
-            jnp.zeros(
-                (MAX_PLANETS, max(0, env_cfg.candidate_count - 1)),
-                dtype=jnp.float32,
-            ),
-        )
-    previous_source_matches = (
-        history.source_ids[-1][None, None, :, None] == source_ids[:, None, None, None]
-    )
-    previous_target_matches = (
-        history.candidate_ids[-1][None, None, :, :] == target_ids[:, :, None, None]
-    )
-    valid_targets = target_ids[:, :, None, None] != -1
-    matches = previous_source_matches & previous_target_matches & valid_targets
-    selected = jnp.where(
-        matches[..., None], history.candidate_features[-1][None, None, :, :, :], 0.0
-    ).sum(axis=(2, 3))
-    present = (selected[..., 0] > 0.5).astype(jnp.float32)
-    return selected, present
-
-
-def _previous_global_features(history, env_cfg: TaskConfig):
-    if history is None or feature_history_steps(env_cfg) <= 1:
-        return (
-            jnp.zeros((BASE_GLOBAL_FEATURE_DIM,), dtype=jnp.float32),
-            jnp.asarray(0.0, dtype=jnp.float32),
-        )
-    previous = history.global_features[-1]
-    present = (jnp.abs(previous).sum() > 0.0).astype(jnp.float32)
-    return previous, present
-
-
-def _outgoing_friendly_fleet_ships(source_ids, fleets, player):
-    matches = (
-        (fleets.from_planet_id[None, :] == source_ids[:, None])
-        & fleets.active[None, :]
-        & (fleets.owner[None, :] == player)
-    )
-    return jnp.where(matches, fleets.ships[None, :], 0.0).sum(axis=1)
 
 
 def _incoming_fleet_pressure(x, y, radius, fleets, player):
@@ -740,3 +159,403 @@ def point_to_segment_distance_xy(px, py, vx, vy, wx, wy):
     proj_x = vx + t * (wx - vx)
     proj_y = vy + t * (wy - vy)
     return jnp.sqrt((px - proj_x) ** 2 + (py - proj_y) ** 2)
+
+
+class FeatureHistory(NamedTuple):
+    """Global-only history plus prior planet ship counts for deltas."""
+
+    global_features: jax.Array
+    planet_ships: jax.Array
+    cursor: jax.Array
+    length: jax.Array
+
+
+class TurnBatch(NamedTuple):
+    """Fixed-shape v2 policy input batch."""
+
+    planet_features: jax.Array
+    planet_mask: jax.Array
+    edge_features: jax.Array
+    edge_mask: jax.Array
+    edge_src_ids: jax.Array
+    edge_tgt_ids: jax.Array
+    global_features: jax.Array
+    theta_ref: jax.Array
+
+
+def ship_feature_scale(env_cfg: TaskConfig) -> jax.Array:
+    scale = float(getattr(env_cfg, "ship_feature_scale", env_cfg.max_ships))
+    return jnp.asarray(scale, dtype=jnp.float32)
+
+
+def encode_turn(
+    game, env_cfg: TaskConfig, history: FeatureHistory | None = None
+) -> TurnBatch:
+    """Encode a JAX game state into v2 planet/edge/global tensors."""
+
+    planets = game.planets
+    player = game.player
+    scale = ship_feature_scale(env_cfg)
+    theta_ref = _theta_ref(planets.x, planets.y, planets.owner, player, planets.active)
+    planet_features = _planet_features(
+        planets, game.fleets, player, env_cfg, scale, theta_ref, history
+    )
+    edge_features, edge_mask, edge_tgt_ids = _edge_features(
+        planets, game.fleets, player, env_cfg, scale, theta_ref
+    )
+    global_frame = _global_frame(game, env_cfg, scale, history)
+    global_features = _stack_global_history(global_frame, history, env_cfg)
+    return TurnBatch(
+        planet_features=planet_features,
+        planet_mask=planets.active.astype(jnp.bool_),
+        edge_features=edge_features,
+        edge_mask=edge_mask,
+        edge_src_ids=planets.id.astype(jnp.int32),
+        edge_tgt_ids=edge_tgt_ids,
+        global_features=global_features,
+        theta_ref=theta_ref,
+    )
+
+
+def empty_feature_history(env_cfg: TaskConfig) -> FeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    return FeatureHistory(
+        global_features=jnp.zeros(
+            (steps, BASE_GLOBAL_FEATURE_V2_DIM), dtype=jnp.float32
+        ),
+        planet_ships=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
+        cursor=jnp.array(0, dtype=jnp.int32),
+        length=jnp.array(0, dtype=jnp.int32),
+    )
+
+
+def current_feature_snapshot(game, env_cfg: TaskConfig) -> FeatureHistory:
+    global_frame = _global_frame(game, env_cfg, ship_feature_scale(env_cfg), None)
+    return FeatureHistory(
+        global_features=global_frame[None, :],
+        planet_ships=game.planets.ships,
+        cursor=jnp.array(0, dtype=jnp.int32),
+        length=jnp.array(1, dtype=jnp.int32),
+    )
+
+
+def append_feature_history(
+    history: FeatureHistory | None, game, env_cfg: TaskConfig
+) -> FeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    if steps == 0:
+        return empty_feature_history(env_cfg)
+    base = empty_feature_history(env_cfg) if history is None else history
+    global_frame = _global_frame(game, env_cfg, ship_feature_scale(env_cfg), None)
+    idx = base.cursor % steps
+    global_features = base.global_features.at[idx].set(global_frame)
+    cursor = (base.cursor + 1).astype(jnp.int32)
+    length = jnp.minimum(base.length + 1, steps).astype(jnp.int32)
+    return FeatureHistory(
+        global_features=global_features,
+        planet_ships=game.planets.ships,
+        cursor=cursor,
+        length=length,
+    )
+
+
+def _theta_ref(x, y, owner, player, active):
+    owned = active & (owner == player)
+    count = owned.astype(jnp.float32).sum()
+    cx = jnp.where(count > 0.0, jnp.where(owned, x, 0.0).sum() / count, BOARD_CENTER[0])
+    cy = jnp.where(count > 0.0, jnp.where(owned, y, 0.0).sum() / count, BOARD_CENTER[1])
+    return jnp.arctan2(cy - BOARD_CENTER[1], cx - BOARD_CENTER[0])
+
+
+def _rotate_to_learner_frame(x, y, theta_ref):
+    dx = x - BOARD_CENTER[0]
+    dy = y - BOARD_CENTER[1]
+    cos_t = jnp.cos(-theta_ref)
+    sin_t = jnp.sin(-theta_ref)
+    rx = dx * cos_t - dy * sin_t
+    ry = dx * sin_t + dy * cos_t
+    return rx, ry
+
+
+def _canonical_angle(x, y, theta_ref):
+    dx = x - BOARD_CENTER[0]
+    dy = y - BOARD_CENTER[1]
+    angle = jnp.arctan2(dy, dx) - theta_ref
+    return jnp.arctan2(jnp.sin(angle), jnp.cos(angle)) / jnp.pi
+
+
+def _previous_planet_ships(history: FeatureHistory | None, current_ships):
+    if history is None:
+        return current_ships
+    return history.planet_ships
+
+
+def _planet_features(
+    planets,
+    fleets,
+    player,
+    env_cfg: TaskConfig,
+    scale,
+    theta_ref,
+    history: FeatureHistory | None,
+):
+    owner_slot = target_owner_one_hot(planets.owner, player, env_cfg)
+    rotating = is_rotating_xy(planets.x, planets.y, planets.radius)
+    sun_dx = planets.x - BOARD_CENTER[0]
+    sun_dy = planets.y - BOARD_CENTER[1]
+    orbit_radius = jnp.sqrt(sun_dx * sun_dx + sun_dy * sun_dy) / BOARD_SIZE
+    orbit_angle = _canonical_angle(planets.x, planets.y, theta_ref)
+    prev_ships = _previous_planet_ships(history, planets.ships)
+    ship_delta = (planets.ships - prev_ships) / scale
+    incoming_friendly, _incoming_enemy = _incoming_fleet_pressure(
+        planets.x, planets.y, planets.radius, fleets, player
+    )
+    features = jnp.stack(
+        [
+            planets.active.astype(jnp.float32),
+            orbit_radius,
+            orbit_angle,
+            planets.radius / 5.0,
+            jnp.minimum(planets.ships, scale) / scale,
+            planets.production / MAX_PRODUCTION,
+            rotating.astype(jnp.float32),
+            owner_slot[..., 0],
+            owner_slot[..., 1],
+            owner_slot[..., 2],
+            owner_slot[..., 3],
+            incoming_friendly / scale,
+            ship_delta,
+        ],
+        axis=-1,
+    )
+    return jnp.where(planets.active[:, None], features, jnp.zeros_like(features))
+
+
+def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_ref):
+    p = MAX_PLANETS
+    k = max(0, int(env_cfg.candidate_count) - 1)
+    if k == 0:
+        return (
+            jnp.zeros((p, 0, BASE_EDGE_FEATURE_DIM), dtype=jnp.float32),
+            jnp.zeros((p, 0), dtype=jnp.bool_),
+            jnp.zeros((p, 0), dtype=jnp.int32),
+        )
+
+    src_x = planets.x[:, None]
+    src_y = planets.y[:, None]
+    dx = planets.x[None, :] - src_x
+    dy = planets.y[None, :] - src_y
+    dist = jnp.sqrt(dx * dx + dy * dy)
+    valid_target = planets.active[None, :] & (
+        planets.id[None, :] != planets.id[:, None]
+    )
+    angle_all = jnp.arctan2(dy, dx)
+    crosses_all = shot_crosses_sun_xy(
+        src_x,
+        src_y,
+        planets.radius[:, None],
+        angle_all,
+        planets.x[None, :],
+        planets.y[None, :],
+    )
+    unblocked_valid = valid_target & (~crosses_all)
+
+    sort_distance = jnp.where(valid_target, dist, jnp.inf)
+    sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
+    sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
+    order = jnp.lexsort((sort_id, sort_distance, sort_blocked), axis=1)[:, :k]
+    pad_width = k - order.shape[1]
+    if pad_width > 0:
+        order = jnp.pad(order, ((0, 0), (0, pad_width)), constant_values=0)
+    ordered_valid = jnp.take_along_axis(valid_target, order, axis=1)
+
+    tgt_x = jnp.take(planets.x, order, axis=0)
+    tgt_y = jnp.take(planets.y, order, axis=0)
+    tgt_radius = jnp.take(planets.radius, order, axis=0)
+    tgt_ships = jnp.take(planets.ships, order, axis=0)
+    tgt_owner = jnp.take(planets.owner, order, axis=0)
+    tgt_active = jnp.take(planets.active, order, axis=0)
+
+    src_rx, src_ry = _rotate_to_learner_frame(src_x, src_y, theta_ref)
+    tgt_rx, tgt_ry = _rotate_to_learner_frame(tgt_x, tgt_y, theta_ref)
+    delta_x = (tgt_rx - src_rx) / BOARD_SIZE
+    delta_y = (tgt_ry - src_ry) / BOARD_SIZE
+    distance = jnp.sqrt(delta_x * delta_x + delta_y * delta_y)
+
+    real_dx = tgt_x - src_x
+    real_dy = tgt_y - src_y
+    angle = jnp.arctan2(real_dy, real_dx)
+    crosses = shot_crosses_sun_xy(
+        src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
+    )
+
+    owner_slot = target_owner_one_hot(tgt_owner, player, env_cfg)
+    incoming_friendly, incoming_enemy = _incoming_fleet_pressure(
+        tgt_x, tgt_y, tgt_radius, fleets, player
+    )
+    turns = distance * BOARD_SIZE / jnp.maximum(MAX_FLEET_SPEED, 1e-6) / MAX_STEPS
+
+    edge_rows = jnp.stack(
+        [
+            delta_x,
+            delta_y,
+            distance,
+            crosses.astype(jnp.float32),
+            jnp.minimum(tgt_ships, scale) / scale,
+            owner_slot[..., 0],
+            owner_slot[..., 1],
+            owner_slot[..., 2],
+            owner_slot[..., 3],
+            turns,
+            incoming_friendly / scale,
+            incoming_enemy / scale,
+        ],
+        axis=-1,
+    )
+    edge_rows = jnp.where(ordered_valid[..., None], edge_rows, 0.0)
+    edge_rows = jnp.where(tgt_active[..., None], edge_rows, 0.0)
+
+    owned_source = planets.active & (planets.owner == player)
+    edge_mask = ordered_valid & (~crosses) & owned_source[:, None]
+
+    tgt_ids = jnp.where(ordered_valid, jnp.take(planets.id, order, axis=0), -1)
+    return edge_rows, edge_mask, tgt_ids.astype(jnp.int32)
+
+
+def _global_frame(
+    game, env_cfg: TaskConfig, scale, history: FeatureHistory | None
+):
+    planets = game.planets
+    fleets = game.fleets
+    player = game.player
+    mine = planets.active & (planets.owner == player)
+    enemy = planets.active & (planets.owner != -1) & (planets.owner != player)
+    neutral = planets.active & (planets.owner == -1)
+    my_fleet = fleets.active & (fleets.owner == player)
+    enemy_fleet = fleets.active & (fleets.owner != player)
+    denom = MAX_PLANETS * scale
+    owner_production = owner_relative_production(planets, player, env_cfg)
+    previous_global, previous_present = _previous_global_features(history, env_cfg)
+
+    owner_ship_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_ship_totals"
+    )
+    owner_planet_counts_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_planet_counts"
+    )
+    owner_fleet_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_fleet_totals"
+    )
+    owner_production_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
+        "owner_relative_production"
+    )
+
+    player_count_int = max(1, min(4, int(env_cfg.player_count)))
+    player_count = jnp.asarray(player_count_int, dtype=jnp.int32)
+    planet_slots = (
+        planets.owner.astype(jnp.int32) - player.astype(jnp.int32)
+    ) % player_count
+    valid_planets = (
+        planets.active & (planets.owner >= 0) & (planets.owner < player_count)
+    )
+    owner_counts_raw = jnp.bincount(
+        planet_slots,
+        weights=valid_planets.astype(jnp.float32),
+        length=4,
+    )[:4]
+    owner_ships_raw = jnp.bincount(
+        planet_slots,
+        weights=jnp.where(valid_planets, planets.ships, 0.0),
+        length=4,
+    )[:4]
+    fleet_slots = (
+        fleets.owner.astype(jnp.int32) - player.astype(jnp.int32)
+    ) % player_count
+    valid_fleets = fleets.active & (fleets.owner >= 0) & (fleets.owner < player_count)
+    owner_fleets_raw = jnp.bincount(
+        fleet_slots,
+        weights=jnp.where(valid_fleets, fleets.ships, 0.0),
+        length=4,
+    )[:4]
+    owner_counts = owner_counts_raw / MAX_PLANETS
+    owner_ships = owner_ships_raw / denom
+    owner_fleets = owner_fleets_raw / denom
+    active_mask = (jnp.arange(4, dtype=jnp.int32) < player_count).astype(jnp.float32)
+    player_count_feature = jnp.asarray(player_count_int / 4.0, dtype=jnp.float32)
+
+    angular_velocity = game.angular_velocity.astype(jnp.float32) / ANGULAR_VELOCITY_NORM
+
+    return jnp.concatenate(
+        [
+            jnp.asarray(
+                [
+                    game.step.astype(jnp.float32) / MAX_STEPS,
+                    mine.astype(jnp.float32).sum() / MAX_PLANETS,
+                    enemy.astype(jnp.float32).sum() / MAX_PLANETS,
+                    neutral.astype(jnp.float32).sum() / MAX_PLANETS,
+                    jnp.where(mine, planets.ships, 0.0).sum() / denom,
+                    jnp.where(enemy, planets.ships, 0.0).sum() / denom,
+                    jnp.where(my_fleet, fleets.ships, 0.0).sum() / denom,
+                    jnp.where(enemy_fleet, fleets.ships, 0.0).sum() / denom,
+                ],
+                dtype=jnp.float32,
+            ),
+            owner_counts,
+            owner_ships,
+            owner_fleets,
+            active_mask,
+            jnp.asarray([player_count_feature], dtype=jnp.float32),
+            owner_production,
+            (owner_ships - previous_global[owner_ship_totals_slice]) * previous_present,
+            (owner_counts - previous_global[owner_planet_counts_slice])
+            * previous_present,
+            (owner_fleets - previous_global[owner_fleet_totals_slice])
+            * previous_present,
+            (owner_production - previous_global[owner_production_slice])
+            * previous_present,
+            jnp.asarray([angular_velocity], dtype=jnp.float32),
+        ]
+    )
+
+
+def _previous_global_features(
+    history: FeatureHistory | None, env_cfg: TaskConfig
+):
+    if history is None or feature_history_steps(env_cfg) <= 1 or history.length <= 0:
+        return (
+            jnp.zeros((BASE_GLOBAL_FEATURE_V2_DIM,), dtype=jnp.float32),
+            jnp.asarray(0.0, dtype=jnp.float32),
+        )
+    ordered = _ordered_global_history(history, env_cfg)
+    previous = ordered.global_features[-1]
+    present = (jnp.abs(previous).sum() > 0.0).astype(jnp.float32)
+    return previous, present
+
+
+def _ordered_global_history(
+    history: FeatureHistory, env_cfg: TaskConfig
+) -> FeatureHistory:
+    steps = max(0, feature_history_steps(env_cfg) - 1)
+    if steps == 0:
+        return history
+    start = (history.cursor - history.length) % steps
+    indices = (start + jnp.arange(steps, dtype=jnp.int32)) % steps
+    valid = jnp.arange(steps, dtype=jnp.int32) >= (steps - history.length)
+    return FeatureHistory(
+        global_features=history.global_features[indices] * valid[:, None],
+        planet_ships=history.planet_ships,
+        cursor=history.cursor,
+        length=history.length,
+    )
+
+
+def _stack_global_history(
+    current: jax.Array, history: FeatureHistory | None, env_cfg: TaskConfig
+) -> jax.Array:
+    if feature_history_steps(env_cfg) <= 1:
+        return current
+    base = empty_feature_history(env_cfg) if history is None else history
+    ordered = _ordered_global_history(base, env_cfg)
+    return jnp.concatenate(
+        [ordered.global_features, current[None, ...]], axis=0
+    ).reshape(-1)

@@ -24,16 +24,13 @@ from src.game.constants import (
     TOTAL_COMETS,
 )
 
-from .encode_dispatch import (
-    append_feature_history_dispatch,
-    empty_feature_history_dispatch,
-    encode_turn_dispatch,
-)
 from .features import (
-    JaxFeatureHistory,
-    JaxTurnBatch,
+    FeatureHistory,
+    TurnBatch,
+    append_feature_history,
+    empty_feature_history,
+    encode_turn,
 )
-from .features_v2 import JaxFeatureHistoryV2, JaxTurnBatchV2
 
 BOARD_CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
@@ -102,7 +99,7 @@ class JaxEnvState(NamedTuple):
     game: JaxGameState
     learner_player: jax.Array
     episode_count: jax.Array
-    feature_history: JaxFeatureHistory | JaxFeatureHistoryV2 | None = None
+    feature_history: FeatureHistory | None = None
 
 
 class JaxAction(NamedTuple):
@@ -125,7 +122,7 @@ class JaxStepResult(NamedTuple):
     diagnostics without re-computing game-state deltas.
     """
 
-    batch: JaxTurnBatch | JaxTurnBatchV2
+    batch: TurnBatch
     reward: jax.Array
     done: jax.Array
     terminal_reward: jax.Array
@@ -160,7 +157,7 @@ def empty_action(cfg: TaskConfig) -> JaxAction:
 
 def reset(
     key: jax.Array, cfg: TaskConfig
-) -> tuple[JaxEnvState, JaxTurnBatch | JaxTurnBatchV2]:
+) -> tuple[JaxEnvState, TurnBatch]:
     """Create a deterministic initial board from a JAX PRNG key."""
 
     initial_planet_count = MAX_PLANETS - TOTAL_COMETS
@@ -249,13 +246,13 @@ def reset(
         initial_planets=planets,
         fleets=empty_fleets,
     )
-    history = empty_feature_history_dispatch(cfg)
-    batch = encode_turn_dispatch(game, cfg, history)
+    history = empty_feature_history(cfg)
+    batch = encode_turn(game, cfg, history)
     env_state = JaxEnvState(
         game=game,
         learner_player=jnp.array(0, dtype=jnp.int32),
         episode_count=jnp.array(0, dtype=jnp.int32),
-        feature_history=append_feature_history_dispatch(history, game, cfg),
+        feature_history=append_feature_history(history, game, cfg),
     )
     return env_state, batch
 
@@ -287,7 +284,7 @@ def assign_learner_players(
     episode_count: jax.Array,
     cfg: TaskConfig,
     alternate_player_sides: bool = True,
-) -> tuple[JaxEnvState, JaxTurnBatch | JaxTurnBatchV2]:
+) -> tuple[JaxEnvState, TurnBatch]:
     """Assign learner player ids and rebuild observations from those perspectives.
 
     ``reset`` itself creates a neutral player-0 learner state. Batched training
@@ -302,16 +299,16 @@ def assign_learner_players(
     games = jax.vmap(lambda game, player: game._replace(player=player))(
         env_state.game, learner_player.astype(jnp.int32)
     )
-    histories = jax.vmap(lambda game: empty_feature_history_dispatch(cfg))(games)
+    histories = jax.vmap(lambda game: empty_feature_history(cfg))(games)
     turn_batch = jax.vmap(
-        lambda game, history: encode_turn_dispatch(game, cfg, history)
+        lambda game, history: encode_turn(game, cfg, history)
     )(games, histories)
     env_state = env_state._replace(
         game=games,
         learner_player=learner_player.astype(jnp.int32),
         episode_count=episode_count.astype(jnp.int32),
         feature_history=jax.vmap(
-            lambda history, game: append_feature_history_dispatch(history, game, cfg)
+            lambda history, game: append_feature_history(history, game, cfg)
         )(histories, games),
     )
     return env_state, turn_batch
@@ -358,10 +355,10 @@ def _finish_step(
         + shaping[2]
     )
     learner_game = next_game._replace(player=state.learner_player)
-    batch = encode_turn_dispatch(learner_game, cfg, state.feature_history)
+    batch = encode_turn(learner_game, cfg, state.feature_history)
     next_state = state._replace(
         game=next_game,
-        feature_history=append_feature_history_dispatch(
+        feature_history=append_feature_history(
             state.feature_history, learner_game, cfg
         ),
     )

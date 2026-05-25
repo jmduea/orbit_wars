@@ -41,74 +41,74 @@ Use tiered Makefile targets. **Serial execution only.** Never run `pytest -n`, `
 
 ### Default rule
 
-During implementation, run the **smallest tier that covers your edit**. Escalate only when the change crosses subsystem boundaries or you are preparing to finish/merge.
+During implementation, run **`make test-fast` only**. Do not run JAX compilation, rollout, or training-smoke tests while iterating — they dominate wall time on WSL2/CUDA hosts.
 
 | When | Command | ~tests | Safe on WSL2? |
 |------|---------|--------|---------------|
-| After most edits (default) | `make test-fast` | 89 CPU | Yes |
-| After JAX code edits | `make test-jax` | 18 serial JAX | Caution — single-process CUDA |
-| Before claiming task complete / merge | `make test` | 156 incl. 49 slow | Slow (~15 min), serial — ask user first on WSL2 |
+| After most edits (default) | `make test-fast` | CPU-only | Yes |
+| After JAX edits (optional, user-requested) | `make test-jax` | ~5 lightweight JAX | Caution |
+| Before merge / user asks | `make test` | full incl. slow | Slow (~15 min); ask first |
 
-Do **not** run `make test` routinely while iterating. Reserve it for final verification or when the user explicitly requests full coverage.
+Do **not** run `make test` or `make test-jax` routinely while iterating. JAX env dispatch, rollout collect, PPO update smokes, JIT/vmap encode, and training-loop tests live in the **slow** tier and run only via `make test` (or when the user explicitly asks).
 
 ### Pick a tier from files touched
 
 | If you changed… | Run first | Also run when… |
 |-----------------|-----------|----------------|
-| `conf/`, `src/conf_schema.py`, `src/config.py`, telemetry/metrics | `make test-domain-config` | curriculum config wiring → add `make test-domain-curriculum` |
-| `src/features/`, `src/feature_registry.py`, Python encoding | `make test-domain-features` | JAX mirrors in `src/jax/features.py` → add `make test-jax` or `make test-domain-policy` if shapes affect policy inputs |
-| `src/game/`, `src/env.py`, `src/jax/env.py` | `make test-domain-features` + `make test-domain-jax-env` | semantic env changes → user should run full suite before merge (parity is `@pytest.mark.slow`) |
-| `src/jax/policy.py`, `src/jax/ppo_update.py`, `src/jax/rollout/`, `src/jax/train_state.py`, opponents JAX actions | `make test-domain-policy` | training-loop integration → full suite before merge |
-| `src/training/curriculum.py`, curriculum config | `make test-domain-curriculum` | rollout/opponent mixing → add `make test-domain-policy`; stage promotion integration is slow-tier only |
-| `src/artifacts/`, replay, checkpoint paths | `make test-domain-artifacts` | checkpoint feature metadata → also `make test-domain-config` |
-| `src/jax_train.py`, `src/jax/train.py` | `make test-domain-policy` + `make test-domain-curriculum` | always plan on full suite before merge |
+| `conf/`, `src/config/schema.py`, telemetry/metrics | `make test-domain-config` | curriculum config wiring → `make test-domain-curriculum` |
+| `src/features/`, `src/jax/features.py`, registry, extractor | `make test-domain-features` | user asks for JAX compile coverage |
+| `src/game/`, `src/jax/env.py` | `make test-domain-features` | user asks; env step smokes are slow-tier |
+| `src/jax/policy.py`, `src/jax/ppo_update.py`, `src/jax/rollout/`, opponents JAX actions | `make test-fast` | user asks for rollout/training smokes before merge |
+| `src/training/curriculum.py`, curriculum config | `make test-domain-curriculum` | training-loop integration is slow-tier only |
+| `src/artifacts/`, replay, checkpoint paths | `make test-domain-artifacts` | also `make test-domain-config` when metadata changes |
+| `src/jax/train.py` | `make test-fast` | full suite before merge, user approval only |
 | `mcp-server/` | `npm run build && npm test` (from `mcp-server/`) | unrelated to Python tiers |
 
-When unsure which domain applies, fall back to `make test-fast`, then add `make test-jax` if any JAX path changed.
+When unsure which domain applies, use `make test-fast` only.
 
 ### Targeted single-file runs
 
-Prefer Makefile domain targets. For a single test file after a focused fix:
+Prefer Makefile domain targets. For a focused fix without JAX compile:
 
 ```bash
 uv run --group dev pytest tests/test_config_consolidation.py -m "not slow and not jax"
-uv run --group dev pytest tests/test_jax_ppo.py -m "jax and not slow"
+uv run --group dev pytest tests/test_feature_encoding_golden.py -m "not slow and not jax"
 ```
 
-Do not run a slow test in isolation unless the user asked for it — e.g. avoid `-k sweep_campaign_samples_compose_full`, `-k training_loop_logs_curriculum`, or `tests/test_jax_env_parity.py` during routine agent work.
+Do not run slow-tier tests in isolation unless the user asked — e.g. `tests/test_jax_rollout.py`, `tests/test_jax_curriculum.py`, `test_encode_v2_jit_vmap_smoke`, or `tests/test_jax_env_parity.py`.
 
 ### What lives in the slow tier
 
-`@pytest.mark.slow` (49 tests) includes expensive checks agents should **not** run by default:
+`@pytest.mark.slow` includes expensive checks agents should **not** run during iteration:
 
 - Full Hydra sweep Cartesian product (`test_wandb_sweep_campaign_samples_compose_full`)
-- Full training loop (`test_training_loop_logs_curriculum_events_on_same_update`)
 - JAX env parity suite (`tests/test_jax_env_parity.py`)
-- End-to-end rollout/PPO smokes, curriculum rollout integration, heavy JAX env steps
+- **JAX compile / training smokes:** `tests/test_jax_rollout.py`, `tests/test_jax_curriculum.py`, `tests/test_jax_scripted_opponents.py`, batched env reset/step, end-to-end rollout+PPO, JIT/vmap encode smoke
+- Full training loop and heavy rollout integration in `test_jax_ppo.py`
 
 These run only via `make test` (no `-m` filter). Pytest prints a yellow warning when the full suite is selected.
 
 ### Agent workflow checklist
 
 1. **Implement** — edit the smallest surface needed.
-2. **Verify** — run the matching domain target(s) from the table above; use `make test-fast` when the mapping is unclear.
-3. **JAX follow-up** — if imports under `src/jax/` or JAX test files changed, run `make test-jax`.
-4. **Pre-merge gate** — tell the user full suite (`make test`) is required for parity/rollout/sweep coverage; run it only with user approval on WSL2/NVIDIA hosts.
-5. **Report** — cite which commands you ran; do not claim full coverage after `test-fast` alone.
+2. **Verify** — run `make test-fast` (or the matching domain target if it is also CPU-only).
+3. **Do not** run `make test-jax` or rollout/training smokes unless the user explicitly requests JAX compile coverage.
+4. **Pre-merge gate** — tell the user full suite (`make test`) covers rollout/training/JIT; run only with user approval on WSL2/NVIDIA hosts.
+5. **Report** — cite which commands you ran; do not claim compile/training coverage after `test-fast` alone.
 
 ### Hard prohibitions for agents
 
 - Never use `pytest-xdist`, `-n auto`, or `-n <N>`.
-- Never run `make test` as a default “let me check my work” step mid-task.
-- Never run bare `uv run --group dev pytest` without understanding it executes **all 156 tests** including slow tier.
-- Do not “optimize” verification by skipping tests outside your edit when the change affects shared config, feature dimensions, or JAX shapes — escalate tiers instead.
+- Never run `make test` or `make test-jax` as a default “let me check my work” step mid-task.
+- Never run bare `uv run --group dev pytest` without understanding it executes **all** tests including slow/JAX-compile tier.
+- Do not run JAX rollout, PPO update, training-loop, or JIT/vmap smokes during routine agent work.
 
 ## Testing Expectations
 
 - **Daily dev loop (CPU-safe):** `make test-fast` — `-m "not slow and not jax"`; serial only.
-- **JAX quick check:** `make test-jax` — `-m "jax and not slow"`; serial only.
-- **Before sharing/merging:** `make test` — full suite including `@pytest.mark.slow`; serial only; confirm with user on WSL2.
-- **Domain targets:** `make test-domain-config`, `test-domain-features`, `test-domain-jax-env`, `test-domain-policy`, `test-domain-artifacts`, `test-domain-curriculum`.
+- **JAX lightweight (user-requested only):** `make test-jax` — metric/action-builder checks; no rollout/training smokes.
+- **Before sharing/merging:** `make test` — full suite including JAX compile/training smokes; user approval on WSL2.
+- **Domain targets:** `make test-domain-config`, `test-domain-features`, `test-domain-artifacts`, `test-domain-curriculum` (CPU-only where noted).
 - **xdist blocked:** `tests/conftest.py` raises if parallel workers are requested.
 
 ## MCP Server Notes

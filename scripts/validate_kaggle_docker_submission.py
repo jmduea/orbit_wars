@@ -24,21 +24,15 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 RUNTIME_FILES = (
     "features/__init__.py",
-    "features/encoding.py",
+    "features/extractor.py",
     "features/registry.py",
     "game/__init__.py",
     "game/constants.py",
     "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
-    "jax/policy.py",
-)
-RUNTIME_FILES_V2 = RUNTIME_FILES + (
-    "features/registry_v2.py",
     "jax/features.py",
-    "jax/features_v2.py",
-    "jax/encode_dispatch.py",
-    "jax/policy_v2.py",
+    "jax/policy.py",
     "jax/submission_runtime.py",
     "jax/env.py",
     "jax/rollout/__init__.py",
@@ -46,7 +40,7 @@ RUNTIME_FILES_V2 = RUNTIME_FILES + (
     "opponents/__init__.py",
     "opponents/jax_actions/__init__.py",
     "opponents/jax_actions/builders.py",
-    "opponents/jax_actions/builders_v2.py",
+    "opponents/jax_actions/sampling.py",
 )
 TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax.train")
 
@@ -146,15 +140,7 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
     model_cfg = _require_dict(config_dict, "model")
     training_cfg = _require_dict(config_dict, "training")
     architecture = str(model_cfg.get("architecture", "")).strip().lower()
-    if architecture not in {
-        "mlp",
-        "attention",
-        "transformer",
-        "mlp_pointer",
-        "transformer_pointer",
-        "gnn_pointer",
-        "gnn_pointer_v2",
-    }:
+    if architecture not in {"gnn_pointer", "gnn_pointer_v2"}:
         raise ValidationError("unsupported_architecture", f"Unsupported architecture: {architecture!r}")
 
     params = checkpoint["params"]
@@ -188,8 +174,7 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
     (staging_dir / "main.py").write_text(MAIN_TEMPLATE, encoding="utf-8")
     with (staging_dir / "runtime_artifact.pkl").open("wb") as file:
         pickle.dump(artifact, file)
-    encoding_version = str(artifact["config"].get("task", {}).get("encoding_version", "v1")).strip().lower()
-    runtime_files = RUNTIME_FILES_V2 if encoding_version == "v2" else RUNTIME_FILES
+    runtime_files = RUNTIME_FILES
     manifest = {
         "format_version": RUNTIME_FORMAT_VERSION,
         "checkpoint_update": artifact["checkpoint_update"],
@@ -381,7 +366,6 @@ class TaskConfig:
     player_count: int = 2
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
-    encoding_version: str = "v2"
     feature_history_steps: int = 1
     trajectory_shield_enabled: bool = True
     trajectory_shield_hit_mode: str = "selected_target"
@@ -458,10 +442,6 @@ _MANIFEST_PATH = _ROOT / "manifest.json"
 _STATE = None
 
 
-def _encoding_version_v2(cfg) -> bool:
-    return getattr(cfg.task, "encoding_version", "v1").strip().lower() == "v2"
-
-
 def _load_state():
     global _STATE
     if _STATE is not None:
@@ -473,14 +453,9 @@ def _load_state():
     params = artifact["params"]
     policy = build_jax_policy(cfg)
     _warm_policy(policy, params, cfg)
-    if _encoding_version_v2(cfg):
-        from src.jax.features_v2 import empty_feature_history_v2
+    from src.jax.features import empty_feature_history
 
-        history = empty_feature_history_v2(cfg.task)
-    else:
-        from src.features import FeatureHistoryBuffer
-
-        history = FeatureHistoryBuffer(max_steps=int(cfg.task.feature_history_steps))
+    history = empty_feature_history(cfg.task)
     manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
     _STATE = {
         "cfg": cfg,
@@ -494,63 +469,42 @@ def _load_state():
 
 
 def _warm_policy(policy, params, cfg) -> None:
-    if _encoding_version_v2(cfg):
-        from src.jax.policy_v2 import make_synthetic_turn_batch_v2
+    from src.jax.policy import make_synthetic_turn_batch
 
-        batch = make_synthetic_turn_batch_v2(1, cfg.task)
-        player_count = jnp.full((1,), cfg.task.player_count, dtype=jnp.int32)
-        outputs = policy.apply(
-            {"params": params},
-            batch,
-            player_count=player_count,
-        )
-        jax.tree_util.tree_map(lambda value: value.block_until_ready(), outputs)
-        return
-
-    from src.features.registry import candidate_feature_dim, global_feature_dim, self_feature_dim
-
-    self_features = jnp.zeros((MAX_PLANETS, self_feature_dim(cfg.task)), dtype=jnp.float32)
-    candidate_features = jnp.zeros(
-        (MAX_PLANETS, int(cfg.task.candidate_count), candidate_feature_dim(cfg.task)),
-        dtype=jnp.float32,
-    )
-    global_features = jnp.zeros((MAX_PLANETS, global_feature_dim(cfg.task)), dtype=jnp.float32)
-    candidate_mask = jnp.ones((MAX_PLANETS, int(cfg.task.candidate_count)), dtype=jnp.bool_)
+    batch = make_synthetic_turn_batch(1, cfg.task)
+    player_count = jnp.full((1,), cfg.task.player_count, dtype=jnp.int32)
     outputs = policy.apply(
         {"params": params},
-        self_features,
-        candidate_features,
-        global_features,
-        candidate_mask,
+        batch,
+        player_count=player_count,
     )
     jax.tree_util.tree_map(lambda value: value.block_until_ready(), outputs)
 
 
 def agent(obs: Any) -> list[list[float | int]]:
     state = _load_state()
-    if _encoding_version_v2(state["cfg"]):
-        return _agent_v2(state, obs)
-    return _agent_v1(state, obs)
-
-
-def _agent_v2(state, obs: Any) -> list[list[float | int]]:
-    from src.jax.encode_dispatch import append_feature_history_dispatch, encode_turn_dispatch
+    from src.features import FeatureExtractor
     from src.jax.submission_runtime import (
         batch_game,
         batch_turn,
-        jax_game_from_observation,
         moves_from_jax_action,
-        select_runtime_shielded_policy_actions_v2,
+        select_runtime_shielded_policy_actions,
     )
 
     cfg = state["cfg"]
-    game = jax_game_from_observation(obs, max_fleet_slots=int(cfg.task.max_fleets))
-    batch = encode_turn_dispatch(game, cfg.task, state["history"])
+    extractor = FeatureExtractor(cfg.task)
+    extracted = extractor.extract(
+        obs,
+        history=state["history"],
+        max_fleet_slots=int(cfg.task.max_fleets),
+    )
+    game = extracted.game
+    batch = extracted.batch
     if not bool(jnp.any(batch.planet_mask)):
         return []
     game_batched = batch_game(game)
     batch_batched = batch_turn(batch)
-    action = select_runtime_shielded_policy_actions_v2(
+    action = select_runtime_shielded_policy_actions(
         jax.random.PRNGKey(0),
         state["policy"],
         {"params": state["params"]},
@@ -559,106 +513,8 @@ def _agent_v2(state, obs: Any) -> list[list[float | int]]:
         cfg,
         deterministic=True,
     )
-    state["history"] = append_feature_history_dispatch(state["history"], game, cfg.task)
+    state["history"] = extractor.append_history(state["history"], obs, max_fleet_slots=int(cfg.task.max_fleets))
     return moves_from_jax_action(action, env_index=0)
-
-
-def _agent_v1(state, obs: Any) -> list[list[float | int]]:
-    from src.features import FeatureHistoryBuffer, encode_turn
-    from src.features.registry import candidate_feature_dim, global_feature_dim, self_feature_dim
-    from src.game.trajectory_shield import is_trajectory_safe_for_launch, select_runtime_shielded_policy_actions
-
-    cfg = state["cfg"]
-    batch = encode_turn(obs, cfg.task, env_index=0, feature_history=state["history"])
-    if batch.self_features.shape[0] == 0:
-        return []
-    sampled = select_runtime_shielded_policy_actions(
-        jax.random.PRNGKey(0),
-        state["policy"],
-        {"params": state["params"]},
-        batch,
-        cfg.task,
-        deterministic=True,
-    )
-    target_indices = jax.device_get(sampled.target_index)
-    ship_buckets = jax.device_get(sampled.ship_bucket)
-
-    moves: list[list[float | int]] = []
-    for row_idx, context in enumerate(batch.contexts):
-        remaining_ships = int(context.source_ships)
-        for step_idx in range(target_indices.shape[1]):
-            if len(moves) >= int(cfg.task.max_fleets):
-                break
-            target_idx = int(target_indices[row_idx, step_idx])
-            bucket_idx = int(ship_buckets[row_idx, step_idx])
-            if target_idx == 0 or bucket_idx == 0:
-                continue
-            if target_idx >= len(context.candidate_ids):
-                continue
-            if not bool(context.candidate_mask[target_idx]):
-                continue
-            ships = _ship_count_for_bucket(remaining_ships, bucket_idx, int(cfg.task.ship_bucket_count))
-            if ships <= 0:
-                continue
-            target_id = int(context.candidate_ids[target_idx])
-            angle = float(context.target_angles[target_idx])
-            if not is_trajectory_safe_for_launch(
-                batch.state,
-                int(context.source_id),
-                target_id,
-                angle,
-                int(ships),
-                cfg.task,
-            ):
-                continue
-            remaining_ships = max(0, remaining_ships - ships)
-            moves.append([int(context.source_id), angle, int(ships)])
-    state["history"].append(batch.state_snapshot if hasattr(batch, "state_snapshot") else _snapshot_from_batch(batch))
-    return moves
-
-
-def _ensure_sequence(values):
-    if values.ndim == 2:
-        return values[:, None, :]
-    return values
-
-
-def _ensure_ship_sequence(values):
-    if values.ndim == 3:
-        return values[:, None, :, :]
-    return values
-
-
-def _padded_policy_inputs(batch):
-    row_count = int(batch.self_features.shape[0])
-    if row_count > MAX_PLANETS:
-        raise ValueError(f"Too many policy rows: {row_count} > {MAX_PLANETS}")
-    pad_rows = MAX_PLANETS - row_count
-    self_features = jnp.asarray(batch.self_features)
-    candidate_features = jnp.asarray(batch.candidate_features)
-    global_features = jnp.asarray(batch.global_features)
-    candidate_mask = jnp.asarray(batch.candidate_mask).astype(jnp.bool_)
-    if pad_rows <= 0:
-        return self_features, candidate_features, global_features, candidate_mask
-    self_features = jnp.pad(self_features, ((0, pad_rows), (0, 0)))
-    candidate_features = jnp.pad(candidate_features, ((0, pad_rows), (0, 0), (0, 0)))
-    global_features = jnp.pad(global_features, ((0, pad_rows), (0, 0)))
-    candidate_mask = jnp.pad(candidate_mask, ((0, pad_rows), (0, 0)), constant_values=False)
-    return self_features, candidate_features, global_features, candidate_mask
-
-
-def _ship_count_for_bucket(available_ships: int, bucket: int, bucket_count: int) -> int:
-    if available_ships <= 0 or bucket <= 0:
-        return 0
-    fraction = float(bucket) / float(max(bucket_count - 1, 1))
-    ships = int(math.ceil(float(available_ships) * fraction))
-    return min(available_ships, max(1, ships))
-
-
-def _snapshot_from_batch(batch):
-    from src.features import build_feature_snapshot
-
-    return build_feature_snapshot(batch)
 '''
 
 

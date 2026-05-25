@@ -5,7 +5,7 @@ import numpy as np
 from src.config import RewardConfig, TaskConfig
 from src.features.registry import edge_k, global_feature_dim, planet_feature_dim
 from src.game.constants import BASE_EDGE_FEATURE_DIM, MAX_PLANETS
-from src.jax.env import batched_reset, batched_step, empty_action, reset
+from src.jax.env import batched_reset, empty_action, reset, step
 from src.jax.features import TurnBatch
 
 
@@ -13,9 +13,12 @@ def test_jax_reset_is_deterministic_for_identical_key():
     cfg = TaskConfig(max_fleets=32, candidate_count=6)
     key = jax.random.PRNGKey(123)
 
-    _state_a, batch_a = reset(key, cfg)
-    _state_b, batch_b = reset(key, cfg)
+    state_a, batch_a = reset(key, cfg)
+    state_b, batch_b = reset(key, cfg)
 
+    np.testing.assert_allclose(
+        np.asarray(state_a.game.planets.x), np.asarray(state_b.game.planets.x)
+    )
     np.testing.assert_array_equal(
         np.asarray(batch_a.planet_features), np.asarray(batch_b.planet_features)
     )

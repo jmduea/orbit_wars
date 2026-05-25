@@ -60,8 +60,7 @@ def _self_play_staged_v2_stages() -> list[dict[str, object]]:
 
 def _v2_curriculum_training_cfg(*, player_count: int, four_player_num_envs: int) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer_v2"
-    cfg.task.encoding_version = "v2"
+    cfg.model.architecture = "gnn_pointer"
     cfg.task.player_count = player_count
     cfg.curriculum.enabled = True
     cfg.curriculum.stages = _self_play_staged_v2_stages()

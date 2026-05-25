@@ -4,13 +4,13 @@ import numpy as np
 import pytest
 
 from src.config import TaskConfig, compose_hydra_train_config
-from src.features.registry_v2 import edge_k, global_v2_feature_dim, planet_feature_dim
+from src.features.registry import edge_k, global_feature_dim, planet_feature_dim
 from src.game.constants import BASE_EDGE_FEATURE_DIM, BASE_PLANET_FEATURE_DIM, MAX_PLANETS
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, batched_reset, reset
-from src.jax.features_v2 import (
-    append_feature_history_v2,
-    empty_feature_history_v2,
-    encode_turn_v2,
+from src.jax.features import (
+    append_feature_history,
+    empty_feature_history,
+    encode_turn,
 )
 
 
@@ -26,16 +26,15 @@ def _cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def test_compose_hydra_includes_v2_task_fields() -> None:
+def test_compose_hydra_includes_ship_feature_scale() -> None:
     cfg = compose_hydra_train_config()
-    assert cfg.task.encoding_version == "v2"
     assert cfg.task.ship_feature_scale == 1000.0
 
 
 def test_encode_v2_shapes_on_2p_reset() -> None:
     cfg = _cfg(player_count=2)
     state, _ = reset(jax.random.PRNGKey(11), cfg)
-    batch = encode_turn_v2(state.game, cfg)
+    batch = encode_turn(state.game, cfg)
     k = edge_k(cfg)
 
     assert batch.planet_features.shape == (MAX_PLANETS, BASE_PLANET_FEATURE_DIM)
@@ -44,16 +43,16 @@ def test_encode_v2_shapes_on_2p_reset() -> None:
     assert batch.edge_mask.shape == (MAX_PLANETS, k)
     assert batch.edge_src_ids.shape == (MAX_PLANETS,)
     assert batch.edge_tgt_ids.shape == (MAX_PLANETS, k)
-    assert batch.global_features.shape == (global_v2_feature_dim(cfg),)
+    assert batch.global_features.shape == (global_feature_dim(cfg),)
     assert batch.theta_ref.shape == ()
 
 
 def test_encode_v2_shapes_on_4p_reset() -> None:
     cfg = _cfg(player_count=4)
     state, _ = reset(jax.random.PRNGKey(42), cfg)
-    batch = encode_turn_v2(state.game, cfg)
+    batch = encode_turn(state.game, cfg)
     assert batch.planet_features.shape == (MAX_PLANETS, planet_feature_dim(cfg))
-    assert batch.global_features.shape == (global_v2_feature_dim(cfg),)
+    assert batch.global_features.shape == (global_feature_dim(cfg),)
 
 
 def test_encode_v2_sun_crossing_targets_are_masked() -> None:
@@ -96,18 +95,18 @@ def test_encode_v2_sun_crossing_targets_are_masked() -> None:
         initial_planets=planets,
         fleets=fleets,
     )
-    batch = encode_turn_v2(game, cfg)
+    batch = encode_turn(game, cfg)
     assert not bool(np.asarray(batch.edge_mask[0]).any())
 
 
 def test_encode_v2_global_history_expands_dim() -> None:
     cfg = _cfg(feature_history_steps=3)
     state, _ = reset(jax.random.PRNGKey(7), cfg)
-    history = empty_feature_history_v2(cfg)
-    history = append_feature_history_v2(history, state.game, cfg)
-    history = append_feature_history_v2(history, state.game, cfg)
-    batch = encode_turn_v2(state.game, cfg, history=history)
-    assert batch.global_features.shape == (global_v2_feature_dim(cfg),)
+    history = empty_feature_history(cfg)
+    history = append_feature_history(history, state.game, cfg)
+    history = append_feature_history(history, state.game, cfg)
+    batch = encode_turn(state.game, cfg, history=history)
+    assert batch.global_features.shape == (global_feature_dim(cfg),)
 
 
 @pytest.mark.jax
@@ -117,9 +116,9 @@ def test_encode_v2_jit_vmap_smoke() -> None:
     states, _ = batched_reset(keys, cfg)
 
     def encode_game(game):
-        return encode_turn_v2(game, cfg)
+        return encode_turn(game, cfg)
 
     vmapped = jax.jit(jax.vmap(encode_game))
     batch = vmapped(states.game)
     assert batch.planet_features.shape == (4, MAX_PLANETS, BASE_PLANET_FEATURE_DIM)
-    assert batch.global_features.shape == (4, global_v2_feature_dim(cfg))
+    assert batch.global_features.shape == (4, global_feature_dim(cfg))

@@ -10,10 +10,9 @@ from src.artifacts.checkpoint_compat import (
 from src.config.schema import TaskConfig
 
 
-def _v2_task(**kwargs) -> TaskConfig:
+def _task(**kwargs) -> TaskConfig:
     base = dict(
         candidate_count=4,
-        encoding_version="v2",
         ship_feature_scale=1000.0,
         feature_history_steps=1,
     )
@@ -21,11 +20,10 @@ def _v2_task(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def test_feature_metadata_v2_includes_schema_and_dims() -> None:
-    metadata = feature_metadata(_v2_task())
+def test_feature_metadata_includes_schema_and_dims() -> None:
+    metadata = feature_metadata(_task())
 
     assert metadata["schema_version"] == 2
-    assert metadata["encoding_version"] == "v2"
     assert metadata["planet_feature_dim"] == 13
     assert metadata["edge_feature_dim"] == 12
     assert metadata["global_feature_dim"] == 46
@@ -34,16 +32,7 @@ def test_feature_metadata_v2_includes_schema_and_dims() -> None:
     assert metadata["edge_k"] == 3
 
 
-def test_feature_metadata_v1_keeps_legacy_dims() -> None:
-    metadata = feature_metadata(TaskConfig(encoding_version="v1"))
-
-    assert metadata["schema_version"] == 1
-    assert metadata["encoding_version"] == "v1"
-    assert "self_feature_dim" in metadata
-    assert "planet_feature_dim" not in metadata
-
-
-def test_validate_rejects_v1_checkpoint_for_v2_config() -> None:
+def test_validate_rejects_v1_checkpoint_metadata() -> None:
     checkpoint = {
         "feature_metadata": {
             "self_feature_dim": 30,
@@ -53,29 +42,28 @@ def test_validate_rejects_v1_checkpoint_for_v2_config() -> None:
         }
     }
 
-    with pytest.raises(ValueError, match="v1 feature metadata"):
-        validate_checkpoint_feature_compatibility(checkpoint, _v2_task())
+    with pytest.raises(ValueError, match="legacy v1 feature metadata"):
+        validate_checkpoint_feature_compatibility(checkpoint, _task())
 
 
-def test_validate_accepts_matching_v2_dims() -> None:
-    env_cfg = _v2_task()
+def test_validate_accepts_matching_dims() -> None:
+    env_cfg = _task()
     checkpoint = {"feature_metadata": feature_metadata(env_cfg)}
 
     validate_checkpoint_feature_compatibility(checkpoint, env_cfg)
 
 
-def test_validate_rejects_v2_dim_mismatch() -> None:
-    env_cfg = _v2_task()
-    stored = feature_metadata(env_cfg)
-    stored = dict(stored)
+def test_validate_rejects_dim_mismatch() -> None:
+    env_cfg = _task()
+    stored = dict(feature_metadata(env_cfg))
     stored["planet_feature_dim"] = stored["planet_feature_dim"] + 1
     checkpoint = {"feature_metadata": stored}
 
-    with pytest.raises(ValueError, match="v2 feature configuration"):
+    with pytest.raises(ValueError, match="incompatible with the current feature"):
         validate_checkpoint_feature_compatibility(checkpoint, env_cfg)
 
 
-def test_infer_v2_metadata_from_state_dict_keys() -> None:
+def test_infer_metadata_from_state_dict_keys() -> None:
     state_dict = {
         "params": {
             "encoder_module": {
@@ -90,7 +78,16 @@ def test_infer_v2_metadata_from_state_dict_keys() -> None:
 
     assert inferred is not None
     assert inferred["schema_version"] == 2
-    assert inferred["encoding_version"] == "v2"
     assert inferred["planet_feature_dim"] == 13
     assert inferred["edge_feature_dim"] == 12
     assert inferred["global_feature_dim"] == 46
+
+
+def test_infer_metadata_rejects_v1_self_encoder() -> None:
+    state_dict = {
+        "params": {
+            "self_encoder_0": {"kernel": __import__("numpy").zeros((30, 16))},
+        }
+    }
+
+    assert infer_feature_metadata_from_state_dict(state_dict) is None

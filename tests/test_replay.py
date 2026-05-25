@@ -2,40 +2,36 @@ from __future__ import annotations
 
 import pickle
 from pathlib import Path
+from unittest.mock import patch
 
 import jax.numpy as jnp
-import numpy as np
 
 from src.artifacts import replay
 from src.config import TrainConfig
-from src.features import DecisionContext, TurnBatch
-from src.game.types import GameState
+from src.jax.env import JaxAction
+from src.jax.features import TurnBatch
 from src.jax.policy import JaxPolicyOutput
+from src.game.constants import MAX_PLANETS
 
 
 class _FakePolicy:
     def apply(self, *_args, **_kwargs) -> JaxPolicyOutput:
-        target_logits = jnp.full((1, 2, 12), -10.0, dtype=jnp.float32)
-        target_logits = target_logits.at[0, 0, 3].set(10.0)
-        target_logits = target_logits.at[0, 1, 5].set(9.0)
-
-        ship_logits = jnp.full((1, 2, 12, 4), -10.0, dtype=jnp.float32)
-        ship_logits = ship_logits.at[0, 0, 3, 2].set(10.0)
-        ship_logits = ship_logits.at[0, 1, 5, 3].set(10.0)
+        target_logits = jnp.full((1, 1, 4), -10.0, dtype=jnp.float32)
+        target_logits = target_logits.at[0, 0, 1].set(10.0)
+        ship_logits = jnp.full((1, 1, 4, 2), -10.0, dtype=jnp.float32)
+        ship_logits = ship_logits.at[0, 0, 1, 1].set(10.0)
         return JaxPolicyOutput(
             target_logits=target_logits,
             ship_logits=ship_logits,
             value=jnp.zeros((1,), dtype=jnp.float32),
-            decoded_target_sequence=jnp.full((1, 2), -1, dtype=jnp.int32),
+            decoded_target_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
         )
 
 
-def test_jax_replay_actor_handles_sequence_policy_outputs(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_jax_replay_actor_uses_submission_runtime_path(monkeypatch, tmp_path: Path) -> None:
     cfg = TrainConfig()
-    cfg.task.candidate_count = 12
-    cfg.task.ship_bucket_count = 4
+    cfg.task.candidate_count = 4
+    cfg.task.ship_bucket_count = 2
     cfg.task.max_fleets = 8
     cfg.task.trajectory_shield_enabled = False
 
@@ -43,32 +39,35 @@ def test_jax_replay_actor_handles_sequence_policy_outputs(
     with checkpoint_path.open("wb") as file:
         pickle.dump({"params": {"fake": "params"}}, file)
 
-    candidate_mask = np.ones((12,), dtype=bool)
-    candidate_ids = list(range(12))
-    target_angles = [float(index) for index in range(12)]
-
-    batch = TurnBatch(
-        self_features=np.zeros((1, 1), dtype=np.float32),
-        candidate_features=np.zeros((1, 12, 1), dtype=np.float32),
-        global_features=np.zeros((1, 1), dtype=np.float32),
-        candidate_mask=candidate_mask[None, :],
-        contexts=[
-            DecisionContext(
-                env_index=0,
-                source_id=7,
-                candidate_ids=candidate_ids,
-                candidate_mask=candidate_mask,
-                ship_counts=[0] * 12,
-                source_ships=10,
-                target_angles=target_angles,
-            )
-        ],
-        state=GameState(player=0, step=0, planets=[], fleets=[]),
+    fake_batch = TurnBatch(
+        planet_features=jnp.zeros((MAX_PLANETS, 13), dtype=jnp.float32),
+        planet_mask=jnp.ones((MAX_PLANETS,), dtype=bool),
+        edge_features=jnp.zeros((MAX_PLANETS, 3, 12), dtype=jnp.float32),
+        edge_mask=jnp.zeros((MAX_PLANETS, 3), dtype=bool),
+        edge_src_ids=jnp.arange(MAX_PLANETS, dtype=jnp.int32),
+        edge_tgt_ids=jnp.full((MAX_PLANETS, 3), -1, dtype=jnp.int32),
+        global_features=jnp.zeros((46,), dtype=jnp.float32),
+        theta_ref=jnp.array(0.0, dtype=jnp.float32),
+    )
+    fake_action = JaxAction(
+        source_id=jnp.array([7], dtype=jnp.int32),
+        angle=jnp.array([1.0], dtype=jnp.float32),
+        ships=jnp.array([3.0], dtype=jnp.float32),
+        valid=jnp.array([True], dtype=bool),
     )
 
-    monkeypatch.setattr(replay, "build_jax_policy", lambda cfg: _FakePolicy())
-    monkeypatch.setattr(replay, "encode_turn", lambda *_args, **_kwargs: batch)
+    with patch("src.artifacts.replay.build_jax_policy", return_value=_FakePolicy()), patch(
+        "src.artifacts.replay.jax_game_from_observation"
+    ) as mock_game, patch(
+        "src.artifacts.replay.encode_turn", return_value=fake_batch
+    ), patch(
+        "src.artifacts.replay.select_runtime_shielded_policy_actions",
+        return_value=fake_action,
+    ), patch(
+        "src.artifacts.replay.moves_from_jax_action", return_value=[[7, 1.0, 3]]
+    ):
+        act = replay._build_jax_policy_actions(cfg, checkpoint_path)
+        moves = act({"player": 0, "planets": []})
 
-    act = replay._build_jax_policy_actions(cfg, checkpoint_path)
-
-    assert act({}) == [[7, 3.0, 7], [7, 5.0, 3]]
+    assert moves == [[7, 1.0, 3]]
+    mock_game.assert_called_once()

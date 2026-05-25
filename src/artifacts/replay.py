@@ -11,13 +11,16 @@ from .checkpoint_compat import (
     validate_checkpoint_config_compatibility,
 )
 from src.config import TrainConfig
-from src.features import encode_turn, ship_count_for_bucket
+from src.jax.features import encode_turn
 from src.jax.policy import build_jax_policy
-from src.opponents import build_opponent
-from src.game.trajectory_shield import (
-    is_trajectory_safe_for_launch,
+from src.jax.submission_runtime import (
+    batch_game,
+    batch_turn,
+    jax_game_from_observation,
+    moves_from_jax_action,
     select_runtime_shielded_policy_actions,
 )
+from src.opponents import build_opponent
 
 
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
@@ -55,53 +58,20 @@ def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
     )
 
     def act(observation: object) -> list[list[float | int]]:
-        batch = encode_turn(observation, cfg.task, env_index=0)
-        if batch.self_features.shape[0] == 0:
-            return []
-        sampled = select_runtime_shielded_policy_actions(
+        game = jax_game_from_observation(
+            observation, max_fleet_slots=int(cfg.task.max_fleets)
+        )
+        batch = encode_turn(game, cfg.task)
+        action = select_runtime_shielded_policy_actions(
             jax.random.PRNGKey(_seed_for_update(cfg, 0)),
             policy,
             {"params": params},
-            batch,
-            cfg.task,
+            batch_game(game),
+            batch_turn(batch),
+            cfg,
             deterministic=True,
         )
-        target_indices = jax.device_get(sampled.target_index)
-        ship_buckets = jax.device_get(sampled.ship_bucket)
-
-        moves: list[list[float | int]] = []
-        for row_idx, context in enumerate(batch.contexts):
-            remaining_ships = int(context.source_ships)
-            for step_idx in range(target_indices.shape[1]):
-                if len(moves) >= int(cfg.task.max_fleets):
-                    break
-                target_idx = int(target_indices[row_idx, step_idx])
-                bucket_idx = int(ship_buckets[row_idx, step_idx])
-                if target_idx == 0 or bucket_idx == 0:
-                    continue
-                if target_idx >= len(context.candidate_ids):
-                    continue
-                if not bool(context.candidate_mask[target_idx]):
-                    continue
-                ships = ship_count_for_bucket(
-                    remaining_ships, bucket_idx, cfg.task.ship_bucket_count
-                )
-                if ships <= 0:
-                    continue
-                target_id = int(context.candidate_ids[target_idx])
-                angle = float(context.target_angles[target_idx])
-                if not is_trajectory_safe_for_launch(
-                    batch.state,
-                    int(context.source_id),
-                    target_id,
-                    angle,
-                    ships,
-                    cfg.task,
-                ):
-                    continue
-                remaining_ships = max(0, remaining_ships - ships)
-                moves.append([context.source_id, angle, ships])
-        return moves
+        return moves_from_jax_action(action)
 
     return act
 

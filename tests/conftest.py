@@ -18,17 +18,17 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_metric_registry.py": "config",
     "test_run_paths.py": "config",
     "test_features.py": "features",
-    "test_feature_history.py": "features",
     "test_feature_registry.py": "features",
+    "test_feature_encoding_golden.py": "features",
     "test_normalization.py": "features",
     "test_jax_env.py": "jax_env",
-    "test_jax_env_v2_dispatch.py": "jax_env",
+    "test_jax_env_dispatch.py": "jax_env",
     "test_jax_env_parity.py": "jax_env",
-    "test_jax_policy.py": "policy",
-    "test_jax_policy_v2.py": "policy",
+    "test_jax_policy_gnn.py": "policy",
     "test_jax_ppo.py": "policy",
-    "test_jax_rollout_v2.py": "policy",
-    "test_jax_scripted_opponents_v2.py": "policy",
+    "test_jax_rollout.py": "policy",
+    "test_jax_scripted_opponents.py": "policy",
+    "test_jax_curriculum.py": "curriculum",
     "test_trajectory_shield.py": "policy",
     "test_artifact_pipeline.py": "artifacts",
     "test_replay.py": "artifacts",
@@ -40,13 +40,12 @@ DOMAIN_BY_FILE: dict[str, str] = {
 FULL_JAX_FILES = frozenset(
     {
         "test_jax_env.py",
-        "test_jax_env_v2_dispatch.py",
+        "test_jax_env_dispatch.py",
         "test_jax_env_parity.py",
-        "test_jax_policy.py",
-        "test_jax_policy_v2.py",
+        "test_jax_policy_gnn.py",
         "test_jax_ppo.py",
-        "test_jax_rollout_v2.py",
-        "test_jax_scripted_opponents_v2.py",
+        "test_jax_rollout.py",
+        "test_jax_scripted_opponents.py",
     }
 )
 
@@ -59,7 +58,18 @@ JAX_TEST_NAMES = frozenset(
     }
 )
 
-SLOW_FILES = frozenset({"test_jax_env_parity.py"})
+SLOW_FILES = frozenset(
+    {
+        "test_jax_env_parity.py",
+        # JAX compile / rollout / training-loop smokes — pre-merge only.
+        "test_jax_rollout.py",
+        "test_jax_curriculum.py",
+        "test_jax_scripted_opponents.py",
+        "test_jax_env.py",
+        "test_jax_policy_gnn.py",
+        "test_jax_env_dispatch.py",
+    }
+)
 
 SLOW_TESTS = frozenset(
     {
@@ -79,6 +89,17 @@ SLOW_TESTS = frozenset(
         "test_jax_candidates_are_sorted_by_distance_before_id_tiebreaker",
         "test_jax_candidate_history_aligns_by_source_and_target_id_after_reorder",
         "test_jax_candidate_history_zeros_missing_prior_targets",
+        "test_encode_v2_jit_vmap_smoke",
+        "test_end_to_end_jax_rollout_and_update_smoke",
+        "test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit",
+        "test_collect_rollout_jax_supports_four_player_multi_player_step",
+        "test_collect_rollout_jax_two_player_static_shapes",
+        "test_collect_rollout_jax_rotates_learner_after_reset_done",
+        "test_collect_rollout_jax_emits_training_scalar_metric_contract",
+        "test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks",
+        "test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs",
+        "test_ppo_update_jax_accepts_four_player_rollout_transitions",
+        "test_rollout_microbatching_preserves_full_environment_axis",
     }
 )
 

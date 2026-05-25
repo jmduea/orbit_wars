@@ -5,54 +5,25 @@ import optax
 
 import jax
 from src.config import TrainConfig
-from src.features.registry import (
-    candidate_feature_dim,
-    global_feature_dim,
-    self_feature_dim,
-)
-from src.game.trajectory_shield import mask_policy_output_for_shield
-
-from .features import JaxTurnBatch
-from .policy import action_log_prob_and_entropy
-from .rollout.types import JaxTrainState, JaxTransitionBatch
-
-
-def flatten_batch(
-    batch: JaxTurnBatch,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Flatten environment/source dimensions into policy decision rows."""
-
-    return (
-        batch.self_features.reshape(-1, batch.self_features.shape[-1]),
-        batch.candidate_features.reshape(
-            -1, batch.candidate_features.shape[-2], batch.candidate_features.shape[-1]
-        ),
-        batch.global_features.reshape(-1, batch.global_features.shape[-1]),
-        batch.candidate_mask.reshape(-1, batch.candidate_mask.shape[-1]),
-        batch.decision_mask.reshape(-1),
-    )
+from src.game.trajectory_shield import mask_policy_output_for_shield_v2
+from src.jax.features import TurnBatch
+from src.jax.policy import action_log_prob_and_entropy, edge_action_count
+from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 
 
 def concatenate_transition_batches(
     batches: tuple[JaxTransitionBatch, ...] | list[JaxTransitionBatch],
 ) -> JaxTransitionBatch:
-    """Concatenate compatible rollout batches along the environment axis.
-
-    Mixed-format JAX training uses one compiled collector per static player
-    count. The resulting transition tensors share rollout and feature shapes,
-    so PPO can consume a single larger batch by joining their independent
-    environment axes.
-    """
-
+    """Concatenate compatible rollout batches along the environment axis."""
     if not batches:
         raise ValueError("At least one transition batch is required.")
     if len(batches) == 1:
         return batches[0]
-    reference_shape = batches[0].self_features.shape
+    reference_shape = batches[0].planet_features.shape
     for batch in batches[1:]:
         if (
-            batch.self_features.shape[0] != reference_shape[0]
-            or batch.self_features.shape[2:] != reference_shape[2:]
+            batch.planet_features.shape[0] != reference_shape[0]
+            or batch.planet_features.shape[2:] != reference_shape[2:]
         ):
             raise ValueError(
                 "Transition batches must share rollout and feature dimensions "
@@ -75,46 +46,69 @@ def discounted_returns(rewards: jax.Array, done: jax.Array, gamma: float) -> jax
     return out
 
 
+def _reshape_minibatches(
+    value: jax.Array,
+    minibatch_count: int,
+    minibatch_size: int,
+    padding_value: float | int | bool,
+) -> jax.Array:
+    """Pad and reshape a flat leading axis into static minibatches."""
+
+    padded_rows = minibatch_count * minibatch_size
+    pad_rows = padded_rows - value.shape[0]
+    pad_width = [(0, pad_rows)] + [(0, 0)] * (value.ndim - 1)
+    padded = jnp.pad(value, pad_width, constant_values=padding_value)
+    return padded.reshape((minibatch_count, minibatch_size) + value.shape[1:])
+
+
+def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
+    """Return the mean of ``x`` over entries where ``mask`` is non-zero."""
+
+    return (x * mask).sum() / jnp.maximum(mask.sum(), 1.0)
+
+
+def _flatten_transition_to_turn_batch(batch: JaxTransitionBatch) -> TurnBatch:
+    env_rows = batch.target_index.shape[0] * batch.target_index.shape[1]
+    return TurnBatch(
+        planet_features=batch.planet_features.reshape(
+            env_rows, *batch.planet_features.shape[2:]
+        ),
+        planet_mask=batch.planet_mask.reshape(env_rows, batch.planet_mask.shape[-1]),
+        edge_features=batch.edge_features.reshape(
+            env_rows, *batch.edge_features.shape[2:]
+        ),
+        edge_mask=batch.edge_mask.reshape(env_rows, *batch.edge_mask.shape[2:]),
+        edge_src_ids=batch.edge_src_ids.reshape(env_rows, batch.edge_src_ids.shape[-1]),
+        edge_tgt_ids=batch.edge_tgt_ids.reshape(
+            env_rows, *batch.edge_tgt_ids.shape[2:]
+        ),
+        global_features=batch.global_features.reshape(
+            env_rows, batch.global_features.shape[-1]
+        ),
+        theta_ref=batch.theta_ref.reshape(env_rows),
+    )
+
+
 def ppo_update_jax(
     train_state: JaxTrainState,
     policy: object,
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    """Apply one PPO epoch using memory-bounded minibatches.
-
-    Rollouts can be large when benchmarking long attention-policy runs. Running
-    the policy over every rollout row in a single XLA program forces the GPU to
-    materialize attention intermediates for the entire rollout at once. Instead,
-    flatten once, pad to static memory chunks, and scan sequential optimizer
-    steps over those chunks. The chunk size honors large configured minibatches
-    and the ``training.update_chunk_rows_min``/``training.update_chunk_rows_max``
-    limits so rollouts can trade memory pressure for throughput.
-    """
-    from src.jax.train_state import uses_v2_policy_batch
-
-    if uses_v2_policy_batch(cfg):
-        from .ppo_update_v2 import ppo_update_jax_v2
-
-        return ppo_update_jax_v2(train_state, policy, batch, cfg)
-
     sequence_k = batch.target_index.shape[-1]
-    mask = batch.decision_mask.reshape(-1, sequence_k).astype(jnp.float32)
-    self_features = batch.self_features.reshape(-1, self_feature_dim(cfg.task))
-    candidate_features = batch.candidate_features.reshape(
-        -1, cfg.task.candidate_count, candidate_feature_dim(cfg.task)
-    )
-    global_features = batch.global_features.reshape(-1, global_feature_dim(cfg.task))
-    candidate_mask = batch.candidate_mask.reshape(-1, cfg.task.candidate_count)
-    player_count = batch.player_count.reshape(-1)
+    edge_count = edge_action_count(cfg.task)
+    env_rows = batch.target_index.shape[0] * batch.target_index.shape[1]
+    mask = jnp.ones((env_rows, sequence_k), dtype=jnp.float32)
+    turn_batch = _flatten_transition_to_turn_batch(batch)
+    player_count = batch.player_count.reshape(env_rows)
     ship_bucket_mask = batch.ship_bucket_mask.reshape(
-        -1, sequence_k, cfg.task.candidate_count, cfg.task.ship_bucket_count
+        env_rows, sequence_k, edge_count, cfg.task.ship_bucket_count
     )
-    target = batch.target_index.reshape(-1, sequence_k)
-    bucket = batch.ship_bucket.reshape(-1, sequence_k)
-    old_log_prob = batch.log_prob.reshape(-1, sequence_k)
-    returns = batch.returns.reshape(-1, sequence_k)
-    advantages = batch.advantages.reshape(-1, sequence_k)
+    target = batch.target_index.reshape(env_rows, sequence_k)
+    bucket = batch.ship_bucket.reshape(env_rows, sequence_k)
+    old_log_prob = batch.log_prob.reshape(env_rows, sequence_k)
+    returns = batch.returns.reshape(env_rows, sequence_k)
+    advantages = batch.advantages.reshape(env_rows, sequence_k)
     advantage_mean = masked_mean(advantages, mask)
     advantages = (advantages - advantage_mean) / jnp.sqrt(
         masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
@@ -130,19 +124,42 @@ def ppo_update_jax(
     chunk_target = max(int(cfg.training.minibatch_size), min_chunk_rows)
     minibatch_size = min(max(chunk_target, 1), max_chunk_rows, total_rows)
     minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
+
+    edge_action_mask = jnp.concatenate(
+        [
+            turn_batch.edge_mask.reshape(env_rows, edge_count - 1),
+            jnp.ones((env_rows, 1), dtype=bool),
+        ],
+        axis=1,
+    )
     minibatches = {
         "mask": _reshape_minibatches(mask, minibatch_count, minibatch_size, 0.0),
-        "self_features": _reshape_minibatches(
-            self_features, minibatch_count, minibatch_size, 0.0
+        "planet_features": _reshape_minibatches(
+            turn_batch.planet_features, minibatch_count, minibatch_size, 0.0
         ),
-        "candidate_features": _reshape_minibatches(
-            candidate_features, minibatch_count, minibatch_size, 0.0
+        "planet_mask": _reshape_minibatches(
+            turn_batch.planet_mask, minibatch_count, minibatch_size, False
+        ),
+        "edge_features": _reshape_minibatches(
+            turn_batch.edge_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "edge_mask": _reshape_minibatches(
+            turn_batch.edge_mask, minibatch_count, minibatch_size, False
+        ),
+        "edge_src_ids": _reshape_minibatches(
+            turn_batch.edge_src_ids, minibatch_count, minibatch_size, 0
+        ),
+        "edge_tgt_ids": _reshape_minibatches(
+            turn_batch.edge_tgt_ids, minibatch_count, minibatch_size, 0
         ),
         "global_features": _reshape_minibatches(
-            global_features, minibatch_count, minibatch_size, 0.0
+            turn_batch.global_features, minibatch_count, minibatch_size, 0.0
         ),
-        "candidate_mask": _reshape_minibatches(
-            candidate_mask, minibatch_count, minibatch_size, False
+        "theta_ref": _reshape_minibatches(
+            turn_batch.theta_ref, minibatch_count, minibatch_size, 0.0
+        ),
+        "edge_action_mask": _reshape_minibatches(
+            edge_action_mask, minibatch_count, minibatch_size, False
         ),
         "player_count": _reshape_minibatches(
             player_count, minibatch_count, minibatch_size, 0
@@ -163,20 +180,27 @@ def ppo_update_jax(
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
+        mb_batch = TurnBatch(
+            planet_features=minibatch["planet_features"],
+            planet_mask=minibatch["planet_mask"],
+            edge_features=minibatch["edge_features"],
+            edge_mask=minibatch["edge_mask"],
+            edge_src_ids=minibatch["edge_src_ids"],
+            edge_tgt_ids=minibatch["edge_tgt_ids"],
+            global_features=minibatch["global_features"],
+            theta_ref=minibatch["theta_ref"],
+        )
 
         def loss_fn(params):
             output = policy.apply(
                 params,
-                minibatch["self_features"],
-                minibatch["candidate_features"],
-                minibatch["global_features"],
-                minibatch["candidate_mask"],
+                mb_batch,
                 player_count=minibatch["player_count"],
                 target_sequence=minibatch["target"],
             )
-            output = mask_policy_output_for_shield(
+            output = mask_policy_output_for_shield_v2(
                 output,
-                minibatch["candidate_mask"],
+                minibatch["edge_action_mask"],
                 cfg.task.ship_bucket_count,
                 minibatch["ship_bucket_mask"],
             )
@@ -212,10 +236,10 @@ def ppo_update_jax(
                 "loss": loss,
                 "sample_count": minibatch["mask"].sum(),
             }
-            for player_count in (2, 4):
-                suffix = f"{player_count}p"
+            for format_player_count in (2, 4):
+                suffix = f"{format_player_count}p"
                 format_mask = minibatch["mask"] * (
-                    minibatch["player_count"][:, None] == player_count
+                    minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
                 format_value_loss = 0.5 * masked_mean(value_error, format_mask)
@@ -237,11 +261,11 @@ def ppo_update_jax(
                 metrics[f"loss_sample_count_{suffix}"] = format_mask.sum()
             return loss, metrics
 
-        (loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+        (_loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
         updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)
         metrics = dict(metrics)
-        metrics["total_loss"] = loss
+        metrics["total_loss"] = _loss
         return (params, opt_state), metrics
 
     (params, opt_state), metrics_by_minibatch = jax.lax.scan(
@@ -291,24 +315,3 @@ def ppo_update_jax(
         ),
         metrics,
     )
-
-
-def _reshape_minibatches(
-    value: jax.Array,
-    minibatch_count: int,
-    minibatch_size: int,
-    padding_value: float | int | bool,
-) -> jax.Array:
-    """Pad and reshape a flat leading axis into static minibatches."""
-
-    padded_rows = minibatch_count * minibatch_size
-    pad_rows = padded_rows - value.shape[0]
-    pad_width = [(0, pad_rows)] + [(0, 0)] * (value.ndim - 1)
-    padded = jnp.pad(value, pad_width, constant_values=padding_value)
-    return padded.reshape((minibatch_count, minibatch_size) + value.shape[1:])
-
-
-def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
-    """Return the mean of ``x`` over entries where ``mask`` is non-zero."""
-
-    return (x * mask).sum() / jnp.maximum(mask.sum(), 1.0)

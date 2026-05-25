@@ -1,4 +1,4 @@
-"""Kaggle submission helpers for JAX v2 encode / policy / action decode."""
+"""Kaggle submission helpers for JAX encode / policy / action decode."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from src.config import TrainConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
 from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
-from src.jax.features_v2 import JaxTurnBatchV2
+from src.jax.features import TurnBatch
 
 
 def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -> JaxGameState:
@@ -147,10 +147,10 @@ def batch_game(game: JaxGameState) -> JaxGameState:
     )
 
 
-def batch_turn(batch: JaxTurnBatchV2) -> JaxTurnBatchV2:
+def batch_turn(batch: TurnBatch) -> TurnBatch:
     """Add a leading batch dimension to a single-env v2 turn batch."""
 
-    return JaxTurnBatchV2(
+    return TurnBatch(
         planet_features=batch.planet_features[None, ...],
         planet_mask=batch.planet_mask[None, ...],
         edge_features=batch.edge_features[None, ...],
@@ -162,21 +162,21 @@ def batch_turn(batch: JaxTurnBatchV2) -> JaxTurnBatchV2:
     )
 
 
-def select_runtime_shielded_policy_actions_v2(
+def select_runtime_shielded_policy_actions(
     key: jax.Array,
     policy: object,
     variables: dict[str, object],
     game: JaxGameState,
-    batch: JaxTurnBatchV2,
+    batch: TurnBatch,
     cfg: TrainConfig,
     *,
     deterministic: bool,
 ) -> JaxAction:
     """Sample a shielded v2 policy action sequence and decode it to ``JaxAction``."""
 
-    from src.opponents.jax_actions.builders_v2 import _sample_policy_action_v2_with_params
+    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
 
-    return _sample_policy_action_v2_with_params(
+    return _sample_policy_action_with_params(
         key,
         game,
         batch,

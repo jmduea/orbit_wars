@@ -7,7 +7,7 @@ from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.train_state import init_train_state
-from src.opponents.jax_actions.builders_v2 import (
+from src.opponents.jax_actions.builders import (
     build_opportunistic_action_from_edge_batch,
     build_sniper_action_from_edge_batch,
     build_turtle_action_from_edge_batch,
@@ -17,8 +17,7 @@ from src.training.curriculum import CurriculumController
 
 def _v2_cfg(*, player_count: int = 2) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer_v2"
-    cfg.task.encoding_version = "v2"
+    cfg.model.architecture = "gnn_pointer"
     cfg.task.player_count = player_count
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16
@@ -61,7 +60,7 @@ def test_edge_scripted_builders_emit_valid_actions(builder):
             game_row, batch_row, cfg.task
         )
     )(state.game, batch)
-    from src.jax.policy_v2 import edge_action_count
+    from src.jax.policy import edge_action_count
 
     bucket_mask = shielded.ship_bucket_mask.reshape(
         1, edge_action_count(cfg.task), cfg.task.ship_bucket_count
