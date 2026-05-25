@@ -21,6 +21,7 @@ class TaskConfig:
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
+    intercept_anchors: tuple[float, float] = (1.0, 6.0)
 
 
 @dataclass(slots=True)
@@ -47,6 +48,8 @@ class ModelConfig:
     max_moves_k: int = 3
     gnn_k_neighbors: int = 5
     gnn_message_passing_layers: int = 2
+    planet_transformer_layers: int = 2
+    spatial_attention_bias: bool = True
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 

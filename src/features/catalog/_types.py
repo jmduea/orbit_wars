@@ -45,19 +45,31 @@ class PlanetAssemblyContext:
     incoming_friendly: Any
     ship_delta: Any
     scale: Any
+    # TODO: add planet_score (planet_total_prod * remaining steps)
+    # TODO: add connectedness (number of static edges)
 
 
 @dataclass(frozen=True, slots=True)
 class EdgeRowAssemblyContext:
-    """Pre-gathered edge row tensors for catalog assembly."""
+    """Pre-gathered edge row tensors for catalog assembly.
 
-    delta_x: Any
-    delta_y: Any
-    distance: Any
-    crosses: Any
+    Per-anchor tensors are shaped ``(P, K, num_anchors)`` where anchor index 0
+    corresponds to the first entry of ``TaskConfig.intercept_anchors`` (e.g.
+    ``s=1.0``) and index 1 to the second (e.g. ``s=6.0``). ``crosses_now`` is
+    the legality-aligned snapshot sun-crossing field (mirrors the dynamic
+    trajectory shield's snapshot-line check); the per-anchor
+    ``sun_cross_at_intercept_per_anchor`` is the predictive counterpart
+    evaluated against the target's future position at each anchor.
+    """
+
+    intercept_delta_x_per_anchor: Any
+    intercept_delta_y_per_anchor: Any
+    intercept_distance_per_anchor: Any
+    intercept_turns_per_anchor: Any
+    sun_cross_at_intercept_per_anchor: Any
+    crosses_now: Any
     tgt_ships: Any
     owner_slot: Any
-    turns: Any
     incoming_friendly: Any
     incoming_enemy: Any
     ordered_valid: Any
@@ -84,3 +96,6 @@ class GlobalAssemblyContext:
     fleet_delta_slots: Any
     production_delta_slots: Any
     angular_velocity: Any
+    # TODO: add owner_score ((owner_total_prod * remaining steps) + owner_ships)
+    # TODO: add owner_score_delta (owner_score - previous_owner_score)
+    # TODO: add current_winner_score (max(owner_score))

@@ -1,3 +1,9 @@
+"""Checkpoint feature-compatibility metadata and validation.
+
+Floor schema_version is 4 (intercept-anchor edges). Earlier versions are not
+loadable; migrate by retraining.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,7 +11,7 @@ from typing import Mapping
 
 import numpy as np
 
-from src.config import TaskConfig, TrainConfig
+from src.config import ModelConfig, TaskConfig, TrainConfig
 from src.features.registry import (
     edge_feature_dim,
     edge_k,
@@ -58,7 +64,22 @@ METADATA_KEYS = (
     "ship_feature_scale",
     "edge_layout",
     "edge_k",
+    "intercept_anchors",
+    "encoder_backbone",
 )
+
+
+def encoder_backbone_for_architecture(architecture: str) -> str:
+    """Map ``model.architecture`` to the checkpoint encoder-backbone slug."""
+
+    normalized = architecture.strip().lower()
+    if normalized in {"gnn_pointer", "gnn_pointer_v2"}:
+        return "planet_gnn"
+    if normalized == "planet_graph_transformer":
+        return "planet_self_attention"
+    raise ValueError(
+        f"Unsupported model architecture for encoder_backbone metadata: {architecture!r}"
+    )
 
 
 def load_checkpoint_payload(checkpoint_path: str | Path) -> object:
@@ -132,12 +153,16 @@ def validate_checkpoint_config_compatibility(
         )
 
 
-def feature_metadata(env_cfg: TaskConfig) -> dict[str, int | float | str]:
+def feature_metadata(
+    env_cfg: TaskConfig,
+    *,
+    model_cfg: ModelConfig | None = None,
+) -> dict[str, int | float | str | tuple]:
     """Return checkpoint metadata that describes feature-dependent input shapes."""
 
     history = feature_history_steps(env_cfg)
-    return {
-        "schema_version": 3,
+    metadata: dict[str, int | float | str | tuple] = {
+        "schema_version": 4,
         "feature_history_steps": history,
         "planet_feature_dim": planet_feature_dim(env_cfg),
         "edge_feature_dim": edge_feature_dim(env_cfg),
@@ -145,7 +170,13 @@ def feature_metadata(env_cfg: TaskConfig) -> dict[str, int | float | str]:
         "ship_feature_scale": float(getattr(env_cfg, "ship_feature_scale", 1000.0)),
         "edge_layout": "top_k_per_source",
         "edge_k": edge_k(env_cfg),
+        "intercept_anchors": tuple(map(float, env_cfg.intercept_anchors)),
     }
+    if model_cfg is not None:
+        metadata["encoder_backbone"] = encoder_backbone_for_architecture(
+            model_cfg.architecture
+        )
+    return metadata
 
 
 def checkpoint_state_dict(checkpoint: object) -> Mapping[str, object] | None:
@@ -164,7 +195,9 @@ def checkpoint_state_dict(checkpoint: object) -> Mapping[str, object] | None:
     return None
 
 
-def checkpoint_feature_metadata(checkpoint: object) -> dict[str, int | float | str] | None:
+def checkpoint_feature_metadata(
+    checkpoint: object,
+) -> dict[str, int | float | str | tuple] | None:
     """Return stored feature metadata, supporting the current and legacy locations."""
 
     if not isinstance(checkpoint, Mapping):
@@ -176,7 +209,7 @@ def checkpoint_feature_metadata(checkpoint: object) -> dict[str, int | float | s
             raw = metadata.get(FEATURE_METADATA_KEY)
     if not isinstance(raw, Mapping):
         return None
-    parsed: dict[str, int | float | str] = {}
+    parsed: dict[str, int | float | str | tuple] = {}
     for key in METADATA_KEYS:
         if key in raw:
             value = raw[key]
@@ -184,8 +217,10 @@ def checkpoint_feature_metadata(checkpoint: object) -> dict[str, int | float | s
                 parsed[key] = int(value)
             elif key == "ship_feature_scale":
                 parsed[key] = float(value)
-            elif key == "edge_layout":
+            elif key in {"edge_layout", "encoder_backbone"}:
                 parsed[key] = str(value)
+            elif key == "intercept_anchors":
+                parsed[key] = tuple(float(v) for v in value)
             else:
                 parsed[key] = int(value)
     return parsed or None
@@ -257,11 +292,30 @@ def infer_feature_metadata_from_state_dict(
     }
     if all(value is not None for value in v2_dims.values()):
         return {
-            "schema_version": 3,
+            "schema_version": 4,
             **{key: int(value) for key, value in v2_dims.items()},
         }
 
     return None
+
+
+def _intercept_anchors_match(
+    stored: object, expected: object, *, tolerance: float = 1e-6
+) -> bool:
+    """Element-wise float equality with tolerance for the anchor tuple."""
+
+    if stored is None or expected is None:
+        return stored is None and expected is None
+    try:
+        stored_tuple = tuple(float(v) for v in stored)  # type: ignore[arg-type]
+        expected_tuple = tuple(float(v) for v in expected)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    if len(stored_tuple) != len(expected_tuple):
+        return False
+    return all(
+        abs(a - b) <= tolerance for a, b in zip(stored_tuple, expected_tuple)
+    )
 
 
 def _is_legacy_v1_metadata(metadata: Mapping[str, object]) -> bool:
@@ -272,6 +326,34 @@ def _is_legacy_v1_metadata(metadata: Mapping[str, object]) -> bool:
     if str(metadata.get("encoding_version", "")).strip().lower() == "v1":
         return True
     return False
+
+
+def validate_checkpoint_encoder_compatibility(
+    stored: Mapping[str, object] | None,
+    cfg: TrainConfig,
+    *,
+    checkpoint_path: str | Path | None = None,
+) -> None:
+    """Raise when checkpoint encoder backbone differs from the current model."""
+
+    if stored is None:
+        return
+
+    stored_backbone = stored.get("encoder_backbone")
+    if stored_backbone is None:
+        return
+
+    expected = encoder_backbone_for_architecture(cfg.model.architecture)
+    if str(stored_backbone) == expected:
+        return
+
+    location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+    raise ValueError(
+        f"Checkpoint{location} encoder_backbone={stored_backbone!r} is incompatible "
+        f"with current model architecture {cfg.model.architecture!r} "
+        f"(expected encoder_backbone={expected!r}). Retrain or load a matching "
+        "checkpoint."
+    )
 
 
 def validate_checkpoint_feature_compatibility(
@@ -310,11 +392,11 @@ def validate_checkpoint_feature_compatibility(
         )
 
     stored_schema = stored.get("schema_version")
-    if stored_schema is not None and int(stored_schema) < 3:
+    if stored_schema is not None and int(stored_schema) < 4:
         raise ValueError(
             f"Checkpoint{location} uses feature schema_version={stored_schema}. "
-            "Schema v3 (single-source feature catalog) is required; retrain with the "
-            "current encoder or migrate with an explicit conversion."
+            "Schema v4 (intercept-anchor edge features) is required; v3 → v4 "
+            "migration required — retrain or run an explicit conversion."
         )
 
     dimension_keys = (
@@ -322,11 +404,20 @@ def validate_checkpoint_feature_compatibility(
         "edge_feature_dim",
         "global_feature_dim",
     )
-    mismatches = [
+    mismatches: list[tuple[str, object, object]] = [
         (key, stored.get(key), expected[key])
         for key in dimension_keys
         if key in stored and stored.get(key) != expected[key]
     ]
+
+    if "intercept_anchors" in stored:
+        stored_anchors = stored.get("intercept_anchors")
+        expected_anchors = expected.get("intercept_anchors")
+        if not _intercept_anchors_match(stored_anchors, expected_anchors):
+            mismatches.append(
+                ("intercept_anchors", stored_anchors, expected_anchors)
+            )
+
     if not mismatches:
         return
 

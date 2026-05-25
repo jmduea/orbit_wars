@@ -17,9 +17,16 @@ from src.features.catalog.global_ import (
 )
 from src.features.catalog.planet import assemble_planet_features, build_planet_context
 from src.features.registry import feature_history_steps
-from src.game.constants import BOARD_SIZE, MAX_FLEET_SPEED, MAX_PLANETS, MAX_STEPS
+from src.game.constants import (
+    BOARD_CENTER,
+    BOARD_SIZE,
+    MAX_PLANETS,
+    MAX_STEPS,
+    ROTATION_RADIUS_LIMIT,
+)
 from src.jax.feature_primitives import (
     incoming_fleet_pressure,
+    orbital_position_at_step_jax,
     rotate_to_learner_frame,
     shot_crosses_sun_xy,
     target_owner_one_hot,
@@ -66,9 +73,7 @@ def encode_turn(
     planet_features = _planet_features(
         planets, game.fleets, player, env_cfg, scale, theta, history
     )
-    edge_features, edge_mask, edge_tgt_ids = _edge_features(
-        planets, game.fleets, player, env_cfg, scale, theta
-    )
+    edge_features, edge_mask, edge_tgt_ids = _edge_features(game, env_cfg, scale, theta)
     global_frame = _global_frame(game, env_cfg, scale, history)
     global_features = _stack_global_history(global_frame, history, env_cfg)
     return TurnBatch(
@@ -152,9 +157,10 @@ def _planet_features(
     return assemble_planet_features(context)
 
 
-def _edge_features(
-    planets, fleets, player, env_cfg: TaskConfig, scale, theta_ref_value
-):
+def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
+    planets = game.planets
+    fleets = game.fleets
+    player = game.player
     p = MAX_PLANETS
     k = max(0, int(env_cfg.candidate_count) - 1)
     edge_dim = EDGE_FEATURE_CATALOG.base_dim
@@ -186,6 +192,9 @@ def _edge_features(
     sort_distance = jnp.where(valid_target, dist, jnp.inf)
     sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
     sort_id = jnp.broadcast_to(planets.id[None, :], dist.shape)
+    # TODO(thin-trajectory-shield-follow-up): re-rank top-K by intercept proximity.
+    # Snapshot sort retained for M4 golden-test stability; ADR-002 amendment will
+    # accompany the re-rank when the follow-up milestone lands.
     order = jnp.lexsort((sort_id, sort_distance, sort_blocked), axis=1)[:, :k]
     pad_width = k - order.shape[1]
     if pad_width > 0:
@@ -199,33 +208,103 @@ def _edge_features(
     tgt_owner = jnp.take(planets.owner, order, axis=0)
     tgt_active = jnp.take(planets.active, order, axis=0)
 
+    tgt_initial_x = jnp.take(game.initial_planets.x, order, axis=0)
+    tgt_initial_y = jnp.take(game.initial_planets.y, order, axis=0)
+    tgt_radius_per_edge = tgt_radius
+    tgt_active_per_edge = tgt_active
+    init_dx = tgt_initial_x - BOARD_CENTER[0]
+    init_dy = tgt_initial_y - BOARD_CENTER[1]
+    target_orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
+    rotates_per_edge = (
+        target_orbit_radius + tgt_radius_per_edge < ROTATION_RADIUS_LIMIT
+    ) & tgt_active_per_edge
+    start_angle_per_edge = jnp.arctan2(init_dy, init_dx)
+
     src_rx, src_ry = rotate_to_learner_frame(src_x, src_y, theta_ref_value)
     tgt_rx, tgt_ry = rotate_to_learner_frame(tgt_x, tgt_y, theta_ref_value)
-    delta_x = (tgt_rx - src_rx) / BOARD_SIZE
-    delta_y = (tgt_ry - src_ry) / BOARD_SIZE
-    distance = jnp.sqrt(delta_x * delta_x + delta_y * delta_y)
+    snapshot_delta_x = (tgt_rx - src_rx) / BOARD_SIZE
+    snapshot_delta_y = (tgt_ry - src_ry) / BOARD_SIZE
 
     real_dx = tgt_x - src_x
     real_dy = tgt_y - src_y
+    snapshot_distance_raw = jnp.sqrt(real_dx * real_dx + real_dy * real_dy)
     angle = jnp.arctan2(real_dy, real_dx)
-    crosses = shot_crosses_sun_xy(
+    crosses_now = shot_crosses_sun_xy(
         src_x, src_y, planets.radius[:, None], angle, tgt_x, tgt_y
     )
+
+    anchor_speeds = tuple(float(s) for s in env_cfg.intercept_anchors)
+    intercept_delta_x_per_anchor: list[jax.Array] = []
+    intercept_delta_y_per_anchor: list[jax.Array] = []
+    intercept_distance_per_anchor: list[jax.Array] = []
+    intercept_turns_per_anchor: list[jax.Array] = []
+    sun_cross_at_intercept_per_anchor: list[jax.Array] = []
+
+    for anchor_speed in anchor_speeds:
+        speed = jnp.asarray(anchor_speed, dtype=jnp.float32)
+        tau = jnp.maximum(snapshot_distance_raw / jnp.maximum(speed, 1e-6), 0.0)
+        step_index = game.step.astype(jnp.float32) + tau
+        tgt_future_x, tgt_future_y = orbital_position_at_step_jax(
+            start_angle_per_edge,
+            target_orbit_radius,
+            game.angular_velocity,
+            step_index,
+            rotates_per_edge,
+            tgt_x,
+            tgt_y,
+        )
+        tgt_future_rx, tgt_future_ry = rotate_to_learner_frame(
+            tgt_future_x, tgt_future_y, theta_ref_value
+        )
+        intercept_delta_x = (tgt_future_rx - src_rx) / BOARD_SIZE
+        intercept_delta_y = (tgt_future_ry - src_ry) / BOARD_SIZE
+        intercept_distance = jnp.sqrt(
+            intercept_delta_x * intercept_delta_x
+            + intercept_delta_y * intercept_delta_y
+        )
+        raw_future_dx = tgt_future_x - src_x
+        raw_future_dy = tgt_future_y - src_y
+        raw_future_distance = jnp.sqrt(
+            raw_future_dx * raw_future_dx + raw_future_dy * raw_future_dy
+        )
+        intercept_turns = jnp.clip(
+            raw_future_distance / jnp.maximum(speed, 1e-6) / MAX_STEPS,
+            0.0,
+            1.0,
+        )
+        future_angle = jnp.arctan2(raw_future_dy, raw_future_dx)
+        sun_cross_at_intercept = shot_crosses_sun_xy(
+            src_x,
+            src_y,
+            planets.radius[:, None],
+            future_angle,
+            tgt_future_x,
+            tgt_future_y,
+        )
+        intercept_delta_x_per_anchor.append(intercept_delta_x)
+        intercept_delta_y_per_anchor.append(intercept_delta_y)
+        intercept_distance_per_anchor.append(intercept_distance)
+        intercept_turns_per_anchor.append(intercept_turns)
+        sun_cross_at_intercept_per_anchor.append(
+            sun_cross_at_intercept.astype(jnp.float32)
+        )
 
     owner_slot = target_owner_one_hot(tgt_owner, player, env_cfg)
     incoming_friendly, incoming_enemy = incoming_fleet_pressure(
         tgt_x, tgt_y, tgt_radius, fleets, player
     )
-    turns = distance * BOARD_SIZE / jnp.maximum(MAX_FLEET_SPEED, 1e-6) / MAX_STEPS
 
     edge_context = EdgeRowAssemblyContext(
-        delta_x=delta_x,
-        delta_y=delta_y,
-        distance=distance,
-        crosses=crosses,
+        intercept_delta_x_per_anchor=jnp.stack(intercept_delta_x_per_anchor, axis=-1),
+        intercept_delta_y_per_anchor=jnp.stack(intercept_delta_y_per_anchor, axis=-1),
+        intercept_distance_per_anchor=jnp.stack(intercept_distance_per_anchor, axis=-1),
+        intercept_turns_per_anchor=jnp.stack(intercept_turns_per_anchor, axis=-1),
+        sun_cross_at_intercept_per_anchor=jnp.stack(
+            sun_cross_at_intercept_per_anchor, axis=-1
+        ),
+        crosses_now=crosses_now.astype(jnp.float32),
         tgt_ships=tgt_ships,
         owner_slot=owner_slot,
-        turns=turns,
         incoming_friendly=incoming_friendly,
         incoming_enemy=incoming_enemy,
         ordered_valid=ordered_valid,
@@ -235,7 +314,7 @@ def _edge_features(
     edge_rows = assemble_edge_rows(edge_context)
 
     owned_source = planets.active & (planets.owner == player)
-    edge_mask = ordered_valid & (~crosses) & owned_source[:, None]
+    edge_mask = ordered_valid & (~crosses_now) & owned_source[:, None]
 
     tgt_ids = jnp.where(ordered_valid, jnp.take(planets.id, order, axis=0), -1)
     return edge_rows, edge_mask, tgt_ids.astype(jnp.int32)

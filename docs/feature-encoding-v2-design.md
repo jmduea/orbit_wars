@@ -39,7 +39,7 @@ See ralplan: `.omg/plans/ralplan-feature-encoding-v2.md`
 
 Joint `(source, target)` over valid edges + NO_OP. See `docs/feature-encoding-v2-pointer.md` (ADR-001 finalized Phase 0).
 
-**Schema (locked):** P=13, E=12, G=46 — see `docs/feature-encoding-v2-phase0-results.md`.
+**Schema (locked):** P=13, E=18, G=46 — see `docs/feature-encoding-v2.md` (schema v4 intercept edges).
 
 ## Ship feature scale (ADR-003)
 

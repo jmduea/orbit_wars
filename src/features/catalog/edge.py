@@ -12,28 +12,61 @@ from src.features.catalog._types import (
 )
 
 
-def _feat_delta_coords(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
-    return jnp.stack([ctx.delta_x, ctx.delta_y], axis=-1)
+def _feat_intercept_delta_coords_s1(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return jnp.stack(
+        [
+            ctx.intercept_delta_x_per_anchor[..., 0],
+            ctx.intercept_delta_y_per_anchor[..., 0],
+        ],
+        axis=-1,
+    )
 
 
-def _feat_distance(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
-    return ctx.distance[..., None]
+def _feat_intercept_distance_s1(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.intercept_distance_per_anchor[..., 0:1]
 
 
-def _feat_sun_crossing(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
-    return ctx.crosses.astype(jnp.float32)[..., None]
+def _feat_intercept_turns_s1(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.intercept_turns_per_anchor[..., 0:1]
 
 
+def _feat_sun_cross_at_intercept_s1(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.sun_cross_at_intercept_per_anchor[..., 0:1].astype(jnp.float32)
+
+
+def _feat_intercept_delta_coords_s6(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return jnp.stack(
+        [
+            ctx.intercept_delta_x_per_anchor[..., 1],
+            ctx.intercept_delta_y_per_anchor[..., 1],
+        ],
+        axis=-1,
+    )
+
+
+def _feat_intercept_distance_s6(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.intercept_distance_per_anchor[..., 1:2]
+
+
+def _feat_intercept_turns_s6(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.intercept_turns_per_anchor[..., 1:2]
+
+
+def _feat_sun_cross_at_intercept_s6(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.sun_cross_at_intercept_per_anchor[..., 1:2].astype(jnp.float32)
+
+
+def _feat_crosses_now(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
+    return ctx.crosses_now.astype(jnp.float32)[..., None]
+
+
+# TODO(M5): forward-projected target ships per anchor.
 def _feat_target_ships(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
     return (jnp.minimum(ctx.tgt_ships, ctx.scale) / ctx.scale)[..., None]
 
 
 def _feat_target_owner_slot(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
     return ctx.owner_slot
-
-
-def _feat_turns_to_arrival(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
-    return ctx.turns[..., None]
 
 
 def _feat_target_incoming_friendly(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
@@ -45,14 +78,39 @@ def _feat_target_incoming_enemy(ctx: EdgeRowAssemblyContext) -> jnp.ndarray:
 
 
 EDGE_FEATURE_ENTRIES: tuple[FeatureCatalogEntry, ...] = (
-    FeatureCatalogEntry(FeatureDefinition("delta_coords", size=2), _feat_delta_coords),
-    FeatureCatalogEntry(FeatureDefinition("distance"), _feat_distance),
-    FeatureCatalogEntry(FeatureDefinition("sun_crossing"), _feat_sun_crossing),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_delta_coords_s1", size=2),
+        _feat_intercept_delta_coords_s1,
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_distance_s1"), _feat_intercept_distance_s1
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_turns_s1"), _feat_intercept_turns_s1
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("sun_cross_at_intercept_s1"),
+        _feat_sun_cross_at_intercept_s1,
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_delta_coords_s6", size=2),
+        _feat_intercept_delta_coords_s6,
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_distance_s6"), _feat_intercept_distance_s6
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("intercept_turns_s6"), _feat_intercept_turns_s6
+    ),
+    FeatureCatalogEntry(
+        FeatureDefinition("sun_cross_at_intercept_s6"),
+        _feat_sun_cross_at_intercept_s6,
+    ),
+    FeatureCatalogEntry(FeatureDefinition("crosses_now"), _feat_crosses_now),
     FeatureCatalogEntry(FeatureDefinition("target_ships"), _feat_target_ships),
     FeatureCatalogEntry(
         FeatureDefinition("target_owner_slot", size=4), _feat_target_owner_slot
     ),
-    FeatureCatalogEntry(FeatureDefinition("turns_to_arrival"), _feat_turns_to_arrival),
     FeatureCatalogEntry(
         FeatureDefinition("target_incoming_friendly"), _feat_target_incoming_friendly
     ),

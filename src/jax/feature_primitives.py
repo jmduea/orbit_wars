@@ -119,6 +119,34 @@ def canonical_angle(x, y, theta_ref):
     return jnp.arctan2(jnp.sin(angle), jnp.cos(angle)) / jnp.pi
 
 
+def orbital_position_at_step_jax(
+    start_angle,
+    orbit_radius,
+    angular_velocity,
+    step_index,
+    rotates,
+    static_x,
+    static_y,
+):
+    """Closed-form orbital position at a fractional step offset.
+
+    Shape-polymorphic: leading dimensions broadcast. Callers gather per-edge
+    orbital constants and pass ``(P, K)`` tensors for edge intercept features.
+    """
+    angle = start_angle + angular_velocity * step_index.astype(jnp.float32)
+    x = jnp.where(
+        rotates,
+        BOARD_CENTER[0] + orbit_radius * jnp.cos(angle),
+        static_x,
+    )
+    y = jnp.where(
+        rotates,
+        BOARD_CENTER[1] + orbit_radius * jnp.sin(angle),
+        static_y,
+    )
+    return x, y
+
+
 def theta_ref(x, y, owner, player, active):
     owned = active & (owner == player)
     count = owned.astype(jnp.float32).sum()

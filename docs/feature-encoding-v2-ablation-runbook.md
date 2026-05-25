@@ -89,6 +89,36 @@ From local JSONL logs (`outputs/.../logs/*_jax.jsonl`) or W&B when enabled:
 
 Recommend ≥3 seeds per cell when time permits. **Does not gate Phase 5 cutover** per interview override.
 
+## M4 intercept-edge ablation (schema v4)
+
+**Prerequisite:** M4 implementation merged (`schema_version=4`, `edge_feature_dim=18`, `task.intercept_anchors=[1.0,6.0]`).
+
+**Baseline pin:** `artifacts/m4/baseline_pin.json` (pre-M4 commit SHA).
+
+Shared anchor (match Phase 0 throughput docs):
+
+```bash
+model=gnn_pointer
+format=mix_2p_4p_8env
+training.rollout_steps=64
+training.minibatch_size=256
+training.rollout_microbatch_envs=8
+training.total_updates=500
+task.candidate_count=4
+task.intercept_anchors=[1.0,6.0]
+```
+
+**Gates (3 paired seeds × 500 updates):**
+
+| ID | Metric | Pass |
+|----|--------|------|
+| W1 | `episode_reward_mean` (updates 450–500) | ≥ +2% vs pre-M4 baseline, 2p and 4p |
+| H2 | `rollout_env_steps_per_sec` median | ≥ 0.95× baseline |
+| H1 | Submission validator | zero illegal actions |
+| H3 | No NaN/inf losses | stable entropy |
+
+Results doc: [m4-intercept-edge-results.md](./m4-intercept-edge-results.md).
+
 ## Cutover recommendation field
 
 After collecting evidence, record observed deltas in the plan appendix. Default recommendation post-Phase 5: **production default is v2** (`conf/task/default.yaml` → `encoding_version: v2`); use ablation numbers to prioritize follow-up tuning, not to block deployment.

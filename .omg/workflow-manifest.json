@@ -665,12 +665,64 @@
       "workflow": "ralplan",
       "status": "complete",
       "title": "Feature registry single-source implementation plan",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "feature-registry-single-source"
       ],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "ralplan-feature-registry-single-source.md phases 0-5 implemented; make test-domain-features equivalent 19 passed; test-fast 93 passed"
+      "evidence": "ralplan-feature-registry-single-source.md phases 0-5 implemented; make test-domain-features equivalent 19 passed; test-fast 93 passed",
+      "notes": null
+    },
+    {
+      "id": "intercept-edge-features",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-intercept-edge-features.md",
+      "workflow": "deep-interview",
+      "status": "complete",
+      "title": "Bucket-aware edge intercept features and thin shield (M4)",
+      "spec_id": null,
+      "plan_id": "ralplan-intercept-edge-features",
+      "related_ids": [
+        "feature-encoding-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Phases 1-3 implemented: schema v4, E=18, intercept_anchors; make test-domain-features 16/16; ablation deferred until M2 transformer finalized",
+      "notes": "Phase 4 ablation deferred per user; thin shield descoped to thin-trajectory-shield spec"
+    },
+    {
+      "id": "thin-trajectory-shield",
+      "kind": "spec",
+      "path": ".omg/specs/deferred-thin-trajectory-shield.md",
+      "workflow": "deep-interview",
+      "status": "deferred",
+      "title": "Thin trajectory shield (drop dynamic per-bucket simulation)",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "intercept-edge-features"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Originally part of M4 scope; descoped during ralplan iter-1 per architect+critic synthesis recommendation. Critic flagged C1/C2/C3 (feature/shield disagreement on rotating targets, static-path guard bypass, legality-net duplication). Should be re-scoped after M4 lands and its win/regression gates are measured."
+    },
+    {
+      "id": "ralplan-intercept-edge-features",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-intercept-edge-features.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "Plan: Bucket-aware edge intercept features (M4)",
+      "related_ids": [
+        "intercept-edge-features",
+        "thin-trajectory-shield"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Phases 1-3: catalog E=18, encoder rewrite, goldens, docs; Phase 4 ablation deferred"
     }
   ]
 }

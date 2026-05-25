@@ -78,7 +78,7 @@ Policy code should follow the same pattern (`src/jax/policy.py` GNN pointer is t
 
 - Feature dims are embedded in checkpoint metadata (`schema_version`, `planet_feature_dim`, …).
 - Layout changes require **retraining**; bump `schema_version` in `src/artifacts/checkpoint_compat.py` when you intentionally break old checkpoints.
-- Current production encoder uses **`schema_version=3`** (single-source catalogs). Checkpoints with `schema_version < 3` are rejected on load.
+- Current production encoder uses **`schema_version=4`** (intercept-anchor edge features). Checkpoints with `schema_version < 4` are rejected on load.
 
 ## Quick checklist
 

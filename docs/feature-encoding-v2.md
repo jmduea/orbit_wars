@@ -193,7 +193,9 @@ Layers A (owner-relative) + B (frame) + C (edge-primary geometry) are **in scope
 
 ## Schema v2 (Locked — Phase 0)
 
-**Dims:** P=13, E=12, G=46. **Evidence:** `docs/feature-encoding-v2-phase0-results.md`, `scripts/spike_feature_encoding_v2_phase0.py budget`.
+**Dims:** P=13, E=18, G=46. **Evidence:** `docs/feature-encoding-v2-phase0-results.md`, M4 intercept-edge milestone (`intercept-edge-features`).
+
+Edge geometry uses **two anchor fleet speeds** (`task.intercept_anchors`, default `[1.0, 6.0]`) encoding intercept-time target positions. Schema floor is **`schema_version=4`**.
 
 ### Planet features (P = 13)
 
@@ -214,18 +216,23 @@ Scale: `S = task.ship_feature_scale`. Frame: ADR-004 (`r`, `θ` learner-canonica
 
 Note: P=13 omits planet-row `incoming_enemy_pressure` and `outgoing_friendly_ships` (edge tensor carries target pressures; outgoing is source-local and omitted at this dim budget).
 
-### Edge features (E = 12)
+### Edge features (E = 18)
 
-Distances/deltas in **learner frame** (ADR-004), then scaled. Target production / ship_delta / owner_changed live on planet rows (Layer C dedup).
+Distances/deltas in **learner frame** (ADR-004), then scaled. Per-anchor intercept block (slow `s=1.0`, fast `s=6.0`) replaces snapshot `delta_*`, `distance`, and `turns_to_arrival`. `crosses_now` is the legality-aligned snapshot sun-crossing field; per-anchor `sun_cross_at_intercept_*` is predictive.
 
 | Field | Dim | Encoding |
 |-------|-----|----------|
-| delta_x, delta_y | 2 | learner-frame `/ BOARD_SIZE` |
-| distance | 1 | learner-frame `/ BOARD_SIZE` |
-| sun_crossing | 1 | 0/1 |
+| intercept_delta_coords_s1 | 2 | learner-frame intercept delta at slow anchor `/ BOARD_SIZE` |
+| intercept_distance_s1 | 1 | magnitude at slow anchor |
+| intercept_turns_s1 | 1 | `raw_distance / 1.0 / MAX_STEPS`, clipped `[0,1]` |
+| sun_cross_at_intercept_s1 | 1 | future-aim sun crossing at slow anchor |
+| intercept_delta_coords_s6 | 2 | same at fast anchor (`s=6.0`) |
+| intercept_distance_s6 | 1 | magnitude at fast anchor |
+| intercept_turns_s6 | 1 | `raw_distance / 6.0 / MAX_STEPS`, clipped `[0,1]` |
+| sun_cross_at_intercept_s6 | 1 | future-aim sun crossing at fast anchor |
+| crosses_now | 1 | snapshot-line sun crossing (legality-aligned) |
 | target_ships | 1 | `min(ships, S) / S` |
 | target_owner_slot | 4 | relative one-hot |
-| turns_to_arrival | 1 | `distance / MAX_FLEET_SPEED / MAX_STEPS` |
 | target_incoming_friendly | 1 | `pressure / S` |
 | target_incoming_enemy | 1 | `pressure / S` |
 
@@ -244,7 +251,7 @@ Retain v1 global group semantics (45 dims) plus **`angular_velocity`** (normaliz
 | Component | Floats |
 |-----------|-------:|
 | Planets (60×13) | 780 |
-| Edges (60×3×12) | 2160 |
+| Edges (60×3×18) | 3240 |
 | Global | 46 |
 | **Total** | **2986** |
 | Pointer softmax | 181 |
@@ -263,12 +270,13 @@ Retain v1 global group semantics (45 dims) plus **`angular_velocity`** (normaliz
 
 ```yaml
 feature_metadata:
-  schema_version: 2
+  schema_version: 4
   encoding_version: v2
   planet_feature_dim: <P>
   edge_feature_dim: <E>
   global_feature_dim: <G>
   ship_feature_scale: <S>          # recorded for checkpoint/debug; must match task config
+  intercept_anchors: [1.0, 6.0]  # anchor fleet speeds for intercept edge block
   edge_layout: top_k_per_source
   edge_k: <K>
   feature_history_steps: <H>
@@ -335,7 +343,7 @@ architecture: gnn_pointer_v2
 - [x] ADR-002 edge layout (top-K) finalized
 - [x] ADR-003 ship feature scale (`ship_feature_scale` vs fleet speed)
 - [x] ADR-004 symmetry frame (`θ_ref` = sun → owned-planet centroid)
-- [x] Schema draft tables → **P=13, E=12, G=46 locked**
+- [x] Schema draft tables → **P=13, E=18, G=46 locked** (schema v4 intercept edges)
 - [x] Submission audit
 - [x] Cutover numeric gates documented
 - [x] Float budget spike (`scripts/spike_feature_encoding_v2_phase0.py`)

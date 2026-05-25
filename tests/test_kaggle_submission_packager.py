@@ -179,14 +179,15 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
         },
         "config": config,
         "feature_metadata": {
-            "schema_version": 3,
+            "schema_version": 4,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 12,
+            "edge_feature_dim": 18,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
             "edge_layout": "top_k_per_source",
             "edge_k": 3,
+            "intercept_anchors": (1.0, 6.0),
         },
     }
     with checkpoint.open("wb") as file:
@@ -195,4 +196,4 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
     artifact = export_runtime_artifact(checkpoint)
 
     assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
-    assert artifact["feature_metadata"]["schema_version"] == 3
+    assert artifact["feature_metadata"]["schema_version"] == 4

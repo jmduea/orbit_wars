@@ -313,7 +313,7 @@ class PlanetEdgeBackboneEncoder(nn.Module):
     k_neighbors: int = 5
     msg_passing_layers: int = 2
     planet_feature_dim: int = 13
-    edge_feature_dim: int = 12
+    edge_feature_dim: int = 18
     global_feature_dim: int = 46
     edge_k: int = 3
 
