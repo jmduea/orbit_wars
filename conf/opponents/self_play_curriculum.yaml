@@ -1,7 +1,7 @@
 self_play:
   enabled: true
   update_interval: 10
-  deterministic: false
+  deterministic: true
 mode:
   opponent: self
   multi_opponent_mode: mixed
@@ -17,8 +17,8 @@ mix:
     noop: 0.0
   temperature: 1.0
 snapshot:
-  pool_size: 5
-  interval_updates: 100
+  pool_size: 2
+  interval_updates: 250
   deterministic: true
   selection: uniform
   fallback: latest

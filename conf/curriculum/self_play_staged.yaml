@@ -11,10 +11,26 @@ stages:
     opponent_families:
       latest: 0.0
       historical: 0.0
-      random: 0.5
-      noop: 0.5
+      random: 1.0
+      noop: 0.0
       nearest_sniper: 0.0
       turtle: 0.0
+      opportunistic: 0.0
+  - id: turtle_noop_cheese_gate
+    min_updates: 2000
+    cooldown_updates: 0
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 5
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.0
+      noop: 0.8
+      nearest_sniper: 0.0
+      turtle: 0.2
       opportunistic: 0.0
   - id: mixed_exploiters
     min_updates: 1000
@@ -22,7 +38,7 @@ stages:
     promote_if:
       metric: overall_win_rate
       op: ">="
-      value: 0.60
+      value: 0.90
       window_updates: 5
     opponent_families:
       latest: 0.55
@@ -35,6 +51,11 @@ stages:
   - id: self_play_pressure
     min_updates: 100
     cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 10
     opponent_families:
       latest: 0.45
       historical: 0.35
@@ -43,3 +64,67 @@ stages:
       nearest_sniper: 0.07
       turtle: 0.04
       opportunistic: 0.04
+  - id: scripted_pressure
+    min_updates: 100
+    cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 10
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.6
+      turtle: 0.1
+      opportunistic: 0.3
+  - id: final_boss
+    min_updates: 100
+    cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 10
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 1.0
+      turtle: 0.0
+      opportunistic: 0.0
+  - id: final_boss_2
+    min_updates: 100
+    cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 10
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.0
+      turtle: 0.0
+      opportunistic: 0.0
+  - id: self_play
+    min_updates: 100
+    cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 10
+    opponent_families:
+      latest: 0.8
+      historical: 0.1
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.06
+      turtle: 0.02
+      opportunistic: 0.02
