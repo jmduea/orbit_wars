@@ -1,5 +1,5 @@
 defaults:
-  - model: gnn_pointer
+  - model: planet_graph_transformer
   - task: default
   - reward: terminal_only
   - training: default

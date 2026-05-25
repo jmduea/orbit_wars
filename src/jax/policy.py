@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from typing import NamedTuple
-
 import flax.linen as nn
 import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.features.catalog.planet import PLANET_FEATURE_CATALOG
 from src.features.registry import (
     edge_feature_dim,
     edge_k,
@@ -15,54 +12,26 @@ from src.features.registry import (
     planet_feature_dim,
 )
 from src.game.constants import MAX_PLANETS
+from src.jax.action_codec import (
+    FactoredPolicyOutput,
+    JaxPolicyOutput,
+    action_log_prob_and_entropy,
+    ensure_policy_sequence,
+)
+from src.jax.decoders.factorized_topk_pointer import FactorizedTopKPointerDecoder
+from src.jax.encoders import EncoderOutput
+from src.jax.encoders.planet_encoder_common import (
+    PlanetEdgeEncoderOutput,
+    finalize_planet_edge_encoder_output,
+    fuse_source_target_edges,
+    mlp,
+    planet_orbit_coords,
+)
+from src.jax.encoders.planet_graph_transformer import PlanetGraphTransformerEncoder
+from src.jax.encoders.remat import remat_if
 from src.jax.features import TurnBatch
 
-_PLANET_ORBIT_RADIUS_SLICE = PLANET_FEATURE_CATALOG.base_slice("orbit_radius")
-_PLANET_ORBIT_ANGLE_SLICE = PLANET_FEATURE_CATALOG.base_slice("orbit_angle")
-
-
-# --- Contracts ---
-class JaxPolicyOutput(NamedTuple):
-    """Unified policy output structure.
-
-    Fields
-    ------
-    target_logits: jax.Array
-        Shape: (batch, sequence_k, candidates)
-    ship_logits: jax.Array
-        Shape: (batch, sequence_k, candidates, ship_buckets)
-    value: jax.Array
-        Shape: (batch,)
-    decoded_target_sequence: jax.Array
-        Shape: (batch, sequence_k). Target path used by autoregressive decoders,
-        or -1 for decoders whose steps can be sampled from logits directly.
-    """
-
-    target_logits: jax.Array
-    ship_logits: jax.Array
-    value: jax.Array
-    decoded_target_sequence: jax.Array
-
-
-class EncoderOutput(NamedTuple):
-    """Structural bridge between any encoder and any decoder.
-
-    Fields
-    ------
-    attended_candidates: jax.Array
-        Detailed per-planet representations
-    context_query: jax.Array
-        Aggregated global game state query
-    value_input: jax.Array
-        Combined state summary for critic head
-    """
-
-    attended_candidates: jax.Array
-    context_query: jax.Array
-    value_input: jax.Array
-
 # --- Decoders ---
-
 
 
 class FeedForwardActionDecoder(nn.Module):
@@ -257,30 +226,11 @@ class FormatRoutedValueHead(nn.Module):
 # --- Helper Functions ---
 
 
-
-def mlp(x: jax.Array, hidden_size: int, output_size: int, name: str) -> jax.Array:
-    """Apply a named two-layer ReLU MLP block."""
-
-    x = nn.Dense(hidden_size, name=f"{name}_0")(x)
-    x = nn.relu(x)
-    x = nn.Dense(output_size, name=f"{name}_1")(x)
-    return nn.relu(x)
-
-
 def safe_attention_mask(candidate_mask: jax.Array) -> jax.Array:
     """Ensure attention has at least one unmasked key for every batch row."""
 
     has_valid_key = candidate_mask.any(axis=-1, keepdims=True)
     return jnp.where(has_valid_key, candidate_mask, jnp.ones_like(candidate_mask))
-
-
-def masked_mean(values: jax.Array, mask: jax.Array) -> jax.Array:
-    """Average candidate embeddings while ignoring masked candidate slots."""
-
-    weights = mask.astype(values.dtype)[..., None]
-    total = (values * weights).sum(axis=1)
-    count = jnp.maximum(weights.sum(axis=1), 1.0)
-    return total / count
 
 
 def build_value_head(cfg: TrainConfig) -> nn.Module:
@@ -295,15 +245,42 @@ def build_value_head(cfg: TrainConfig) -> nn.Module:
         f"Unsupported value head '{cfg.model.value_head}'. Expected 'shared' or 'format_routed'."
     )
 
-# --- Planet-Edge GNN Policy ---
 
-class PlanetEdgeEncoderOutput(NamedTuple):
-    """Policy encoder contract for ``TurnBatch`` inputs."""
+# --- Planet-Edge Policy Encoders ---
 
-    attended_edges: jax.Array
-    edge_action_mask: jax.Array
-    context_query: jax.Array
-    value_input: jax.Array
+
+class PlanetGnnMessageLayer(nn.Module):
+    """Single GNN message-passing block for ``PlanetEdgeBackboneEncoder``."""
+
+    hidden_size: int
+    layer_idx: int
+
+    @nn.compact
+    def __call__(
+        self,
+        current_planet_states: jax.Array,
+        final_adj_mask: jax.Array,
+    ) -> jax.Array:
+        residual = current_planet_states
+        msg_proj = nn.Dense(self.hidden_size, name=f"planet_msg_proj_{self.layer_idx}")(
+            current_planet_states
+        )
+        masked_messages = jnp.where(
+            final_adj_mask[..., None], msg_proj[:, None, :, :], 0.0
+        )
+        aggregated_messages = jnp.sum(masked_messages, axis=2)
+        combined_planet_input = jnp.concatenate(
+            [current_planet_states, aggregated_messages], axis=-1
+        )
+        current_planet_states = mlp(
+            combined_planet_input,
+            self.hidden_size,
+            self.hidden_size,
+            f"planet_gnn_layer_{self.layer_idx}",
+        )
+        return nn.LayerNorm(name=f"planet_gnn_norm_{self.layer_idx}")(
+            residual + current_planet_states
+        )
 
 
 class PlanetEdgeBackboneEncoder(nn.Module):
@@ -316,6 +293,7 @@ class PlanetEdgeBackboneEncoder(nn.Module):
     edge_feature_dim: int = 18
     global_feature_dim: int = 46
     edge_k: int = 3
+    gradient_checkpointing: bool = False
 
     def setup(self) -> None:
         if self.k_neighbors < 1:
@@ -356,15 +334,7 @@ class PlanetEdgeBackboneEncoder(nn.Module):
                 "edge_enc",
             )
 
-        orbit_radius = batch.planet_features[..., _PLANET_ORBIT_RADIUS_SLICE]
-        orbit_angle = batch.planet_features[..., _PLANET_ORBIT_ANGLE_SLICE] * jnp.pi
-        coords = jnp.stack(
-            [
-                orbit_radius * jnp.cos(orbit_angle),
-                orbit_radius * jnp.sin(orbit_angle),
-            ],
-            axis=-1,
-        )
+        coords = planet_orbit_coords(batch.planet_features)
 
         num_planets = planet_hidden.shape[-2]
         diffs = coords[:, :, None, :] - coords[:, None, :, :]
@@ -379,66 +349,30 @@ class PlanetEdgeBackboneEncoder(nn.Module):
         )
 
         current_planet_states = planet_hidden
+        layer_cls = remat_if(PlanetGnnMessageLayer, self.gradient_checkpointing)
         for layer_idx in range(self.msg_passing_layers):
-            msg_proj = nn.Dense(self.hidden_size, name=f"planet_msg_proj_{layer_idx}")(
-                current_planet_states
-            )
-            masked_messages = jnp.where(
-                final_adj_mask[..., None], msg_proj[:, None, :, :], 0.0
-            )
-            aggregated_messages = jnp.sum(masked_messages, axis=2)
-            combined_planet_input = jnp.concatenate(
-                [current_planet_states, aggregated_messages], axis=-1
-            )
-            current_planet_states = mlp(
-                combined_planet_input,
-                self.hidden_size,
-                self.hidden_size,
-                f"planet_gnn_layer_{layer_idx}",
-            )
-            current_planet_states = nn.LayerNorm(name=f"planet_gnn_norm_{layer_idx}")(
-                planet_hidden + current_planet_states
-            )
+            current_planet_states = layer_cls(
+                hidden_size=self.hidden_size,
+                layer_idx=layer_idx,
+                name=f"planet_gnn_block_{layer_idx}",
+            )(current_planet_states, final_adj_mask)
 
         if self.edge_k > 0:
-            src_planet = jnp.broadcast_to(
-                current_planet_states[:, :, None, :],
-                (*edge_hidden.shape[:3], self.hidden_size),
+            edge_hidden = fuse_source_target_edges(
+                current_planet_states,
+                edge_hidden,
+                batch,
+                hidden_size=self.hidden_size,
             )
-            edge_input = jnp.concatenate([src_planet, edge_hidden], axis=-1)
-            edge_hidden = mlp(
-                edge_input, self.hidden_size, self.hidden_size, "edge_fuse"
-            )
-            edge_hidden = nn.LayerNorm(name="edge_fuse_norm")(edge_hidden)
-            batch_size = edge_hidden.shape[0]
-            attended_edges = edge_hidden.reshape(
-                batch_size, MAX_PLANETS * self.edge_k, -1
-            )
-            edge_action_mask = edge_mask.reshape(batch_size, MAX_PLANETS * self.edge_k)
-        else:
-            batch_size = planet_hidden.shape[0]
-            attended_edges = jnp.zeros(
-                (batch_size, 0, self.hidden_size), dtype=jnp.float32
-            )
-            edge_action_mask = jnp.zeros((batch_size, 0), dtype=bool)
 
-        pooled_planets = masked_mean(current_planet_states, planet_mask)
-        pooled_edges = masked_mean(attended_edges, edge_action_mask)
-        context_query = mlp(
-            jnp.concatenate([global_hidden, pooled_planets], axis=-1),
-            self.hidden_size,
-            self.hidden_size,
-            "context_query",
-        )
-        value_input = jnp.concatenate(
-            [context_query, global_hidden, pooled_planets, pooled_edges], axis=-1
-        )
-
-        return PlanetEdgeEncoderOutput(
-            attended_edges=attended_edges,
-            edge_action_mask=edge_action_mask,
-            context_query=context_query,
-            value_input=value_input,
+        return finalize_planet_edge_encoder_output(
+            current_planet_states=current_planet_states,
+            global_hidden=global_hidden,
+            edge_hidden=edge_hidden,
+            edge_mask=edge_mask,
+            planet_mask=planet_mask,
+            hidden_size=self.hidden_size,
+            edge_k=self.edge_k,
         )
 
 
@@ -502,47 +436,176 @@ class ComposablePlanetPolicy(nn.Module):
         )
 
 
+class ComposableFactorizedPlanetPolicy(nn.Module):
+    """Encoder + factorized top-K pointer decoder for v2 planet-edge batches."""
+
+    encoder_module: nn.Module
+    decoder_module: FactorizedTopKPointerDecoder
+    value_head_module: nn.Module | None = None
+    hidden_size: int = 128
+
+    @nn.compact
+    def __call__(
+        self,
+        batch: TurnBatch,
+        player_count: jax.Array | None = None,
+        source_sequence: jax.Array | None = None,
+        target_slot_sequence: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> FactoredPolicyOutput:
+        encoder_out = self.encoder_module(batch)
+        (
+            source_logits,
+            target_logits,
+            stop_logits,
+            ship_logits,
+            decoded_source_sequence,
+            decoded_target_slot_sequence,
+            decoded_stop_sequence,
+        ) = self.decoder_module(
+            encoder_out,
+            source_sequence=source_sequence,
+            target_slot_sequence=target_slot_sequence,
+            rng=rng,
+            deterministic=deterministic,
+        )
+
+        value_head_module = self.value_head_module
+        if value_head_module is None:
+            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
+        value = value_head_module(encoder_out.value_input, player_count=player_count)
+
+        return FactoredPolicyOutput(
+            source_logits=source_logits,
+            target_logits=target_logits,
+            stop_logits=stop_logits,
+            ship_logits=ship_logits,
+            value=value,
+            decoded_source_sequence=decoded_source_sequence,
+            decoded_target_slot_sequence=decoded_target_slot_sequence,
+            decoded_stop_sequence=decoded_stop_sequence,
+        )
+
+
 def edge_action_count(task_cfg) -> int:
     """Flat edge logits including the always-legal NO_OP slot."""
 
     return MAX_PLANETS * edge_k(task_cfg) + 1
 
 
-def build_jax_policy(cfg: TrainConfig) -> nn.Module:
-    """Construct the planet-edge GNN pointer policy."""
-    normalized_architecture = cfg.model.architecture.strip().lower()
-    if normalized_architecture in {"gnn_pointer", "gnn_pointer_v2"}:
-        return build_gnn_pointer_policy(cfg)
-    raise ValueError(
-        f"Unsupported JAX model architecture '{cfg.model.architecture}'. "
-        "Expected 'gnn_pointer'."
+def build_pointer_decoder(cfg: TrainConfig) -> nn.Module:
+    """Construct the configured pointer decoder module."""
+
+    from src.artifacts.checkpoint_compat import (
+        POINTER_DECODER_FACTORIZED_TOPK,
+        pointer_decoder_for_model,
+    )
+
+    hidden = cfg.model.hidden_size
+    if pointer_decoder_for_model(cfg.model) == POINTER_DECODER_FACTORIZED_TOPK:
+        return FactorizedTopKPointerDecoder(
+            ship_bucket_count=cfg.task.ship_bucket_count,
+            max_moves_k=cfg.model.max_moves_k,
+            hidden_size=hidden,
+            edge_k=edge_k(cfg.task),
+        )
+    return AutoregressivePointerDecoder(
+        ship_bucket_count=cfg.task.ship_bucket_count,
+        max_moves_k=cfg.model.max_moves_k,
+        hidden_size=hidden,
     )
 
 
-def build_gnn_pointer_policy(cfg: TrainConfig) -> ComposablePlanetPolicy:
+def _is_factorized_pointer(cfg: TrainConfig) -> bool:
+    from src.artifacts.checkpoint_compat import (
+        POINTER_DECODER_FACTORIZED_TOPK,
+        pointer_decoder_for_model,
+    )
+
+    return pointer_decoder_for_model(cfg.model) == POINTER_DECODER_FACTORIZED_TOPK
+
+
+def build_jax_policy(cfg: TrainConfig) -> nn.Module:
+    """Construct the planet-edge policy for the configured architecture."""
+    normalized_architecture = cfg.model.architecture.strip().lower()
+    if normalized_architecture in {"gnn_pointer", "gnn_pointer_v2"}:
+        return build_gnn_pointer_policy(cfg)
+    if normalized_architecture == "planet_graph_transformer":
+        return build_planet_graph_transformer_policy(cfg)
+    raise ValueError(
+        f"Unsupported JAX model architecture '{cfg.model.architecture}'. "
+        "Expected 'gnn_pointer' or 'planet_graph_transformer'."
+    )
+
+
+def _build_planet_edge_policy_shell(
+    cfg: TrainConfig,
+    *,
+    encoder_module: nn.Module,
+) -> nn.Module:
+    """Wrap a planet-edge encoder with the configured pointer decoder shell."""
+
+    hidden = cfg.model.hidden_size
+    k_slots = edge_k(cfg.task)
+    decoder_module = build_pointer_decoder(cfg)
+    value_head_module = build_value_head(cfg)
+    if _is_factorized_pointer(cfg):
+        return ComposableFactorizedPlanetPolicy(
+            encoder_module=encoder_module,
+            decoder_module=decoder_module,
+            value_head_module=value_head_module,
+            hidden_size=hidden,
+        )
+    return ComposablePlanetPolicy(
+        encoder_module=encoder_module,
+        decoder_module=decoder_module,
+        value_head_module=value_head_module,
+        hidden_size=hidden,
+        edge_k=k_slots,
+    )
+
+
+def build_planet_graph_transformer_policy(cfg: TrainConfig) -> nn.Module:
+    """Construct the planet graph transformer policy (M2 encoder)."""
+
+    hidden = cfg.model.hidden_size
+    k_slots = edge_k(cfg.task)
+    if hidden % cfg.model.attention_heads != 0:
+        raise ValueError(
+            "model.hidden_size must be divisible by model.attention_heads for "
+            "planet_graph_transformer."
+        )
+    encoder_module = PlanetGraphTransformerEncoder(
+        hidden_size=hidden,
+        attention_heads=cfg.model.attention_heads,
+        planet_transformer_layers=cfg.model.planet_transformer_layers,
+        spatial_attention_bias=cfg.model.spatial_attention_bias,
+        planet_feature_dim=planet_feature_dim(cfg.task),
+        edge_feature_dim=edge_feature_dim(cfg.task),
+        global_feature_dim=global_feature_dim(cfg.task),
+        edge_k=k_slots,
+        gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
+    )
+    return _build_planet_edge_policy_shell(cfg, encoder_module=encoder_module)
+
+
+def build_gnn_pointer_policy(cfg: TrainConfig) -> nn.Module:
     """Construct the v2 GNN pointer policy for ``TurnBatch`` inputs."""
 
     hidden = cfg.model.hidden_size
     k_slots = edge_k(cfg.task)
-    return ComposablePlanetPolicy(
-        encoder_module=PlanetEdgeBackboneEncoder(
-            hidden_size=hidden,
-            k_neighbors=cfg.model.gnn_k_neighbors,
-            msg_passing_layers=cfg.model.gnn_message_passing_layers,
-            planet_feature_dim=planet_feature_dim(cfg.task),
-            edge_feature_dim=edge_feature_dim(cfg.task),
-            global_feature_dim=global_feature_dim(cfg.task),
-            edge_k=k_slots,
-        ),
-        decoder_module=AutoregressivePointerDecoder(
-            ship_bucket_count=cfg.task.ship_bucket_count,
-            max_moves_k=cfg.model.max_moves_k,
-            hidden_size=hidden,
-        ),
-        value_head_module=build_value_head(cfg),
+    encoder_module = PlanetEdgeBackboneEncoder(
         hidden_size=hidden,
+        k_neighbors=cfg.model.gnn_k_neighbors,
+        msg_passing_layers=cfg.model.gnn_message_passing_layers,
+        planet_feature_dim=planet_feature_dim(cfg.task),
+        edge_feature_dim=edge_feature_dim(cfg.task),
+        global_feature_dim=global_feature_dim(cfg.task),
         edge_k=k_slots,
+        gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
     )
+    return _build_planet_edge_policy_shell(cfg, encoder_module=encoder_module)
 
 
 def make_synthetic_turn_batch(
@@ -596,6 +659,8 @@ def make_synthetic_turn_batch(
         global_features=global_features,
         theta_ref=theta_ref,
     )
+
+
 def sample_actions(
     key: jax.Array,
     output: JaxPolicyOutput,
@@ -629,60 +694,6 @@ def sample_actions(
     )
     log_prob, entropy = action_log_prob_and_entropy(output, target_index, ship_bucket)
     return target_index, ship_bucket, log_prob, entropy
-
-
-def action_log_prob_and_entropy(
-    output: JaxPolicyOutput,
-    target_index: jax.Array,
-    ship_bucket: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
-    """Compute joint log-probability and entropy for target/bucket actions."""
-
-    squeeze_sequence = target_index.ndim == 1
-    target_logits = ensure_policy_sequence(output.target_logits)
-    ship_logits = ensure_policy_sequence(output.ship_logits)
-    target_index = ensure_action_sequence(target_index)
-    ship_bucket = ensure_action_sequence(ship_bucket)
-    target_log_probs = jax.nn.log_softmax(target_logits, axis=-1)
-    target_probs = jax.nn.softmax(target_logits, axis=-1)
-    target_lp = jnp.take_along_axis(
-        target_log_probs, target_index[..., None], axis=-1
-    ).squeeze(-1)
-    selected_ship_logits = jnp.take_along_axis(
-        ship_logits,
-        target_index[..., None, None].repeat(ship_logits.shape[-1], axis=-1),
-        axis=2,
-    ).squeeze(axis=2)
-    ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-    ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-    ship_lp = jnp.take_along_axis(
-        ship_log_probs, ship_bucket[..., None], axis=-1
-    ).squeeze(-1)
-    target_entropy = -(target_probs * target_log_probs).sum(axis=-1)
-    ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
-    log_prob = target_lp + ship_lp
-    entropy = target_entropy + ship_entropy
-    if squeeze_sequence:
-        return log_prob[:, 0], entropy[:, 0]
-    return log_prob, entropy
-
-
-def ensure_policy_sequence(value: jax.Array) -> jax.Array:
-    """Represent policy logits with an explicit sequence axis."""
-
-    if value.ndim == 2:
-        return value[:, None, :]
-    if value.ndim == 3:
-        return value
-    return value
-
-
-def ensure_action_sequence(value: jax.Array) -> jax.Array:
-    """Represent sampled action ids with an explicit sequence axis."""
-
-    if value.ndim == 1:
-        return value[:, None]
-    return value
 
 
 def first_policy_step(output: JaxPolicyOutput) -> JaxPolicyOutput:
