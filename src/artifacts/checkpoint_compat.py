@@ -137,7 +137,7 @@ def feature_metadata(env_cfg: TaskConfig) -> dict[str, int | float | str]:
 
     history = feature_history_steps(env_cfg)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "feature_history_steps": history,
         "planet_feature_dim": planet_feature_dim(env_cfg),
         "edge_feature_dim": edge_feature_dim(env_cfg),
@@ -257,7 +257,7 @@ def infer_feature_metadata_from_state_dict(
     }
     if all(value is not None for value in v2_dims.values()):
         return {
-            "schema_version": 2,
+            "schema_version": 3,
             **{key: int(value) for key, value in v2_dims.items()},
         }
 
@@ -307,6 +307,14 @@ def validate_checkpoint_feature_compatibility(
             f"Checkpoint{location} uses legacy v1 feature metadata or self/candidate "
             "encoder weights. v1 checkpoints cannot be loaded; retrain with the "
             "current planet-edge feature encoding."
+        )
+
+    stored_schema = stored.get("schema_version")
+    if stored_schema is not None and int(stored_schema) < 3:
+        raise ValueError(
+            f"Checkpoint{location} uses feature schema_version={stored_schema}. "
+            "Schema v3 (single-source feature catalog) is required; retrain with the "
+            "current encoder or migrate with an explicit conversion."
         )
 
     dimension_keys = (

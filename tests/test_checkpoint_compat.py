@@ -23,7 +23,7 @@ def _task(**kwargs) -> TaskConfig:
 def test_feature_metadata_includes_schema_and_dims() -> None:
     metadata = feature_metadata(_task())
 
-    assert metadata["schema_version"] == 2
+    assert metadata["schema_version"] == 3
     assert metadata["planet_feature_dim"] == 13
     assert metadata["edge_feature_dim"] == 12
     assert metadata["global_feature_dim"] == 46
@@ -44,6 +44,16 @@ def test_validate_rejects_v1_checkpoint_metadata() -> None:
 
     with pytest.raises(ValueError, match="legacy v1 feature metadata"):
         validate_checkpoint_feature_compatibility(checkpoint, _task())
+
+
+def test_validate_rejects_v2_schema_version() -> None:
+    env_cfg = _task()
+    stored = dict(feature_metadata(env_cfg))
+    stored["schema_version"] = 2
+    checkpoint = {"feature_metadata": stored}
+
+    with pytest.raises(ValueError, match="schema_version=2"):
+        validate_checkpoint_feature_compatibility(checkpoint, env_cfg)
 
 
 def test_validate_accepts_matching_dims() -> None:
@@ -77,7 +87,7 @@ def test_infer_metadata_from_state_dict_keys() -> None:
     inferred = infer_feature_metadata_from_state_dict(state_dict)
 
     assert inferred is not None
-    assert inferred["schema_version"] == 2
+    assert inferred["schema_version"] == 3
     assert inferred["planet_feature_dim"] == 13
     assert inferred["edge_feature_dim"] == 12
     assert inferred["global_feature_dim"] == 46

@@ -1,12 +1,26 @@
+"""Ordered feature schemas derived from single-source catalogs.
+
+Adding a new observation feature:
+
+1. Append a ``FeatureCatalogEntry`` to the appropriate group module under
+   ``src/features/catalog/`` (planet, edge, or global).
+2. Optionally add a focused unit test for the compute function.
+
+Dimensions and slice positions are derived from the catalog automatically.
+"""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Sequence
 
 from src.config.schema import TaskConfig
-from src.game.constants import (
-    BASE_EDGE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_V2_DIM,
-    BASE_PLANET_FEATURE_DIM,
+from src.features.catalog import (
+    EDGE_FEATURE_CATALOG,
+    GLOBAL_FEATURE_CATALOG,
+    PLANET_FEATURE_CATALOG,
 )
+from src.features.catalog._types import FeatureDefinition
 
 
 @dataclass(frozen=True)
@@ -97,67 +111,23 @@ class FeatureGroupRegistry:
         return frame
 
 
-PLANET_FEATURE_REGISTRY = [
-    FeatureItem("active", size=1, active=True),
-    FeatureItem("orbit_radius", size=1, active=True),
-    FeatureItem("orbit_angle", size=1, active=True),
-    FeatureItem("radius", size=1, active=True),
-    FeatureItem("ships", size=1, active=True),
-    FeatureItem("production", size=1, active=True),
-    FeatureItem("rotating_flag", size=1, active=True),
-    FeatureItem("owner_slot", size=4, active=True),
-    FeatureItem("incoming_friendly_pressure", size=1, active=True),
-    FeatureItem("ship_delta", size=1, active=True),
-]
-PLANET_FEATURE_SCHEMA = FeatureGroupRegistry(PLANET_FEATURE_REGISTRY)
-
-EDGE_FEATURE_REGISTRY = [
-    FeatureItem("delta_coords", size=2, active=True),
-    FeatureItem("distance", size=1, active=True),
-    FeatureItem("sun_crossing", size=1, active=True),
-    FeatureItem("target_ships", size=1, active=True),
-    FeatureItem("target_owner_slot", size=4, active=True),
-    FeatureItem("turns_to_arrival", size=1, active=True),
-    FeatureItem("target_incoming_friendly", size=1, active=True),
-    FeatureItem("target_incoming_enemy", size=1, active=True),
-]
-EDGE_FEATURE_SCHEMA = FeatureGroupRegistry(EDGE_FEATURE_REGISTRY)
-
-GLOBAL_FEATURE_REGISTRY = [
-    FeatureItem("step_fraction", size=1, active=True),
-    FeatureItem("planet_fractions", size=3, active=True),
-    FeatureItem("ship_fractions", size=2, active=True),
-    FeatureItem("fleet_ship_fractions", size=2, active=True),
-    FeatureItem("owner_relative_planet_counts", size=4, active=True),
-    FeatureItem("owner_relative_ship_totals", size=4, active=True),
-    FeatureItem("owner_relative_fleet_totals", size=4, active=True),
-    FeatureItem("active_owner_mask", size=4, active=True),
-    FeatureItem("player_count", size=1, active=True),
-    FeatureItem("owner_relative_production", size=4, active=True),
-    FeatureItem("ship_delta_slots", size=4, active=True),
-    FeatureItem("planet_delta_slots", size=4, active=True),
-    FeatureItem("fleet_delta_slots", size=4, active=True),
-    FeatureItem("production_delta_slots", size=4, active=True),
-    FeatureItem("angular_velocity", size=1, active=True),
-]
-GLOBAL_FEATURE_SCHEMA = FeatureGroupRegistry(GLOBAL_FEATURE_REGISTRY)
+def _items_from_catalog(
+    definitions: Sequence[FeatureDefinition],
+) -> tuple[FeatureItem, ...]:
+    return tuple(
+        FeatureItem(definition.name, size=definition.size, active=definition.active)
+        for definition in definitions
+    )
 
 
-def _validate_schema_dim(
-    name: str, schema: FeatureGroupRegistry, expected_dim: int
-) -> None:
-    if schema.base_dim != expected_dim:
-        raise ValueError(
-            f"{name} schema base_dim {schema.base_dim} does not match expected {expected_dim}"
-        )
-
-
-_validate_schema_dim(
-    "planet", PLANET_FEATURE_SCHEMA, expected_dim=BASE_PLANET_FEATURE_DIM
+PLANET_FEATURE_SCHEMA = FeatureGroupRegistry(
+    _items_from_catalog(PLANET_FEATURE_CATALOG.definitions)
 )
-_validate_schema_dim("edge", EDGE_FEATURE_SCHEMA, expected_dim=BASE_EDGE_FEATURE_DIM)
-_validate_schema_dim(
-    "global", GLOBAL_FEATURE_SCHEMA, expected_dim=BASE_GLOBAL_FEATURE_V2_DIM
+EDGE_FEATURE_SCHEMA = FeatureGroupRegistry(
+    _items_from_catalog(EDGE_FEATURE_CATALOG.definitions)
+)
+GLOBAL_FEATURE_SCHEMA = FeatureGroupRegistry(
+    _items_from_catalog(GLOBAL_FEATURE_CATALOG.definitions)
 )
 
 

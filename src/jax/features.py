@@ -4,161 +4,27 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config.schema import TaskConfig
-from src.features.registry import (
-    GLOBAL_FEATURE_SCHEMA,
-    feature_history_steps,
+from src.features.catalog._types import EdgeRowAssemblyContext
+from src.features.catalog.edge import EDGE_FEATURE_CATALOG, assemble_edge_rows
+from src.features.catalog.global_ import (
+    GLOBAL_FEATURE_CATALOG,
+    assemble_global_frame,
+    build_global_context,
 )
-from src.game.constants import (
-    ANGULAR_VELOCITY_NORM,
-    BASE_EDGE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_V2_DIM,
-    BOARD_CENTER,
-    BOARD_SIZE,
-    MAX_FLEET_SPEED,
-    MAX_OWNER_FEATURE_PLAYERS,
-    MAX_PLANETS,
-    MAX_PRODUCTION,
-    MAX_STEPS,
-    PLANET_LAUNCH_RADIUS_OFFSET,
-    ROTATION_RADIUS_LIMIT,
-    SUN_RADIUS,
+from src.features.catalog.planet import assemble_planet_features, build_planet_context
+from src.features.registry import feature_history_steps
+from src.game.constants import BOARD_SIZE, MAX_FLEET_SPEED, MAX_PLANETS, MAX_STEPS
+from src.jax.feature_primitives import (
+    incoming_fleet_pressure,
+    rotate_to_learner_frame,
+    shot_crosses_sun_xy,
+    target_owner_one_hot,
+    theta_ref,
 )
-
-
-
-def _incoming_fleet_pressure(x, y, radius, fleets, player):
-    target_x = jnp.asarray(x)[..., None]
-    target_y = jnp.asarray(y)[..., None]
-    target_radius = jnp.asarray(radius)[..., None]
-    dx = target_x - fleets.x
-    dy = target_y - fleets.y
-    cos_a = jnp.cos(fleets.angle)
-    sin_a = jnp.sin(fleets.angle)
-    forward = dx * cos_a + dy * sin_a
-    closest_x = fleets.x + cos_a * forward
-    closest_y = fleets.y + sin_a * forward
-    cross_track = jnp.sqrt((target_x - closest_x) ** 2 + (target_y - closest_y) ** 2)
-    aims_at_target = fleets.active & (forward >= 0.0) & (cross_track <= target_radius)
-    friendly = jnp.where(
-        aims_at_target & (fleets.owner == player), fleets.ships, 0.0
-    ).sum(axis=-1)
-    enemy = jnp.where(aims_at_target & (fleets.owner != player), fleets.ships, 0.0).sum(
-        axis=-1
-    )
-    return friendly, enemy
-
-
-def owner_relative_production(planets, player, env_cfg: TaskConfig):
-    player_count = clipped_player_count(env_cfg)
-    slots = relative_owner_slots(planets.owner, player, player_count)
-    valid_planets = (
-        planets.active & (planets.owner >= 0) & (planets.owner < player_count)
-    )
-    production = jnp.bincount(
-        slots,
-        weights=jnp.where(valid_planets, planets.production, 0.0),
-        length=MAX_OWNER_FEATURE_PLAYERS,
-    )[:MAX_OWNER_FEATURE_PLAYERS]
-    return production / (MAX_PLANETS * MAX_PRODUCTION)
-
-
-def owner_relative_summary(planets, fleets, player, env_cfg: TaskConfig):
-    """Return fixed-size owner-relative summaries for up to four players."""
-
-    player_count = clipped_player_count(env_cfg)
-    denom = MAX_PLANETS * env_cfg.max_ships
-
-    planet_slots = relative_owner_slots(planets.owner, player, player_count)
-    valid_planets = (
-        planets.active & (planets.owner >= 0) & (planets.owner < player_count)
-    )
-    owner_counts = jnp.bincount(
-        planet_slots,
-        weights=valid_planets.astype(jnp.float32),
-        length=MAX_OWNER_FEATURE_PLAYERS,
-    )[:MAX_OWNER_FEATURE_PLAYERS]
-    owner_ships = jnp.bincount(
-        planet_slots,
-        weights=jnp.where(valid_planets, planets.ships, 0.0),
-        length=MAX_OWNER_FEATURE_PLAYERS,
-    )[:MAX_OWNER_FEATURE_PLAYERS]
-
-    fleet_slots = relative_owner_slots(fleets.owner, player, player_count)
-    valid_fleets = fleets.active & (fleets.owner >= 0) & (fleets.owner < player_count)
-    owner_fleets = jnp.bincount(
-        fleet_slots,
-        weights=jnp.where(valid_fleets, fleets.ships, 0.0),
-        length=MAX_OWNER_FEATURE_PLAYERS,
-    )[:MAX_OWNER_FEATURE_PLAYERS]
-    active_mask = (
-        jnp.arange(MAX_OWNER_FEATURE_PLAYERS, dtype=jnp.int32) < player_count
-    ).astype(jnp.float32)
-    return (
-        owner_counts / MAX_PLANETS,
-        owner_ships / denom,
-        owner_fleets / denom,
-        active_mask,
-        jnp.asarray(player_count / MAX_OWNER_FEATURE_PLAYERS, dtype=jnp.float32),
-    )
-
-
-def target_owner_one_hot(owner, player, env_cfg: TaskConfig):
-    """Encode target owners relative to ``player`` with neutral as all-zero."""
-
-    player_count = clipped_player_count(env_cfg)
-    slots = relative_owner_slots(owner, player, player_count)
-    valid_owner = (owner >= 0) & (owner < player_count)
-    return jax.nn.one_hot(
-        jnp.where(valid_owner, slots, 0),
-        MAX_OWNER_FEATURE_PLAYERS,
-        dtype=jnp.float32,
-    ) * valid_owner[..., None].astype(jnp.float32)
-
-
-def clipped_player_count(env_cfg: TaskConfig) -> int:
-    return max(
-        1, min(MAX_OWNER_FEATURE_PLAYERS, int(getattr(env_cfg, "player_count", 2)))
-    )
-
-
-def relative_owner_slots(owner, player, player_count: int):
-    return (owner.astype(jnp.int32) - player.astype(jnp.int32)) % player_count
-
-
-def is_rotating_xy(x, y, radius):
-    """Return whether planets at ``(x, y)`` are inside the rotating orbit band."""
-
-    dx = x - BOARD_CENTER[0]
-    dy = y - BOARD_CENTER[1]
-    return jnp.sqrt(dx * dx + dy * dy) + radius < ROTATION_RADIUS_LIMIT
-
-
-def shot_crosses_sun_xy(src_x, src_y, src_radius, angle, tgt_x, tgt_y):
-    """Return whether a launch ray from source to target intersects the sun."""
-
-    start_x = src_x + jnp.cos(angle) * (src_radius + PLANET_LAUNCH_RADIUS_OFFSET)
-    start_y = src_y + jnp.sin(angle) * (src_radius + PLANET_LAUNCH_RADIUS_OFFSET)
-    return (
-        point_to_segment_distance_xy(
-            BOARD_CENTER[0], BOARD_CENTER[1], start_x, start_y, tgt_x, tgt_y
-        )
-        < SUN_RADIUS
-    )
-
-
-def point_to_segment_distance_xy(px, py, vx, vy, wx, wy):
-    """Return the distance from point ``p`` to segment ``v``-``w``."""
-
-    l2 = (vx - wx) ** 2 + (vy - wy) ** 2
-    t = ((px - vx) * (wx - vx) + (py - vy) * (wy - vy)) / jnp.maximum(l2, 1e-12)
-    t = jnp.clip(t, 0.0, 1.0)
-    proj_x = vx + t * (wx - vx)
-    proj_y = vy + t * (wy - vy)
-    return jnp.sqrt((px - proj_x) ** 2 + (py - proj_y) ** 2)
 
 
 class FeatureHistory(NamedTuple):
@@ -196,12 +62,12 @@ def encode_turn(
     planets = game.planets
     player = game.player
     scale = ship_feature_scale(env_cfg)
-    theta_ref = _theta_ref(planets.x, planets.y, planets.owner, player, planets.active)
+    theta = theta_ref(planets.x, planets.y, planets.owner, player, planets.active)
     planet_features = _planet_features(
-        planets, game.fleets, player, env_cfg, scale, theta_ref, history
+        planets, game.fleets, player, env_cfg, scale, theta, history
     )
     edge_features, edge_mask, edge_tgt_ids = _edge_features(
-        planets, game.fleets, player, env_cfg, scale, theta_ref
+        planets, game.fleets, player, env_cfg, scale, theta
     )
     global_frame = _global_frame(game, env_cfg, scale, history)
     global_features = _stack_global_history(global_frame, history, env_cfg)
@@ -213,7 +79,7 @@ def encode_turn(
         edge_src_ids=planets.id.astype(jnp.int32),
         edge_tgt_ids=edge_tgt_ids,
         global_features=global_features,
-        theta_ref=theta_ref,
+        theta_ref=theta,
     )
 
 
@@ -221,7 +87,7 @@ def empty_feature_history(env_cfg: TaskConfig) -> FeatureHistory:
     steps = max(0, feature_history_steps(env_cfg) - 1)
     return FeatureHistory(
         global_features=jnp.zeros(
-            (steps, BASE_GLOBAL_FEATURE_V2_DIM), dtype=jnp.float32
+            (steps, GLOBAL_FEATURE_CATALOG.base_dim), dtype=jnp.float32
         ),
         planet_ships=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
         cursor=jnp.array(0, dtype=jnp.int32),
@@ -259,31 +125,6 @@ def append_feature_history(
     )
 
 
-def _theta_ref(x, y, owner, player, active):
-    owned = active & (owner == player)
-    count = owned.astype(jnp.float32).sum()
-    cx = jnp.where(count > 0.0, jnp.where(owned, x, 0.0).sum() / count, BOARD_CENTER[0])
-    cy = jnp.where(count > 0.0, jnp.where(owned, y, 0.0).sum() / count, BOARD_CENTER[1])
-    return jnp.arctan2(cy - BOARD_CENTER[1], cx - BOARD_CENTER[0])
-
-
-def _rotate_to_learner_frame(x, y, theta_ref):
-    dx = x - BOARD_CENTER[0]
-    dy = y - BOARD_CENTER[1]
-    cos_t = jnp.cos(-theta_ref)
-    sin_t = jnp.sin(-theta_ref)
-    rx = dx * cos_t - dy * sin_t
-    ry = dx * sin_t + dy * cos_t
-    return rx, ry
-
-
-def _canonical_angle(x, y, theta_ref):
-    dx = x - BOARD_CENTER[0]
-    dy = y - BOARD_CENTER[1]
-    angle = jnp.arctan2(dy, dx) - theta_ref
-    return jnp.arctan2(jnp.sin(angle), jnp.cos(angle)) / jnp.pi
-
-
 def _previous_planet_ships(history: FeatureHistory | None, current_ships):
     if history is None:
         return current_ships
@@ -296,47 +137,30 @@ def _planet_features(
     player,
     env_cfg: TaskConfig,
     scale,
-    theta_ref,
+    theta_ref_value,
     history: FeatureHistory | None,
 ):
-    owner_slot = target_owner_one_hot(planets.owner, player, env_cfg)
-    rotating = is_rotating_xy(planets.x, planets.y, planets.radius)
-    sun_dx = planets.x - BOARD_CENTER[0]
-    sun_dy = planets.y - BOARD_CENTER[1]
-    orbit_radius = jnp.sqrt(sun_dx * sun_dx + sun_dy * sun_dy) / BOARD_SIZE
-    orbit_angle = _canonical_angle(planets.x, planets.y, theta_ref)
-    prev_ships = _previous_planet_ships(history, planets.ships)
-    ship_delta = (planets.ships - prev_ships) / scale
-    incoming_friendly, _incoming_enemy = _incoming_fleet_pressure(
-        planets.x, planets.y, planets.radius, fleets, player
+    context = build_planet_context(
+        planets,
+        fleets,
+        player,
+        env_cfg,
+        scale,
+        theta_ref_value,
+        _previous_planet_ships(history, planets.ships),
     )
-    features = jnp.stack(
-        [
-            planets.active.astype(jnp.float32),
-            orbit_radius,
-            orbit_angle,
-            planets.radius / 5.0,
-            jnp.minimum(planets.ships, scale) / scale,
-            planets.production / MAX_PRODUCTION,
-            rotating.astype(jnp.float32),
-            owner_slot[..., 0],
-            owner_slot[..., 1],
-            owner_slot[..., 2],
-            owner_slot[..., 3],
-            incoming_friendly / scale,
-            ship_delta,
-        ],
-        axis=-1,
-    )
-    return jnp.where(planets.active[:, None], features, jnp.zeros_like(features))
+    return assemble_planet_features(context)
 
 
-def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_ref):
+def _edge_features(
+    planets, fleets, player, env_cfg: TaskConfig, scale, theta_ref_value
+):
     p = MAX_PLANETS
     k = max(0, int(env_cfg.candidate_count) - 1)
+    edge_dim = EDGE_FEATURE_CATALOG.base_dim
     if k == 0:
         return (
-            jnp.zeros((p, 0, BASE_EDGE_FEATURE_DIM), dtype=jnp.float32),
+            jnp.zeros((p, 0, edge_dim), dtype=jnp.float32),
             jnp.zeros((p, 0), dtype=jnp.bool_),
             jnp.zeros((p, 0), dtype=jnp.int32),
         )
@@ -358,7 +182,6 @@ def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_re
         planets.x[None, :],
         planets.y[None, :],
     )
-    unblocked_valid = valid_target & (~crosses_all)
 
     sort_distance = jnp.where(valid_target, dist, jnp.inf)
     sort_blocked = jnp.where(valid_target, crosses_all.astype(jnp.int32), 1)
@@ -376,8 +199,8 @@ def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_re
     tgt_owner = jnp.take(planets.owner, order, axis=0)
     tgt_active = jnp.take(planets.active, order, axis=0)
 
-    src_rx, src_ry = _rotate_to_learner_frame(src_x, src_y, theta_ref)
-    tgt_rx, tgt_ry = _rotate_to_learner_frame(tgt_x, tgt_y, theta_ref)
+    src_rx, src_ry = rotate_to_learner_frame(src_x, src_y, theta_ref_value)
+    tgt_rx, tgt_ry = rotate_to_learner_frame(tgt_x, tgt_y, theta_ref_value)
     delta_x = (tgt_rx - src_rx) / BOARD_SIZE
     delta_y = (tgt_ry - src_ry) / BOARD_SIZE
     distance = jnp.sqrt(delta_x * delta_x + delta_y * delta_y)
@@ -390,30 +213,26 @@ def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_re
     )
 
     owner_slot = target_owner_one_hot(tgt_owner, player, env_cfg)
-    incoming_friendly, incoming_enemy = _incoming_fleet_pressure(
+    incoming_friendly, incoming_enemy = incoming_fleet_pressure(
         tgt_x, tgt_y, tgt_radius, fleets, player
     )
     turns = distance * BOARD_SIZE / jnp.maximum(MAX_FLEET_SPEED, 1e-6) / MAX_STEPS
 
-    edge_rows = jnp.stack(
-        [
-            delta_x,
-            delta_y,
-            distance,
-            crosses.astype(jnp.float32),
-            jnp.minimum(tgt_ships, scale) / scale,
-            owner_slot[..., 0],
-            owner_slot[..., 1],
-            owner_slot[..., 2],
-            owner_slot[..., 3],
-            turns,
-            incoming_friendly / scale,
-            incoming_enemy / scale,
-        ],
-        axis=-1,
+    edge_context = EdgeRowAssemblyContext(
+        delta_x=delta_x,
+        delta_y=delta_y,
+        distance=distance,
+        crosses=crosses,
+        tgt_ships=tgt_ships,
+        owner_slot=owner_slot,
+        turns=turns,
+        incoming_friendly=incoming_friendly,
+        incoming_enemy=incoming_enemy,
+        ordered_valid=ordered_valid,
+        tgt_active=tgt_active,
+        scale=scale,
     )
-    edge_rows = jnp.where(ordered_valid[..., None], edge_rows, 0.0)
-    edge_rows = jnp.where(tgt_active[..., None], edge_rows, 0.0)
+    edge_rows = assemble_edge_rows(edge_context)
 
     owned_source = planets.active & (planets.owner == player)
     edge_mask = ordered_valid & (~crosses) & owned_source[:, None]
@@ -422,108 +241,18 @@ def _edge_features(planets, fleets, player, env_cfg: TaskConfig, scale, theta_re
     return edge_rows, edge_mask, tgt_ids.astype(jnp.int32)
 
 
-def _global_frame(
-    game, env_cfg: TaskConfig, scale, history: FeatureHistory | None
-):
-    planets = game.planets
-    fleets = game.fleets
-    player = game.player
-    mine = planets.active & (planets.owner == player)
-    enemy = planets.active & (planets.owner != -1) & (planets.owner != player)
-    neutral = planets.active & (planets.owner == -1)
-    my_fleet = fleets.active & (fleets.owner == player)
-    enemy_fleet = fleets.active & (fleets.owner != player)
-    denom = MAX_PLANETS * scale
-    owner_production = owner_relative_production(planets, player, env_cfg)
+def _global_frame(game, env_cfg: TaskConfig, scale, history: FeatureHistory | None):
     previous_global, previous_present = _previous_global_features(history, env_cfg)
-
-    owner_ship_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_ship_totals"
+    context = build_global_context(
+        game, env_cfg, scale, previous_global, previous_present
     )
-    owner_planet_counts_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_planet_counts"
-    )
-    owner_fleet_totals_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_fleet_totals"
-    )
-    owner_production_slice = GLOBAL_FEATURE_SCHEMA.base_slice(
-        "owner_relative_production"
-    )
-
-    player_count_int = max(1, min(4, int(env_cfg.player_count)))
-    player_count = jnp.asarray(player_count_int, dtype=jnp.int32)
-    planet_slots = (
-        planets.owner.astype(jnp.int32) - player.astype(jnp.int32)
-    ) % player_count
-    valid_planets = (
-        planets.active & (planets.owner >= 0) & (planets.owner < player_count)
-    )
-    owner_counts_raw = jnp.bincount(
-        planet_slots,
-        weights=valid_planets.astype(jnp.float32),
-        length=4,
-    )[:4]
-    owner_ships_raw = jnp.bincount(
-        planet_slots,
-        weights=jnp.where(valid_planets, planets.ships, 0.0),
-        length=4,
-    )[:4]
-    fleet_slots = (
-        fleets.owner.astype(jnp.int32) - player.astype(jnp.int32)
-    ) % player_count
-    valid_fleets = fleets.active & (fleets.owner >= 0) & (fleets.owner < player_count)
-    owner_fleets_raw = jnp.bincount(
-        fleet_slots,
-        weights=jnp.where(valid_fleets, fleets.ships, 0.0),
-        length=4,
-    )[:4]
-    owner_counts = owner_counts_raw / MAX_PLANETS
-    owner_ships = owner_ships_raw / denom
-    owner_fleets = owner_fleets_raw / denom
-    active_mask = (jnp.arange(4, dtype=jnp.int32) < player_count).astype(jnp.float32)
-    player_count_feature = jnp.asarray(player_count_int / 4.0, dtype=jnp.float32)
-
-    angular_velocity = game.angular_velocity.astype(jnp.float32) / ANGULAR_VELOCITY_NORM
-
-    return jnp.concatenate(
-        [
-            jnp.asarray(
-                [
-                    game.step.astype(jnp.float32) / MAX_STEPS,
-                    mine.astype(jnp.float32).sum() / MAX_PLANETS,
-                    enemy.astype(jnp.float32).sum() / MAX_PLANETS,
-                    neutral.astype(jnp.float32).sum() / MAX_PLANETS,
-                    jnp.where(mine, planets.ships, 0.0).sum() / denom,
-                    jnp.where(enemy, planets.ships, 0.0).sum() / denom,
-                    jnp.where(my_fleet, fleets.ships, 0.0).sum() / denom,
-                    jnp.where(enemy_fleet, fleets.ships, 0.0).sum() / denom,
-                ],
-                dtype=jnp.float32,
-            ),
-            owner_counts,
-            owner_ships,
-            owner_fleets,
-            active_mask,
-            jnp.asarray([player_count_feature], dtype=jnp.float32),
-            owner_production,
-            (owner_ships - previous_global[owner_ship_totals_slice]) * previous_present,
-            (owner_counts - previous_global[owner_planet_counts_slice])
-            * previous_present,
-            (owner_fleets - previous_global[owner_fleet_totals_slice])
-            * previous_present,
-            (owner_production - previous_global[owner_production_slice])
-            * previous_present,
-            jnp.asarray([angular_velocity], dtype=jnp.float32),
-        ]
-    )
+    return assemble_global_frame(context)
 
 
-def _previous_global_features(
-    history: FeatureHistory | None, env_cfg: TaskConfig
-):
+def _previous_global_features(history: FeatureHistory | None, env_cfg: TaskConfig):
     if history is None or feature_history_steps(env_cfg) <= 1 or history.length <= 0:
         return (
-            jnp.zeros((BASE_GLOBAL_FEATURE_V2_DIM,), dtype=jnp.float32),
+            jnp.zeros((GLOBAL_FEATURE_CATALOG.base_dim,), dtype=jnp.float32),
             jnp.asarray(0.0, dtype=jnp.float32),
         )
     ordered = _ordered_global_history(history, env_cfg)

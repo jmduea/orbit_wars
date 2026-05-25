@@ -1,24 +1,25 @@
+from src.features.catalog import (
+    EDGE_FEATURE_CATALOG,
+    GLOBAL_FEATURE_CATALOG,
+    PLANET_FEATURE_CATALOG,
+)
 from src.features.registry import (
     EDGE_FEATURE_SCHEMA,
     GLOBAL_FEATURE_SCHEMA,
     PLANET_FEATURE_SCHEMA,
     edge_k,
 )
-from src.game.constants import (
-    BASE_EDGE_FEATURE_DIM,
-    BASE_GLOBAL_FEATURE_V2_DIM,
-    BASE_PLANET_FEATURE_DIM,
-)
 
 
-def test_schema_base_dims_match_constants() -> None:
-    assert PLANET_FEATURE_SCHEMA.base_dim == BASE_PLANET_FEATURE_DIM
-    assert EDGE_FEATURE_SCHEMA.base_dim == BASE_EDGE_FEATURE_DIM
-    assert GLOBAL_FEATURE_SCHEMA.base_dim == BASE_GLOBAL_FEATURE_V2_DIM
+def test_schema_base_dims_match_catalogs() -> None:
+    assert PLANET_FEATURE_SCHEMA.base_dim == PLANET_FEATURE_CATALOG.base_dim
+    assert EDGE_FEATURE_SCHEMA.base_dim == EDGE_FEATURE_CATALOG.base_dim
+    assert GLOBAL_FEATURE_SCHEMA.base_dim == GLOBAL_FEATURE_CATALOG.base_dim
 
 
 def test_global_schema_includes_angular_velocity_slice() -> None:
-    assert GLOBAL_FEATURE_SCHEMA.slice("angular_velocity") == slice(45, 46)
+    angular_slice = GLOBAL_FEATURE_SCHEMA.base_slice("angular_velocity")
+    assert angular_slice == GLOBAL_FEATURE_CATALOG.base_slice("angular_velocity")
 
 
 def test_edge_k_from_candidate_count() -> None:
