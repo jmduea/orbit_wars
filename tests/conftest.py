@@ -33,16 +33,21 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_jax_train_timing.py": "curriculum",
 }
 
-JAX_FILES = frozenset(
+FULL_JAX_FILES = frozenset(
     {
-        "test_curriculum.py",
-        "test_feature_history.py",
         "test_jax_env.py",
         "test_jax_env_parity.py",
         "test_jax_policy.py",
         "test_jax_ppo.py",
-        "test_replay.py",
-        "test_trajectory_shield.py",
+    }
+)
+
+# Mixed modules: mark jax per test, not per file.
+JAX_TEST_NAMES = frozenset(
+    {
+        "test_recent_biased_snapshot_selection_prefers_newer_updates",
+        "test_jax_replay_actor_handles_sequence_policy_outputs",
+        "test_python_and_jax_launch_reasons_match_for_sun_and_hit_modes",
     }
 )
 
@@ -99,6 +104,30 @@ def pytest_configure(config: pytest.Config) -> None:
         )
 
 
+def pytest_sessionstart(session: pytest.Session) -> None:
+    markexpr = session.config.option.markexpr or ""
+    if markexpr or os.environ.get("ORBIT_WARS_ALLOW_SLOW_TESTS") == "1":
+        return
+    terminal = session.config.pluginmanager.get_plugin("terminalreporter")
+    if terminal is not None:
+        terminal.write_line("")
+        terminal.write_line(
+            "WARNING: full suite selected (156 tests incl. 49 slow/JAX-heavy). "
+            "Daily loop: make test-fast (CPU) or make test-jax (serial JAX). "
+            "Set ORBIT_WARS_ALLOW_SLOW_TESTS=1 to silence.",
+            yellow=True,
+        )
+        terminal.write_line("")
+
+
+def _is_jax(item: pytest.Item) -> bool:
+    filename = item.path.name
+    test_name = item.name.split("[", 1)[0]
+    if filename in FULL_JAX_FILES:
+        return True
+    return test_name in JAX_TEST_NAMES
+
+
 def _is_slow(item: pytest.Item) -> bool:
     filename = item.path.name
     test_name = item.name.split("[", 1)[0]
@@ -119,7 +148,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         domain = DOMAIN_BY_FILE.get(filename)
         if domain is not None:
             item.add_marker(getattr(pytest.mark, domain))
-        if filename in JAX_FILES:
+        if _is_jax(item):
             item.add_marker(pytest.mark.jax)
         if _is_slow(item):
             item.add_marker(pytest.mark.slow)

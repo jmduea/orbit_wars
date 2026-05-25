@@ -85,11 +85,15 @@ uv sync --group dev
 Run tests:
 
 ```bash
-uv run --group dev pytest
+make test-fast    # CPU-only daily loop (safe on WSL2)
+make test-jax     # serial JAX subset when editing JAX code
+make test         # full suite incl. slow tests; serial only — never use pytest -n
 ```
+
+Do **not** use `pytest-xdist` / `-n auto`: parallel JAX/CUDA workers have crashed WSL2.
 
 For config work, start with:
 
 ```bash
-uv run --group dev pytest tests/test_config_consolidation.py tests/test_curriculum.py tests/test_telemetry.py
+make test-domain-config
 ```
