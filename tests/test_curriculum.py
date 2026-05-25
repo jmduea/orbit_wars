@@ -1,18 +1,18 @@
 import json
 
-import jax
 import pytest
 from omegaconf import OmegaConf
 
+import jax
 from src.config import (
     TrainConfig,
     compose_hydra_train_config,
     train_config_from_omegaconf,
 )
-from src.training.curriculum import CurriculumController
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo import collect_rollout_jax, init_train_state
+from src.training.curriculum import CurriculumController
 
 
 def _curriculum_config(stages):
@@ -374,3 +374,42 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     ):
         assert isinstance(update_record[key], float)
         assert update_record[key] >= 0.0
+
+
+def test_lean_rollout_metrics_skips_expensive_scan_payloads():
+    cfg = _curriculum_config([{"id": "latest", "opponent_families": {"latest": 1.0}}])
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    cfg.training.lean_rollout_metrics = True
+    reset_keys = jax.random.split(jax.random.PRNGKey(140), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(141), policy, cfg)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    stage_view = controller.stage_view(
+        1,
+        snapshot_ids=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+        snapshot_valid_mask=jax.numpy.zeros((2,), dtype=bool),
+        snapshot_updates=jax.numpy.zeros((2,), dtype=jax.numpy.int32),
+    )
+
+    _key, _env_state, _turn_batch, transitions, metrics = collect_rollout_jax(
+        jax.random.PRNGKey(142),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        stage_view=stage_view,
+    )
+
+    assert float(metrics["samples"]) > 0.0
+    assert float(metrics["env_steps"]) == float(
+        cfg.training.rollout_steps * cfg.training.num_envs
+    )
+    assert float(metrics["trajectory_shield_blocked_count"]) == 0.0
+    assert float(metrics["opponent_slots_total"]) == 0.0

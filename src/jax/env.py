@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-import jax
 import jax.numpy as jnp
 
+import jax
+from src.config import RewardConfig, TaskConfig
 from src.game.constants import (
     BOARD_SIZE,
     MAX_FLEET_SPEED,
@@ -23,7 +24,6 @@ from src.game.constants import (
     TOTAL_COMETS,
 )
 
-from src.config import RewardConfig, TaskConfig
 from .features import (
     JaxFeatureHistory,
     JaxTurnBatch,
@@ -443,13 +443,22 @@ def step_multi_player(
     planets = previous_game.planets
     fleets = previous_game.fleets
     next_fleet_id = previous_game.next_fleet_id
-    for player in range(int(getattr(cfg, "player_count", 2))):
-        action = jax.tree.map(
-            lambda x, p=player: jnp.take(x, p, axis=0), player_actions
-        )
+    player_count = int(getattr(cfg, "player_count", 2))
+
+    def launch_player(player_id, carry):
+        planets, fleets, next_fleet_id = carry
+        action = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_actions)
         planets, fleets, next_fleet_id = _launch_fleets(
-            planets, fleets, next_fleet_id, action, player, cfg
+            planets, fleets, next_fleet_id, action, player_id, cfg
         )
+        return planets, fleets, next_fleet_id
+
+    planets, fleets, next_fleet_id = jax.lax.fori_loop(
+        0,
+        player_count,
+        lambda player_id, carry: launch_player(player_id, carry),
+        (planets, fleets, next_fleet_id),
+    )
     return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
 
 

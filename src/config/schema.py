@@ -62,6 +62,8 @@ class TrainingConfig:
     update_chunk_rows_min: int = 8192
     update_chunk_rows_max: int | None = None
     rollout_microbatch_envs: int | None = None
+    rotate_format_rollouts: bool = False
+    lean_rollout_metrics: bool = False
     enable_gradient_checkpointing: bool = False
     gamma: float = 0.99
     clip_coef: float = 0.2

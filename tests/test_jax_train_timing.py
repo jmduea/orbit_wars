@@ -1,4 +1,36 @@
-from src.jax.train import _build_per_format_timing_metrics
+from types import SimpleNamespace
+
+from src.jax.train import _active_group_indices, _build_per_format_timing_metrics
+
+
+def _rollout_group(player_count: int):
+    return SimpleNamespace(
+        cfg=SimpleNamespace(task=SimpleNamespace(player_count=player_count))
+    )
+
+
+def test_active_group_indices_runs_all_formats_by_default():
+    groups = [_rollout_group(2), _rollout_group(4)]
+    indices = _active_group_indices(groups, {2: 0.5, 4: 0.5}, update=1)
+    assert indices == [0, 1]
+
+
+def test_active_group_indices_rotate_selects_one_format_per_update():
+    groups = [_rollout_group(2), _rollout_group(4)]
+    first = _active_group_indices(
+        groups,
+        {2: 0.5, 4: 0.5},
+        update=1,
+        rotate_format_rollouts=True,
+    )
+    second = _active_group_indices(
+        groups,
+        {2: 0.5, 4: 0.5},
+        update=51,
+        rotate_format_rollouts=True,
+    )
+    assert first == [0]
+    assert second == [1]
 
 
 def test_build_per_format_timing_metrics_is_deterministic():

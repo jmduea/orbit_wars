@@ -10,6 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from src.artifacts.checkpoint_compat import (
+    feature_metadata,
+    load_checkpoint_payload,
+    validate_checkpoint_config_compatibility,
+    validate_checkpoint_feature_compatibility,
+)
+from src.artifacts.checkpoint_retention import prune_checkpoints
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
@@ -20,29 +27,24 @@ from src.artifacts.pipeline import (
     protected_paths_from_jobs,
     write_optional_job,
 )
-from src.artifacts.checkpoint_compat import (
-    feature_metadata,
-    load_checkpoint_payload,
-    validate_checkpoint_config_compatibility,
-    validate_checkpoint_feature_compatibility,
-)
-from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.artifacts.replay import maybe_write_jax_checkpoint_replay
+from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
+from src.telemetry import build_telemetry
 from src.training.curriculum import CurriculumController
+from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+
 from .device import (
     configure_jax_platform_for_host,
     ensure_cuda_jax_if_nvidia_present,
 )
-from src.artifacts.replay import maybe_write_jax_checkpoint_replay
-from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
-from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
-from src.telemetry import build_telemetry
 
 configure_jax_platform_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
 
-import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
+
+import jax  # noqa: E402
 
 from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
 from .features import JaxTurnBatch  # noqa: E402
@@ -524,19 +526,17 @@ def _collect_rollout_microbatched(
     update=jnp.asarray(0, dtype=jnp.int32),
 ) -> tuple[jax.Array, JaxEnvState, JaxTurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
     env_count = int(cfg.training.num_envs)
-    chunk_count = env_count // int(microbatch_envs)
-    key, *chunk_keys = jax.random.split(rollout_key, chunk_count + 1)
-    states: list[JaxEnvState] = []
-    batches: list[JaxTurnBatch] = []
-    transitions: list[JaxTransitionBatch] = []
-    metrics: list[dict[str, jax.Array]] = []
-    for chunk_index, chunk_key in enumerate(chunk_keys):
-        start = chunk_index * int(microbatch_envs)
+    micro = int(microbatch_envs)
+    chunk_count = env_count // micro
+
+    def collect_chunk(chunk_index: jax.Array):
+        chunk_key = jax.random.fold_in(rollout_key, chunk_index * 9973 + 17)
+        start = chunk_index * micro
         chunk_state = _slice_env_axis(
-            state, start=start, size=int(microbatch_envs), env_count=env_count
+            state, start=start, size=micro, env_count=env_count
         )
         chunk_batch = _slice_env_axis(
-            batch, start=start, size=int(microbatch_envs), env_count=env_count
+            batch, start=start, size=micro, env_count=env_count
         )
         (
             _next_chunk_key,
@@ -556,16 +556,47 @@ def _collect_rollout_microbatched(
             update=update,
             env_index_offset=start,
         )
-        states.append(next_state)
-        batches.append(next_batch)
-        transitions.append(chunk_transitions)
-        metrics.append(chunk_metrics)
+        return next_state, next_batch, chunk_transitions, chunk_metrics
+
+    chunk_indices = jnp.arange(chunk_count, dtype=jnp.int32)
+    chunk_states, chunk_batches, chunk_transitions, chunk_metrics = jax.lax.map(
+        collect_chunk, chunk_indices
+    )
+
+    def reshape_chunk_axis(leaf):
+        if isinstance(leaf, jax.Array) and leaf.ndim > 0:
+            return leaf.reshape((env_count,) + leaf.shape[2:])
+        return leaf
+
+    merged_states = jax.tree.map(reshape_chunk_axis, chunk_states)
+    merged_batches = jax.tree.map(reshape_chunk_axis, chunk_batches)
+    merged_transitions = jax.tree.map(reshape_chunk_axis, chunk_transitions)
+
+    def merge_metrics_scan(acc, chunk_index):
+        chunk_metric = jax.tree.map(
+            lambda x: jax.lax.dynamic_index_in_dim(
+                x, chunk_index, axis=0, keepdims=False
+            ),
+            chunk_metrics,
+        )
+        return _sum_metric_dicts([acc, chunk_metric])
+
+    merged_metrics = jax.tree.map(
+        lambda x: jax.lax.dynamic_index_in_dim(x, 0, axis=0, keepdims=False),
+        chunk_metrics,
+    )
+    if chunk_count > 1:
+        merged_metrics, _ = jax.lax.scan(
+            merge_metrics_scan,
+            merged_metrics,
+            jnp.arange(1, chunk_count, dtype=jnp.int32),
+        )
     return (
-        key,
-        _concat_env_axis(states),
-        _concat_env_axis(batches),
-        concatenate_transition_batches(transitions),
-        _sum_metric_dicts(metrics),
+        rollout_key,
+        merged_states,
+        merged_batches,
+        merged_transitions,
+        merged_metrics,
     )
 
 
@@ -750,14 +781,38 @@ def _start_artifact_worker_if_needed(
 
 
 def _active_group_indices(
-    groups: list[JaxRolloutGroup], format_weights: dict[int, float]
+    groups: list[JaxRolloutGroup],
+    format_weights: dict[int, float],
+    *,
+    update: int = 1,
+    rotate_format_rollouts: bool = False,
 ) -> list[int]:
-    active: list[int] = []
+    """Return rollout group indices to collect on this update.
+
+    When ``rotate_format_rollouts`` is enabled and multiple formats have positive
+    curriculum weight, only one group is selected per update using a fixed-period
+    weighted schedule so long-run sample mix tracks ``format_weights``.
+    """
+
+    weighted_indices: list[tuple[int, float]] = []
     for idx, group in enumerate(groups):
         player_count = int(group.cfg.task.player_count)
-        if float(format_weights.get(player_count, 0.0)) > 0.0:
-            active.append(idx)
-    return active or list(range(len(groups)))
+        weight = float(format_weights.get(player_count, 0.0))
+        if weight > 0.0:
+            weighted_indices.append((idx, weight))
+    if not weighted_indices:
+        return list(range(len(groups)))
+    if not rotate_format_rollouts or len(weighted_indices) == 1:
+        return [idx for idx, _ in weighted_indices]
+
+    total_weight = sum(weight for _, weight in weighted_indices)
+    slot = float((int(update) - 1) % 100) / 100.0
+    cumulative = 0.0
+    for idx, weight in weighted_indices:
+        cumulative += weight / total_weight
+        if slot < cumulative:
+            return [idx]
+    return [weighted_indices[-1][0]]
 
 
 def _init_historical_snapshot_pool(
@@ -1064,7 +1119,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 snapshot_updates=historical_pool.snapshot_updates,
             )
             active_indices = _active_group_indices(
-                rollout_groups, curriculum.current_format_weights()
+                rollout_groups,
+                curriculum.current_format_weights(),
+                update=update,
+                rotate_format_rollouts=cfg.training.rotate_format_rollouts,
             )
             key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
             for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):

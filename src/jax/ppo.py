@@ -4,12 +4,12 @@ from typing import NamedTuple
 
 import flax
 import flax.struct
-import jax
 import jax.numpy as jnp
 import optax
 
+import jax
+from src.config import TrainConfig
 from src.config.schema import TaskConfig
-from src.game.constants import MAX_FLEET_SPEED, MAX_PLANETS, MAX_PRODUCTION
 from src.features.registry import (
     candidate_feature_dim,
     candidate_feature_schema,
@@ -18,9 +18,25 @@ from src.features.registry import (
     self_feature_dim,
     self_feature_schema,
 )
-
-from src.config import TrainConfig
+from src.game.constants import MAX_FLEET_SPEED, MAX_PLANETS, MAX_PRODUCTION
+from src.game.trajectory_shield import (
+    ShieldDiagnostics,
+    apply_trajectory_shield_to_turn_batch,
+    default_ship_bucket_mask,
+    mask_policy_output_for_shield,
+)
+from src.opponents.pool import (
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+    OPPONENT_NEAREST_SNIPER,
+    OPPONENT_NOOP,
+    OPPONENT_OPPORTUNISTIC,
+    OPPONENT_RANDOM,
+    OPPONENT_TURTLE,
+    sample_opponent_type_ids_jax,
+)
 from src.training.curriculum import StageView, default_stage_view
+
 from .env import (
     JaxAction,
     JaxEnvState,
@@ -32,23 +48,6 @@ from .env import (
 )
 from .features import JaxTurnBatch, encode_turn
 from .policy import action_log_prob_and_entropy
-from src.opponents.pool import (
-    OPPONENT_HISTORICAL,
-    OPPONENT_LATEST,
-    OPPONENT_NEAREST_SNIPER,
-    OPPONENT_NOOP,
-    OPPONENT_OPPORTUNISTIC,
-    OPPONENT_RANDOM,
-    OPPONENT_SCRIPTED_SNIPER,
-    OPPONENT_TURTLE,
-    sample_opponent_type_ids_jax,
-)
-from src.game.trajectory_shield import (
-    ShieldDiagnostics,
-    apply_trajectory_shield_to_turn_batch,
-    default_ship_bucket_mask,
-    mask_policy_output_for_shield,
-)
 
 
 def validate_policy_param_shapes(params: dict, env_cfg: TaskConfig) -> None:
@@ -555,7 +554,6 @@ def _sample_shielded_sequence_with_params(
     log_prob_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.float32)
     entropy_sequence = jnp.zeros((row_count, sequence_k), dtype=jnp.float32)
     remaining_ships = batch.source_ships.reshape(-1)
-    bucket_masks: list[jax.Array] = []
     env_count = batch.source_ships.shape[0]
     diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
     diagnostics = ShieldDiagnostics(
@@ -570,7 +568,21 @@ def _sample_shielded_sequence_with_params(
         legal_non_noop_rate=diagnostic_zero,
     )
 
-    for step_idx in range(sequence_k):
+    bucket_mask_stack = jnp.zeros(
+        (row_count, sequence_k, cfg.task.candidate_count, cfg.task.ship_bucket_count),
+        dtype=jnp.bool_,
+    )
+
+    def sequence_scan_body(carry, step_idx):
+        (
+            target_sequence,
+            bucket_sequence,
+            log_prob_sequence,
+            entropy_sequence,
+            remaining_ships,
+            diagnostics,
+            bucket_mask_stack,
+        ) = carry
         step_output = policy.apply(
             params,
             flat_self,
@@ -635,7 +647,41 @@ def _sample_shielded_sequence_with_params(
         bucket_sequence = bucket_sequence.at[:, step_idx].set(bucket)
         log_prob_sequence = log_prob_sequence.at[:, step_idx].set(log_prob)
         entropy_sequence = entropy_sequence.at[:, step_idx].set(entropy)
-        bucket_masks.append(step_bucket_mask)
+        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(step_bucket_mask)
+        return (
+            target_sequence,
+            bucket_sequence,
+            log_prob_sequence,
+            entropy_sequence,
+            remaining_ships,
+            diagnostics,
+            bucket_mask_stack,
+        ), None
+
+    (
+        (
+            target_sequence,
+            bucket_sequence,
+            log_prob_sequence,
+            entropy_sequence,
+            remaining_ships,
+            diagnostics,
+            bucket_mask_stack,
+        ),
+        _,
+    ) = jax.lax.scan(
+        sequence_scan_body,
+        (
+            target_sequence,
+            bucket_sequence,
+            log_prob_sequence,
+            entropy_sequence,
+            remaining_ships,
+            diagnostics,
+            bucket_mask_stack,
+        ),
+        jnp.arange(sequence_k, dtype=jnp.int32),
+    )
 
     diagnostics = ShieldDiagnostics(
         blocked_count=diagnostics.blocked_count,
@@ -658,7 +704,7 @@ def _sample_shielded_sequence_with_params(
         log_prob=log_prob_sequence,
         entropy=entropy_sequence,
         value=probe_output.value,
-        ship_bucket_mask=jnp.stack(bucket_masks, axis=1),
+        ship_bucket_mask=bucket_mask_stack,
         diagnostics=diagnostics,
     )
 
@@ -726,6 +772,17 @@ def _select_env_action(
         true_action,
         false_action,
     )
+
+
+def _slice_env_axis(tree: object, env_index: jax.Array) -> object:
+    """Slice leading env axis to a single row (keeps batch dim size 1)."""
+
+    def slice_leaf(value):
+        if isinstance(value, jax.Array) and value.ndim > 0:
+            return jax.lax.dynamic_index_in_dim(value, env_index, axis=0, keepdims=True)
+        return value
+
+    return jax.tree.map(slice_leaf, tree)
 
 
 def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
@@ -942,10 +999,25 @@ def _sample_single_family_2p_action(
     )
 
 
+def _opponent_params_for_player(
+    player_id: jax.Array,
+    train_state: JaxTrainState,
+    opponent_params_by_player: tuple[dict, ...] | None,
+    *,
+    player_count: int,
+) -> dict:
+    if opponent_params_by_player is None:
+        return train_state.params
+    return jax.lax.switch(
+        jnp.asarray(player_id, dtype=jnp.int32),
+        tuple(opponent_params_by_player[index] for index in range(player_count)),
+    )
+
+
 def _sample_single_family_4p_action(
     key: jax.Array,
     family_id: jax.Array,
-    player_id: int,
+    player_id: jax.Array,
     game,
     batch: JaxTurnBatch,
     train_state: JaxTrainState,
@@ -957,10 +1029,11 @@ def _sample_single_family_4p_action(
 ) -> JaxAction:
     """Build one 4p player action without constructing unused families."""
 
-    opponent_params = (
-        train_state.params
-        if opponent_params_by_player is None
-        else opponent_params_by_player[player_id]
+    opponent_params = _opponent_params_for_player(
+        player_id,
+        train_state,
+        opponent_params_by_player,
+        player_count=int(cfg.task.player_count),
     )
 
     def latest_branch(_: None) -> JaxAction:
@@ -1047,6 +1120,157 @@ def _sample_single_family_4p_action(
         ),
         None,
     )
+
+
+def _sample_mixed_opponent_2p_action(
+    opp_key: jax.Array,
+    opp_game,
+    opp_batch_cache: JaxTurnBatch,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    slot_type: jax.Array,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    """Sample per-env opponent actions with lax.switch (no eager multi-family compute)."""
+
+    env_count = int(slot_type.shape[0])
+    env_indices = jnp.arange(env_count, dtype=jnp.int32)
+    per_env = jax.vmap(
+        lambda env_index: _sample_single_family_2p_action(
+            jax.random.fold_in(opp_key, env_index),
+            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
+            _slice_env_axis(opp_game, env_index),
+            _slice_env_axis(opp_batch_cache, env_index),
+            train_state,
+            policy,
+            cfg,
+            stage_view,
+            historical_params_pool,
+        )
+    )(env_indices)
+    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)
+
+
+def _four_player_step_action(
+    player_id: jax.Array,
+    *,
+    opp_key: jax.Array,
+    player_games,
+    player_batches,
+    effective_type_ids: jax.Array,
+    single_family: jax.Array,
+    effective_single_family_id: jax.Array,
+    learner_action: JaxAction,
+    learner_player: jax.Array,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    opponent_params_by_player: tuple[dict, ...] | None,
+    active_stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    """Build one player's env-batch action row (vmapped over player_id)."""
+
+    player_batch = jax.tree.map(
+        lambda x: jnp.take(x, player_id, axis=0), player_batches
+    )
+    player_game = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_games)
+    player_key = jax.random.fold_in(opp_key, player_id)
+    slot_type = effective_type_ids[:, player_id]
+    if cfg.opponents.mode.opponent == "self":
+
+        def single_player_branch(_: None) -> JaxAction:
+            return _sample_single_family_4p_action(
+                player_key,
+                effective_single_family_id,
+                player_id,
+                player_game,
+                player_batch,
+                train_state,
+                policy,
+                cfg,
+                opponent_params_by_player,
+                active_stage_view,
+                historical_params_pool,
+            )
+
+        def mixed_player_branch(_: None) -> JaxAction:
+            return _sample_mixed_player_4p_action(
+                player_key,
+                player_id,
+                player_game,
+                player_batch,
+                slot_type,
+                train_state,
+                policy,
+                cfg,
+                opponent_params_by_player,
+                active_stage_view,
+                historical_params_pool,
+            )
+
+        opponent_action = jax.lax.cond(
+            single_family,
+            single_player_branch,
+            mixed_player_branch,
+            None,
+        )
+    elif cfg.opponents.mode.opponent == "random":
+        player_shielded = jax.vmap(
+            lambda game, turn: apply_trajectory_shield_to_turn_batch(
+                game, turn, cfg.task
+            )
+        )(player_game, player_batch)
+        opponent_action = build_random_action_from_batch(
+            player_key,
+            player_shielded.batch,
+            cfg,
+            player_shielded.ship_bucket_mask,
+        )
+    else:
+        raise ValueError(
+            "JAX training supports opponent='self' or opponent='random', "
+            f"got {cfg.opponents.mode.opponent!r}."
+        )
+    is_learner_player = learner_player == player_id
+    return _select_env_action(is_learner_player, learner_action, opponent_action)
+
+
+def _sample_mixed_player_4p_action(
+    player_key: jax.Array,
+    player_id: jax.Array,
+    player_game,
+    player_batch: JaxTurnBatch,
+    slot_type: jax.Array,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    opponent_params_by_player: tuple[dict, ...] | None,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    """Sample one 4p player's batched actions with per-env lax.switch."""
+
+    env_count = int(slot_type.shape[0])
+    env_indices = jnp.arange(env_count, dtype=jnp.int32)
+    per_env = jax.vmap(
+        lambda env_index: _sample_single_family_4p_action(
+            jax.random.fold_in(player_key, env_index),
+            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
+            player_id,
+            _slice_env_axis(player_game, env_index),
+            _slice_env_axis(player_batch, env_index),
+            train_state,
+            policy,
+            cfg,
+            opponent_params_by_player,
+            stage_view,
+            historical_params_pool,
+        )
+    )(env_indices)
+    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)
 
 
 def collect_rollout_jax(
@@ -1166,64 +1390,16 @@ def collect_rollout_jax(
                     )
 
                 def mixed_opponent_branch(_: None) -> JaxAction:
-                    opp_shielded = jax.vmap(
-                        lambda game, turn: apply_trajectory_shield_to_turn_batch(
-                            game, turn, cfg.task
-                        )
-                    )(opp_game, opp_batch_cache)
-                    current_action = _sample_policy_action(
+                    return _sample_mixed_opponent_2p_action(
                         opp_key,
                         opp_game,
                         opp_batch_cache,
                         train_state,
                         policy,
                         cfg,
-                        deterministic=cfg.opponents.self_play.deterministic,
-                    )
-                    historical_action, _historical_fallback_by_env = (
-                        _sample_historical_action(
-                            jax.random.fold_in(opp_key, 71),
-                            opp_game,
-                            opp_batch_cache,
-                            historical_params_pool,
-                            active_stage_view,
-                            current_action,
-                            policy,
-                            cfg,
-                        )
-                    )
-                    random_action = build_random_action_from_batch(
-                        opp_key, opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
-                    )
-                    nearest_action = build_sniper_action_from_batch(
-                        opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
-                    )
-                    turtle_action = build_turtle_action_from_batch(
-                        opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
-                    )
-                    opportunistic_action = build_opportunistic_action_from_batch(
-                        opp_shielded.batch, cfg, opp_shielded.ship_bucket_mask
-                    )
-                    noop_action = build_noop_action_from_batch(opp_batch_cache, cfg)
-                    action = _select_env_action(
-                        slot_type == OPPONENT_RANDOM, random_action, current_action
-                    )
-                    action = _select_env_action(
-                        slot_type == OPPONENT_HISTORICAL, historical_action, action
-                    )
-                    action = _select_env_action(
-                        slot_type == OPPONENT_NEAREST_SNIPER, nearest_action, action
-                    )
-                    action = _select_env_action(
-                        slot_type == OPPONENT_TURTLE, turtle_action, action
-                    )
-                    action = _select_env_action(
-                        slot_type == OPPONENT_OPPORTUNISTIC,
-                        opportunistic_action,
-                        action,
-                    )
-                    return _select_env_action(
-                        slot_type == OPPONENT_NOOP, noop_action, action
+                        slot_type,
+                        active_stage_view,
+                        historical_params_pool,
                     )
 
                 opponent_action = jax.lax.cond(
@@ -1269,129 +1445,28 @@ def collect_rollout_jax(
                 lambda x: x.reshape((cfg.task.player_count, env_count) + x.shape[1:]),
                 flat_player_batch,
             )
-            for player_id in range(cfg.task.player_count):
-                player_batch = jax.tree.map(lambda x: x[player_id], player_batches)
-                player_game = jax.tree.map(lambda x: x[player_id], player_games)
-                player_key = jax.random.fold_in(opp_key, player_id)
-                slot_type = effective_type_ids[:, player_id]
-                if cfg.opponents.mode.opponent == "self":
-
-                    def single_player_branch(_: None) -> JaxAction:
-                        return _sample_single_family_4p_action(
-                            player_key,
-                            effective_single_family_id,
-                            player_id,
-                            player_game,
-                            player_batch,
-                            train_state,
-                            policy,
-                            cfg,
-                            opponent_params_by_player,
-                            active_stage_view,
-                            historical_params_pool,
-                        )
-
-                    def mixed_player_branch(_: None) -> JaxAction:
-                        player_shielded = jax.vmap(
-                            lambda game, turn: apply_trajectory_shield_to_turn_batch(
-                                game, turn, cfg.task
-                            )
-                        )(player_game, player_batch)
-                        opponent_params = (
-                            train_state.params
-                            if opponent_params_by_player is None
-                            else opponent_params_by_player[player_id]
-                        )
-                        current_action = _sample_policy_action_with_params(
-                            player_key,
-                            player_game,
-                            player_batch,
-                            opponent_params,
-                            policy,
-                            cfg,
-                            deterministic=cfg.opponents.self_play.deterministic,
-                        )
-                        historical_action, _historical_fallback_by_env = (
-                            _sample_historical_action(
-                                jax.random.fold_in(player_key, 71),
-                                player_game,
-                                player_batch,
-                                historical_params_pool,
-                                active_stage_view,
-                                current_action,
-                                policy,
-                                cfg,
-                            )
-                        )
-                        random_action = build_random_action_from_batch(
-                            jax.random.fold_in(player_key, cfg.task.player_count),
-                            player_shielded.batch,
-                            cfg,
-                            player_shielded.ship_bucket_mask,
-                        )
-                        nearest_action = build_sniper_action_from_batch(
-                            player_shielded.batch, cfg, player_shielded.ship_bucket_mask
-                        )
-                        turtle_action = build_turtle_action_from_batch(
-                            player_shielded.batch, cfg, player_shielded.ship_bucket_mask
-                        )
-                        opportunistic_action = build_opportunistic_action_from_batch(
-                            player_shielded.batch, cfg, player_shielded.ship_bucket_mask
-                        )
-                        noop_action = build_noop_action_from_batch(player_batch, cfg)
-                        use_latest = slot_type == OPPONENT_LATEST
-                        use_historical = slot_type == OPPONENT_HISTORICAL
-                        use_scripted = slot_type == OPPONENT_SCRIPTED_SNIPER
-                        use_turtle = slot_type == OPPONENT_TURTLE
-                        use_opportunistic = slot_type == OPPONENT_OPPORTUNISTIC
-                        use_noop = slot_type == OPPONENT_NOOP
-                        action = _select_env_action(
-                            use_latest, current_action, random_action
-                        )
-                        action = _select_env_action(
-                            use_historical, historical_action, action
-                        )
-                        action = _select_env_action(
-                            use_scripted, nearest_action, action
-                        )
-                        action = _select_env_action(use_turtle, turtle_action, action)
-                        action = _select_env_action(
-                            use_opportunistic, opportunistic_action, action
-                        )
-                        return _select_env_action(use_noop, noop_action, action)
-
-                    opponent_action = jax.lax.cond(
-                        single_family,
-                        single_player_branch,
-                        mixed_player_branch,
-                        None,
-                    )
-                elif cfg.opponents.mode.opponent == "random":
-                    player_shielded = jax.vmap(
-                        lambda game, turn: apply_trajectory_shield_to_turn_batch(
-                            game, turn, cfg.task
-                        )
-                    )(player_game, player_batch)
-                    opponent_action = build_random_action_from_batch(
-                        player_key,
-                        player_shielded.batch,
-                        cfg,
-                        player_shielded.ship_bucket_mask,
-                    )
-                else:
-                    raise ValueError(
-                        "JAX training supports opponent='self' or opponent='random', "
-                        f"got {cfg.opponents.mode.opponent!r}."
-                    )
-
-                is_learner_player = state.learner_player == player_id
-                player_actions.append(
-                    _select_env_action(
-                        is_learner_player, learner_action, opponent_action
-                    )
+            per_player_action = jax.vmap(
+                lambda player_id: _four_player_step_action(
+                    player_id,
+                    opp_key=opp_key,
+                    player_games=player_games,
+                    player_batches=player_batches,
+                    effective_type_ids=effective_type_ids,
+                    single_family=single_family,
+                    effective_single_family_id=effective_single_family_id,
+                    learner_action=learner_action,
+                    learner_player=state.learner_player,
+                    train_state=train_state,
+                    policy=policy,
+                    cfg=cfg,
+                    opponent_params_by_player=opponent_params_by_player,
+                    active_stage_view=active_stage_view,
+                    historical_params_pool=historical_params_pool,
                 )
-
-            multi_player_action = _stack_player_actions(tuple(player_actions))
+            )(player_ids)
+            multi_player_action = jax.tree.map(
+                lambda x: jnp.moveaxis(x, 0, 1), per_player_action
+            )
             next_state, result = batched_step_multi_player(
                 state, multi_player_action, cfg.task, cfg.reward
             )
@@ -1472,29 +1547,36 @@ def collect_rollout_jax(
             "terminal_placement": result.terminal_placement,
             "terminal_score_share": result.terminal_score_share,
             "terminal_survival_time": result.terminal_survival_time,
-            "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
-            "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
-            "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
-            "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
-            "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
-            "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
-            "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
-            "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
-            "trajectory_shield_legal_non_noop_rate": sample.diagnostics.legal_non_noop_rate,
-            "opponent_slots_total": family_counts["opponent_slots_total"],
-            "opponent_slots_latest": family_counts["opponent_slots_latest"],
-            "opponent_slots_historical": family_counts["opponent_slots_historical"],
-            "opponent_slots_random": family_counts["opponent_slots_random"],
-            "opponent_slots_noop": family_counts["opponent_slots_noop"],
-            "opponent_slots_nearest_sniper": family_counts[
-                "opponent_slots_nearest_sniper"
-            ],
-            "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
-            "opponent_slots_opportunistic": family_counts[
-                "opponent_slots_opportunistic"
-            ],
-            "opponent_historical_fallback_latest_slots": historical_fallback_slots,
         }
+        if not cfg.training.lean_rollout_metrics:
+            transition.update(
+                {
+                    "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
+                    "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
+                    "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
+                    "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
+                    "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
+                    "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
+                    "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
+                    "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
+                    "trajectory_shield_legal_non_noop_rate": sample.diagnostics.legal_non_noop_rate,
+                    "opponent_slots_total": family_counts["opponent_slots_total"],
+                    "opponent_slots_latest": family_counts["opponent_slots_latest"],
+                    "opponent_slots_historical": family_counts[
+                        "opponent_slots_historical"
+                    ],
+                    "opponent_slots_random": family_counts["opponent_slots_random"],
+                    "opponent_slots_noop": family_counts["opponent_slots_noop"],
+                    "opponent_slots_nearest_sniper": family_counts[
+                        "opponent_slots_nearest_sniper"
+                    ],
+                    "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
+                    "opponent_slots_opportunistic": family_counts[
+                        "opponent_slots_opportunistic"
+                    ],
+                    "opponent_historical_fallback_latest_slots": historical_fallback_slots,
+                }
+            )
         return (key, next_state, next_batch, next_opp_batch_cache), transition
 
     if cfg.task.player_count == 2:
@@ -1579,15 +1661,24 @@ def collect_rollout_jax(
             else jnp.array(0.0, dtype=jnp.float32)
         )
     )
-    metrics = _rollout_diagnostics(
-        data=data,
-        transitions=transitions,
-        turn_batch=turn_batch,
-        cfg=cfg,
-        opponent_slots=opponent_slots,
-        snapshot_share=snapshot_share,
-        current_share=current_share,
-        random_share=random_share,
+    metrics = (
+        _rollout_diagnostics_lean(
+            data=data,
+            transitions=transitions,
+            turn_batch=turn_batch,
+            cfg=cfg,
+        )
+        if cfg.training.lean_rollout_metrics
+        else _rollout_diagnostics(
+            data=data,
+            transitions=transitions,
+            turn_batch=turn_batch,
+            cfg=cfg,
+            opponent_slots=opponent_slots,
+            snapshot_share=snapshot_share,
+            current_share=current_share,
+            random_share=random_share,
+        )
     )
     return key, env_state, turn_batch, transitions, metrics
 
@@ -1924,6 +2015,142 @@ def _rollout_diagnostics(
         ),
     }
     return metrics
+
+
+def _rollout_diagnostics_lean(
+    *,
+    data: dict[str, jax.Array],
+    transitions: JaxTransitionBatch,
+    turn_batch: JaxTurnBatch,
+    cfg: TrainConfig,
+) -> dict[str, jax.Array]:
+    """Compute rollout metrics without per-step shield/opponent scan payloads."""
+
+    row_mask = transitions.decision_mask.astype(jnp.float32)
+    done_float = data["done"].astype(jnp.float32)
+    reward_mean = data["reward"].mean()
+    episode_done = done_float.sum()
+    episode_reward_sum = (data["reward"] * done_float).sum()
+    episodes_2p = jnp.where(cfg.task.player_count == 2, episode_done, 0.0)
+    episodes_4p = jnp.where(cfg.task.player_count == 4, episode_done, 0.0)
+    first_place_sum = (data["terminal_is_first"] * done_float).sum()
+    placement_4p_sum = jnp.where(
+        cfg.task.player_count == 4, (data["terminal_placement"] * done_float).sum(), 0.0
+    )
+    survival_time_sum = (data["terminal_survival_time"] * done_float).sum()
+    score_share_sum = (data["terminal_score_share"] * done_float).sum()
+    selected_target = data["target_index"]
+    decision_count = row_mask.sum()
+    noop_count = ((selected_target == 0).astype(jnp.float32) * row_mask).sum()
+    zero = jnp.array(0.0, dtype=jnp.float32)
+    return {
+        "env_steps": jnp.array(
+            cfg.training.rollout_steps * turn_batch.self_features.shape[0],
+            dtype=jnp.float32,
+        ),
+        "samples": transitions.decision_mask.astype(jnp.float32).sum(),
+        "valid_non_noop_targets_sum": zero,
+        "valid_non_noop_target_rows": row_mask.sum(),
+        "only_noop_rows": zero,
+        "valid_non_noop_targets_per_row": zero,
+        "only_noop_fraction": zero,
+        "trajectory_shield_blocked_count": zero,
+        "trajectory_shield_blocked_sun_count": zero,
+        "trajectory_shield_blocked_bounds_count": zero,
+        "trajectory_shield_blocked_unintended_hit_count": zero,
+        "trajectory_shield_blocked_horizon_count": zero,
+        "trajectory_shield_fallback_noop_count": zero,
+        "trajectory_shield_legal_non_noop_count": zero,
+        "trajectory_shield_original_non_noop_count": zero,
+        "trajectory_shield_legal_non_noop_rate": zero,
+        "episode_done": episode_done,
+        "win_episode_rows": zero,
+        "loss_episode_rows": zero,
+        "non_noop_count": zero,
+        "launched_ship_count": zero,
+        "launched_ship_total": zero,
+        "launched_ship_speed_total": zero,
+        "won_planets_owned_total": zero,
+        "lost_planets_owned_total": zero,
+        "won_planets_lost_total": zero,
+        "lost_planets_lost_total": zero,
+        "won_planets_taken_total": zero,
+        "lost_planets_taken_total": zero,
+        "won_garrisoned_ships_per_planet_total": zero,
+        "lost_garrisoned_ships_per_planet_total": zero,
+        "won_planet_diff_total": zero,
+        "lost_planet_diff_total": zero,
+        "won_production_diff_total": zero,
+        "lost_production_diff_total": zero,
+        "average_reward": reward_mean,
+        "episode_reward_mean": jnp.where(
+            episode_done > 0.0, episode_reward_sum / episode_done, 0.0
+        ),
+        "episodes_2p": episodes_2p,
+        "episodes_4p": episodes_4p,
+        "wins_2p": jnp.where(cfg.task.player_count == 2, first_place_sum, 0.0),
+        "first_places_4p": jnp.where(cfg.task.player_count == 4, first_place_sum, 0.0),
+        "placement_4p_sum": placement_4p_sum,
+        "survival_time_sum": survival_time_sum,
+        "score_share_sum": score_share_sum,
+        "decision_count": decision_count,
+        "noop_count": noop_count,
+        "friendly_target_count": zero,
+        "enemy_target_count": zero,
+        "neutral_target_count": zero,
+        "win_rate_2p": jnp.where(episodes_2p > 0.0, first_place_sum / episodes_2p, 0.0),
+        "first_place_rate_4p": jnp.where(
+            episodes_4p > 0.0, first_place_sum / episodes_4p, 0.0
+        ),
+        "average_placement_4p": jnp.where(
+            episodes_4p > 0.0, placement_4p_sum / episodes_4p, 0.0
+        ),
+        "survival_time": jnp.where(
+            episode_done > 0.0, survival_time_sum / episode_done, 0.0
+        ),
+        "score_share": jnp.where(
+            episode_done > 0.0, score_share_sum / episode_done, 0.0
+        ),
+        "noop_percent": jnp.where(
+            decision_count > 0.0, (noop_count / decision_count) * 100.0, 0.0
+        ),
+        "friendly_target_percent": zero,
+        "enemy_target_percent": zero,
+        "neutral_target_percent": zero,
+        "overall_win_rate": jnp.where(
+            episode_done > 0.0, first_place_sum / episode_done, 0.0
+        ),
+        "opponent_slots_total": zero,
+        "opponent_slots_latest": zero,
+        "opponent_slots_historical": zero,
+        "opponent_slots_random": zero,
+        "opponent_slots_noop": zero,
+        "opponent_slots_nearest_sniper": zero,
+        "opponent_slots_turtle": zero,
+        "opponent_slots_opportunistic": zero,
+        "opponent_historical_fallback_latest_slots": zero,
+        "opponent_current_slots": zero,
+        "opponent_random_slots": zero,
+        "opponent_snapshot_slots": zero,
+        "won_non_noop_actions_per_step": zero,
+        "lost_non_noop_actions_per_step": zero,
+        "won_avg_fleet_launch_size": zero,
+        "lost_avg_fleet_launch_size": zero,
+        "won_avg_planets_owned": zero,
+        "lost_avg_planets_owned": zero,
+        "won_avg_planets_lost": zero,
+        "lost_avg_planets_lost": zero,
+        "won_avg_planets_taken": zero,
+        "lost_avg_planets_taken": zero,
+        "won_avg_garrisoned_ships_per_planet": zero,
+        "lost_avg_garrisoned_ships_per_planet": zero,
+        "won_avg_planet_diff": zero,
+        "lost_avg_planet_diff": zero,
+        "won_avg_production_diff": zero,
+        "lost_avg_production_diff": zero,
+        "won_avg_launch_fleet_speed": zero,
+        "lost_avg_launch_fleet_speed": zero,
+    }
 
 
 def concatenate_transition_batches(
