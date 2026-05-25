@@ -628,6 +628,8 @@
       "workflow": "deep-interview",
       "status": "complete",
       "title": "Feature encoding v2 Phases 3–5",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "feature-encoding",
         "feature-encoding-v2-plan",
@@ -635,7 +637,40 @@
       ],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "Autopilot execution 2026-05-25; see .omg/autopilot/spec.md"
+      "evidence": "Autopilot execution 2026-05-25; see .omg/autopilot/spec.md",
+      "notes": null
+    },
+    {
+      "id": "feature-registry-single-source",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-feature-registry-single-source.md",
+      "workflow": "deep-interview",
+      "status": "complete",
+      "title": "Feature registry single-source refactor",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "feature-encoding",
+        "feature-encoding-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "Single-source catalogs in src/features/catalog/; registry derived from catalogs; jax/features thin orchestration; policy named slices; schema_version 3 hard gate; tests: 19 feature+checkpoint pass, 93 test-fast pass (3 unrelated curriculum/sweep failures pre-existing)",
+      "notes": null
+    },
+    {
+      "id": "ralplan-feature-registry-single-source",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-feature-registry-single-source.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "Feature registry single-source implementation plan",
+      "related_ids": [
+        "feature-registry-single-source"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "ralplan-feature-registry-single-source.md phases 0-5 implemented; make test-domain-features equivalent 19 passed; test-fast 93 passed"
     }
   ]
 }

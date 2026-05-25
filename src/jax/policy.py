@@ -7,6 +7,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
+from src.features.catalog.planet import PLANET_FEATURE_CATALOG
 from src.features.registry import (
     edge_feature_dim,
     edge_k,
@@ -15,6 +16,9 @@ from src.features.registry import (
 )
 from src.game.constants import MAX_PLANETS
 from src.jax.features import TurnBatch
+
+_PLANET_ORBIT_RADIUS_SLICE = PLANET_FEATURE_CATALOG.base_slice("orbit_radius")
+_PLANET_ORBIT_ANGLE_SLICE = PLANET_FEATURE_CATALOG.base_slice("orbit_angle")
 
 
 # --- Contracts ---
@@ -352,8 +356,8 @@ class PlanetEdgeBackboneEncoder(nn.Module):
                 "edge_enc",
             )
 
-        orbit_radius = batch.planet_features[..., 1]
-        orbit_angle = batch.planet_features[..., 2] * jnp.pi
+        orbit_radius = batch.planet_features[..., _PLANET_ORBIT_RADIUS_SLICE]
+        orbit_angle = batch.planet_features[..., _PLANET_ORBIT_ANGLE_SLICE] * jnp.pi
         coords = jnp.stack(
             [
                 orbit_radius * jnp.cos(orbit_angle),

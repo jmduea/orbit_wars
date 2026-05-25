@@ -4,7 +4,8 @@ import numpy as np
 
 from src.config import RewardConfig, TaskConfig
 from src.features.registry import edge_k, global_feature_dim, planet_feature_dim
-from src.game.constants import BASE_EDGE_FEATURE_DIM, MAX_PLANETS
+from src.features.registry import edge_feature_dim
+from src.game.constants import MAX_PLANETS
 from src.jax.env import batched_reset, empty_action, reset, step
 from src.jax.features import TurnBatch
 
@@ -32,7 +33,7 @@ def test_jax_batched_reset_and_step_shapes():
     states, batches = batched_reset(keys, cfg)
     assert states.game.planets.x.shape == (3, MAX_PLANETS)
     assert batches.planet_features.shape == (3, MAX_PLANETS, planet_feature_dim(cfg))
-    assert batches.edge_features.shape == (3, MAX_PLANETS, k, BASE_EDGE_FEATURE_DIM)
+    assert batches.edge_features.shape == (3, MAX_PLANETS, k, edge_feature_dim(cfg))
     assert batches.global_features.shape == (3, global_feature_dim(cfg))
 
     action = empty_action(cfg)

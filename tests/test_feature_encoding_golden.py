@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from src.config import TaskConfig, compose_hydra_train_config
-from src.features.registry import edge_k, global_feature_dim, planet_feature_dim
-from src.game.constants import BASE_EDGE_FEATURE_DIM, BASE_PLANET_FEATURE_DIM, MAX_PLANETS
+from src.features.registry import edge_feature_dim, edge_k, global_feature_dim, planet_feature_dim
+from src.game.constants import MAX_PLANETS
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, batched_reset, reset
 from src.jax.features import (
     append_feature_history,
@@ -37,9 +37,9 @@ def test_encode_v2_shapes_on_2p_reset() -> None:
     batch = encode_turn(state.game, cfg)
     k = edge_k(cfg)
 
-    assert batch.planet_features.shape == (MAX_PLANETS, BASE_PLANET_FEATURE_DIM)
+    assert batch.planet_features.shape == (MAX_PLANETS, planet_feature_dim(cfg))
     assert batch.planet_mask.shape == (MAX_PLANETS,)
-    assert batch.edge_features.shape == (MAX_PLANETS, k, BASE_EDGE_FEATURE_DIM)
+    assert batch.edge_features.shape == (MAX_PLANETS, k, edge_feature_dim(cfg))
     assert batch.edge_mask.shape == (MAX_PLANETS, k)
     assert batch.edge_src_ids.shape == (MAX_PLANETS,)
     assert batch.edge_tgt_ids.shape == (MAX_PLANETS, k)
@@ -120,5 +120,5 @@ def test_encode_v2_jit_vmap_smoke() -> None:
 
     vmapped = jax.jit(jax.vmap(encode_game))
     batch = vmapped(states.game)
-    assert batch.planet_features.shape == (4, MAX_PLANETS, BASE_PLANET_FEATURE_DIM)
+    assert batch.planet_features.shape == (4, MAX_PLANETS, planet_feature_dim(cfg))
     assert batch.global_features.shape == (4, global_feature_dim(cfg))

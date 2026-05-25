@@ -2,8 +2,8 @@ import jax
 import pytest
 
 from src.config import RewardConfig, TaskConfig
-from src.features.registry import edge_k, global_feature_dim
-from src.game.constants import BASE_EDGE_FEATURE_DIM, BASE_PLANET_FEATURE_DIM, MAX_PLANETS
+from src.features.registry import edge_feature_dim, edge_k, global_feature_dim, planet_feature_dim
+from src.game.constants import MAX_PLANETS
 from src.jax.env import empty_action, reset, step
 from src.jax.features import TurnBatch
 
@@ -18,8 +18,8 @@ def test_jax_reset_and_step_shapes():
     k = edge_k(cfg)
     state, batch = reset(jax.random.PRNGKey(21), cfg)
     assert isinstance(batch, TurnBatch)
-    assert batch.planet_features.shape == (MAX_PLANETS, BASE_PLANET_FEATURE_DIM)
-    assert batch.edge_features.shape == (MAX_PLANETS, k, BASE_EDGE_FEATURE_DIM)
+    assert batch.planet_features.shape == (MAX_PLANETS, planet_feature_dim(cfg))
+    assert batch.edge_features.shape == (MAX_PLANETS, k, edge_feature_dim(cfg))
     assert batch.global_features.shape == (global_feature_dim(cfg),)
 
     action = empty_action(cfg)
