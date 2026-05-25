@@ -16,7 +16,9 @@ def test_root_config_composes_from_responsibility_groups() -> None:
     assert cfg.task.candidate_count == 4
     assert cfg.training.total_updates == 100
     assert cfg.format.rollout_groups
-    assert cfg.curriculum.enabled is False
+    assert cfg.curriculum.enabled is True
+    assert len(cfg.curriculum.stages) == 3
+    assert cfg.curriculum.stages[0]["id"] == "bootstrap_random"
     assert cfg.opponents.self_play.enabled is True
     assert cfg.opponents.snapshot.pool_size == 5
     assert cfg.artifacts.artifact_pipeline.enabled is True

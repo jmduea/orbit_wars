@@ -10,13 +10,15 @@ from hydra.core.config_store import ConfigStore
 class TaskConfig:
     """Environment and feature-shape configuration shared by all backends."""
 
-    candidate_count: int = 8
-    ship_bucket_count: int = 8
+    # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1
+    # TODO: Move to ActionCodecConfig or something more action-adjacent.
+    candidate_count: int = 8
+    ship_bucket_count: int = 8
     trajectory_shield_enabled: bool = True
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
@@ -50,6 +52,7 @@ class ModelConfig:
     gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
+    pointer_decoder: str = "joint_flat"
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 
@@ -59,28 +62,31 @@ class TrainingConfig:
     """PPO rollout, optimization, and loss hyperparameters."""
 
     rollout_steps: int = 32
-    num_envs: int = 4
+    num_envs: int = 4  # TODO: let format config handle this, remove from here
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512
     update_chunk_rows_min: int = 8192
     update_chunk_rows_max: int | None = None
-    rollout_microbatch_envs: int | None = None
+    rollout_microbatch_envs: int | None = (
+        None  # Keep since it's used in the rollout group config
+    )
     rotate_format_rollouts: bool = False
-    lean_rollout_metrics: bool = False
+    lean_rollout_metrics: bool = False  # TODO: telemetry?
     enable_gradient_checkpointing: bool = False
     gamma: float = 0.99
+    gae_lambda: float = 0.95
     clip_coef: float = 0.2
     ent_coef: float = 0.01
     vf_coef: float = 0.5
     lr: float = 3e-4
     max_grad_norm: float = 0.5
-    log_every: int = 1
-    reseed_every_updates: int = 0
-    reseed_on_plateau: bool = False
-    plateau_metric: str = "episode_reward_mean"
-    plateau_window: int = 10
-    plateau_delta: float = 0.0
+    log_every: int = 1  # TODO: telemetry?
+    reseed_every_updates: int = 0  # TODOL curriculum?
+    reseed_on_plateau: bool = False  # TODO: curriculum?
+    plateau_metric: str = "episode_reward_mean"  # TODO: curriculum?
+    plateau_window: int = 10  # TODO: curriculum?
+    plateau_delta: float = 0.0  # TODO: curriculum?
 
 
 @dataclass(slots=True)

@@ -47,7 +47,7 @@ def register_runtime_resolvers() -> None:
         OmegaConf.register_new_resolver("orbit_safe_rel", _orbit_safe_rel, use_cache=False)
 
 
-def _orbit_run_id(seed: object = 42) -> str:
+def _orbit_run_id(seed: int = 42) -> str:
     import uuid
     from datetime import datetime, timezone
 
@@ -166,6 +166,9 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         )
     if training.rollout_microbatch_envs is not None and int(training.rollout_microbatch_envs) <= 0:
         raise ValueError("training.rollout_microbatch_envs must be a positive integer when set.")
+    gae_lambda = float(training.gae_lambda)
+    if not 0.0 <= gae_lambda <= 1.0:
+        raise ValueError("training.gae_lambda must be in [0, 1].")
 
     artifact_pipeline = cfg.artifacts.artifact_pipeline
     if int(artifact_pipeline.checkpoint_queue_size) <= 0:
