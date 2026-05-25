@@ -20,10 +20,12 @@
       "status": "approved",
       "title": "JAX PPO module split",
       "plan_id": null,
-      "related_ids": ["src-reorganization", "telemetry-metrics-cleanup"],
+      "related_ids": [
+        "telemetry-metrics-cleanup"
+      ],
       "completed_at": null,
       "evidence": null,
-      "notes": "Spec approved 2026-05-24; implementation not started. src/jax/ppo.py still monolithic."
+      "notes": "Spec approved 2026-05-24; implementation not started. src/jax/ppo.py still monolithic. src-reorganization is complete separately."
     },
     {
       "id": "rollout-optimization",
@@ -56,25 +58,25 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-src-reorganization.md",
       "workflow": "deep-interview",
-      "status": "executing",
+      "status": "complete",
       "title": "Source domain reorganization",
       "plan_id": "src-reorganization-plan",
       "related_ids": ["jax-ppo-split"],
-      "completed_at": null,
-      "evidence": "Domain packages exist under src/config, src/game, src/jax, src/training, src/opponents, src/artifacts, src/telemetry",
-      "notes": "Partially landed; jax-ppo-split tracked separately."
+      "completed_at": "2026-05-24",
+      "evidence": "Commit 9b0834a reorganized src into domain packages; print_resolved_config ok; 145 reorg acceptance tests passed 2026-05-25",
+      "notes": "Monolithic src/jax/ppo.py split tracked separately as jax-ppo-split."
     },
     {
       "id": "src-reorganization-plan",
       "kind": "plan",
       "path": ".omg/plans/ralplan-src-reorganization.md",
       "workflow": "ralplan",
-      "status": "executing",
+      "status": "complete",
       "title": "Source reorganization plan",
       "spec_id": "src-reorganization",
       "related_ids": [],
-      "completed_at": null,
-      "evidence": "Package moves largely present; follow plan verification steps before marking complete",
+      "completed_at": "2026-05-24",
+      "evidence": "Domain packages landed; imports updated in src/tests/scripts; uv run python -m src.train print_resolved_config=true; 145 targeted pytest pass",
       "notes": null
     },
     {
