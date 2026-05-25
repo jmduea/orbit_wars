@@ -53,6 +53,7 @@
 
 - `.github/` remains the OMG source catalog for Copilot instructions, skills, agents, prompts, and hooks.
 - **Cursor (native):** project config lives in `.cursor/` — rules, skills, subagents, hooks, and MCP. Regenerate from `.github/` with `uv run python scripts/sync_omg_cursor.py` after editing agents, skills, prompts, or `copilot-instructions.md`.
+- **Understand-Anything (Cursor):** enable `/understand`, `/understand-dashboard`, `/understand-chat`, etc. with `bash scripts/install_understand_anything_cursor.sh` (links plugin skills from `~/.understand-anything/repo` into `.cursor/skills/`). Re-run after `sync_omg_cursor.py` if OMG skills were refreshed. Alternatively install globally via **Cursor Settings → Plugins** → `https://github.com/Lum1104/Understand-Anything`.
 - **Codex:** mirrored project skills in `.agents/skills/`, custom agents in `.codex/agents/`, hooks in `.codex/hooks.json`, and the OMG MCP server from `.codex/config.toml`.
 - The deep-interview → ralplan → omg-autopilot path depends on `mcp-server/dist/` being current; after TypeScript MCP edits, run `npm run build` in `mcp-server/` before relying on the workflow.
 

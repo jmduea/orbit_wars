@@ -146,13 +146,14 @@ def sync_skills() -> int:
         dest_dir.mkdir(parents=True, exist_ok=True)
         _link_or_copy(prompt_path, dest_dir / "SKILL.md")
         linked += 1
+    managed_names = {
+        *(d.name for d in (GITHUB / "skills").iterdir() if d.is_dir()),
+        *(p.stem.replace(".prompt", "") for p in (GITHUB / "prompts").glob("*.prompt.md")),
+    }
     stale = [
         path
         for path in dest_root.iterdir()
-        if path.name not in {
-            *(d.name for d in (GITHUB / "skills").iterdir() if d.is_dir()),
-            *(p.stem.replace(".prompt", "") for p in (GITHUB / "prompts").glob("*.prompt.md")),
-        }
+        if path.name not in managed_names and not path.name.startswith("understand")
     ]
     for path in stale:
         if path.is_symlink() or path.is_file():
