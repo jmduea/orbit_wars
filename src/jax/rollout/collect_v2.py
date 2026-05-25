@@ -78,6 +78,26 @@ def _rollout_metrics_v2(data, cfg: TrainConfig, env_count: int) -> dict[str, jax
     ):
         if key in data:
             metrics[key] = data[key].sum()
+    original_non_noop = data.get("trajectory_shield_original_non_noop_count")
+    if original_non_noop is not None:
+        legal_non_noop = data["trajectory_shield_legal_non_noop_count"].sum()
+        original_total = original_non_noop.sum()
+        metrics["trajectory_shield_legal_non_noop_count"] = legal_non_noop
+        metrics["trajectory_shield_original_non_noop_count"] = original_total
+        metrics["trajectory_shield_legal_non_noop_rate"] = jnp.where(
+            original_total > 0.0,
+            legal_non_noop / original_total,
+            0.0,
+        )
+        for key in (
+            "trajectory_shield_blocked_count",
+            "trajectory_shield_blocked_sun_count",
+            "trajectory_shield_blocked_bounds_count",
+            "trajectory_shield_blocked_unintended_hit_count",
+            "trajectory_shield_blocked_horizon_count",
+            "trajectory_shield_fallback_noop_count",
+        ):
+            metrics[key] = data[key].sum()
     return metrics
 
 
@@ -301,6 +321,14 @@ def collect_rollout_jax_v2(
             "opponent_slots_turtle": family_counts["opponent_slots_turtle"],
             "opponent_slots_opportunistic": family_counts["opponent_slots_opportunistic"],
             "opponent_historical_fallback_latest_slots": historical_fallback_slots,
+            "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
+            "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
+            "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
+            "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
+            "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
+            "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
+            "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
+            "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
         }
         return (key, next_state, next_batch, next_opp_batch_cache), transition
 

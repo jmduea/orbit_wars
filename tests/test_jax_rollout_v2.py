@@ -158,3 +158,39 @@ def test_v2_four_player_self_play_random_family_rollout_smoke():
     assert float(rollout_metrics["opponent_slots_total"]) == 6.0
     assert float(rollout_metrics["opponent_slots_random"]) == 6.0
     assert float(rollout_metrics["opponent_slots_latest"]) == 0.0
+
+
+@pytest.mark.jax
+def test_v2_shield_legal_non_noop_rate_within_v1_parity_band():
+    """Phase 3 gate: v2 learner shield rate within ±5pp of v1 on matched rollout."""
+    v1_cfg = TrainConfig()
+    v1_cfg.model.architecture = "gnn_pointer"
+    v1_cfg.task.encoding_version = "v1"
+    v1_cfg.task.candidate_count = 4
+    v1_cfg.task.max_fleets = 16
+    v1_cfg.model.hidden_size = 16
+    v1_cfg.model.max_moves_k = 2
+    v1_cfg.training.num_envs = 2
+    v1_cfg.training.rollout_steps = 4
+    v1_cfg.opponents.mode.opponent = "random"
+
+    v2_cfg = _v2_smoke_cfg(rollout_steps=4)
+    reset_keys = jax.random.split(jax.random.PRNGKey(50), v1_cfg.training.num_envs)
+
+    v1_state, v1_batch = batched_reset(reset_keys, v1_cfg.task)
+    v1_policy = build_jax_policy(v1_cfg)
+    v1_train = init_train_state(jax.random.PRNGKey(51), v1_policy, v1_cfg)
+    _, _, _, _, v1_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(52), v1_state, v1_batch, v1_train, v1_policy, v1_cfg
+    )
+
+    v2_state, v2_batch = batched_reset(reset_keys, v2_cfg.task)
+    v2_policy = build_jax_policy(v2_cfg)
+    v2_train = init_train_state(jax.random.PRNGKey(53), v2_policy, v2_cfg)
+    _, _, _, _, v2_metrics = collect_rollout_jax(
+        jax.random.PRNGKey(54), v2_state, v2_batch, v2_train, v2_policy, v2_cfg
+    )
+
+    v1_rate = float(v1_metrics["trajectory_shield_legal_non_noop_rate"])
+    v2_rate = float(v2_metrics["trajectory_shield_legal_non_noop_rate"])
+    assert abs(v2_rate - v1_rate) <= 0.05
