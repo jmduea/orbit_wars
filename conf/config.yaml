@@ -8,6 +8,7 @@ defaults:
   - opponents: self_play_curriculum
   - telemetry: default
   - artifacts: default
+  - optional preset: null
   - _self_
 
 seed: 42

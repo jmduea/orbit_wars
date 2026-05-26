@@ -1,4 +1,6 @@
-format_schedule: []
+defaults:
+  - base
+  - _self_
 format_mix:
   - player_count: 2
     weight: 0.5

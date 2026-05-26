@@ -1,14 +1,4 @@
-candidate_count: 4
-ship_bucket_count: 8
-max_fleets: 256
-player_count: 4
-# max_ships: 400.0 # Deprecated
-ship_feature_scale: 1000.0
-feature_history_steps: 10
-trajectory_shield_enabled: true
-trajectory_shield_hit_mode: selected_target # non_friendly
-trajectory_shield_horizon: 30
-trajectory_shield_epsilon: 1.0e-06
-intercept_anchors: [1.0, 6.0]
-edge_rank_mode: snapshot
-ship_action_mode: continuous_fraction # continuous_fraction or buckets
+defaults:
+  - base
+  - _self_
+  

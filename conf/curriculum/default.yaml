@@ -1,2 +1,4 @@
-enabled: false
-stages: []
+defaults:
+  - base
+  - _self_
+  
