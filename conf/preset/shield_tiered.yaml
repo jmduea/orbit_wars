@@ -1,0 +1,6 @@
+defaults:
+  - override /task: shield_tiered
+  - override /telemetry: default
+  - _self_
+
+run_name: shield_tiered

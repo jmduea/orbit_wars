@@ -1,14 +1,21 @@
+defaults:
+  - base
+  - _self_
+
 # Planet-edge masked self-attention encoder with factorized top-K pointer (M1).
 architecture: planet_graph_transformer
 pointer_decoder: factorized_topk
 decoder_carry: true
+
 hidden_size: 128
 attention_heads: 4
-max_moves_k: 3
+max_moves_k: 5
 planet_transformer_layers: 2
 spatial_attention_bias: true
+
 normalize_observations: true
+
 obs_norm_clip: 10.0
 value_head: distributional
-value_bins: 101 # 101 for early terminal reward shaping 5 otherwise
-value_max: 2.0 # 2.0 for early terminal reward shaping 1.0 otherwise
+value_bins: 51 # 101 for early terminal reward shaping 51 otherwise
+value_max: 1.0 # 2.0 for early terminal reward shaping 1.0 otherwise

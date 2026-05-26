@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - base
+  - command: ow_train
+  - method: bayes
+  - metric: overall_win_rate
+  - fixed: budget
+  - space: budget
+  - _self_
+
+name: budget

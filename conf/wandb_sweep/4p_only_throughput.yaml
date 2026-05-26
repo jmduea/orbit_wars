@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - base
+  - command: ow_train
+  - method: grid
+  - metric: samples_per_sec
+  - fixed: throughput_4p
+  - fixed: no_artifacts
+  - space: throughput_4p
+  - _self_
+
+name: 4p_only_throughput

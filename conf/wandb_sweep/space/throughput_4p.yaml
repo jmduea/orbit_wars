@@ -1,0 +1,13 @@
+# @package _global_
+
+parameters:
+  format:
+    values: [4p_16env, 4p_32env]
+  training.rollout_steps:
+    values: [64, 128, 250, 500]
+  training.minibatch_size:
+    values: [256, 512, 1024]
+  training.rollout_microbatch_envs:
+    values: [4, 8, 16]
+  training.update_chunk_rows_min:
+    values: [2048, 4096, 8192]

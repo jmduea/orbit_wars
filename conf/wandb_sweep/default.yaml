@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - base
+  - command: ow_train
+  - method: grid
+  - metric: overall_win_rate
+  - _self_
+
+name: default

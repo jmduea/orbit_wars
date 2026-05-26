@@ -1,4 +1,3 @@
-# M1 pointer-decoder ablation telemetry — lean timing + action-decision for L1.
 metric_groups:
   core_progress: true
   losses: true
@@ -6,17 +5,17 @@ metric_groups:
   curriculum: false
   opponent_composition: false
   action_decision: true
-  game_state: false
+  game_state: true
   trajectory_shield_debug: false
   historical_pool: false
-  events: false
+  events: true
 
 wandb:
-  enabled: false
+  enabled: true
   project: orbit_wars
-  entity: null
-  group: m1_ablation
-  tags: [m1, ablation]
+  entity: jmduea-jdueadev
+  group: null
+  tags: []
   log_artifacts: false
-  log_model_every: 1000
+  log_model_every: 100
   watch_model: false

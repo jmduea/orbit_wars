@@ -16,8 +16,15 @@ dependencies = [
     "wandb>=0.27.0",
 ]
 
+[project.scripts]
+ow = "src.cli:main"
+
 [tool.uv]
-package = false
+package = true
+
+[tool.uv.build-backend]
+module-name = "src"
+module-root = ""
 
 [tool.pytest.ini_options]
 testpaths = [

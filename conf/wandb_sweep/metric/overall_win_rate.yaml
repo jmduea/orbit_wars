@@ -1,0 +1,5 @@
+# @package _global_
+
+metric:
+  name: overall_win_rate
+  goal: maximize

@@ -1,0 +1,3 @@
+defaults:
+  - self_play_curriculum
+  - _self_

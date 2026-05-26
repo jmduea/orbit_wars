@@ -1,0 +1,9 @@
+# @package _global_
+
+parameters:
+  model.hidden_size:
+    values: [128, 192, 224]
+  model.planet_transformer_layers:
+    values: [1, 2, 3]
+  model.max_moves_k:
+    values: [3, 5, 8]

@@ -1,0 +1,11 @@
+# @package _global_
+
+parameters:
+  output.campaign:
+    value: budget
+  telemetry.wandb.group:
+    value: budget
+  telemetry.wandb.tags:
+    value: [budget, ppo]
+  model:
+    value: transformer_factorized_small

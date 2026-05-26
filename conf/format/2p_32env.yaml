@@ -1,9 +1,13 @@
-format_schedule: []
+defaults:
+  - base
+  - _self_
+
 format_mix:
   - player_count: 2
     weight: 1.0
   - player_count: 4
     weight: 0.0
+
 rollout_groups:
   - name: two_player
     player_count: 2

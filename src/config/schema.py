@@ -271,7 +271,7 @@ class OutputConfig:
 @dataclass(slots=True)
 class TrainConfig:
     seed: int = 42
-    run_name: str = "orbit_wars_template_ppo"
+    run_name: str = "ow"
     device: str = "auto"
     model: ModelConfig = field(default_factory=ModelConfig)
     task: TaskConfig = field(default_factory=TaskConfig)
@@ -282,6 +282,7 @@ class TrainConfig:
     opponents: OpponentsConfig = field(default_factory=OpponentsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
+    sweep_space: dict = field(default_factory=dict)
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     print_resolved_config: bool = False

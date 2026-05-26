@@ -1,3 +1,7 @@
+defaults:
+  - base
+  - _self_
+
 # Minimal telemetry for long GPU ablation runs (no W&B sync overhead).
 metric_groups:
   core_progress: true
@@ -15,8 +19,8 @@ wandb:
   enabled: false
   project: orbit_wars
   entity: null
-  group: m2_ablation
-  tags: [m2, ablation]
+  group: ablation
+  tags: [ablation]
   log_artifacts: false
   log_model_every: 1000
   watch_model: false

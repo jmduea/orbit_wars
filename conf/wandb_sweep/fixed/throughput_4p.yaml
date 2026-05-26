@@ -1,0 +1,13 @@
+# @package _global_
+
+parameters:
+  telemetry:
+    value: throughput_only
+  output.campaign:
+    value: 4p_only_throughput
+  telemetry.wandb.group:
+    value: 4p_only_throughput
+  telemetry.wandb.tags:
+    value: [throughput, 4p]
+  training.total_updates:
+    value: 30

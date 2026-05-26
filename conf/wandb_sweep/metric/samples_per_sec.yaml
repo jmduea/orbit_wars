@@ -1,0 +1,5 @@
+# @package _global_
+
+metric:
+  name: samples_per_sec
+  goal: maximize

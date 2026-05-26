@@ -1,0 +1,7 @@
+defaults:
+  - override /task: shield_cheap
+  - override /telemetry: default
+  - override /sweep_space: shield_cheap
+  - _self_
+
+run_name: sweep_shield_cheap

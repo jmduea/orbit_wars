@@ -1,3 +1,7 @@
+defaults:
+  - base
+  - _self_
+
 enabled: true
 stages:
   - id: soft_start

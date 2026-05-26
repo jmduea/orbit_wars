@@ -1,4 +1,3 @@
 defaults:
-  - base
+  - self_play_staged
   - _self_
-  

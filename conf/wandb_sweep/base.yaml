@@ -1,0 +1,14 @@
+# @package _global_
+
+name: default
+description: null
+method: grid
+run_cap: null
+
+metric:
+  name: overall_win_rate
+  goal: maximize
+
+command_name: ow_train
+
+parameters: {}

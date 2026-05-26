@@ -1,19 +1,2 @@
-enabled: true
-stages: 
-  # default to a self-play stage
-  - id: soft_start
-  min_updates: 1000
-  cooldown_updates: 0
-  promote_if:
-    metric: overall_win_rate
-    op: ">"
-    value: 0.55
-    window_updates: 10
-  opponent_families:
-    latest: 0.8
-    historical: 0.2
-    random: 0.0
-    noop: 0.0
-    nearest_sniper: 0.0
-    turtle: 0.0
-    opportunistic: 0.0
+enabled: false
+stages: []

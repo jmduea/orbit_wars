@@ -2,4 +2,4 @@ defaults:
   - shield_cheap
   - _self_
 
-trajectory_shield_horizon: 20
+feature_history_steps: 20

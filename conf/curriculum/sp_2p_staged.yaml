@@ -1,7 +1,8 @@
 defaults:
   - base
   - _self_
-  
+
+enabled: true
 stages:
   - id: soft_start
     min_updates: 1000

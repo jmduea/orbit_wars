@@ -1,0 +1,29 @@
+rollout_steps: 500
+num_envs: 32
+total_updates: 100
+
+epochs: 2
+minibatch_size: 512
+gamma: 0.99
+gae_lambda: 0.95
+clip_coef: 0.2
+ent_coef: 0.005
+vf_coef: 0.5
+lr: 0.0003
+max_grad_norm: 0.5
+
+update_chunk_rows_min: 1024
+update_chunk_rows_max: 4096
+rollout_microbatch_envs: 16
+
+rotate_format_rollouts: false
+lean_rollout_metrics: true
+enable_gradient_checkpointing: true
+
+log_every: 1
+
+reseed_every_updates: 0
+reseed_on_plateau: false
+plateau_metric: episode_reward_mean
+plateau_window: 10
+plateau_delta: 0.0

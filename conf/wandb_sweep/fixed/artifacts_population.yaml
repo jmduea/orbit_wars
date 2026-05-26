@@ -1,0 +1,13 @@
+# @package _global_
+
+parameters:
+  artifacts:
+    value: default
+  artifacts.checkpoint_every:
+    value: 100
+  artifacts.artifact_pipeline.enabled:
+    value: true
+  artifacts.artifact_pipeline.docker_validation_async:
+    value: false
+  artifacts.replay.enabled:
+    value: false

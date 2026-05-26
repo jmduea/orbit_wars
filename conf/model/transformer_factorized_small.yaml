@@ -1,0 +1,9 @@
+defaults:
+  - transformer_factorized
+  - _self_
+
+hidden_size: 96
+attention_heads: 4
+planet_transformer_layers: 1
+value_bins: 51
+value_max: 1.0

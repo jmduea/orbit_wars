@@ -1,7 +1,6 @@
-reward_capture_planet: 0.0
-reward_ship_delta: 0.0
-reward_production_delta: 0.0
-reward_terminal_scale: 1.0
+defaults:
+  - base
+  - _self_
+
 early_terminal_reward_shaping_enabled: true
 early_terminal_reward_shaping_horizon: 500
-terminal_reward_mode: binary_win

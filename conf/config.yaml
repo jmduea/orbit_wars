@@ -1,13 +1,14 @@
 defaults:
-  - model: transformer_factorized
+  - model: default
   - task: default
-  - reward: terminal_only
+  - reward: default
   - training: default
-  - format: mix_2p_4p_16env
-  - curriculum: self_play_staged
-  - opponents: self_play_curriculum
+  - format: default
+  - curriculum: default
+  - opponents: default
   - telemetry: default
   - artifacts: default
+  - optional sweep_space: none
   - optional preset: null
   - _self_
 

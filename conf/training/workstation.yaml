@@ -1,0 +1,18 @@
+defaults:
+  - base
+  - _self_
+
+rollout_steps: 128
+num_envs: 32
+total_updates: 500
+epochs: 2
+minibatch_size: 512
+
+update_chunk_rows_min: 2048
+update_chunk_rows_max: 8192
+rollout_microbatch_envs: 16
+
+rotate_format_rollouts: true
+lean_rollout_metrics: true
+enable_gradient_checkpointing: true
+log_every: 10

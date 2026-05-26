@@ -1,0 +1,3 @@
+defaults:
+  - terminal_only
+  - _self_

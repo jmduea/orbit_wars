@@ -1,0 +1,10 @@
+defaults:
+  - override /training: smoke
+  - override /format: 2p_16env
+  - override /curriculum: off
+  - override /opponents: noop_only
+  - override /telemetry: throughput_only
+  - override /artifacts: disabled
+  - _self_
+
+run_name: smoke

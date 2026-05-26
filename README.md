@@ -5,7 +5,7 @@ Orbit Wars is a Python 3.12 reinforcement-learning project managed with `uv` and
 The canonical training entrypoint composes responsibility-based config groups from `conf/`:
 
 ```bash
-uv run python -m src.train
+uv run ow train
 ```
 
 Print the resolved config without training:

@@ -1,0 +1,5 @@
+# @package _global_
+
+metric:
+  name: episode_reward_mean
+  goal: maximize

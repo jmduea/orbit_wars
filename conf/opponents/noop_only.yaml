@@ -1,11 +1,12 @@
+defaults:
+  - base
+  - _self_
+
 self_play:
   enabled: false
   update_interval: 10
   deterministic: false
-mode:
-  opponent: self
-  multi_opponent_mode: mixed
-  alternate_player_sides: true
+
 mix:
   weights:
     latest: 0.0
@@ -15,10 +16,3 @@ mix:
     opportunistic: 0.0
     random: 0.0
     noop: 1.0
-  temperature: 1.0
-snapshot:
-  pool_size: 0
-  interval_updates: 0
-  deterministic: true
-  selection: uniform
-  fallback: latest
