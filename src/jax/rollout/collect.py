@@ -26,6 +26,7 @@ from src.opponents.jax_actions.builders import (
     _sample_shielded_sequence_with_params,
     build_action_from_edge_batch,
     build_action_from_factored_batch,
+    owned_planet_ships,
 )
 from src.opponents.jax_actions.sampling import (
     _maybe_effective_single_family_id,
@@ -307,6 +308,7 @@ def collect_rollout_jax(
             "stop_flag": sample.stop_flag,
             "step_mask": sample.step_mask,
             "log_prob": sample.log_prob,
+            "initial_planet_ships": owned_planet_ships(state.game),
             "value": sample.value,
             "reward": result.reward,
             "done": result.done,
@@ -391,6 +393,7 @@ def collect_rollout_jax(
         "target_slot": data["target_slot"],
         "stop_flag": data["stop_flag"],
         "step_mask": data["step_mask"],
+        "initial_planet_ships": data["initial_planet_ships"],
     }
     if carry_enabled:
         transition_kwargs["decoder_hidden"] = data["decoder_hidden"]

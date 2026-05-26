@@ -6,7 +6,7 @@ metric_groups:
   opponent_composition: true
   action_decision: true
   game_state: true
-  trajectory_shield_debug: false
+  trajectory_shield_debug: true
   historical_pool: false
   events: true
 

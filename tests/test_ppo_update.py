@@ -262,33 +262,25 @@ def _factorized_behavior_log_prob(
     step_mask: jax.Array,
     ship_bucket_mask: jax.Array,
 ) -> jax.Array:
-    from src.jax.action_codec import factored_action_log_prob_with_shield
+    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
 
     num_envs = int(turn_batch.planet_features.shape[0])
     player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    output = policy.apply(
-        params,
-        turn_batch,
-        player_count=player_count,
-        source_sequence=source_index,
-        target_slot_sequence=target_slot,
-    )
     per_env_bucket_mask = ship_bucket_mask[0]
-    has_real = per_env_bucket_mask[..., 1:].any(axis=-1)
-    source_mask = (turn_batch.edge_mask[:, None, :, :] & has_real).any(axis=-1)
-    log_prob, _entropy, _stop_entropy, _move_entropy = (
-        factored_action_log_prob_with_shield(
-            output,
-            source_index,
-            target_slot,
-            ship_bucket,
-            stop_flag,
-            step_mask,
-            source_mask,
-            per_env_bucket_mask,
-        )
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        turn_batch,
+        cfg,
+        player_count=player_count,
+        source_index=source_index,
+        target_slot=target_slot,
+        ship_bucket=ship_bucket,
+        stop_flag=stop_flag,
+        step_mask=step_mask,
+        ship_bucket_mask=per_env_bucket_mask,
     )
-    return log_prob
+    return replay.log_prob
 
 
 def _joint_transition_batch(

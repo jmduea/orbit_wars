@@ -1010,6 +1010,25 @@
       "completed_at": null,
       "evidence": null,
       "notes": null
+    },
+    {
+      "id": "kaggle-wandb-population",
+      "kind": "spec",
+      "path": ".omg/specs/deep-interview-kaggle-wandb-population.md",
+      "workflow": "deep-interview",
+      "status": "approved",
+      "title": "Kaggle W&B population training",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "async-artifact-pipeline",
+        "kaggle-docker-validation",
+        "policy-advances-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": "Deep interview approved: W&B-first one-command Kaggle workers, population MVP, accelerator fallback, throughput calibration, W&B checkpoint artifacts, shortlist generation.",
+      "notes": "First milestone is Population MVP; full tournaments, scripted_nearest gates, action-distribution diversity, and self-play promotion are follow-up pipeline work."
     }
   ]
 }

@@ -34,7 +34,7 @@ def test_sample_factored_step_from_logits_is_vmap_compatible() -> None:
         _sample_factored_step_from_logits,
         in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
     )
-    source, target_slot, bucket, stop, log_prob, entropy = vmapped(
+    source, target_slot, bucket, stop, log_prob, entropy, _ship_fraction = vmapped(
         keys,
         source_logits,
         target_logits,

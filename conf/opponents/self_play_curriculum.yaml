@@ -1,6 +1,6 @@
 self_play:
   enabled: true
-  update_interval: 10
+  update_interval: 50
   deterministic: true
 mode:
   opponent: self

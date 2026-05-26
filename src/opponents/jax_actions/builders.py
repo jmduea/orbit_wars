@@ -18,6 +18,10 @@ from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
 from src.jax.policy import edge_action_count
 from src.jax.decoder_carry import decoder_carry_enabled, empty_decoder_hidden
+from src.jax.action_codec import (
+    _factored_step_log_prob_entropy,
+    source_mask_from_bucket_mask_and_ships,
+)
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.ship_action import (
     continuous_fraction_log_prob,
@@ -425,7 +429,6 @@ def _sample_factored_step_from_logits(
     deterministic_eval: bool = False,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     key_stop, key_source, key_target, key_ship = jax.random.split(key, 4)
-    illegal_logit = jnp.finfo(jnp.float32).min
 
     stop_logit = stop_logits
     stop_prob = jax.nn.sigmoid(stop_logit)
@@ -434,83 +437,95 @@ def _sample_factored_step_from_logits(
         (stop_prob >= 0.5).astype(jnp.int32),
         jax.random.bernoulli(key_stop, stop_prob).astype(jnp.int32),
     )
-    has_launch = source_mask.any() & ship_bucket_mask[..., 1:].any()
+    continuous_heads = ship_logits.shape[-1] == 1
+    has_real_bucket = ship_bucket_mask[..., 1:].any()
+    can_launch = source_mask.any() & (has_real_bucket | continuous_heads)
     stop = jnp.where(
-        deterministic & deterministic_eval & has_launch,
+        deterministic & deterministic_eval & can_launch,
         jnp.zeros_like(stop),
         stop,
     )
-    stop_lp = stop * jax.nn.log_sigmoid(stop_logit) + (1 - stop) * jax.nn.log_sigmoid(
-        -stop_logit
-    )
-    stop_entropy = -(
-        stop_prob * jax.nn.log_sigmoid(stop_logit)
-        + (1.0 - stop_prob) * jax.nn.log_sigmoid(-stop_logit)
-    )
+    stop = jnp.where(can_launch, stop, jnp.ones_like(stop))
+    launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
 
-    masked_source_logits = jnp.where(source_mask, source_logits, illegal_logit)
-    source = jnp.where(
-        deterministic,
-        jnp.argmax(masked_source_logits, axis=-1),
-        jax.random.categorical(key_source, masked_source_logits, axis=-1),
+    masked_source_logits = jnp.where(
+        source_mask, source_logits, jnp.full_like(source_logits, -1.0e9)
     )
-    source_log_probs = jax.nn.log_softmax(masked_source_logits, axis=-1)
-    source_probs = jax.nn.softmax(masked_source_logits, axis=-1)
-    source_lp = jnp.take(source_log_probs, source)
-    source_entropy = -(source_probs * source_log_probs).sum(axis=-1)
+    source = jnp.where(
+        launch_active,
+        jnp.where(
+            deterministic,
+            jnp.argmax(masked_source_logits, axis=-1),
+            jax.random.categorical(key_source, masked_source_logits, axis=-1),
+        ),
+        jnp.zeros_like(stop),
+    )
 
     row_bucket_mask = ship_bucket_mask[source]
     target_mask = row_bucket_mask.any(axis=-1)
-    masked_target_logits = jnp.where(target_mask, target_logits, illegal_logit)
-    target_slot = jnp.where(
-        deterministic,
-        jnp.argmax(masked_target_logits, axis=-1),
-        jax.random.categorical(key_target, masked_target_logits, axis=-1),
+    has_target = target_mask.any()
+    stop = jnp.where(launch_active & (~has_target), jnp.ones_like(stop), stop)
+    launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
+    masked_target_logits = jnp.where(
+        target_mask, target_logits, jnp.full_like(target_logits, -1.0e9)
     )
-    target_log_probs = jax.nn.log_softmax(masked_target_logits, axis=-1)
-    target_probs = jax.nn.softmax(masked_target_logits, axis=-1)
-    target_lp = jnp.take(target_log_probs, target_slot)
-    target_entropy = -(target_probs * target_log_probs).sum(axis=-1)
+    target_slot = jnp.where(
+        launch_active,
+        jnp.where(
+            deterministic,
+            jnp.argmax(masked_target_logits, axis=-1),
+            jax.random.categorical(key_target, masked_target_logits, axis=-1),
+        ),
+        jnp.zeros_like(source),
+    )
 
     selected_bucket_mask = row_bucket_mask[target_slot]
     selected_ship_logits = ship_logits[target_slot]
     continuous_ship = selected_ship_logits.shape[-1] == 1
+    ship_fraction = jnp.zeros_like(source, dtype=jnp.float32)
     if continuous_ship:
         ship_logit = selected_ship_logits[..., 0]
         selected_target_legal = target_mask[target_slot]
-        ship_logit = jnp.where(selected_target_legal, ship_logit, illegal_logit)
+        ship_logit = jnp.where(selected_target_legal, ship_logit, -1.0e9)
         if deterministic:
             ship_fraction = fraction_from_logit(ship_logit)
         else:
             ship_logit = ship_logit + jax.random.logistic(key_ship, ship_logit.shape)
             ship_fraction = fraction_from_logit(ship_logit)
-        ship_lp = continuous_fraction_log_prob(ship_logit)
-        ship_entropy = jnp.zeros_like(ship_lp)
         bucket = jnp.where(
-            ship_fraction > 0.0,
+            launch_active & (ship_fraction > 0.0),
             jnp.ones_like(target_slot, dtype=jnp.int32),
             jnp.zeros_like(target_slot, dtype=jnp.int32),
         )
     else:
         selected_ship_logits = jnp.where(
-            selected_bucket_mask, selected_ship_logits, illegal_logit
+            selected_bucket_mask, selected_ship_logits, -1.0e9
         )
         bucket = jnp.where(
-            deterministic,
-            jnp.argmax(selected_ship_logits, axis=-1),
-            jax.random.categorical(key_ship, selected_ship_logits, axis=-1),
+            launch_active,
+            jnp.where(
+                deterministic,
+                jnp.argmax(selected_ship_logits, axis=-1),
+                jax.random.categorical(key_ship, selected_ship_logits, axis=-1),
+            ),
+            jnp.zeros_like(target_slot, dtype=jnp.int32),
         )
-        ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-        ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-        ship_lp = jnp.take(ship_log_probs, bucket)
-        ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
-        ship_fraction = jnp.zeros_like(ship_lp)
 
-    head_active = 1.0 - stop.astype(jnp.float32)
-    log_prob = stop_lp + head_active * (source_lp + target_lp + ship_lp)
-    entropy = stop_entropy + head_active * (
-        source_entropy + target_entropy + ship_entropy
+    log_prob, entropy, _, _ = _factored_step_log_prob_entropy(
+        source_logits[None, :],
+        target_logits[None, :],
+        stop_logit[None],
+        ship_logits[None, :, :],
+        source_mask[None, :],
+        ship_bucket_mask[None, ...],
+        source[None],
+        target_slot[None],
+        bucket[None],
+        stop.astype(jnp.float32)[None],
+        ship_fraction=ship_fraction[None] if continuous_ship else None,
     )
+    log_prob = log_prob[0]
+    entropy = entropy[0]
     source = jnp.where(stop.astype(bool), jnp.zeros_like(source), source)
     target_slot = jnp.where(stop.astype(bool), jnp.zeros_like(target_slot), target_slot)
     bucket = jnp.where(stop.astype(bool), jnp.zeros_like(bucket), bucket)
@@ -532,6 +547,8 @@ def _sample_shielded_factored_sequence_with_params(
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> ShieldedSequenceSample:
+    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
+
     env_count = batch.planet_features.shape[0]
     player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
     carry_enabled = decoder_carry_enabled(cfg)
@@ -625,11 +642,9 @@ def _sample_shielded_factored_sequence_with_params(
             legal_non_noop_rate=diagnostic_zero,
         )
         step_bucket_mask = shielded.ship_bucket_mask
-        source_mask = jax.vmap(factorized_source_mask_from_shield, in_axes=(0, 0, 0))(
-            shielded.batch.edge_mask,
-            step_bucket_mask,
-            remaining_ships,
-        )
+        source_mask = jax.vmap(
+            source_mask_from_bucket_mask_and_ships, in_axes=(0, 0)
+        )(step_bucket_mask, remaining_ships)
         source, target_slot, bucket, stop, log_prob, entropy, ship_fraction = jax.vmap(
             _sample_factored_step_from_logits,
             in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
@@ -769,6 +784,24 @@ def _sample_shielded_factored_sequence_with_params(
             deterministic=deterministic,
         )
         decoder_hidden_out = final_output.decoder_hidden
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_index=source_sequence,
+        target_slot=slot_sequence,
+        ship_bucket=bucket_sequence,
+        stop_flag=stop_sequence.astype(jnp.float32),
+        step_mask=step_mask_sequence,
+        ship_bucket_mask=bucket_mask_stack,
+        ship_fraction=ship_fraction_sequence if continuous else None,
+        decoder_hidden=decoder_hidden_in if carry_enabled else None,
+        initial_remaining_ships=owned_planet_ships(game),
+    )
+    log_prob_sequence = replay.log_prob
+    entropy_sequence = replay.entropy
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,
@@ -1199,6 +1232,10 @@ def build_noop_action_from_edge_batch(
     cfg: TrainConfig,
 ) -> JaxAction:
     """Build a pass/no-op action that launches no fleets."""
+    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
+
+    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
+
 
     env_count = batch.planet_features.shape[0]
     noop_idx = noop_edge_index(cfg.task)

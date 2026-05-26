@@ -9,9 +9,10 @@ from src.config import TrainConfig
 from src.game.trajectory_shield import (
     mask_policy_output_for_shield_v2,
 )
-from src.jax.action_codec import (
-    action_log_prob_and_entropy,
-    factored_action_log_prob_with_shield,
+from src.jax.action_codec import action_log_prob_and_entropy
+from src.jax.factored_sequence_scan import (
+    factored_logprob_parity_metrics,
+    replay_factored_sequence_logprob,
 )
 from src.jax.distributional_value import (
     categorical_value_cross_entropy,
@@ -242,6 +243,12 @@ def _ppo_update_joint_flat_jax(
     decoder_hidden = None
     if cfg.model.decoder_carry and batch.decoder_hidden is not None:
         decoder_hidden = batch.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
+    initial_planet_ships = None
+    if batch.initial_planet_ships is not None:
+        initial_planet_ships = batch.initial_planet_ships.reshape(
+            env_rows, batch.initial_planet_ships.shape[-1]
+        )
+
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -314,6 +321,10 @@ def _ppo_update_joint_flat_jax(
         minibatches["decoder_hidden"] = _reshape_minibatches(
             decoder_hidden, minibatch_count, minibatch_size, 0.0
         )
+    if initial_planet_ships is not None:
+        minibatches["initial_planet_ships"] = _reshape_minibatches(
+            initial_planet_ships, minibatch_count, minibatch_size, 0.0
+        )
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
@@ -357,7 +368,12 @@ def _ppo_update_joint_flat_jax(
                 minibatch["old_log_prob"] - new_log_prob,
                 minibatch["mask"],
             )
-            ratio = jnp.exp(new_log_prob - minibatch["old_log_prob"])
+            log_ratio = jnp.clip(
+                new_log_prob - minibatch["old_log_prob"],
+                -20.0,
+                20.0,
+            )
+            ratio = jnp.exp(log_ratio)
             clipped_ratio = jnp.clip(
                 ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
             )
@@ -467,6 +483,12 @@ def _ppo_update_factorized_jax(
     decoder_hidden = None
     if cfg.model.decoder_carry and batch.decoder_hidden is not None:
         decoder_hidden = batch.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
+    initial_planet_ships = None
+    if batch.initial_planet_ships is not None:
+        initial_planet_ships = batch.initial_planet_ships.reshape(
+            env_rows, batch.initial_planet_ships.shape[-1]
+        )
+
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -480,10 +502,63 @@ def _ppo_update_factorized_jax(
     minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
     pad_rows = minibatch_count * minibatch_size - total_rows
 
-    source_mask = (
-        ship_bucket_mask[..., 1:].any(axis=-1)
-        & batch.edge_mask.reshape(env_rows, 1, MAX_PLANETS, k)
-    ).any(axis=-1)
+    source_mask = ship_bucket_mask[..., 1:].any(axis=(-2, -1))
+    launch_active = mask * (1.0 - stop_flag)
+    per_step_bucket_counts = ship_bucket_mask.sum(axis=(-3, -2, -1))
+    debug_metrics = {
+        "debug_step_mask_sum": mask.sum(),
+        "debug_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
+            jnp.float32
+        ),
+        "debug_returns_finite": jnp.all(jnp.isfinite(returns)).astype(jnp.float32),
+        "debug_advantages_finite": jnp.all(jnp.isfinite(advantages)).astype(
+            jnp.float32
+        ),
+        "debug_ship_bucket_mask_any_min": per_step_bucket_counts.min(),
+        "debug_ship_bucket_mask_all_false": (per_step_bucket_counts == 0)
+        .sum()
+        .astype(jnp.float32),
+        "debug_source_mask_all_false": (source_mask.sum(axis=-1) == 0)
+        .sum()
+        .astype(jnp.float32),
+        "debug_active_launch_all_false_bucket": (
+            launch_active * (per_step_bucket_counts == 0)
+        )
+        .sum()
+        .astype(jnp.float32),
+    }
+    parity_batch = TurnBatch(
+        planet_features=turn_batch.planet_features,
+        planet_mask=turn_batch.planet_mask,
+        edge_features=turn_batch.edge_features,
+        edge_mask=turn_batch.edge_mask,
+        edge_src_ids=turn_batch.edge_src_ids,
+        edge_tgt_ids=turn_batch.edge_tgt_ids,
+        global_features=turn_batch.global_features,
+        theta_ref=turn_batch.theta_ref,
+    )
+    parity_fraction = ship_fraction
+    parity_hidden = decoder_hidden
+    debug_metrics.update(
+        factored_logprob_parity_metrics(
+            train_state.params,
+            policy,
+            parity_batch,
+            cfg,
+            player_count=player_count,
+            source_index=source,
+            target_slot=target_slot,
+            ship_bucket=bucket,
+            stop_flag=stop_flag,
+            step_mask=mask,
+            ship_bucket_mask=ship_bucket_mask,
+            old_log_prob=old_log_prob,
+            ship_fraction=parity_fraction,
+            decoder_hidden=parity_hidden,
+            initial_remaining_ships=initial_planet_ships,
+            advantages=advantages,
+        )
+    )
     minibatches = {
         "mask": _reshape_minibatches(mask, minibatch_count, minibatch_size, 0.0),
         "planet_features": _reshape_minibatches(
@@ -540,6 +615,10 @@ def _ppo_update_factorized_jax(
         minibatches["decoder_hidden"] = _reshape_minibatches(
             decoder_hidden, minibatch_count, minibatch_size, 0.0
         )
+    if initial_planet_ships is not None:
+        minibatches["initial_planet_ships"] = _reshape_minibatches(
+            initial_planet_ships, minibatch_count, minibatch_size, 0.0
+        )
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
@@ -557,39 +636,56 @@ def _ppo_update_factorized_jax(
         def loss_fn(params):
             apply_kwargs = {
                 "player_count": minibatch["player_count"],
-                "source_sequence": minibatch["source"],
-                "target_slot_sequence": minibatch["target_slot"],
+                "deterministic": True,
             }
-            if cfg.model.decoder_carry and "decoder_hidden" in minibatch:
-                apply_kwargs["decoder_hidden"] = minibatch["decoder_hidden"]
             output = policy.apply(params, mb_batch, **apply_kwargs)
-            has_real_bucket = minibatch["ship_bucket_mask"][..., 1:].any(axis=-1)
-            source_mask = (mb_batch.edge_mask[:, None, :, :] & has_real_bucket).any(
-                axis=-1
-            )
             fraction_arg = (
                 minibatch["ship_fraction"]
                 if continuous and "ship_fraction" in minibatch
                 else None
             )
-            new_log_prob, entropy, stop_entropy, move_entropy = (
-                factored_action_log_prob_with_shield(
-                    output,
-                    minibatch["source"],
-                    minibatch["target_slot"],
-                    minibatch["bucket"],
-                    minibatch["stop_flag"],
-                    minibatch["mask"],
-                    source_mask,
-                    minibatch["ship_bucket_mask"],
-                    ship_fraction=fraction_arg,
-                )
+            decoder_hidden_arg = (
+                minibatch["decoder_hidden"]
+                if cfg.model.decoder_carry and "decoder_hidden" in minibatch
+                else None
             )
+            initial_ships_arg = (
+                minibatch["initial_planet_ships"]
+                if "initial_planet_ships" in minibatch
+                else None
+            )
+            replay = replay_factored_sequence_logprob(
+                params,
+                policy,
+                mb_batch,
+                cfg,
+                player_count=minibatch["player_count"],
+                source_index=minibatch["source"],
+                target_slot=minibatch["target_slot"],
+                ship_bucket=minibatch["bucket"],
+                stop_flag=minibatch["stop_flag"],
+                step_mask=minibatch["mask"],
+                ship_bucket_mask=minibatch["ship_bucket_mask"],
+                ship_fraction=fraction_arg,
+                decoder_hidden=decoder_hidden_arg,
+                initial_remaining_ships=initial_ships_arg,
+            )
+            new_log_prob = replay.log_prob
+            entropy = replay.entropy
+            stop_entropy = replay.stop_entropy
+            move_entropy = replay.move_entropy
+            log_ratio_raw = new_log_prob - minibatch["old_log_prob"]
             approx_kl = masked_mean(
                 minibatch["old_log_prob"] - new_log_prob,
                 minibatch["mask"],
             )
-            ratio = jnp.exp(new_log_prob - minibatch["old_log_prob"])
+            ratio_for_kl = jnp.exp(jnp.clip(log_ratio_raw, -20.0, 20.0))
+            approx_kl_v2 = masked_mean(
+                (ratio_for_kl - 1.0) - log_ratio_raw,
+                minibatch["mask"],
+            )
+            log_ratio = jnp.clip(log_ratio_raw, -20.0, 20.0)
+            ratio = jnp.exp(log_ratio)
             clipped_ratio = jnp.clip(
                 ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
             )
@@ -620,6 +716,7 @@ def _ppo_update_factorized_jax(
                 "entropy_stop": entropy_stop_loss,
                 "entropy_move": entropy_move_loss,
                 "approx_kl": approx_kl,
+                "approx_kl_v2": approx_kl_v2,
                 "loss": loss,
                 "sample_count": minibatch["mask"].sum(),
             }
@@ -659,6 +756,7 @@ def _ppo_update_factorized_jax(
         update_minibatch, (train_state.params, train_state.opt_state), minibatches
     )
     metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
+    metrics.update(debug_metrics)
     return (
         JaxTrainState(
             params=params, opt_state=opt_state, optimizer=train_state.optimizer

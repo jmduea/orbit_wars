@@ -13,7 +13,7 @@ defaults:
 seed: 42
 run_name: default
 device: auto
-heldout_eval_seed_set: []
+heldout_eval_seed_set: [69, 42, 0]
 print_resolved_config: false
 resume_checkpoint: null
 

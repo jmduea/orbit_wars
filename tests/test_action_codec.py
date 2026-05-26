@@ -2,11 +2,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.jax.action_codec import (
+    FactoredPolicyOutput,
     JaxPolicyOutput,
     action_log_prob_and_entropy,
     decode_flat_edge,
-    FactoredPolicyOutput,
     factored_action_log_prob_and_entropy,
+    factored_action_log_prob_with_shield,
     flat_edge_index,
     noop_edge_index,
 )
@@ -71,6 +72,89 @@ def test_factored_continuous_ship_log_prob_uses_width_one_head() -> None:
 
     assert np.isfinite(np.asarray(log_prob)).all()
     assert np.isfinite(np.asarray(entropy)).all()
+
+
+def test_factored_shield_continuous_ship_log_prob_batched_targets() -> None:
+    """Regression: continuous ship replay must index per-target legality, not (B, T)."""
+
+    batch_size = 8
+    num_targets = 7
+    output = FactoredPolicyOutput(
+        source_logits=jnp.zeros((batch_size, 1, 2), dtype=jnp.float32),
+        target_logits=jnp.zeros((batch_size, 1, num_targets), dtype=jnp.float32),
+        stop_logits=jnp.full((batch_size, 1), -2.0, dtype=jnp.float32),
+        ship_logits=jnp.zeros((batch_size, 1, num_targets, 1), dtype=jnp.float32),
+        value=jnp.zeros((batch_size,), dtype=jnp.float32),
+        decoded_source_sequence=jnp.full((batch_size, 1), -1, dtype=jnp.int32),
+        decoded_target_slot_sequence=jnp.full((batch_size, 1), -1, dtype=jnp.int32),
+        decoded_stop_sequence=jnp.zeros((batch_size, 1), dtype=jnp.int32),
+    )
+    source_index = jnp.zeros((batch_size, 1), dtype=jnp.int32)
+    target_slot = jnp.zeros((batch_size, 1), dtype=jnp.int32)
+    ship_bucket = jnp.ones((batch_size, 1), dtype=jnp.int32)
+    stop_flag = jnp.zeros((batch_size, 1), dtype=jnp.int32)
+    step_mask = jnp.ones((batch_size, 1), dtype=jnp.float32)
+    source_mask = jnp.ones((batch_size, 1, 2), dtype=bool)
+    ship_bucket_mask = jnp.zeros((batch_size, 1, 2, num_targets, 8), dtype=bool)
+    ship_bucket_mask = ship_bucket_mask.at[:, :, 0, 0, 1].set(True)
+
+    log_prob, entropy, stop_entropy, move_entropy = (
+        factored_action_log_prob_with_shield(
+            output,
+            source_index,
+            target_slot,
+            ship_bucket,
+            stop_flag,
+            step_mask,
+            source_mask,
+            ship_bucket_mask,
+        )
+    )
+
+    for arr in (log_prob, entropy, stop_entropy, move_entropy):
+        assert np.isfinite(np.asarray(arr)).all()
+
+
+def test_factored_shield_replay_teacher_forces_stored_actions() -> None:
+    """Stored rollout actions stay legal during replay even when coarse masks omit them."""
+
+    batch_size = 4
+    num_targets = 7
+    output = FactoredPolicyOutput(
+        source_logits=jnp.zeros((batch_size, 1, 2), dtype=jnp.float32),
+        target_logits=jnp.zeros((batch_size, 1, num_targets), dtype=jnp.float32),
+        stop_logits=jnp.full((batch_size, 1), -1.0, dtype=jnp.float32),
+        ship_logits=jnp.zeros((batch_size, 1, num_targets, 1), dtype=jnp.float32),
+        value=jnp.zeros((batch_size,), dtype=jnp.float32),
+        decoded_source_sequence=jnp.full((batch_size, 1), -1, dtype=jnp.int32),
+        decoded_target_slot_sequence=jnp.full((batch_size, 1), -1, dtype=jnp.int32),
+        decoded_stop_sequence=jnp.zeros((batch_size, 1), dtype=jnp.int32),
+    )
+    source_index = jnp.ones((batch_size, 1), dtype=jnp.int32)
+    target_slot = jnp.ones((batch_size, 1), dtype=jnp.int32)
+    ship_bucket = jnp.ones((batch_size, 1), dtype=jnp.int32)
+    stop_flag = jnp.zeros((batch_size, 1), dtype=jnp.int32)
+    step_mask = jnp.ones((batch_size, 1), dtype=jnp.float32)
+    source_mask = jnp.zeros((batch_size, 1, 2), dtype=bool)
+    ship_bucket_mask = jnp.zeros((batch_size, 1, 2, num_targets, 8), dtype=bool)
+    ship_bucket_mask = ship_bucket_mask.at[:, :, 0, 0, 1].set(True)
+
+    log_prob, entropy, stop_entropy, move_entropy = (
+        factored_action_log_prob_with_shield(
+            output,
+            source_index,
+            target_slot,
+            ship_bucket,
+            stop_flag,
+            step_mask,
+            source_mask,
+            ship_bucket_mask,
+        )
+    )
+
+    for arr in (log_prob, entropy, stop_entropy, move_entropy):
+        assert np.isfinite(np.asarray(arr)).all()
+    assert float(np.asarray(log_prob).mean()) > -1e10
 
 
 def jax_log_softmax(values: np.ndarray) -> np.ndarray:

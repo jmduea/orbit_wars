@@ -10,8 +10,8 @@ ent_coef: 0.005
 vf_coef: 0.5
 lr: 0.0003
 max_grad_norm: 0.5
-update_chunk_rows_min: 4096
-update_chunk_rows_max: null
+update_chunk_rows_min: 2048
+update_chunk_rows_max: 4096
 rollout_microbatch_envs: 16
 rotate_format_rollouts: false
 lean_rollout_metrics: true

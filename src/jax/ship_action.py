@@ -29,6 +29,13 @@ def fraction_from_logit(logit: jax.Array) -> jax.Array:
     return jnp.clip(jax.nn.sigmoid(logit), 1e-6, 1.0)
 
 
+def logit_from_fraction(fraction: jax.Array) -> jax.Array:
+    """Invert ``fraction_from_logit`` for replaying stored continuous ship draws."""
+
+    clipped = jnp.clip(fraction.astype(jnp.float32), 1e-6, 1.0 - 1e-6)
+    return jnp.log(clipped) - jnp.log1p(-clipped)
+
+
 def continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
     """Log density of a logistic draw at ``logit`` (used for PPO replay)."""
 

@@ -34,6 +34,7 @@ class JaxTransitionBatch(NamedTuple):
     step_mask: jax.Array
     decoder_hidden: jax.Array | None = None
     ship_fraction: jax.Array | None = None
+    initial_planet_ships: jax.Array | None = None
 
 
 @flax.struct.dataclass
