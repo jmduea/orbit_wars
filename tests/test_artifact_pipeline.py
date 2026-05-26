@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import pickle
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -258,6 +259,8 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
 
     def fake_run(command, **kwargs):
         output_dir = Path(command[command.index("--output-dir") + 1])
+        assert command[command.index("--per-step-seconds") + 1] == "1.0"
+        assert "--timeout-seconds" not in command
         replay_dir = output_dir / "replays"
         replay_dir.mkdir(parents=True, exist_ok=True)
         (replay_dir / "replay_u000001_2p.html").write_text("<html></html>", encoding="utf-8")
@@ -270,10 +273,51 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
     status = json.loads(job_path.read_text(encoding="utf-8"))
     assert status["status"] == "completed"
     assert status["backend"] == "docker"
+    assert "error" not in status
     assert Path(status["output_dir"]).parent == Path(status["result_dir"])
     assert Path(status["result_manifest_path"]).exists()
     assert len(status["replay_html_paths"]) == 1
     assert status["replay_html_paths"][0].endswith("replay_u000001_2p.html")
+
+
+def test_artifact_worker_retry_failed_processes_failed_job(
+    tmp_path: Path, monkeypatch
+):
+    from scripts import run_artifact_worker
+
+    checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+    job_path = write_optional_job(
+        tmp_path / "jobs",
+        kind="replay",
+        update=1,
+        checkpoint_path=checkpoint_path,
+        payload={"backend": "docker", "log_path": str(tmp_path / "metrics.jsonl")},
+        result_root=tmp_path / "evaluations",
+    )
+    job = json.loads(job_path.read_text(encoding="utf-8"))
+    job["status"] = "failed"
+    job["error"] = "stale failure"
+    job_path.write_text(json.dumps(job), encoding="utf-8")
+
+    processed: list[dict[str, object]] = []
+
+    def fake_run_replay(job: dict[str, object]) -> None:
+        processed.append(job)
+
+    monkeypatch.setattr(run_artifact_worker, "_run_replay_job", fake_run_replay)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["run_artifact_worker.py", str(tmp_path / "jobs"), "--once", "--retry-failed"],
+    )
+
+    assert run_artifact_worker.main() == 0
+    assert len(processed) == 1
+    assert processed[0]["status"] == "failed"
+    status = json.loads(job_path.read_text(encoding="utf-8"))
+    assert status["status"] == "running"
+    assert "error" not in status
 
 
 def test_local_replay_worker_writes_to_result_dir(tmp_path: Path, monkeypatch):
@@ -389,7 +433,7 @@ def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, m
     )
 
     command = launched["command"]
-    assert "scripts/run_artifact_worker.py" in str(command)
+    assert command[1] == str(Path("scripts/run_artifact_worker.py").resolve())
     assert str(tmp_path) in command
     assert launched["kwargs"]["start_new_session"] is True
     assert worker_state["process"].poll() is None

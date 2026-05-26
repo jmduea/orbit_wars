@@ -39,11 +39,16 @@ RUNTIME_FILES = (
     "game/types.py",
     "jax/__init__.py",
     "jax/action_codec.py",
+    "jax/decoder_carry.py",
     "jax/decoders/__init__.py",
     "jax/decoders/factorized_topk_pointer.py",
+    "jax/distributional_value.py",
     "jax/encoders/__init__.py",
+    "jax/encoders/_types.py",
     "jax/encoders/planet_encoder_common.py",
     "jax/encoders/planet_graph_transformer.py",
+    "jax/encoders/remat.py",
+    "jax/factored_sequence_scan.py",
     "jax/feature_primitives.py",
     "jax/features.py",
     "jax/policy.py",
@@ -51,6 +56,7 @@ RUNTIME_FILES = (
     "jax/env.py",
     "jax/rollout/__init__.py",
     "jax/rollout/types.py",
+    "jax/ship_action.py",
     "opponents/__init__.py",
     "opponents/jax_actions/__init__.py",
     "opponents/jax_actions/builders.py",
@@ -256,7 +262,7 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
 def create_tarball(staging_dir: Path, package_path: Path) -> None:
     with tarfile.open(package_path, "w:gz") as archive:
         for path in sorted(staging_dir.rglob("*")):
-            archive.add(path, arcname=path.relative_to(staging_dir))
+            archive.add(path, arcname=path.relative_to(staging_dir), recursive=False)
 
 
 def validate_tarball_layout(package_path: Path) -> None:
@@ -447,6 +453,7 @@ from typing import Any
 class TaskConfig:
     candidate_count: int = 8
     ship_bucket_count: int = 8
+    ship_action_mode: str = "buckets"
     max_fleets: int = 256
     player_count: int = 2
     max_ships: float = 400.0
@@ -457,6 +464,7 @@ class TaskConfig:
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, float] = (1.0, 6.0)
+    edge_rank_mode: str = "snapshot"
 
 
 @dataclass(slots=True)
@@ -474,7 +482,10 @@ class RewardConfig:
 class ModelConfig:
     architecture: str = "gnn_pointer"
     value_head: str = "shared"
+    value_bins: int = 51
+    value_max: float = 1.0
     pointer_decoder: str = "joint_flat"
+    decoder_carry: bool = False
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3

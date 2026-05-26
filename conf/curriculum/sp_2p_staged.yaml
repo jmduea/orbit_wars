@@ -1,0 +1,67 @@
+enabled: true
+stages:
+  - id: soft_start
+    min_updates: 500
+    cooldown_updates: 0
+    promote_if:
+      metric: overall_win_rate
+      op: ">"
+      value: 0.0
+      window_updates: 10
+    opponent_families:
+      latest: 0.8
+      historical: 0.2
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.0
+      turtle: 0.0
+      opportunistic: 0.0
+  - id: bootstrap_random_2p
+    min_updates: 500
+    cooldown_updates: 0
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.55
+      window_updates: 5
+    opponent_families:
+      latest: 0.3
+      historical: 0.0
+      random: 0.5
+      noop: 0.2
+      nearest_sniper: 0.0
+      turtle: 0.0
+      opportunistic: 0.0
+  - id: turtle_noop_cheese_gate_2p
+    # Thought process is that if our agent doesn't learn to effectively take planets they lose, i.e. noop through whole match == tie, launching ships without taking a planet == loss, agent has to increase there prod or eliminate opponent to win
+    min_updates: 2000
+    cooldown_updates: 0
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.60
+      window_updates: 5
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.0
+      noop: 0.8
+      nearest_sniper: 0.0
+      turtle: 0.2
+      opportunistic: 0.0
+  - id: mixed_exploiters_2p
+    min_updates: 1000
+    cooldown_updates: 10
+    promote_if:
+      metric: overall_win_rate
+      op: ">="
+      value: 0.90
+      window_updates: 5
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.70
+      noop: 0.10
+      nearest_sniper: 0.07
+      turtle: 0.10
+      opportunistic: 0.03

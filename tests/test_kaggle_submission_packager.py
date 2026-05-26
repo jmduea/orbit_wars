@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import pickle
 import tarfile
 from pathlib import Path
@@ -10,8 +11,10 @@ import numpy as np
 import pytest
 
 from scripts.validate_kaggle_docker_submission import (
+    CONFIG_TEMPLATE,
     IN_CONTAINER_VALIDATOR,
     MAIN_TEMPLATE,
+    RUNTIME_FILES,
     ValidationError,
     _to_plain_data,
     build_submission_package,
@@ -132,6 +135,7 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
     assert "src/__init__.py" in names
     assert "src/jax/policy.py" in names
     assert "src/game/trajectory_shield.py" in names
+    assert len(names) == len(set(names))
     assert str(checkpoint.parent) not in manifest_text
     assert "source_checkpoint_sha256" in manifest_text
 
@@ -302,6 +306,72 @@ def test_build_submission_package_includes_factorized_runtime_modules(
     with tarfile.open(package_path, "r:gz") as archive:
         names = set(archive.getnames())
     assert "src/jax/action_codec.py" in names
+    assert "src/jax/decoder_carry.py" in names
     assert "src/jax/decoders/factorized_topk_pointer.py" in names
+    assert "src/jax/distributional_value.py" in names
+    assert "src/jax/encoders/_types.py" in names
+    assert "src/jax/encoders/remat.py" in names
+    assert "src/jax/factored_sequence_scan.py" in names
+    assert "src/jax/ship_action.py" in names
     assert "src/features/catalog/planet.py" in names
     assert "src/features/catalog/edge.py" in names
+
+
+def test_runtime_files_cover_static_submission_import_closure() -> None:
+    packaged = {Path("src") / filename for filename in RUNTIME_FILES}
+    packaged.update(
+        {
+            Path("src/__init__.py"),
+            Path("src/config/__init__.py"),
+            Path("src/config/schema.py"),
+        }
+    )
+    ignored = {
+        Path("src/artifacts/__init__.py"),
+    }
+
+    needed: set[Path] = set()
+    for filename in RUNTIME_FILES:
+        path = Path("src") / filename
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            module_names: list[str] = []
+            if isinstance(node, ast.Import):
+                module_names.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                module_names.append(node.module)
+            for module_name in module_names:
+                if not module_name.startswith("src."):
+                    continue
+                parts = module_name.split(".")
+                for index in range(2, len(parts) + 1):
+                    module_path = Path(*parts[:index])
+                    py_file = module_path.with_suffix(".py")
+                    init_file = module_path / "__init__.py"
+                    if py_file.exists():
+                        needed.add(py_file)
+                    if init_file.exists():
+                        needed.add(init_file)
+
+    assert sorted(needed - packaged - ignored) == []
+
+
+def test_embedded_runtime_config_template_matches_runtime_fields() -> None:
+    namespace: dict[str, object] = {}
+    exec(CONFIG_TEMPLATE, namespace)
+
+    template_task = namespace["TaskConfig"]()
+    template_model = namespace["ModelConfig"]()
+    runtime_task = TrainConfig().task
+    runtime_model = TrainConfig().model
+
+    for field in (
+        "ship_action_mode",
+        "edge_rank_mode",
+        "value_bins",
+        "value_max",
+        "decoder_carry",
+    ):
+        template = template_task if hasattr(template_task, field) else template_model
+        runtime = runtime_task if hasattr(runtime_task, field) else runtime_model
+        assert getattr(template, field) == getattr(runtime, field)

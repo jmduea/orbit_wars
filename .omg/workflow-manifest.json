@@ -1016,10 +1016,10 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-kaggle-wandb-population.md",
       "workflow": "deep-interview",
-      "status": "approved",
+      "status": "executing",
       "title": "Kaggle W&B population training",
       "spec_id": null,
-      "plan_id": null,
+      "plan_id": "ralplan-kaggle-wandb-population",
       "related_ids": [
         "async-artifact-pipeline",
         "kaggle-docker-validation",
@@ -1029,6 +1029,25 @@
       "completed_at": null,
       "evidence": "Deep interview approved: W&B-first one-command Kaggle workers, population MVP, accelerator fallback, throughput calibration, W&B checkpoint artifacts, shortlist generation.",
       "notes": "First milestone is Population MVP; full tournaments, scripted_nearest gates, action-distribution diversity, and self-play promotion are follow-up pipeline work."
+    },
+    {
+      "id": "ralplan-kaggle-wandb-population",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-kaggle-wandb-population.md",
+      "workflow": "ralplan",
+      "status": "executing",
+      "title": "Plan: Kaggle W&B population training",
+      "spec_id": "kaggle-wandb-population",
+      "plan_id": null,
+      "related_ids": [
+        "kaggle-wandb-population",
+        "async-artifact-pipeline",
+        "kaggle-docker-validation"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": "Consensus iter-1: Native W&B sweep first; local Kaggle launcher only for packaging, accelerator fallback, status/output sync; hybrid manifest deferred.",
+      "notes": "User selected Native W&B first over hybrid manifest. Population MVP stops at W&B-backed shortlist; tournaments and self-play promotion follow later."
     }
   ]
 }

@@ -17,8 +17,8 @@ def test_root_config_composes_from_responsibility_groups() -> None:
     assert cfg.training.total_updates == 100
     assert cfg.format.rollout_groups
     assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 8
-    assert cfg.curriculum.stages[0]["id"] == "bootstrap_random"
+    assert len(cfg.curriculum.stages) == 12
+    assert cfg.curriculum.stages[0]["id"] == "soft_start"
     assert cfg.curriculum.stages[-1]["id"] == "self_play"
     assert cfg.opponents.self_play.enabled is True
     assert cfg.opponents.snapshot.pool_size == 2

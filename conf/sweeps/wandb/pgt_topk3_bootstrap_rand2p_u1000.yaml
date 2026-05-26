@@ -20,21 +20,24 @@ parameters:
     value:
       [
         transformer_factorized,
-        pgt_topk3_bootstrap_rand2p_u1000,
+        pgt_topk3_sp2pstaged_u1000,
         random,
         overall_win_rate,
         soft_start,
-        bootstrap_random_2p,
+        sp_2p_staged,
+        2p_32env,
         update1000,
       ]
   curriculum:
-    value: self_play_staged
+    value: sp_2p_staged
   opponents:
     value: self_play_curriculum
   model:
     value: transformer_factorized
   format:
-    value: mix_2p_4p_16env
+    value: 2p_32env
+  training.rollout_microbatch_envs:
+    value: 32
   training.total_updates:
     value: 1000
   artifacts.checkpoint_every:
@@ -44,13 +47,13 @@ parameters:
   artifacts.replay.enabled:
     value: true
   training.gamma:
-    value: 0.999
+    value: 0.995
   training.gae_lambda:
-    value: 0.99
+    value: 0.95
   training.vf_coef:
     values: [0.5, 1.0]
   training.epochs:
-    values: [2, 3]
+    values: [1, 3]
   training.clip_coef:
     values: [0.1, 0.2]
   training.lr:
@@ -69,17 +72,15 @@ parameters:
     distribution: uniform
     min: 0.0
     max: 0.05
-  reward.early_terminal_reward_shaping_enabled:
-    values: [true, false]
-  model.hidden_size:
-    values: [140, 224]
-  model.attention_heads:
-    values: [4, 7]
   model.max_moves_k:
-    values: [3, 5, 8]
-  model.planet_transformer_layers:
-    values: [1, 2, 3]
+    values: [3, 5]
+  task.trajectory_shield_enabled: 
+    value: false
+  task.trajectory_shield_hit_mode: 
+    value: selected_target # non_friendly
+  task.trajectory_shield_horizon: 
+    value: 30
+  task.trajectory_shield_epsilon: 
+    value: 1.0e-06
   task.feature_history_steps:
-    values: [2, 5, 10]
-  task.trajectory_shield_horizon:
-    values: [10, 20, 30]
+    values: [2, 5]

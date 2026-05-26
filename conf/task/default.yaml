@@ -1,6 +1,6 @@
 candidate_count: 4
 ship_bucket_count: 8
-max_fleets: 512
+max_fleets: 256
 player_count: 4
 # max_ships: 400.0 # Deprecated
 ship_feature_scale: 1000.0

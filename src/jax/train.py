@@ -743,7 +743,7 @@ def _start_artifact_worker_if_needed(
     stderr_path = queue_dir / "worker.stderr.log"
     command = [
         sys.executable,
-        str(Path(__file__).resolve().parents[1] / "scripts" / "run_artifact_worker.py"),
+        str(Path(__file__).resolve().parents[2] / "scripts" / "run_artifact_worker.py"),
         str(queue_dir),
         "--poll-seconds",
         str(cfg.artifacts.artifact_pipeline.worker_poll_seconds),

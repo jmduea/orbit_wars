@@ -16,6 +16,9 @@ stages:
       nearest_sniper: 0.0
       turtle: 0.0
       opportunistic: 0.0
+    format_weights:
+      2: 1.0
+      4: 0.0
   - id: bootstrap_random_2p
     min_updates: 500
     cooldown_updates: 0

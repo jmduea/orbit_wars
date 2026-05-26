@@ -40,6 +40,8 @@ def _write_status(job_file: Path, status: str, **fields: object) -> None:
     payload = json.loads(job_file.read_text(encoding="utf-8"))
     payload.update(fields)
     payload["status"] = status
+    if status in {"running", "completed"}:
+        payload.pop("error", None)
     payload["updated_at_unix"] = time.time()
     tmp_path = job_file.with_suffix(job_file.suffix + f".{uuid.uuid4().hex}.tmp")
     tmp_path.write_text(
@@ -113,7 +115,7 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
         str(job.get("seed", 42)),
         "--player-count",
         str(job.get("player_count", "both")),
-        "--timeout-seconds",
+        "--per-step-seconds",
         str(job.get("timeout_seconds", 1.0)),
         "--episode-steps",
         str(job.get("episode_steps", 500)),
@@ -215,17 +217,23 @@ def main() -> int:
         action="store_true",
         help="Also process jobs left in running status by a dead worker.",
     )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Also process failed jobs, for explicit one-off retry workflows.",
+    )
     args = parser.parse_args()
     if args.result_root is not None:
         setattr(_trusted_result_root, "explicit", args.result_root)
 
     last_work_time = time.monotonic()
     while True:
-        jobs = (
-            load_optional_jobs(args.queue_dir, statuses={"queued", "running"})
-            if args.recover_running
-            else load_pending_optional_jobs(args.queue_dir)
-        )
+        statuses = {"queued"}
+        if args.recover_running:
+            statuses.add("running")
+        if args.retry_failed:
+            statuses.add("failed")
+        jobs = load_optional_jobs(args.queue_dir, statuses=statuses)
         if jobs:
             last_work_time = time.monotonic()
         for job in jobs:
