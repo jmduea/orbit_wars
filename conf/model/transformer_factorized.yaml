@@ -2,8 +2,8 @@
 architecture: planet_graph_transformer
 pointer_decoder: factorized_topk
 decoder_carry: true
-hidden_size: 224
-attention_heads: 7
+hidden_size: 128
+attention_heads: 8
 max_moves_k: 8
 planet_transformer_layers: 2
 spatial_attention_bias: true

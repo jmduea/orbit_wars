@@ -1373,10 +1373,17 @@ def apply_trajectory_shield_factorized_topk(
     original_real_mask = batch.edge_mask
     original_legal_total = original_real_mask.astype(jnp.float32).sum()
 
-    default_bucket_mask = jnp.zeros((MAX_PLANETS, k, bucket_count), dtype=bool)
-    default_bucket_mask = default_bucket_mask.at[..., 0].set(True)
-
     if not trajectory_shield_enabled(env_cfg) or k == 0:
+        unshielded_bucket_mask = jnp.zeros(
+            (MAX_PLANETS, k, bucket_count),
+            dtype=bool,
+        )
+        unshielded_bucket_mask = unshielded_bucket_mask.at[..., 0].set(True)
+        if bucket_count > 1:
+            legal_edges = batch.edge_mask.reshape(MAX_PLANETS, k)
+            unshielded_bucket_mask = unshielded_bucket_mask.at[..., 1:].set(
+                legal_edges[..., None]
+            )
         diagnostics = ShieldDiagnostics(
             blocked_count=jnp.asarray(0.0, dtype=jnp.float32),
             blocked_sun_count=jnp.asarray(0.0, dtype=jnp.float32),
@@ -1390,7 +1397,7 @@ def apply_trajectory_shield_factorized_topk(
         )
         return ShieldedBatchResult(
             batch=batch,
-            ship_bucket_mask=default_bucket_mask,
+            ship_bucket_mask=unshielded_bucket_mask,
             diagnostics=diagnostics,
         )
 

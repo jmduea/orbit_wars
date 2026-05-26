@@ -26,6 +26,7 @@ from src.jax.ship_action import (
     ship_count_for_action,
 )
 
+
 def ship_count_for_bucket_jax(
     available_ships: jax.Array, bucket: jax.Array, bucket_count: int
 ) -> jax.Array:
@@ -37,8 +38,6 @@ def ship_count_for_bucket_jax(
     ships = jnp.ceil(available_ships * fraction)
     ships = jnp.minimum(available_ships, jnp.maximum(1.0, ships))
     return jnp.where((available_ships <= 0.0) | (fraction <= 0.0), 0.0, ships)
-
-
 
 
 def noop_edge_index(task_cfg) -> int:
@@ -61,7 +60,6 @@ def _launch_angle_for_edge(game, batch: TurnBatch, src_row, slot):
     tgt_x = jnp.sum(jnp.where(match, game.planets.x, 0.0))
     tgt_y = jnp.sum(jnp.where(match, game.planets.y, 0.0))
     return jnp.arctan2(tgt_y - src_y, tgt_x - src_x)
-
 
 
 def build_action_from_factored_batch(
@@ -100,9 +98,7 @@ def build_action_from_factored_batch(
     ):
         def step_fn(remaining, step_inputs):
             src_row, slot, bucket, stop, step_active, fraction = step_inputs
-            launch_fraction = jnp.where(
-                continuous, fraction, jnp.zeros_like(fraction)
-            )
+            launch_fraction = jnp.where(continuous, fraction, jnp.zeros_like(fraction))
             valid = (
                 step_active.astype(bool)
                 & jnp.logical_not(stop.astype(bool))
@@ -241,11 +237,16 @@ def build_random_action_from_edge_batch(
     edge_count = edge_action_count(cfg.task)
     key_target, key_bucket = jax.random.split(key)
     flat_mask = jnp.concatenate(
-        [batch.edge_mask.reshape(env_count, MAX_PLANETS * k), jnp.ones((env_count, 1), dtype=bool)],
+        [
+            batch.edge_mask.reshape(env_count, MAX_PLANETS * k),
+            jnp.ones((env_count, 1), dtype=bool),
+        ],
         axis=1,
     )
     if ship_bucket_mask is None:
-        flat_bucket_mask = default_edge_action_bucket_mask(flat_mask, cfg.task.ship_bucket_count)
+        flat_bucket_mask = default_edge_action_bucket_mask(
+            flat_mask, cfg.task.ship_bucket_count
+        )
     else:
         flat_bucket_mask = ship_bucket_mask
     real_bucket_mask = flat_bucket_mask & (
@@ -274,7 +275,6 @@ def build_random_action_from_edge_batch(
     return build_action_from_edge_batch(
         game, batch, target[:, None], bucket[:, None], cfg
     )
-
 
 
 def _noop_bucket_mask(
@@ -333,7 +333,6 @@ def _pick_eval_deterministic_bucket(
     )
 
 
-
 def _sample_step_from_logits(
     *,
     key: jax.Array,
@@ -377,11 +376,13 @@ def _sample_step_from_logits(
         if deterministic:
             ship_fraction = fraction_from_logit(ship_logit)
         else:
-            ship_logit = jax.random.logistic(key_ship, ship_logit)
+            ship_logit = ship_logit + jax.random.logistic(key_ship, ship_logit.shape)
             ship_fraction = fraction_from_logit(ship_logit)
         ship_lp = continuous_fraction_log_prob(ship_logit)
         ship_entropy = jnp.zeros_like(ship_lp)
-        bucket = jnp.where(ship_fraction > 0.0, jnp.ones_like(bucket), jnp.zeros_like(bucket))
+        bucket = jnp.where(
+            ship_fraction > 0.0, jnp.ones_like(bucket), jnp.zeros_like(bucket)
+        )
     else:
         bucket = jnp.where(
             deterministic,
@@ -397,7 +398,9 @@ def _sample_step_from_logits(
             )
         ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
         ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
-        ship_lp = jnp.take_along_axis(ship_log_probs, bucket[:, None], axis=-1).squeeze(-1)
+        ship_lp = jnp.take_along_axis(ship_log_probs, bucket[:, None], axis=-1).squeeze(
+            -1
+        )
         ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
         ship_fraction = jnp.zeros_like(ship_lp)
 
@@ -408,7 +411,6 @@ def _sample_step_from_logits(
     )
     entropy = -(target_probs * target_log_probs).sum(axis=-1) - ship_entropy
     return target, bucket, target_lp + ship_lp, entropy, ship_fraction
-
 
 
 def _sample_factored_step_from_logits(
@@ -472,16 +474,15 @@ def _sample_factored_step_from_logits(
 
     selected_bucket_mask = row_bucket_mask[target_slot]
     selected_ship_logits = ship_logits[target_slot]
-    selected_ship_logits = jnp.where(
-        selected_bucket_mask, selected_ship_logits, illegal_logit
-    )
     continuous_ship = selected_ship_logits.shape[-1] == 1
     if continuous_ship:
         ship_logit = selected_ship_logits[..., 0]
+        selected_target_legal = target_mask[target_slot]
+        ship_logit = jnp.where(selected_target_legal, ship_logit, illegal_logit)
         if deterministic:
             ship_fraction = fraction_from_logit(ship_logit)
         else:
-            ship_logit = jax.random.logistic(key_ship, ship_logit)
+            ship_logit = ship_logit + jax.random.logistic(key_ship, ship_logit.shape)
             ship_fraction = fraction_from_logit(ship_logit)
         ship_lp = continuous_fraction_log_prob(ship_logit)
         ship_entropy = jnp.zeros_like(ship_lp)
@@ -491,6 +492,9 @@ def _sample_factored_step_from_logits(
             jnp.zeros_like(target_slot, dtype=jnp.int32),
         )
     else:
+        selected_ship_logits = jnp.where(
+            selected_bucket_mask, selected_ship_logits, illegal_logit
+        )
         bucket = jnp.where(
             deterministic,
             jnp.argmax(selected_ship_logits, axis=-1),
@@ -504,13 +508,16 @@ def _sample_factored_step_from_logits(
 
     head_active = 1.0 - stop.astype(jnp.float32)
     log_prob = stop_lp + head_active * (source_lp + target_lp + ship_lp)
-    entropy = stop_entropy + head_active * (source_entropy + target_entropy + ship_entropy)
+    entropy = stop_entropy + head_active * (
+        source_entropy + target_entropy + ship_entropy
+    )
     source = jnp.where(stop.astype(bool), jnp.zeros_like(source), source)
     target_slot = jnp.where(stop.astype(bool), jnp.zeros_like(target_slot), target_slot)
     bucket = jnp.where(stop.astype(bool), jnp.zeros_like(bucket), bucket)
-    ship_fraction = jnp.where(stop.astype(bool), jnp.zeros_like(ship_fraction), ship_fraction)
+    ship_fraction = jnp.where(
+        stop.astype(bool), jnp.zeros_like(ship_fraction), ship_fraction
+    )
     return source, target_slot, bucket, stop, log_prob, entropy, ship_fraction
-
 
 
 def _sample_shielded_factored_sequence_with_params(
@@ -547,11 +554,7 @@ def _sample_shielded_factored_sequence_with_params(
     log_prob_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     entropy_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
-    decoder_hidden_carry = (
-        probe_output.decoder_hidden
-        if carry_enabled
-        else None
-    )
+    decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
     diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
     diagnostics = ShieldDiagnostics(
@@ -645,7 +648,9 @@ def _sample_shielded_factored_sequence_with_params(
         stop = jnp.where(sequence_active, stop, jnp.zeros_like(stop))
         log_prob = jnp.where(sequence_active, log_prob, jnp.zeros_like(log_prob))
         entropy = jnp.where(sequence_active, entropy, jnp.zeros_like(entropy))
-        ship_fraction = jnp.where(sequence_active, ship_fraction, jnp.zeros_like(ship_fraction))
+        ship_fraction = jnp.where(
+            sequence_active, ship_fraction, jnp.zeros_like(ship_fraction)
+        )
         src_rows = source
         current_source_ships = remaining_ships[jnp.arange(env_count), src_rows]
         launched = ship_count_for_action(
@@ -674,11 +679,11 @@ def _sample_shielded_factored_sequence_with_params(
         step_mask_sequence = step_mask_sequence.at[:, step_idx].set(step_active)
         log_prob_sequence = log_prob_sequence.at[:, step_idx].set(log_prob)
         entropy_sequence = entropy_sequence.at[:, step_idx].set(entropy)
-        ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(ship_fraction)
+        ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(
+            ship_fraction
+        )
         bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(step_bucket_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
-        if carry_enabled:
-            decoder_hidden_carry = step_output.decoder_hidden
         return (
             source_sequence,
             slot_sequence,
@@ -753,6 +758,17 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
+    if carry_enabled:
+        final_output = policy.apply(
+            params,
+            batch,
+            player_count=player_count,
+            source_sequence=source_sequence,
+            target_slot_sequence=slot_sequence,
+            decoder_hidden=decoder_hidden_in,
+            deterministic=deterministic,
+        )
+        decoder_hidden_out = final_output.decoder_hidden
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,
@@ -815,9 +831,7 @@ def _sample_shielded_sequence_with_params(
     log_prob_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     entropy_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
-    decoder_hidden_carry = (
-        probe_output.decoder_hidden if carry_enabled else None
-    )
+    decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
     diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
     diagnostics = ShieldDiagnostics(
@@ -883,7 +897,9 @@ def _sample_shielded_sequence_with_params(
         )
         edge_action_mask = jnp.concatenate(
             [
-                shielded.batch.edge_mask.reshape(env_count, MAX_PLANETS * edge_k(cfg.task)),
+                shielded.batch.edge_mask.reshape(
+                    env_count, MAX_PLANETS * edge_k(cfg.task)
+                ),
                 jnp.ones((env_count, 1), dtype=bool),
             ],
             axis=1,
@@ -892,7 +908,10 @@ def _sample_shielded_sequence_with_params(
             env_count, edge_count, cfg.task.ship_bucket_count
         )
         env_active = jnp.ones((env_count,), dtype=bool)
-        step_bucket_mask = _ensure_bucket_mask_has_choice(step_bucket_mask.reshape(-1, edge_count, cfg.task.ship_bucket_count), env_active)
+        step_bucket_mask = _ensure_bucket_mask_has_choice(
+            step_bucket_mask.reshape(-1, edge_count, cfg.task.ship_bucket_count),
+            env_active,
+        )
         step_bucket_mask = step_bucket_mask.reshape(
             env_count, edge_count, cfg.task.ship_bucket_count
         )
@@ -912,8 +931,10 @@ def _sample_shielded_sequence_with_params(
             ship_fraction if continuous else None,
             cfg,
         )
-        launch_valid = (target < noop_idx) & (launched > 0.0) & jnp.where(
-            continuous, ship_fraction > 0.0, bucket > 0
+        launch_valid = (
+            (target < noop_idx)
+            & (launched > 0.0)
+            & jnp.where(continuous, ship_fraction > 0.0, bucket > 0)
         )
         remaining_ships = remaining_ships.at[jnp.arange(env_count), src_rows].set(
             jnp.where(
@@ -926,10 +947,10 @@ def _sample_shielded_sequence_with_params(
         bucket_sequence = bucket_sequence.at[:, step_idx].set(bucket)
         log_prob_sequence = log_prob_sequence.at[:, step_idx].set(log_prob)
         entropy_sequence = entropy_sequence.at[:, step_idx].set(entropy)
-        ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(ship_fraction)
+        ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(
+            ship_fraction
+        )
         bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(step_bucket_mask)
-        if carry_enabled:
-            decoder_hidden_carry = step_output.decoder_hidden
         return (
             target_sequence,
             bucket_sequence,
@@ -986,6 +1007,16 @@ def _sample_shielded_sequence_with_params(
         ),
     )
     k = edge_k(cfg.task)
+    if carry_enabled:
+        final_output = policy.apply(
+            params,
+            batch,
+            player_count=player_count,
+            target_sequence=target_sequence,
+            decoder_hidden=decoder_hidden_in,
+            deterministic=deterministic,
+        )
+        decoder_hidden_out = final_output.decoder_hidden
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,
@@ -1015,7 +1046,9 @@ def _edge_scripted_context(
     flat_count = MAX_PLANETS * k
     flat_mask = batch.edge_mask.reshape(env_count, flat_count)
     owner_slice = EDGE_FEATURE_SCHEMA.slice("target_owner_slot")
-    owner_slots = batch.edge_features[..., owner_slice].reshape(env_count, flat_count, 4)
+    owner_slots = batch.edge_features[..., owner_slice].reshape(
+        env_count, flat_count, 4
+    )
     # Sniper/turtle scripted opponents rank edges by fast-anchor intercept distance.
     distance = batch.edge_features[
         ..., EDGE_FEATURE_SCHEMA.slice("intercept_distance_s1")
@@ -1064,7 +1097,9 @@ def _bucket_for_flat_target(
         bucket = jnp.argmax(nonzero.astype(jnp.int32), axis=-1)
         bucket = jnp.where(has_target & nonzero.any(axis=-1), bucket, 0)
     else:
-        bucket = jnp.max(jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1)
+        bucket = jnp.max(
+            jnp.where(selected_bucket_mask, bucket_ids[None, :], 0), axis=-1
+        )
         bucket = jnp.where(has_target, bucket, 0)
     return bucket
 
@@ -1157,6 +1192,7 @@ def build_opportunistic_action_from_edge_batch(
         conservative_bucket=False,
     )
 
+
 def build_noop_action_from_edge_batch(
     game,
     batch: TurnBatch,
@@ -1232,4 +1268,3 @@ def _sample_policy_action(
         cfg,
         deterministic=deterministic,
     )
-

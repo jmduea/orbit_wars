@@ -3,7 +3,7 @@ defaults:
   - task: default
   - reward: terminal_only
   - training: default
-  - format: 2p_32env
+  - format: mix_2p_4p_16env
   - curriculum: self_play_staged
   - opponents: self_play_curriculum
   - telemetry: default

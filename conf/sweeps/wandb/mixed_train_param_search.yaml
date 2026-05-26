@@ -24,8 +24,6 @@ parameters:
     value: self_play_curriculum
   model:
     value: transformer_factorized
-  task.ship_action_mode:
-    value: continuous_fraction
   format:
     value: mix_2p_4p_16env
   training.total_updates:
@@ -37,7 +35,7 @@ parameters:
   training.rollout_microbatch_envs:
     value: 16
   training.update_chunk_rows_min:
-    value: 4096
+    value: 2048
   training.update_chunk_rows_max:
     value: 8192
   training.lean_rollout_metrics:

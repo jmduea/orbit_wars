@@ -142,7 +142,12 @@ def planet_feature_schema(env_cfg: TaskConfig | None = None) -> FeatureGroupRegi
 
 
 def planet_feature_dim(env_cfg: TaskConfig | None = None) -> int:
-    return planet_feature_schema(env_cfg).total_dim
+    """Return per-planet vector width for encoders and ``TurnBatch``.
+
+    Planet tensors are a single current frame; temporal history is stacked only
+    on ``global_features`` (see ``_stack_global_history`` in ``src/jax/features.py``).
+    """
+    return planet_feature_schema(env_cfg).base_dim
 
 
 def edge_feature_dim(env_cfg: TaskConfig | None = None) -> int:

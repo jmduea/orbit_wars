@@ -253,11 +253,12 @@ def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax
     active = step_mask.astype(jnp.float32)
     active_sum = active.sum()
     stop_sum = (stop_flag.astype(jnp.float32) * active).sum()
-    launch_sum = (
-        active
-        * (1.0 - stop_flag.astype(jnp.float32))
-        * (ship_bucket.astype(jnp.float32) > 0.0)
-    ).sum()
+    non_stop = active * (1.0 - stop_flag.astype(jnp.float32))
+    ship_fraction = data.get("ship_fraction")
+    if ship_fraction is not None:
+        launch_sum = (non_stop * (ship_fraction.astype(jnp.float32) > 0.0)).sum()
+    else:
+        launch_sum = (non_stop * (ship_bucket.astype(jnp.float32) > 0.0)).sum()
     turn_count = jnp.asarray(stop_flag.shape[0] * stop_flag.shape[1], dtype=jnp.float32)
     metrics["stop_rate"] = _safe_rate(stop_sum, active_sum)
     metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)

@@ -54,7 +54,9 @@ class FactoredPolicyOutput(NamedTuple):
     decoder_hidden: jax.Array | None = None
 
 
-def __continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
+def _continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
+    """Log density of a logistic ship-fraction draw at ``logit``."""
+
     return -jax.nn.softplus(-logit) - jax.nn.softplus(logit)
 
 
@@ -180,7 +182,7 @@ def _factored_step_log_prob_entropy(
     target_slot: jax.Array,
     ship_bucket: jax.Array,
     stop_flag: jax.Array,
-) -> tuple[jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     """Match rollout ``_sample_factored_step_from_logits`` log-prob math (batched)."""
 
     illegal_logit = jnp.finfo(jnp.float32).min
@@ -215,14 +217,15 @@ def _factored_step_log_prob_entropy(
 
     selected_bucket_mask = row_bucket_mask[batch_idx, target_slot]
     selected_ship_logits = ship_logits[batch_idx, target_slot]
-    selected_ship_logits = jnp.where(
-        selected_bucket_mask, selected_ship_logits, illegal_logit
-    )
     if selected_ship_logits.shape[-1] == 1:
         ship_logit = selected_ship_logits[..., 0]
+        ship_logit = jnp.where(target_mask, ship_logit, illegal_logit)
         ship_lp = _continuous_fraction_log_prob(ship_logit)
         ship_entropy = jnp.zeros_like(ship_lp)
     else:
+        selected_ship_logits = jnp.where(
+            selected_bucket_mask, selected_ship_logits, illegal_logit
+        )
         ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
         ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
         ship_lp = jnp.take_along_axis(
@@ -296,7 +299,6 @@ def factored_action_log_prob_with_shield(
             tgt,
             bkt,
             stop,
-            ship_fraction=ship_fraction,
         )
         return (
             mask * log_prob,

@@ -36,7 +36,11 @@ from src.opponents.jax_actions.sampling import (
     _four_player_step_action,
     _sample_opponent_2p_action,
 )
-from src.opponents.pool import OPPONENT_HISTORICAL, OPPONENT_LATEST, sample_opponent_type_ids_jax
+from src.opponents.pool import (
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+    sample_opponent_type_ids_jax,
+)
 from src.training.curriculum import StageView, default_stage_view
 
 from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
@@ -74,7 +78,9 @@ def collect_rollout_jax(
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
     carry_enabled = decoder_carry_enabled(cfg)
     fresh_decoder_hidden = (
-        empty_decoder_hidden(env_count, cfg.model.hidden_size) if carry_enabled else None
+        empty_decoder_hidden(env_count, cfg.model.hidden_size)
+        if carry_enabled
+        else None
     )
     if carry_enabled:
         initial_decoder_hidden = (
@@ -82,6 +88,7 @@ def collect_rollout_jax(
             if env_state.decoder_hidden is not None
             else fresh_decoder_hidden
         )
+        env_state = env_state._replace(decoder_hidden=initial_decoder_hidden)
     else:
         initial_decoder_hidden = None
 
@@ -192,9 +199,9 @@ def collect_rollout_jax(
                 lambda x: x.reshape((cfg.task.player_count * env_count,) + x.shape[2:]),
                 player_games,
             )
-            flat_player_batch = jax.vmap(
-                lambda game: encode_turn(game, cfg.task)
-            )(flat_player_games)
+            flat_player_batch = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                flat_player_games
+            )
             player_batches = jax.tree.map(
                 lambda x: x.reshape((cfg.task.player_count, env_count) + x.shape[1:]),
                 flat_player_batch,
@@ -248,6 +255,10 @@ def collect_rollout_jax(
                 cfg.task,
                 cfg.opponents.mode.alternate_player_sides,
             )
+            if carry_enabled:
+                reset_states = reset_states._replace(
+                    decoder_hidden=fresh_decoder_hidden
+                )
             merged_state = jax.tree.map(maybe_reset, reset_states, next_state)
             merged_batch = jax.tree.map(maybe_reset, reset_batches, result.batch)
             if carry_enabled:
@@ -270,9 +281,9 @@ def collect_rollout_jax(
             next_opp_game = next_state.game._replace(
                 player=(1 - next_state.learner_player).astype(jnp.int32)
             )
-            next_opp_batch_cache = jax.vmap(
-                lambda game: encode_turn(game, cfg.task)
-            )(next_opp_game)
+            next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                next_opp_game
+            )
         else:
             next_opp_batch_cache = opp_batch_cache
 
@@ -285,7 +296,9 @@ def collect_rollout_jax(
             "edge_tgt_ids": batch.edge_tgt_ids,
             "global_features": batch.global_features,
             "theta_ref": batch.theta_ref,
-            "player_count": jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32),
+            "player_count": jnp.full(
+                (env_count,), cfg.task.player_count, dtype=jnp.int32
+            ),
             "ship_bucket_mask": sample.ship_bucket_mask,
             "target_index": sample.target_index,
             "ship_bucket": sample.ship_bucket,
@@ -322,9 +335,7 @@ def collect_rollout_jax(
             transition["decoder_hidden"] = decoder_hidden
         if is_continuous_ship_mode(cfg):
             transition["ship_fraction"] = sample.ship_fraction
-        next_carry_decoder_hidden = (
-            next_state.decoder_hidden if carry_enabled else None
-        )
+        next_carry_decoder_hidden = next_state.decoder_hidden if carry_enabled else None
         return (
             key,
             next_state,
@@ -337,9 +348,9 @@ def collect_rollout_jax(
         initial_opp_game = env_state.game._replace(
             player=(1 - env_state.learner_player).astype(jnp.int32)
         )
-        initial_opp_batch_cache = jax.vmap(
-            lambda game: encode_turn(game, cfg.task)
-        )(initial_opp_game)
+        initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+            initial_opp_game
+        )
     else:
         initial_opp_batch_cache = turn_batch
 
@@ -356,9 +367,7 @@ def collect_rollout_jax(
         gamma=cfg.training.gamma,
         gae_lambda=cfg.training.gae_lambda,
     )
-    returns = jnp.broadcast_to(
-        returns_step[..., None], data["target_index"].shape
-    )
+    returns = jnp.broadcast_to(returns_step[..., None], data["target_index"].shape)
     advantages = jnp.broadcast_to(
         advantages_step[..., None], data["target_index"].shape
     )

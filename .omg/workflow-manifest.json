@@ -851,6 +851,23 @@
       "notes": "Factorized shield mask bug found and fixed; hyperparam wiring verified"
     },
     {
+      "id": "decoder-carry-trace",
+      "kind": "trace",
+      "path": ".omg/specs/deep-dive-trace-decoder-carry.md",
+      "workflow": "deep-dive",
+      "status": "complete",
+      "title": "Decoder carry trace",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "policy-advances-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "tests/test_decoder_carry.py 5 passed; make test-fast 181 passed",
+      "notes": "Shielded sampler advanced cross-turn decoder hidden during intra-turn probes; fixed sampler/replay carry alignment"
+    },
+    {
       "id": "ppo-encoder-decoder-audit",
       "kind": "spec",
       "path": ".omg/specs/deep-dive-ppo-encoder-decoder-audit.md",
@@ -932,6 +949,7 @@
       "status": "planned",
       "title": "Plan: Policy advances audit (4 features)",
       "spec_id": "policy-advances-audit",
+      "plan_id": null,
       "related_ids": [
         "factored-pointer-decoder",
         "alphazero-mcts-planning",
@@ -941,6 +959,57 @@
       "completed_at": null,
       "evidence": "ralplan-policy-advances-audit.md iter-1: architect+critic synthesized approval; dependency order M5I→M5V→M6S/M6B",
       "notes": "Audit-only pass complete; implementation milestones not yet registered as separate manifest entries"
+    },
+    {
+      "id": "zero-launch-metrics-trace",
+      "kind": "trace",
+      "path": ".omg/specs/deep-dive-trace-zero-launch-metrics.md",
+      "workflow": "deep-dive",
+      "status": "draft",
+      "title": "Zero launch metrics during mixed train (shield off)",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder",
+        "policy-advances-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": "Reproduced locally: shield off + continuous_fraction → source_mask false, zero launches, nonzero entropy"
+    },
+    {
+      "id": "zero-launch-metrics",
+      "kind": "spec",
+      "path": ".omg/specs/deep-dive-zero-launch-metrics.md",
+      "workflow": "deep-dive",
+      "status": "complete",
+      "title": "Fix zero launch metrics (shield off + continuous fraction)",
+      "related_ids": [
+        "zero-launch-metrics-trace",
+        "factored-pointer-decoder"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-25",
+      "evidence": "trajectory_shield.py unshielded bucket mask; builders.py continuous broadcast fix; action_codec.py replay parity; metrics.py ship_fraction launch count; tests/test_factorized_launch_metrics.py + test_trajectory_shield_factorized.py"
+    },
+    {
+      "id": "ralplan-zero-launch-metrics",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-zero-launch-metrics.md",
+      "workflow": "ralplan",
+      "status": "planned",
+      "title": "Plan: Fix zero launch metrics (shield off)",
+      "spec_id": "zero-launch-metrics",
+      "plan_id": null,
+      "related_ids": [
+        "zero-launch-metrics",
+        "zero-launch-metrics-trace"
+      ],
+      "supersedes_id": null,
+      "completed_at": null,
+      "evidence": null,
+      "notes": null
     }
   ]
 }

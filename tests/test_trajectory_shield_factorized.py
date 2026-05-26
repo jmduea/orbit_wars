@@ -39,6 +39,7 @@ def test_factorized_shield_disabled_returns_all_legal() -> None:
     shielded = apply_trajectory_shield_factorized_topk(state.game, batch, cfg)
 
     assert bool(np.asarray(shielded.ship_bucket_mask[..., 0]).all())
+    assert bool(np.asarray(shielded.ship_bucket_mask[..., 1:]).any())
     assert shielded.ship_bucket_mask.shape == (MAX_PLANETS, k, cfg.ship_bucket_count)
 
 
@@ -53,3 +54,10 @@ def test_factorized_source_mask_requires_ships_and_buckets() -> None:
         planet_ships,
     )
     np.testing.assert_array_equal(np.asarray(source_mask), False)
+
+    source_mask_with_ships = factorized_source_mask_from_shield(
+        shielded.batch.edge_mask,
+        shielded.ship_bucket_mask,
+        state.game.planets.ships,
+    )
+    assert bool(np.asarray(source_mask_with_ships).any())
