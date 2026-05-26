@@ -36,6 +36,7 @@ markers = [
     "artifacts: artifact pipeline, replay, and packaging tests",
     "curriculum: curriculum controller and training-loop tests",
 ]
+venv = ".venv"
 
 [tool.ty.environment]
 root = ["."]

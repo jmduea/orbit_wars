@@ -1,27 +1,29 @@
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.artifacts.checkpoint_compat import is_factorized_pointer_decoder
 from src.config import TrainConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
 from src.game.trajectory_shield import (
     ShieldDiagnostics,
-    apply_trajectory_shield_factorized_topk,
+    apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_to_turn_batch_v2,
     default_edge_action_bucket_mask,
-    factorized_source_mask_from_shield,
+    trajectory_shield_mode,
+    trajectory_shield_final_validate_selected,
+    selected_factored_launch_is_exact_safe_jax,
 )
-from src.jax.env import JaxAction
-from src.jax.features import TurnBatch
-from src.jax.policy import edge_action_count
-from src.jax.decoder_carry import decoder_carry_enabled, empty_decoder_hidden
 from src.jax.action_codec import (
     _factored_step_log_prob_entropy,
     source_mask_from_bucket_mask_and_ships,
 )
+from src.jax.decoder_carry import decoder_carry_enabled
+from src.jax.env import JaxAction
+from src.jax.features import TurnBatch
+from src.jax.policy import edge_action_count
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.ship_action import (
     continuous_fraction_log_prob,
@@ -618,8 +620,10 @@ def _sample_shielded_factored_sequence_with_params(
             step_kwargs["decoder_hidden"] = decoder_hidden_carry
         step_output = policy.apply(params, batch, **step_kwargs)
         shielded = jax.vmap(
-            lambda game_row, batch_row, ships: apply_trajectory_shield_factorized_topk(
-                game_row, batch_row, cfg.task, remaining_planet_ships=ships
+            lambda game_row, batch_row, ships: (
+                apply_configured_trajectory_shield_factorized_topk(
+                    game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                )
             )
         )(game, batch, remaining_ships)
         step_diagnostics = shielded.diagnostics
@@ -642,9 +646,9 @@ def _sample_shielded_factored_sequence_with_params(
             legal_non_noop_rate=diagnostic_zero,
         )
         step_bucket_mask = shielded.ship_bucket_mask
-        source_mask = jax.vmap(
-            source_mask_from_bucket_mask_and_ships, in_axes=(0, 0)
-        )(step_bucket_mask, remaining_ships)
+        source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
+            step_bucket_mask, remaining_ships
+        )
         source, target_slot, bucket, stop, log_prob, entropy, ship_fraction = jax.vmap(
             _sample_factored_step_from_logits,
             in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
@@ -678,8 +682,49 @@ def _sample_shielded_factored_sequence_with_params(
             sequence_active
             & jnp.logical_not(stop.astype(bool))
             & (launched > 0.0)
-            & jnp.where(continuous, True, bucket > 0)
+            & jnp.where(continuous, ship_fraction > 0.0, bucket > 0)
         )
+
+        # Tiered mode: cheap mask for sampling, exact check only the sampled launch.
+        # Rejected launches are converted into stop/no-op so replay log-prob is
+        # recomputed against the final stored sequence below.
+        if trajectory_shield_mode(
+            cfg.task
+        ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task):
+            exact_safe = jax.vmap(
+                lambda game_row, batch_row, src, slot, ships, stop_value, active: (
+                    selected_factored_launch_is_exact_safe_jax(
+                        game_row,
+                        batch_row,
+                        cfg.task,
+                        src,
+                        slot,
+                        ships,
+                        stop_value,
+                        active,
+                    )
+                )
+            )(
+                game,
+                batch,
+                source,
+                target_slot,
+                launched,
+                stop,
+                sequence_active,
+            )
+            reject_launch = launch_valid & (~exact_safe)
+
+            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+            ship_fraction = jnp.where(
+                reject_launch,
+                jnp.zeros_like(ship_fraction),
+                ship_fraction,
+            )
+            launched = jnp.where(reject_launch, 0.0, launched)
+            launch_valid = launch_valid & exact_safe
+
         remaining_ships = remaining_ships.at[jnp.arange(env_count), src_rows].set(
             jnp.where(
                 launch_valid,
@@ -1232,10 +1277,6 @@ def build_noop_action_from_edge_batch(
     cfg: TrainConfig,
 ) -> JaxAction:
     """Build a pass/no-op action that launches no fleets."""
-    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
-
-    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
-
 
     env_count = batch.planet_features.shape[0]
     noop_idx = noop_edge_index(cfg.task)

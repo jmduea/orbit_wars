@@ -9,7 +9,6 @@ from hydra.core.config_store import ConfigStore
 @dataclass(slots=True)
 class TaskConfig:
     """Environment and feature-shape configuration shared by all backends."""
-
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
@@ -21,7 +20,14 @@ class TaskConfig:
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
     trajectory_shield_enabled: bool = True
+    trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
+    # off: no trajectory filtering beyond ordinary action legality
+    # cheap: feature-derived source/target/bucket mask, no horizon scan
+    # exact: current full per-edge/per-bucket trajectory shield
+    # tiered: cheap sampling + exact selected-launch validation
+    trajectory_shield_final_validate_selected: bool = False
     trajectory_shield_hit_mode: str = "selected_target"
+    trajectory_shield_train_horizon: int = 80
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, float] = (1.0, 6.0)

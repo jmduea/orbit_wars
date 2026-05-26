@@ -6,6 +6,7 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 import jax
+from src.config import TaskConfig
 from src.jax.action_codec import (
     FactoredPolicyOutput,
     JaxPolicyOutput,
@@ -72,9 +73,46 @@ class RuntimeShieldedActionSequence(NamedTuple):
     ship_bucket: jax.Array
 
 
-def trajectory_shield_enabled(env_cfg: Any) -> bool:
+def trajectory_shield_enabled(env_cfg: TaskConfig | Any) -> bool:
     return bool(getattr(env_cfg, "trajectory_shield_enabled", True))
 
+def trajectory_shield_mode(env_cfg: TaskConfig | Any) -> str:
+    """
+    Return configured shield mode.
+
+    Args:
+        env_cfg (TaskConfig | Any): config containing trajectory shield mode to use.
+
+    Modes:
+      off    - do not apply trajectory shield
+      cheap  - use feature-derived/top-k bucket mask only
+      exact  - current full trajectory shield
+      tiered - cheap mask during sampling, selected-launch exact validation later
+
+    Returns:
+        str: string containing shield mode configured.
+
+    Raises:
+        ValueError
+    """
+
+    if not trajectory_shield_enabled(env_cfg):
+        return "off"
+    mode = str(getattr(env_cfg, "trajectory_shield_mode", "exact")).strip().lower()
+    if mode in {"none", "disabled", "false"}:
+        return "off"
+    if mode not in {"off", "cheap", "exact", "tiered"}:
+        raise ValueError(
+            f"Unsupported trajectory_shield_mode={mode!r}."
+            "Expected one of: off, cheap, exact, tiered."
+        )
+    return mode
+
+
+def trajectory_shield_final_validate_selected(env_cfg: Any) -> bool:
+    """Whether to exact-check the sampled launch after cheap/tiered masking."""
+
+    return bool(getattr(env_cfg, "trajectory_shield_final_validate_selected", False))
 
 def trajectory_shield_horizon(state_step: int, env_cfg: Any) -> int:
     configured = max(int(getattr(env_cfg, "trajectory_shield_horizon", MAX_STEPS)), 1)
@@ -1353,6 +1391,267 @@ def evaluate_edge_pair(
     legal = jnp.any(bucket_legal)
     legal = original_mask & (target_id >= 0) & legal
     return legal, bucket_legal
+
+def _zero_shield_diagnostics_like(value: jax.Array) -> ShieldDiagnostics:
+    zero = jnp.zeros_like(value, dtype=jnp.float32)
+    return ShieldDiagnostics(
+        blocked_count=zero,
+        blocked_sun_count=zero,
+        blocked_bounds_count=zero,
+        blocked_unintended_hit_count=zero,
+        blocked_horizon_count=zero,
+        fallback_noop_count=zero,
+        legal_non_noop_count=zero,
+        original_non_noop_count=zero,
+        legal_non_noop_rate=zero,
+    )
+
+
+def _unshielded_factorized_topk_result(
+    game,
+    batch,
+    env_cfg: Any,
+    *,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """
+    Return ordinary edge/bucket legality without trajectory simulation.
+
+    This preserves the source/target top-k mask from feature encoding and only expands it across non-zero ship buckets.
+    """
+    from src.features.registry import edge_k
+
+    k = edge_k(env_cfg)
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    planet_ships = (
+        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
+    )
+
+    bucket_ids = jnp.arange(bucket_count, dtype=jnp.int32)
+    real_bucket = bucket_ids > 0
+
+    ship_counts = ship_count_for_bucket_jax(
+        planet_ships[:, None],
+        bucket_ids[None, :],
+        bucket_count,
+    )
+    bucket_has_ships = (ship_counts > 0.0) & (ship_counts <= planet_ships[:, None])
+
+    real_bucket_mask = (
+        batch.edge_mask[..., None]
+        & real_bucket[None, None, :]
+        & bucket_has_ships[:, None, :]
+    )
+
+    shielded_edge_mask = real_bucket_mask[..., 1:].any(axis=-1)
+    original_legal_total = batch.edge_mask.astype(jnp.float32).sum()
+    shielded_legal_total = shielded_edge_mask.astype(jnp.float32).sum()
+
+    diagnostics = ShieldDiagnostics(
+        blocked_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_sun_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_bounds_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_unintended_hit_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_horizon_count=jnp.asarray(0.0, dtype=jnp.float32),
+        fallback_noop_count=(
+            (batch.edge_mask.any()) & (~shielded_edge_mask.any())
+        ).astype(jnp.float32),
+        legal_non_noop_count=shielded_legal_total,
+        original_non_noop_count=original_legal_total,
+        legal_non_noop_rate=jnp.where(
+            original_legal_total > 0.0,
+            shielded_legal_total / original_legal_total,
+            0.0,
+        ),
+    )
+
+    return ShieldedBatchResult(
+        batch=batch._replace(edge_mask=shielded_edge_mask),
+        ship_bucket_mask=real_bucket_mask,
+        diagnostics=diagnostics,
+    )
+
+
+def _edge_scalar_feature(batch, feature_name: str) -> jax.Array:
+    """Read a scalar edge feature from TurnBatch.edge_features.
+
+    The feature schema is static Python metadata, so the slice is resolved before
+    JAX tracing. This avoids adding the feature registry to the JAX data path.
+    """
+
+    from src.features.registry import EDGE_FEATURE_SCHEMA
+
+    feature_slice = EDGE_FEATURE_SCHEMA.base_slice(feature_name)
+    value = batch.edge_features[..., feature_slice]
+    return value.reshape(value.shape[:-1])
+
+
+def apply_cheap_trajectory_shield_factorized_topk(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """Cheap shield for factorized top-K decoding.
+
+    This intentionally avoids horizon scans. It uses edge features already
+    computed by encode_turn:
+
+      - batch.edge_mask for source ownership, active target, not-current-sun-cross
+      - sun_cross_at_intercept_s1 for slow/small launches
+      - sun_cross_at_intercept_s6 for fast/large launches
+      - per-bucket ship availability
+
+    It is not a perfect physics validator. It is a low-cost mask for PPO
+    collection and training.
+    """
+
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    planet_ships = (
+        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
+    )
+
+    bucket_ids = jnp.arange(bucket_count, dtype=jnp.int32)
+    real_bucket = bucket_ids > 0
+
+    # Existing edge schema currently exposes s1 and s6 anchors.
+    sun_s1 = _edge_scalar_feature(batch, "sun_cross_at_intercept_s1") > 0.5
+    sun_s6 = _edge_scalar_feature(batch, "sun_cross_at_intercept_s6") > 0.5
+
+    # Map lower buckets to slow-anchor risk, upper buckets to fast-anchor risk.
+    # Bucket 0 is reserved for no-launch/noop behavior and is never a real launch.
+    midpoint = max((bucket_count - 1) // 2, 1)
+    use_slow_anchor = bucket_ids <= midpoint
+    bucket_sun_blocked = jnp.where(
+        use_slow_anchor[None, None, :],
+        sun_s1[..., None],
+        sun_s6[..., None],
+    )
+
+    ship_counts = ship_count_for_bucket_jax(
+        planet_ships[:, None],
+        bucket_ids[None, :],
+        bucket_count,
+    )
+    bucket_has_ships = (ship_counts > 0.0) & (ship_counts <= planet_ships[:, None])
+
+    bucket_legal = (
+        batch.edge_mask[..., None]
+        & real_bucket[None, None, :]
+        & bucket_has_ships[:, None, :]
+        & (~bucket_sun_blocked)
+    )
+
+    shielded_edge_mask = bucket_legal[..., 1:].any(axis=-1)
+
+    original_real_mask = batch.edge_mask
+    original_legal_total = original_real_mask.astype(jnp.float32).sum()
+    shielded_legal_total = shielded_edge_mask.astype(jnp.float32).sum()
+    blocked_slots = original_real_mask & (~shielded_edge_mask)
+
+    sun_blocked_slots = original_real_mask & (
+        ~(~bucket_sun_blocked[..., 1:]).any(axis=-1)
+    )
+
+    diagnostics = ShieldDiagnostics(
+        blocked_count=blocked_slots.astype(jnp.float32).sum(),
+        blocked_sun_count=(blocked_slots & sun_blocked_slots).astype(jnp.float32).sum(),
+        blocked_bounds_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_unintended_hit_count=jnp.asarray(0.0, dtype=jnp.float32),
+        blocked_horizon_count=(blocked_slots & (~sun_blocked_slots))
+        .astype(jnp.float32)
+        .sum(),
+        fallback_noop_count=(
+            (original_real_mask.any()) & (~shielded_edge_mask.any())
+        ).astype(jnp.float32),
+        legal_non_noop_count=shielded_legal_total,
+        original_non_noop_count=original_legal_total,
+        legal_non_noop_rate=jnp.where(
+            original_legal_total > 0.0,
+            shielded_legal_total / original_legal_total,
+            0.0,
+        ),
+    )
+
+    return ShieldedBatchResult(
+        batch=batch._replace(edge_mask=shielded_edge_mask),
+        ship_bucket_mask=bucket_legal,
+        diagnostics=diagnostics,
+    )
+
+
+def apply_configured_trajectory_shield_factorized_topk(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """Dispatch factorized top-K shielding based on task.trajectory_shield_mode."""
+
+    mode = trajectory_shield_mode(env_cfg)
+
+    if mode == "off":
+        return _unshielded_factorized_topk_result(
+            game,
+            batch,
+            env_cfg,
+            remaining_planet_ships=remaining_planet_ships,
+        )
+
+    if mode in {"cheap", "tiered"}:
+        return apply_cheap_trajectory_shield_factorized_topk(
+            game,
+            batch,
+            env_cfg,
+            remaining_planet_ships=remaining_planet_ships,
+        )
+
+    return apply_trajectory_shield_factorized_topk(
+        game,
+        batch,
+        env_cfg,
+        remaining_planet_ships=remaining_planet_ships,
+    )
+
+
+def selected_factored_launch_is_exact_safe_jax(
+    game,
+    batch,
+    env_cfg: Any,
+    source_row: jax.Array,
+    target_slot: jax.Array,
+    ships: jax.Array,
+    stop_flag: jax.Array,
+    step_active: jax.Array,
+) -> jax.Array:
+    """Exact-check one selected factorized launch.
+
+    This is intended for tiered mode after cheap sampling. It checks only the
+    selected action, not the full source-target-bucket lattice.
+    """
+
+    source_id = batch.edge_src_ids[source_row]
+    target_id = batch.edge_tgt_ids[source_row, target_slot]
+    angle = _launch_angle_for_edge(game, batch.edge_tgt_ids, source_row, target_slot)
+
+    should_check = (
+        step_active.astype(bool)
+        & (~stop_flag.astype(bool))
+        & (ships > 0.0)
+        & (target_id >= 0)
+    )
+
+    reason_code = _trajectory_reason_code_jax(
+        game,
+        source_id,
+        target_id,
+        angle,
+        ships,
+        game.player,
+        env_cfg,
+    )
+
+    return (~should_check) | (reason_code == _REASON_TO_CODE[SAFE_REASON])
 
 
 def apply_trajectory_shield_factorized_topk(
