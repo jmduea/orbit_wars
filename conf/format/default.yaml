@@ -1,3 +1,3 @@
 defaults:
-  - mix_2p_4p_16env
+  - 2p_32env
   - _self_
