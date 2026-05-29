@@ -1,0 +1,3 @@
+defaults:
+  - transformer_factorized
+  - _self_

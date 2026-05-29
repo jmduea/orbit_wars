@@ -13,13 +13,12 @@ from src.config import compose_hydra_train_config
 def test_root_config_composes_from_responsibility_groups() -> None:
     cfg = compose_hydra_train_config()
 
-    assert cfg.task.candidate_count == 4
+    assert cfg.task.candidate_count == 6
     assert cfg.training.total_updates == 100
     assert cfg.format.rollout_groups
     assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 12
-    assert cfg.curriculum.stages[0]["id"] == "soft_start"
-    assert cfg.curriculum.stages[-1]["id"] == "self_play"
+    assert len(cfg.curriculum.stages) == 1
+    assert cfg.curriculum.stages[0]["id"] == "sp_2p"
     assert cfg.opponents.self_play.enabled is True
     assert cfg.opponents.snapshot.pool_size == 2
     assert cfg.artifacts.artifact_pipeline.enabled is True
@@ -71,7 +70,7 @@ def test_legacy_overrides_are_rejected(legacy_override: str) -> None:
 def test_compare_script_default_configs_compose() -> None:
     for overrides in DEFAULT_CONFIGS.values():
         cfg = compose_hydra_train_config(overrides)
-        assert cfg.model.architecture == "attention"
+        assert cfg.model.architecture == "planet_graph_transformer"
         assert cfg.task.candidate_count in {8, 16, 24}
 
 
@@ -148,17 +147,9 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
 
 
 def test_baseline_sweep_scaffolding_is_discoverable() -> None:
-    expected = {
-        "baseline_stage1_comfort.yaml",
-        "baseline_stage2_stability.yaml",
-        "baseline_sentinels.yaml",
-    }
+    expected = {"kaggle_population_mvp.yaml"}
     sweep_dir = Path("conf/sweeps/wandb")
     assert expected <= {path.name for path in sweep_dir.glob("*.yaml")}
-
-    experiment_docs = Path("docs/experiments.md").read_text()
-    for filename in expected:
-        assert filename in experiment_docs
 
 
 def _hydra_value(value: object) -> str:

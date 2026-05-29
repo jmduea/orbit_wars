@@ -1,0 +1,54 @@
+{
+  "label": "validation-random_only-seed-43-100u",
+  "commit_sha": "dcafdc827a9202152b27e3676edfa9e715ecc0f7",
+  "tier": "workstation",
+  "jax_version": "0.10.0",
+  "devices": [
+    "cuda:0"
+  ],
+  "default_backend": "gpu",
+  "overrides": [
+    "model=transformer_factorized",
+    "format=2p_4p_16env",
+    "training=workstation",
+    "curriculum=off",
+    "telemetry.wandb.enabled=false",
+    "artifacts.artifact_pipeline.enabled=false",
+    "opponents=random_only",
+    "seed=43"
+  ],
+  "updates": 100,
+  "warmup": 2,
+  "measured_updates": 100,
+  "format": "2p_4p_16env",
+  "num_envs": 32,
+  "rollout_groups": [
+    {
+      "name": "two_player",
+      "player_count": 2,
+      "num_envs": 16
+    },
+    {
+      "name": "four_player",
+      "player_count": 4,
+      "num_envs": 16
+    }
+  ],
+  "rollout_steps": 128,
+  "rollout_microbatch_envs": 16,
+  "compile_seconds_to_update_3": 207.279539389001,
+  "seconds_total": 185.33871744299904,
+  "seconds_per_update_mean": 1.8533871744299903,
+  "rollout_seconds_mean": 1.736650614139944,
+  "update_seconds_mean": 0.11673396188019979,
+  "rollout_seconds_total": 173.6650614139944,
+  "update_seconds_total": 11.673396188019979,
+  "env_steps_per_sec": 2210.0077396185316,
+  "policy_loss": -0.023870127893751487,
+  "value_loss": 2.3063300838321448,
+  "approx_kl": 0.00328730172399446,
+  "entropy": 5.150917367935181,
+  "total_loss": 1.10354032529518,
+  "mean_active_launches_per_turn": 3.341044921875,
+  "overall_win_rate": 0.22450350001454353
+}

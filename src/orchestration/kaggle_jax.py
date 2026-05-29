@@ -609,6 +609,25 @@ def _set_ld_library_path_for_current_process() -> None:
         os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(_dedupe(merged))
 
 
+def _add_cuda_wheel_library_path(env: dict[str, str], *, venv: Path) -> None:
+    """Prepend CUDA wheel library dirs from *venv* into ``env`` LD_LIBRARY_PATH."""
+
+    wheel_dirs: list[str] = []
+    for site_packages in sorted(venv.glob("lib/python*/site-packages")):
+        nvidia_root = site_packages / "nvidia"
+        if not nvidia_root.exists():
+            continue
+        for lib_dir in sorted(nvidia_root.glob("*/lib")):
+            if lib_dir.is_dir():
+                wheel_dirs.append(str(lib_dir.resolve()))
+    existing = env.get("LD_LIBRARY_PATH", "")
+    merged = [*wheel_dirs]
+    if existing:
+        merged.append(existing)
+    if merged:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(_dedupe(merged))
+
+
 def _cuda_wheel_library_dirs() -> list[str]:
     dirs: list[str] = []
     venv = _venv_path().resolve()

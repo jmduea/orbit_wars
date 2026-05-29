@@ -1,0 +1,31 @@
+defaults:
+  - base
+  - _self_
+
+self_play:
+  enabled: true
+  update_interval: 10
+  deterministic: true
+
+mode:
+  opponent: self
+  multi_opponent_mode: mixed
+  alternate_player_sides: true
+
+mix:
+  weights:
+    latest: 0.5
+    historical: 0.5
+    nearest_sniper: 0.0
+    turtle: 0.0
+    opportunistic: 0.0
+    random: 0.0
+    noop: 0.0
+  temperature: 1.0
+
+snapshot:
+  pool_size: 2
+  interval_updates: 10
+  deterministic: true
+  selection: uniform
+  fallback: latest

@@ -4,8 +4,9 @@
 
 | Label | Commit / tree |
 |-------|----------------|
-| Baseline | `e7f8e4c2c45881e0e9db6c81f172b5800605e74f` (clean tree before Issues.md fixes) |
-| Post-fix | worktree `issues-jax-14f07ba2` (uncommitted JAX PPO fixes on same base) |
+| Baseline (micro) | `e7f8e4c2c45881e0e9db6c81f172b5800605e74f` — 16-env micro profile |
+| Post-fix (micro) | archived `docs/benchmarks/postfix-30update.json` |
+| **Workstation production** | `dcafdc827a9202152b27e3676edfa9e715ecc0f7` — `docs/benchmarks/workstation-30update.json` |
 
 ## CUDA / JAX environment
 
@@ -16,45 +17,83 @@
 | JAX | `0.10.0` with `jax[cuda13]` in `pyproject.toml` (linux x86_64) |
 | `jax.devices()` | `[CudaDevice(id=0)]`, default backend `gpu` |
 
-**Root cause of prior “no CUDA” runs:** WSL2 has no `/dev/nvidia*` nodes, so `pin_jax_platform_from_kaggle()` set `JAX_PLATFORMS=cpu` unless overridden. `configure_jax_runtime_for_host()` only pinned `cuda,cpu` for Kaggle `KAGGLE_ACCELERATOR_ID=nvidia*`. **Fix:** pin `cuda,cpu` whenever `nvidia_gpu_present()` (see `src/jax/device.py`).
-
-**Dependency:** `jax[cuda13]` already declared; `uv sync --group dev` in the worktree is sufficient (no extra `uv add` required on this host).
+**WSL note:** `pin_jax_platform_from_kaggle()` may set `JAX_PLATFORMS=cpu` when `/dev/nvidia*` is absent. Local benchmarks call `configure_jax_runtime_for_host()` and force `cuda,cpu` when `nvidia_gpu_present()` before importing JAX.
 
 ## Benchmark protocol
 
 - Script: `scripts/issues_jax_30update_benchmark.py`
-- Hydra overrides: `model=transformer_factorized`, `opponents=self_play_only`, `seed=42`, `format=2p_4p_8env`, `training.rollout_steps=16`, `training.rollout_microbatch_envs=8`
-- 30 measured updates after 2 warmup (JIT compile included in warmup)
-- **Note:** Default `format` (32+32 envs) OOMs on 16 GB GPU during XLA compile; paired runs use 16 total envs (8+8) for comparability.
+- 30 measured updates after 2 warmup (JIT compile counted through update 3)
+- JSON includes `compile_seconds_to_update_3`, `rollout_seconds_mean`, `update_seconds_mean`, `tier`, `format`, `rollout_microbatch_envs`, `rollout_groups`
 
-Artifacts: `docs/benchmarks/baseline-30update.json`, `docs/benchmarks/postfix-30update.json`
+### Micro profile (historical comparability)
 
-## Before / after (GPU)
+Hydra overrides: `model=transformer_factorized`, `opponents=self_play_only`, `seed=42`, `format=2p_4p_8env`, `training.rollout_steps=16`, `training.rollout_microbatch_envs=8` — **16 total envs**, short rollouts.
 
-| Metric | Baseline | Post-fix | Δ |
-|--------|----------|----------|---|
-| Wall-clock total (30 updates, s) | 8.99 | 6.94 | **−22.9%** |
-| Mean s / update | 0.300 | 0.231 | **−22.9%** |
-| Env steps / s | 854.1 | 1107.0 | **+29.6%** |
-| `policy_loss` | −0.00113 | 0.02592 | — (correctness change) |
-| `value_loss` | 0.4010 | 0.4160 | +3.8% |
-| `approx_kl` | 0.000194 | 0.000862 | +344% (still tiny) |
-| `entropy` | 3.614 | 4.528 | +25.3% |
-| `total_loss` | 0.1813 | 0.2113 | +16.5% |
-| `mean_active_launches_per_turn` | 1.490 | 2.520 | +69.2% |
+Artifact: `docs/benchmarks/baseline-30update.json`
 
-Post-fix includes: continuous ship `log p(fraction|μ)`, single-pass factorized replay (one `policy.apply` per replay), gated parity metrics, scalar GAE storage, sparse C51 CE, WSL CUDA platform pin.
-
-**Interpretation:** Throughput improves ~23–30% on this GPU with fewer decoder forwards. Loss magnitudes and launch activity shift as expected when the ship head receives PPO gradients; not a numeric match to baseline.
-
-## Tests (post-fix worktree)
+### Workstation production profile (primary gate)
 
 ```bash
-uv run --group dev pytest tests/test_factored_sequence_scan.py \
-  tests/test_distributional_value.py tests/test_action_codec.py -m "not slow"
+uv run python scripts/issues_jax_30update_benchmark.py \
+  --label workstation-production-30u \
+  --tier workstation \
+  --out docs/benchmarks/workstation-30update.json \
+  --overrides \
+    model=transformer_factorized \
+    format=2p_4p_16env \
+    training=workstation \
+    opponents=self_play_curriculum \
+    curriculum=self_play_staged \
+    telemetry.wandb.enabled=false \
+    artifacts.artifact_pipeline.enabled=false \
+    seed=42
 ```
 
-**17 passed, 1 failed** — `test_compose_hydra_train_config_accepts_distributional_value_head` (missing `opponents/self_play_curriculum` in default Hydra group; pre-existing worktree config gap, unrelated to CUDA).
+| Field | Workstation production |
+|-------|----------------------|
+| `num_envs` | 32 (16×2p + 16×4p) |
+| `rollout_steps` | 128 |
+| `rollout_microbatch_envs` | 16 |
+| `compile_seconds_to_update_3` | **221.3 s** |
+| `seconds_per_update_mean` | **0.703 s** |
+| `rollout_seconds_mean` | 0.585 s |
+| `update_seconds_mean` | 0.118 s |
+| `env_steps_per_sec` | **5826** |
+| `mean_active_launches_per_turn` | 0.475 |
+| `overall_win_rate` | 0.319 |
+| `approx_kl` | 0.00035 |
+
+## Micro vs workstation (not apples-to-apples)
+
+| Metric | Baseline micro (`baseline-30update.json`) | Workstation production |
+|--------|------------------------------------------|------------------------|
+| Total envs | 16 | 32 |
+| `rollout_steps` | 16 | 128 |
+| Curriculum | default `sp_2p` | `self_play_staged` |
+| Opponents | `self_play_only` | `self_play_curriculum` |
+| `seconds_per_update_mean` | 0.300 | 0.703 |
+| `env_steps_per_sec` | 854 | 5826 |
+| `compile_seconds_to_update_3` | (in warmup) | 221.3 |
+
+Workstation uses **8× longer rollouts** and **2× env parallelism**; higher env-steps/sec is expected. Use this table for throughput regression on the **same** profile, not to compare against the 16-env micro run.
+
+## Cloud stretch tier (documented, not run here)
+
+| Tier | Profile | Where |
+|------|---------|-------|
+| **Colab / large VRAM** | `format=2p_4p_32env` (64 envs), same training/opponents/curriculum | Run when GPU headroom allows; OOM → bisect `training.rollout_microbatch_envs` (32 → 16) |
+
+Alias: `format=mix_2p_4p_32env` composes `2p_4p_32env` (deprecated `mix_*` naming).
+
+## Tests (worktree `dcafdc8`)
+
+```bash
+make test-domain-config
+uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m "not slow and not jax"
+make test-fast
+```
+
+**228 passed** (`make test-fast`), domain-config green after Hydra hygiene fixes.
 
 ## Not in this milestone
 

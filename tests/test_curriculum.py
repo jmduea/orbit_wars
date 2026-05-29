@@ -31,8 +31,8 @@ def test_default_hydra_config_uses_new_curriculum_surface():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
     assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 8
-    assert cfg.curriculum.stages[-1]["id"] == "self_play"
+    assert len(cfg.curriculum.stages) == 1
+    assert cfg.curriculum.stages[-1]["id"] == "sp_2p"
     assert cfg.opponents.snapshot.pool_size == 2
 
 

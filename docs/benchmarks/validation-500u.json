@@ -1,0 +1,93 @@
+{
+  "label": "workstation-validation-500u",
+  "commit_sha": "dcafdc827a9202152b27e3676edfa9e715ecc0f7",
+  "tier": "workstation",
+  "jax_version": "0.10.0",
+  "devices": [
+    "cuda:0"
+  ],
+  "default_backend": "gpu",
+  "overrides": [
+    "model=transformer_factorized",
+    "format=2p_4p_16env",
+    "training=workstation",
+    "opponents=self_play_only",
+    "curriculum=off",
+    "telemetry.wandb.enabled=false",
+    "artifacts.artifact_pipeline.enabled=false",
+    "seed=42"
+  ],
+  "updates": 500,
+  "warmup": 2,
+  "measured_updates": 500,
+  "format": "2p_4p_16env",
+  "num_envs": 32,
+  "rollout_groups": [
+    {
+      "name": "two_player",
+      "player_count": 2,
+      "num_envs": 16
+    },
+    {
+      "name": "four_player",
+      "player_count": 4,
+      "num_envs": 16
+    }
+  ],
+  "rollout_steps": 128,
+  "rollout_microbatch_envs": 16,
+  "compile_seconds_to_update_3": 309.9495019749993,
+  "seconds_total": 530.5610683000377,
+  "seconds_per_update_mean": 1.0611221366000754,
+  "rollout_seconds_mean": 0.9322999071180093,
+  "update_seconds_mean": 0.12881874195794807,
+  "rollout_seconds_total": 466.14995355900464,
+  "update_seconds_total": 64.40937097897404,
+  "env_steps_per_sec": 3860.0646039898184,
+  "policy_loss": -0.0035732357206288727,
+  "value_loss": 1.9374768971800804,
+  "approx_kl": 0.0014419126455577499,
+  "entropy": 4.4406739840507505,
+  "total_loss": 0.9429618440419435,
+  "mean_active_launches_per_turn": 1.5191435546875,
+  "overall_win_rate": 0.5336643998324871,
+  "snapshots": [
+    {
+      "update": 50,
+      "curriculum_stage_id": "default_latest",
+      "policy_loss": -0.0007416571024805307,
+      "value_loss": 1.1298730373382568,
+      "approx_kl": -0.0008653673576191068,
+      "entropy": 3.899491786956787,
+      "total_loss": 0.5446974039077759,
+      "mean_active_launches_per_turn": 4.5478515625,
+      "overall_win_rate": 0.6666666865348816,
+      "survival_time": 0.9979999860127767
+    },
+    {
+      "update": 100,
+      "curriculum_stage_id": "default_latest",
+      "policy_loss": 0.0001943747338373214,
+      "value_loss": 0.9774438142776489,
+      "approx_kl": 0.0004604911373462528,
+      "entropy": 0.7607049942016602,
+      "total_loss": 0.4851127564907074,
+      "mean_active_launches_per_turn": 0.16650390625,
+      "overall_win_rate": 0.20000000298023224,
+      "survival_time": 0.9980000495910645
+    },
+    {
+      "update": 500,
+      "curriculum_stage_id": "default_latest",
+      "policy_loss": -0.019310597330331802,
+      "value_loss": 0.2235947698354721,
+      "approx_kl": 0.0014762585051357746,
+      "entropy": 1.9730165004730225,
+      "total_loss": 0.08262170851230621,
+      "mean_active_launches_per_turn": 0.84423828125,
+      "overall_win_rate": 0.0,
+      "survival_time": 0.0
+    }
+  ],
+  "snapshots_all_finite": true
+}

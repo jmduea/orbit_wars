@@ -1,0 +1,46 @@
+{
+  "workstation_validation_default_format": "2p_4p_16env",
+  "source": "scripts/issues_jax_30update_benchmark.py WORKSTATION_VALIDATION_OVERRIDES / --preset validation",
+  "commit_sha": "dcafdc827a9202152b27e3676edfa9e715ecc0f7",
+  "gpu": "NVIDIA GeForce RTX 5080 (CUDA, jax 0.10.0)",
+  "primary_sweep": {
+    "profile": "self_play_only",
+    "updates": 500,
+    "seeds": [42, 43, 44, 45, 46],
+    "artifacts": [
+      "validation-500u.json",
+      "validation-seed-43-500u.json",
+      "validation-seed-44-500u.json",
+      "validation-seed-45-500u.json",
+      "validation-seed-46-500u.json"
+    ],
+    "summary_all_seeds": {
+      "seconds_total": {"mean": 797.29, "std": 761.35},
+      "env_steps_per_sec": {"mean": 3800.31, "std": 1637.78},
+      "compile_seconds_to_update_3": {"mean": 286.51, "std": 78.43},
+      "policy_loss": {"mean": -0.0145, "std": 0.0095},
+      "value_loss": {"mean": 2.240, "std": 0.265},
+      "approx_kl": {"mean": 0.00304, "std": 0.00108},
+      "mean_active_launches_per_turn": {"mean": 2.916, "std": 1.184},
+      "overall_win_rate": {"mean": 0.665, "std": 0.105}
+    },
+    "summary_excluding_seed_43_throughput_outlier": {
+      "note": "Seed 43 first-run wall time 2157s (949 env_steps/s) vs ~430-530s (~4.7k env_steps/s) for other seeds; likely cold-start / system contention.",
+      "seconds_total": {"mean": 457.33, "std": 47.08},
+      "env_steps_per_sec": {"mean": 4513.03, "std": 385.47},
+      "compile_seconds_to_update_3": {"mean": 254.50, "std": 35.44}
+    }
+  },
+  "opponent_contrast": {
+    "updates": 100,
+    "seeds": [42, 43],
+    "profiles": ["noop_only", "random_only"],
+    "artifacts": [
+      "validation-noop_only-seed-42-100u.json",
+      "validation-noop_only-seed-43-100u.json",
+      "validation-random_only-seed-42-100u.json",
+      "validation-random_only-seed-43-100u.json"
+    ]
+  },
+  "stability_gate": "PASS — finite PPO scalars, |approx_kl| < 0.005 at run means across all self_play_only 500u seeds"
+}

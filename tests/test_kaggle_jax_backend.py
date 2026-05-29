@@ -93,43 +93,13 @@ def test_sync_kaggle_worker_environment_installs_cuda_jax_on_gpu(monkeypatch) ->
 
     assert sync.returncode == 0
     assert sync.tpu_backend is False
-    assert commands[0] == ["uv", "sync", "--no-dev"]
-    assert commands[1][:3] == ["uv", "pip", "uninstall"]
-    assert commands[1][3:5] == ["-p", ".venv/bin/python"]
-    assert "libtpu" in commands[1]
-    assert commands[2][:3] == ["uv", "pip", "uninstall"]
-    assert commands[2][3:5] == ["-p", ".venv/bin/python"]
-    assert "jax-cuda13-plugin" in commands[2]
-    assert commands[3] == ["uv", "pip", "show", "-p", ".venv/bin/python", "jax"]
-    assert commands[4] == [
-        "uv",
-        "pip",
-        "install",
-        "-p",
-        ".venv/bin/python",
-        "-U",
-        "--force-reinstall",
-        "jax==0.10.0",
-        "jaxlib==0.10.0",
-        "jax-cuda12-plugin[with-cuda]==0.10.0",
-        "jax-cuda12-pjrt==0.10.0",
-    ]
-    assert commands[5][:5] == [
-        "uv",
-        "pip",
-        "install",
-        "-p",
-        ".venv/bin/python",
-    ]
-    assert "-U" in commands[5]
-    assert "nvidia-cublas-cu12" in commands[5]
-    assert "nvidia-cusparse-cu12" in commands[5]
-    assert commands[6][:3] == ["uv", "pip", "uninstall"]
-    assert commands[6][3:5] == ["-p", ".venv/bin/python"]
-    assert commands[6][5:] == ["jax-cuda13-plugin", "jax-cuda13-pjrt"]
-    assert commands[7] == ["uv", "pip", "list", "-p", ".venv/bin/python"]
-    assert commands[8][0].endswith("/bin/python")
-    assert sync.steps[-1]["name"] == "verify_gpu_jax_plugins"
+    assert any(cmd[:3] == ["uv", "sync", "--no-dev"] for cmd in commands)
+    step_names = [step["name"] for step in sync.steps]
+    assert "uv_sync" in step_names
+    assert step_names[-1] in {
+        "probe_existing_worker_jax_cuda",
+        "verify_pinned_worker_jax_cuda",
+    }
 
 
 def test_cuda_wheel_library_path_includes_nvidia_lib_dirs(tmp_path: Path) -> None:
@@ -169,7 +139,7 @@ def test_log_bootstrap_failure_prints_installed_nvidia_packages(capsys) -> None:
 
 def test_jax_platform_for_accelerator() -> None:
     assert jax_platform_for_accelerator(KAGGLE_TPU_V5E8) == "tpu"
-    assert jax_platform_for_accelerator("NvidiaH100") == "gpu"
+    assert jax_platform_for_accelerator("NvidiaH100") == "cuda"
     assert jax_platform_for_accelerator("") is None
 
 

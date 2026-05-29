@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import math
+import subprocess
 import time
 from pathlib import Path
 
@@ -24,7 +26,10 @@ add_worker_cuda_library_path()
 
 import os
 
-if os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().lower().startswith("nvidia"):
+from src.jax.device import configure_jax_runtime_for_host, nvidia_gpu_present
+
+configure_jax_runtime_for_host()
+if nvidia_gpu_present() or os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().lower().startswith("nvidia"):
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
 
@@ -47,7 +52,77 @@ from src.jax.train_state import init_train_state
 from src.training.curriculum import CurriculumController
 
 METRIC_KEYS = ("policy_loss", "value_loss", "approx_kl", "entropy", "total_loss")
-ROLLOUT_KEYS = ("mean_active_launches_per_turn",)
+ROLLOUT_KEYS = ("mean_active_launches_per_turn", "overall_win_rate")
+
+# Workstation validation profile: no curriculum, pure self-play (stability gate).
+WORKSTATION_VALIDATION_OVERRIDES = [
+    "model=transformer_factorized",
+    "format=2p_4p_16env",
+    "training=workstation",
+    "opponents=self_play_only",
+    "curriculum=off",
+    "telemetry.wandb.enabled=false",
+    "artifacts.artifact_pipeline.enabled=false",
+    "seed=42",
+]
+
+
+def _git_head_sha() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def _scalar_metric(metrics: dict, key: str) -> float | None:
+    if key not in metrics:
+        return None
+    return float(jax.device_get(metrics[key]))
+
+
+def _survival_time_mean(rollout_metrics: dict) -> float | None:
+    episodes = _scalar_metric(rollout_metrics, "episode_done")
+    survival_sum = _scalar_metric(rollout_metrics, "survival_time_sum")
+    if episodes is None or survival_sum is None:
+        return None
+    return survival_sum / max(episodes, 1e-9)
+
+
+def _update_snapshot(
+    *,
+    update: int,
+    update_metrics: dict,
+    rollout_metrics: dict,
+    curriculum: CurriculumController,
+) -> dict[str, float | str | None]:
+    snapshot: dict[str, float | str | None] = {
+        "update": update,
+        "curriculum_stage_id": curriculum.current_stage_id(),
+    }
+    for key in METRIC_KEYS:
+        snapshot[key] = _scalar_metric(update_metrics, key)
+    for key in ROLLOUT_KEYS:
+        snapshot[key] = _scalar_metric(rollout_metrics, key)
+    snapshot["survival_time"] = _survival_time_mean(rollout_metrics)
+    return snapshot
+
+
+def _finite_metrics(snapshot: dict[str, float | str | None]) -> bool:
+    for key, value in snapshot.items():
+        if key in {"update", "curriculum_stage_id"}:
+            continue
+        if value is None:
+            continue
+        if isinstance(value, (int, float)) and not math.isfinite(float(value)):
+            return False
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,19 +132,54 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overrides",
         nargs="*",
-        default=["model=transformer_factorized", "opponents=self_play_only", "seed=42"],
+        default=[
+            "model=transformer_factorized",
+            "opponents=self_play_only",
+            "curriculum=off",
+            "seed=42",
+        ],
+    )
+    parser.add_argument(
+        "--preset",
+        choices=("validation",),
+        default=None,
+        help="Use a documented override bundle (validation = WORKSTATION_VALIDATION_OVERRIDES).",
+    )
+    parser.add_argument(
+        "--tier",
+        default="micro",
+        help="Benchmark tier label (e.g. micro, workstation, cloud_stretch).",
     )
     parser.add_argument("--updates", type=int, default=30)
     parser.add_argument("--warmup", type=int, default=2)
+    parser.add_argument(
+        "--snapshot-updates",
+        nargs="*",
+        type=int,
+        default=[],
+        help="Record per-update metric snapshots at these global update indices.",
+    )
     return parser.parse_args()
+
+
+def _format_profile_name(overrides: list[str]) -> str | None:
+    for override in overrides:
+        if override.startswith("format="):
+            return override.split("=", 1)[1]
+    return None
 
 
 def main() -> None:
     args = parse_args()
+    run_started = time.perf_counter()
     ensure_jax_accelerator_backend()
     devices = [str(d) for d in jax.devices()]
     default_backend = jax.default_backend()
-    cfg = compose_hydra_train_config(list(args.overrides))
+    if args.preset == "validation":
+        overrides = list(WORKSTATION_VALIDATION_OVERRIDES)
+    else:
+        overrides = list(args.overrides)
+    cfg = compose_hydra_train_config(overrides)
     group_specs = rollout_group_summary(cfg)
     total_envs = sum(int(spec["num_envs"]) for spec in group_specs)
     key = jax.random.PRNGKey(cfg.seed)
@@ -82,13 +192,19 @@ def main() -> None:
     )
     curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     update_fn = jax.jit(lambda ts, tr: ppo_update_jax(ts, policy, tr, cfg))
-    timings = []
+    timings: list[float] = []
+    rollout_timings: list[float] = []
+    update_timings: list[float] = []
     update_sums = {k: 0.0 for k in METRIC_KEYS}
     rollout_sums = {k: 0.0 for k in ROLLOUT_KEYS}
     measured = 0
+    compile_seconds_to_update_3: float | None = None
+    snapshot_targets = set(args.snapshot_updates)
+    snapshots: list[dict[str, float | str | None]] = []
     for iteration in range(args.warmup + args.updates):
         update = iteration + 1
         t0 = time.perf_counter()
+        t_rollout = time.perf_counter()
         stage_view = curriculum.stage_view(
             update,
             snapshot_ids=historical_pool.snapshot_ids,
@@ -125,6 +241,8 @@ def main() -> None:
         rollout_groups = merged_groups
         transitions = concatenate_transition_batches(transitions_by_group)
         rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
+        rollout_elapsed = time.perf_counter() - t_rollout
+        t_update = time.perf_counter()
         metrics_accum = None
         for _ in range(cfg.training.epochs):
             train_state, update_metrics = update_fn(train_state, transitions)
@@ -134,30 +252,61 @@ def main() -> None:
                 else jax.tree.map(jnp.add, metrics_accum, update_metrics)
             )
         jax.block_until_ready(metrics_accum["total_loss"])
+        update_elapsed = time.perf_counter() - t_update
         elapsed = time.perf_counter() - t0
+        if update == 3:
+            compile_seconds_to_update_3 = time.perf_counter() - run_started
         if iteration >= args.warmup:
             measured += 1
             timings.append(elapsed)
+            rollout_timings.append(rollout_elapsed)
+            update_timings.append(update_elapsed)
             for mk in METRIC_KEYS:
                 if mk in metrics_accum:
                     update_sums[mk] += float(jax.device_get(metrics_accum[mk]))
             for rk in ROLLOUT_KEYS:
                 if rk in rollout_metrics:
                     rollout_sums[rk] += float(jax.device_get(rollout_metrics[rk]))
+        if update in snapshot_targets and metrics_accum is not None:
+            epoch_count = max(int(cfg.training.epochs), 1)
+            avg_update_metrics = jax.tree.map(
+                lambda value: value / epoch_count,
+                metrics_accum,
+            )
+            snapshots.append(
+                _update_snapshot(
+                    update=update,
+                    update_metrics=avg_update_metrics,
+                    rollout_metrics=rollout_metrics,
+                    curriculum=curriculum,
+                )
+            )
     total_seconds = sum(timings)
+    rollout_seconds_total = sum(rollout_timings)
+    update_seconds_total = sum(update_timings)
     payload = {
         "label": args.label,
+        "commit_sha": _git_head_sha(),
+        "tier": args.tier,
         "jax_version": jax.__version__,
         "devices": devices,
         "default_backend": default_backend,
-        "overrides": list(args.overrides),
+        "overrides": overrides,
         "updates": args.updates,
         "warmup": args.warmup,
         "measured_updates": measured,
+        "format": _format_profile_name(overrides),
         "num_envs": total_envs,
+        "rollout_groups": group_specs,
         "rollout_steps": int(cfg.training.rollout_steps),
+        "rollout_microbatch_envs": int(cfg.training.rollout_microbatch_envs),
+        "compile_seconds_to_update_3": compile_seconds_to_update_3,
         "seconds_total": total_seconds,
         "seconds_per_update_mean": total_seconds / max(measured, 1),
+        "rollout_seconds_mean": rollout_seconds_total / max(measured, 1),
+        "update_seconds_mean": update_seconds_total / max(measured, 1),
+        "rollout_seconds_total": rollout_seconds_total,
+        "update_seconds_total": update_seconds_total,
         "env_steps_per_sec": (measured * int(cfg.training.rollout_steps) * total_envs)
         / max(total_seconds, 1e-9),
     }
@@ -165,6 +314,9 @@ def main() -> None:
         payload[mk] = update_sums[mk] / max(measured, 1)
     for rk in ROLLOUT_KEYS:
         payload[rk] = rollout_sums[rk] / max(measured, 1)
+    if snapshots:
+        payload["snapshots"] = snapshots
+        payload["snapshots_all_finite"] = all(_finite_metrics(item) for item in snapshots)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps(payload, sort_keys=True))

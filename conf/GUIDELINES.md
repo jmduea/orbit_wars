@@ -7,8 +7,10 @@ Examples:
 ```bash
 task/shield_cheap.yaml
 training/workstation.yaml
-format/mix_2p_4p_16env.yaml
+format/2p_4p_16env.yaml
 ```
+
+`format/mix_2p_4p_*` names are **deprecated aliases** that compose the matching `2p_4p_*` group; prefer `2p_4p_*` in new configs and docs.
 
 ## Use a preset when multiple groups should change together
 
