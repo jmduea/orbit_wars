@@ -100,6 +100,7 @@ class TrainingConfig:
     plateau_metric: str = "episode_reward_mean"  # TODO: curriculum?
     plateau_window: int = 10  # TODO: curriculum?
     plateau_delta: float = 0.0  # TODO: curriculum?
+    debug_replay_parity: bool = False
 
 
 @dataclass(slots=True)

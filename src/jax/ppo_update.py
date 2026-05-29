@@ -15,7 +15,7 @@ from src.jax.factored_sequence_scan import (
     replay_factored_sequence_logprob,
 )
 from src.jax.distributional_value import (
-    categorical_value_cross_entropy,
+    sparse_categorical_value_cross_entropy,
     value_support,
 )
 from src.jax.features import TurnBatch
@@ -107,6 +107,27 @@ def _reshape_minibatches(
     return padded.reshape((minibatch_count, minibatch_size) + value.shape[1:])
 
 
+def _flatten_state_scalars(value: jax.Array, env_rows: int) -> jax.Array:
+    """Collapse legacy per-sequence broadcast returns/advantages to per-state scalars."""
+
+    flat = value.reshape(-1)
+    if value.ndim >= 3:
+        return value.reshape(env_rows, -1)[:, 0]
+    if value.ndim == 2 and value.shape[-1] > 1:
+        return value.reshape(env_rows, -1)[:, 0]
+    return flat[:env_rows]
+
+
+def _actor_advantages_from_state(
+    advantages: jax.Array, sequence_k: int
+) -> jax.Array:
+    """Broadcast per-state advantages for per-sub-action PPO objectives."""
+
+    if advantages.ndim == 1:
+        return jnp.broadcast_to(advantages[:, None], (advantages.shape[0], sequence_k))
+    return advantages
+
+
 def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
     """Return the mean of ``x`` over entries where ``mask`` is non-zero."""
 
@@ -183,33 +204,26 @@ def _aggregate_ppo_metrics(
     return metrics
 
 
-def _value_loss_per_step(
+def _value_loss_per_state(
     cfg: TrainConfig,
     value: jax.Array,
     value_logits: jax.Array | None,
     returns: jax.Array,
 ) -> jax.Array:
-    """Return per-step critic loss with shape matching ``returns``."""
+    """Return per-state critic loss with shape ``(batch,)``."""
 
+    if returns.ndim > 1:
+        returns = returns.reshape(returns.shape[0], -1)[:, 0]
     if is_distributional_value_head(cfg):
         if value_logits is None:
             raise ValueError(
                 "Distributional value head requires value_logits in policy output."
             )
         support = value_support(cfg.model.value_bins, cfg.model.value_max)
-        batch_size, sequence_k = returns.shape
-        bins = value_logits.shape[-1]
-        expanded_logits = jnp.broadcast_to(
-            value_logits[:, None, :],
-            (batch_size, sequence_k, bins),
-        ).reshape(-1, bins)
-        flat_ce = categorical_value_cross_entropy(
-            expanded_logits,
-            returns.reshape(-1),
-            support,
+        return sparse_categorical_value_cross_entropy(
+            value_logits, returns, support
         )
-        return flat_ce.reshape(batch_size, sequence_k)
-    return 0.5 * (returns - value[:, None]) ** 2
+    return 0.5 * (returns - value) ** 2
 
 
 def _ppo_update_joint_flat_jax(
@@ -230,12 +244,14 @@ def _ppo_update_joint_flat_jax(
     target = batch.target_index.reshape(env_rows, sequence_k)
     bucket = batch.ship_bucket.reshape(env_rows, sequence_k)
     old_log_prob = batch.log_prob.reshape(env_rows, sequence_k)
-    returns = batch.returns.reshape(env_rows, sequence_k)
-    advantages = batch.advantages.reshape(env_rows, sequence_k)
-    advantage_mean = masked_mean(advantages, mask)
-    advantages = (advantages - advantage_mean) / jnp.sqrt(
-        masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
+    returns_state = _flatten_state_scalars(batch.returns, env_rows)
+    advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
+    advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
+    advantage_mean = jnp.mean(advantages_state)
+    advantages_state = (advantages_state - advantage_mean) / jnp.sqrt(
+        jnp.mean((advantages_state - advantage_mean) ** 2) + 1e-8
     )
+    advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
     continuous = is_continuous_ship_mode(cfg)
     ship_fraction = None
     if continuous and batch.ship_fraction is not None:
@@ -248,7 +264,6 @@ def _ppo_update_joint_flat_jax(
         initial_planet_ships = batch.initial_planet_ships.reshape(
             env_rows, batch.initial_planet_ships.shape[-1]
         )
-
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -308,9 +323,11 @@ def _ppo_update_joint_flat_jax(
         "old_log_prob": _reshape_minibatches(
             old_log_prob, minibatch_count, minibatch_size, 0.0
         ),
-        "returns": _reshape_minibatches(returns, minibatch_count, minibatch_size, 0.0),
+        "returns": _reshape_minibatches(
+            returns_state, minibatch_count, minibatch_size, 0.0
+        ),
         "advantages": _reshape_minibatches(
-            advantages, minibatch_count, minibatch_size, 0.0
+            advantages_actor, minibatch_count, minibatch_size, 0.0
         ),
     }
     if continuous and ship_fraction is not None:
@@ -381,14 +398,14 @@ def _ppo_update_joint_flat_jax(
                 minibatch["advantages"] * ratio,
                 minibatch["advantages"] * clipped_ratio,
             )
-            value_error = _value_loss_per_step(
+            value_error = _value_loss_per_state(
                 cfg,
                 output.value,
                 output.value_logits,
                 minibatch["returns"],
             )
             policy_loss = -masked_mean(policy_objective, minibatch["mask"])
-            value_loss = masked_mean(value_error, minibatch["mask"])
+            value_loss = jnp.mean(value_error)
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             loss = (
                 policy_loss
@@ -408,8 +425,13 @@ def _ppo_update_joint_flat_jax(
                 format_mask = minibatch["mask"] * (
                     minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
+                state_mask = (
+                    minibatch["player_count"] == format_player_count
+                ).astype(jnp.float32)
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
-                format_value_loss = masked_mean(value_error, format_mask)
+                format_value_loss = masked_mean(
+                    value_error, state_mask
+                )
                 format_entropy = masked_mean(entropy, format_mask)
                 format_approx_kl = masked_mean(
                     minibatch["old_log_prob"] - new_log_prob,
@@ -470,12 +492,14 @@ def _ppo_update_factorized_jax(
     bucket = batch.ship_bucket.reshape(env_rows, sequence_k)
     stop_flag = batch.stop_flag.reshape(env_rows, sequence_k)
     old_log_prob = batch.log_prob.reshape(env_rows, sequence_k)
-    returns = batch.returns.reshape(env_rows, sequence_k)
-    advantages = batch.advantages.reshape(env_rows, sequence_k)
-    advantage_mean = masked_mean(advantages, mask)
-    advantages = (advantages - advantage_mean) / jnp.sqrt(
-        masked_mean((advantages - advantage_mean) ** 2, mask) + 1e-8
+    returns_state = _flatten_state_scalars(batch.returns, env_rows)
+    advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
+    advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
+    advantage_mean = jnp.mean(advantages_state)
+    advantages_state = (advantages_state - advantage_mean) / jnp.sqrt(
+        jnp.mean((advantages_state - advantage_mean) ** 2) + 1e-8
     )
+    advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
     continuous = is_continuous_ship_mode(cfg)
     ship_fraction = None
     if continuous and batch.ship_fraction is not None:
@@ -488,7 +512,6 @@ def _ppo_update_factorized_jax(
         initial_planet_ships = batch.initial_planet_ships.reshape(
             env_rows, batch.initial_planet_ships.shape[-1]
         )
-
 
     total_rows = mask.shape[0]
     min_chunk_rows = int(cfg.training.update_chunk_rows_min)
@@ -510,8 +533,10 @@ def _ppo_update_factorized_jax(
         "debug_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
             jnp.float32
         ),
-        "debug_returns_finite": jnp.all(jnp.isfinite(returns)).astype(jnp.float32),
-        "debug_advantages_finite": jnp.all(jnp.isfinite(advantages)).astype(
+        "debug_returns_finite": jnp.all(jnp.isfinite(returns_state)).astype(
+            jnp.float32
+        ),
+        "debug_advantages_finite": jnp.all(jnp.isfinite(advantages_state)).astype(
             jnp.float32
         ),
         "debug_ship_bucket_mask_any_min": per_step_bucket_counts.min(),
@@ -537,28 +562,29 @@ def _ppo_update_factorized_jax(
         global_features=turn_batch.global_features,
         theta_ref=turn_batch.theta_ref,
     )
-    parity_fraction = ship_fraction
-    parity_hidden = decoder_hidden
-    debug_metrics.update(
-        factored_logprob_parity_metrics(
-            train_state.params,
-            policy,
-            parity_batch,
-            cfg,
-            player_count=player_count,
-            source_index=source,
-            target_slot=target_slot,
-            ship_bucket=bucket,
-            stop_flag=stop_flag,
-            step_mask=mask,
-            ship_bucket_mask=ship_bucket_mask,
-            old_log_prob=old_log_prob,
-            ship_fraction=parity_fraction,
-            decoder_hidden=parity_hidden,
-            initial_remaining_ships=initial_planet_ships,
-            advantages=advantages,
+    if cfg.training.debug_replay_parity:
+        parity_fraction = ship_fraction
+        parity_hidden = decoder_hidden
+        debug_metrics.update(
+            factored_logprob_parity_metrics(
+                train_state.params,
+                policy,
+                parity_batch,
+                cfg,
+                player_count=player_count,
+                source_index=source,
+                target_slot=target_slot,
+                ship_bucket=bucket,
+                stop_flag=stop_flag,
+                step_mask=mask,
+                ship_bucket_mask=ship_bucket_mask,
+                old_log_prob=old_log_prob,
+                ship_fraction=parity_fraction,
+                decoder_hidden=parity_hidden,
+                initial_remaining_ships=initial_planet_ships,
+                advantages=advantages_actor,
+            )
         )
-    )
     minibatches = {
         "mask": _reshape_minibatches(mask, minibatch_count, minibatch_size, 0.0),
         "planet_features": _reshape_minibatches(
@@ -602,9 +628,11 @@ def _ppo_update_factorized_jax(
         "old_log_prob": _reshape_minibatches(
             old_log_prob, minibatch_count, minibatch_size, 0.0
         ),
-        "returns": _reshape_minibatches(returns, minibatch_count, minibatch_size, 0.0),
+        "returns": _reshape_minibatches(
+            returns_state, minibatch_count, minibatch_size, 0.0
+        ),
         "advantages": _reshape_minibatches(
-            advantages, minibatch_count, minibatch_size, 0.0
+            advantages_actor, minibatch_count, minibatch_size, 0.0
         ),
     }
     if continuous and ship_fraction is not None:
@@ -634,11 +662,6 @@ def _ppo_update_factorized_jax(
         )
 
         def loss_fn(params):
-            apply_kwargs = {
-                "player_count": minibatch["player_count"],
-                "deterministic": True,
-            }
-            output = policy.apply(params, mb_batch, **apply_kwargs)
             fraction_arg = (
                 minibatch["ship_fraction"]
                 if continuous and "ship_fraction" in minibatch
@@ -693,14 +716,18 @@ def _ppo_update_factorized_jax(
                 minibatch["advantages"] * ratio,
                 minibatch["advantages"] * clipped_ratio,
             )
-            value_error = _value_loss_per_step(
+            value = replay.value
+            value_logits = replay.value_logits
+            if value is None:
+                raise ValueError("Factorized replay must return critic outputs.")
+            value_error = _value_loss_per_state(
                 cfg,
-                output.value,
-                output.value_logits,
+                value,
+                value_logits,
                 minibatch["returns"],
             )
             policy_loss = -masked_mean(policy_objective, minibatch["mask"])
-            value_loss = masked_mean(value_error, minibatch["mask"])
+            value_loss = jnp.mean(value_error)
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             entropy_stop_loss = masked_mean(stop_entropy, minibatch["mask"])
             entropy_move_loss = masked_mean(move_entropy, minibatch["mask"])
@@ -725,8 +752,11 @@ def _ppo_update_factorized_jax(
                 format_mask = minibatch["mask"] * (
                     minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
+                state_mask = (
+                    minibatch["player_count"] == format_player_count
+                ).astype(jnp.float32)
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
-                format_value_loss = masked_mean(value_error, format_mask)
+                format_value_loss = masked_mean(value_error, state_mask)
                 format_entropy = masked_mean(entropy, format_mask)
                 format_approx_kl = masked_mean(
                     minibatch["old_log_prob"] - new_log_prob,

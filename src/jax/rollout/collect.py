@@ -369,10 +369,8 @@ def collect_rollout_jax(
         gamma=cfg.training.gamma,
         gae_lambda=cfg.training.gae_lambda,
     )
-    returns = jnp.broadcast_to(returns_step[..., None], data["target_index"].shape)
-    advantages = jnp.broadcast_to(
-        advantages_step[..., None], data["target_index"].shape
-    )
+    returns = returns_step
+    advantages = advantages_step
     transition_kwargs = {
         "planet_features": data["planet_features"],
         "planet_mask": data["planet_mask"],

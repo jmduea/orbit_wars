@@ -26,7 +26,7 @@ from src.jax.features import TurnBatch
 from src.jax.policy import edge_action_count
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.ship_action import (
-    continuous_fraction_log_prob,
+    continuous_fraction_log_prob_at_action,
     fraction_from_logit,
     is_continuous_ship_mode,
     ship_count_for_action,
@@ -384,7 +384,8 @@ def _sample_step_from_logits(
         else:
             ship_logit = ship_logit + jax.random.logistic(key_ship, ship_logit.shape)
             ship_fraction = fraction_from_logit(ship_logit)
-        ship_lp = continuous_fraction_log_prob(ship_logit)
+        policy_loc = selected_ship_logits[:, 0]
+        ship_lp = continuous_fraction_log_prob_at_action(policy_loc, ship_fraction)
         ship_entropy = jnp.zeros_like(ship_lp)
         bucket = jnp.where(
             ship_fraction > 0.0, jnp.ones_like(bucket), jnp.zeros_like(bucket)

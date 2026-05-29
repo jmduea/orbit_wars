@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 import jax
@@ -11,6 +12,7 @@ from src.jax.distributional_value import (
     categorical_value_cross_entropy,
     expected_value_from_logits,
     project_returns_to_two_hot,
+    sparse_categorical_value_cross_entropy,
     value_support,
 )
 from src.jax.policy import (
@@ -77,17 +79,34 @@ def test_compose_hydra_train_config_accepts_distributional_value_head() -> None:
     assert cfg.model.value_max == 1.0
 
 
-def test_value_loss_per_step_uses_cross_entropy_for_distributional_head() -> None:
-    from src.jax.ppo_update import _value_loss_per_step
+def test_sparse_categorical_value_cross_entropy_matches_dense() -> None:
+    support = value_support(11, 1.0)
+    logits = jnp.array(
+        [
+            [0.1, -0.2, 0.3, 0.0, -0.1, 0.2, 0.4, -0.3, 0.1, 0.0, -0.2],
+            [-0.4, 0.2, 0.1, 0.3, -0.2, 0.0, 0.5, 0.1, -0.1, 0.2, 0.3],
+        ],
+        dtype=jnp.float32,
+    )
+    returns = jnp.array([-0.2, 0.5], dtype=jnp.float32)
+    dense = categorical_value_cross_entropy(logits, returns, support)
+    sparse = sparse_categorical_value_cross_entropy(logits, returns, support)
+    np.testing.assert_allclose(
+        np.asarray(sparse), np.asarray(dense), rtol=1e-5, atol=1e-5
+    )
+
+
+def test_value_loss_per_state_uses_cross_entropy_for_distributional_head() -> None:
+    from src.jax.ppo_update import _value_loss_per_state
 
     cfg = TrainConfig()
     cfg.model.value_head = "distributional"
     cfg.model.value_bins = 11
     cfg.model.value_max = 1.0
-    returns = jnp.array([[0.2, -0.1]], dtype=jnp.float32)
-    logits = jnp.zeros((1, 11), dtype=jnp.float32)
-    value = jnp.array([0.0], dtype=jnp.float32)
-    loss = _value_loss_per_step(cfg, value, logits, returns)
-    assert loss.shape == (1, 2)
+    returns = jnp.array([0.2, -0.1], dtype=jnp.float32)
+    logits = jnp.zeros((2, 11), dtype=jnp.float32)
+    value = jnp.zeros((2,), dtype=jnp.float32)
+    loss = _value_loss_per_state(cfg, value, logits, returns)
+    assert loss.shape == (2,)
     assert jnp.all(jnp.isfinite(loss))
     assert float(loss.mean()) >= 0.0

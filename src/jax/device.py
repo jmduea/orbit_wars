@@ -70,7 +70,7 @@ def configure_jax_runtime_for_host() -> None:
         if os.environ.get("JAX_PLATFORMS", "").strip().lower() == "gpu":
             os.environ.pop("JAX_PLATFORM_NAME", None)
             os.environ["JAX_PLATFORMS"] = "cuda,cpu"
-        elif _nvidia_kaggle_requested() and not os.environ.get("JAX_PLATFORMS"):
+        elif not os.environ.get("JAX_PLATFORMS"):
             os.environ.pop("JAX_PLATFORM_NAME", None)
             os.environ["JAX_PLATFORMS"] = "cuda,cpu"
     elif _tpu_runtime_requested():

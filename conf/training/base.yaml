@@ -27,3 +27,4 @@ reseed_on_plateau: false
 plateau_metric: episode_reward_mean
 plateau_window: 10
 plateau_delta: 0.0
+debug_replay_parity: false

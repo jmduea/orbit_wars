@@ -1,7 +1,9 @@
 """Shared stepwise factorized sequence scan for rollout sampling and PPO replay.
 
 Rollout and PPO must use the same prefix-growing ``policy.apply`` loop so stored
-actions receive logits identical to those seen during sampling.
+actions receive logits identical to those seen during sampling. PPO replay uses
+one teacher-forced forward with zeroed sequence inputs (matching per-step prefix
+semantics) plus a lightweight mask scan for log-probs.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import jax
 from src.config import TrainConfig
 from src.features.registry import PLANET_FEATURE_SCHEMA
 from src.jax.action_codec import (
+    FactoredPolicyOutput,
     _factored_step_log_prob_entropy,
     source_mask_from_bucket_mask_and_ships,
 )
@@ -29,6 +32,8 @@ class FactoredSequenceLogProbResult(NamedTuple):
     entropy: jax.Array
     stop_entropy: jax.Array
     move_entropy: jax.Array
+    value: jax.Array | None = None
+    value_logits: jax.Array | None = None
 
 
 def owned_planet_ships_from_turn_batch(
@@ -46,39 +51,32 @@ def owned_planet_ships_from_turn_batch(
     return jnp.where(owned, ships, 0.0)
 
 
-def replay_factored_sequence_logprob(
-    params: dict,
-    policy: object,
-    batch: TurnBatch,
+def _replay_masks_and_logprobs_from_output(
+    step_output: FactoredPolicyOutput,
     cfg: TrainConfig,
     *,
-    player_count: jax.Array,
     source_index: jax.Array,
     target_slot: jax.Array,
     ship_bucket: jax.Array,
     stop_flag: jax.Array,
     step_mask: jax.Array,
     ship_bucket_mask: jax.Array,
-    ship_fraction: jax.Array | None = None,
-    decoder_hidden: jax.Array | None = None,
-    initial_remaining_ships: jax.Array | None = None,
+    ship_fraction: jax.Array | None,
+    initial_remaining_ships: jax.Array | None,
+    batch: TurnBatch,
 ) -> FactoredSequenceLogProbResult:
-    """Replay stored factorized actions with rollout-matching prefix decoding."""
-
-    env_count = batch.planet_features.shape[0]
-    sequence_k = source_index.shape[1]
-    continuous = is_continuous_ship_mode(cfg)
-    carry_enabled = decoder_carry_enabled(cfg)
+    """Compute per-step log-probs from one full-sequence policy forward."""
 
     from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
-    source_prefix = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
-    slot_prefix = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
+    env_count = source_index.shape[0]
+    sequence_k = source_index.shape[1]
+    continuous = is_continuous_ship_mode(cfg)
+
     if initial_remaining_ships is not None:
         remaining_ships = initial_remaining_ships.astype(jnp.float32)
     else:
         remaining_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
-    sequence_active = jnp.ones((env_count,), dtype=bool)
 
     log_prob_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
@@ -87,27 +85,14 @@ def replay_factored_sequence_logprob(
 
     def scan_step(carry, step_idx):
         (
-            source_prefix,
-            slot_prefix,
             remaining_ships,
-            sequence_active,
             log_prob_out,
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
         ) = carry
 
-        step_active = sequence_active & (step_mask[:, step_idx] > 0.0)
-        apply_kwargs = {
-            "player_count": player_count,
-            "source_sequence": source_prefix,
-            "target_slot_sequence": slot_prefix,
-            "deterministic": True,
-        }
-        if carry_enabled and decoder_hidden is not None:
-            apply_kwargs["decoder_hidden"] = decoder_hidden
-        step_output = policy.apply(params, batch, **apply_kwargs)
-
+        step_active = step_mask[:, step_idx] > 0.0
         step_bucket_mask = ship_bucket_mask[:, step_idx]
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
@@ -179,15 +164,9 @@ def replay_factored_sequence_logprob(
                 current_source_ships,
             )
         )
-        source_prefix = source_prefix.at[:, step_idx].set(stored_source)
-        slot_prefix = slot_prefix.at[:, step_idx].set(stored_target)
-        sequence_active = sequence_active & jnp.logical_not(stop_bool)
 
         return (
-            source_prefix,
-            slot_prefix,
             remaining_ships,
-            sequence_active,
             log_prob_out,
             entropy_out,
             stop_entropy_out,
@@ -196,10 +175,7 @@ def replay_factored_sequence_logprob(
 
     (
         (
-            _source_prefix,
-            _slot_prefix,
             _remaining_ships,
-            _sequence_active,
             log_prob_out,
             entropy_out,
             stop_entropy_out,
@@ -209,10 +185,7 @@ def replay_factored_sequence_logprob(
     ) = jax.lax.scan(
         scan_step,
         (
-            source_prefix,
-            slot_prefix,
             remaining_ships,
-            sequence_active,
             log_prob_out,
             entropy_out,
             stop_entropy_out,
@@ -225,6 +198,54 @@ def replay_factored_sequence_logprob(
         entropy=entropy_out,
         stop_entropy=stop_entropy_out,
         move_entropy=move_entropy_out,
+        value=step_output.value,
+        value_logits=step_output.value_logits,
+    )
+
+
+def replay_factored_sequence_logprob(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    player_count: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    step_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    ship_fraction: jax.Array | None = None,
+    decoder_hidden: jax.Array | None = None,
+    initial_remaining_ships: jax.Array | None = None,
+) -> FactoredSequenceLogProbResult:
+    """Replay stored factorized actions with rollout-matching prefix decoding."""
+
+    carry_enabled = decoder_carry_enabled(cfg)
+    # Zero teacher sequences match per-step prefix replay: only column ``step_idx``
+    # is read during decode, and it is zero before the step is committed.
+    apply_kwargs = {
+        "player_count": player_count,
+        "source_sequence": jnp.zeros_like(source_index),
+        "target_slot_sequence": jnp.zeros_like(target_slot),
+        "deterministic": True,
+    }
+    if carry_enabled and decoder_hidden is not None:
+        apply_kwargs["decoder_hidden"] = decoder_hidden
+    step_output = policy.apply(params, batch, **apply_kwargs)
+    return _replay_masks_and_logprobs_from_output(
+        step_output,
+        cfg,
+        source_index=source_index,
+        target_slot=target_slot,
+        ship_bucket=ship_bucket,
+        stop_flag=stop_flag,
+        step_mask=step_mask,
+        ship_bucket_mask=ship_bucket_mask,
+        ship_fraction=ship_fraction,
+        initial_remaining_ships=initial_remaining_ships,
+        batch=batch,
     )
 
 
@@ -321,13 +342,16 @@ def factored_logprob_parity_metrics(
         "debug/ratio20_max": jnp.max(jnp.where(mask > 0.0, ratio20, 0.0)),
     }
     if advantages is not None:
+        adv_for_mask = advantages
+        if advantages.ndim == 1:
+            adv_for_mask = advantages[:, None]
         metrics.update(
             {
                 "debug/adv_min": jnp.min(advantages),
                 "debug/adv_max": jnp.max(advantages),
-                "debug/adv_abs_mean": masked_mean(jnp.abs(advantages), mask),
+                "debug/adv_abs_mean": masked_mean(jnp.abs(adv_for_mask), mask),
                 "debug/neg_adv_ratio20_objective_mean": masked_mean(
-                    jnp.where(advantages < 0.0, ratio20 * advantages, 0.0),
+                    jnp.where(adv_for_mask < 0.0, ratio20 * adv_for_mask, 0.0),
                     mask,
                 ),
             }

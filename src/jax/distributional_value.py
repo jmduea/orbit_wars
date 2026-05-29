@@ -50,6 +50,40 @@ def project_returns_to_two_hot(returns: jax.Array, support: jax.Array) -> jax.Ar
     return targets.reshape(*returns.shape, support.shape[0])
 
 
+def _project_return_atom_indices(
+    returns: jax.Array, support: jax.Array
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Return lower/upper atom indices and weights for C51 two-hot targets."""
+
+    returns = returns.astype(jnp.float32)
+    vmin = support[0]
+    delta = support[1] - support[0]
+    clipped = jnp.clip(returns, vmin, support[-1])
+    position = (clipped - vmin) / delta
+    lower = jnp.floor(position).astype(jnp.int32)
+    lower = jnp.clip(lower, 0, support.shape[0] - 2)
+    upper = lower + 1
+    upper_weight = position - lower.astype(jnp.float32)
+    lower_weight = 1.0 - upper_weight
+    return clipped, lower, upper, lower_weight, upper_weight
+
+
+def sparse_categorical_value_cross_entropy(
+    logits: jax.Array,
+    returns: jax.Array,
+    support: jax.Array,
+) -> jax.Array:
+    """Two-atom C51 cross-entropy without materializing dense target rows."""
+
+    _, lower, upper, lower_weight, upper_weight = _project_return_atom_indices(
+        returns, support
+    )
+    log_probs = jax.nn.log_softmax(logits, axis=-1)
+    lower_lp = jnp.take_along_axis(log_probs, lower[..., None], axis=-1).squeeze(-1)
+    upper_lp = jnp.take_along_axis(log_probs, upper[..., None], axis=-1).squeeze(-1)
+    return -(lower_weight * lower_lp + upper_weight * upper_lp)
+
+
 def categorical_value_cross_entropy(
     logits: jax.Array,
     returns: jax.Array,

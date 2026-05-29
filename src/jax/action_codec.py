@@ -221,10 +221,13 @@ def factored_action_log_prob_and_entropy(
         axis=2,
     ).squeeze(axis=2)
     if selected_ship_logits.shape[-1] == 1:
-        ship_logit = selected_ship_logits[..., 0]
+        policy_loc = selected_ship_logits[..., 0]
         if ship_fraction is not None:
-            ship_logit = _logit_from_fraction(ship_fraction)
-        ship_lp = _continuous_fraction_log_prob(ship_logit)
+            from src.jax.ship_action import continuous_fraction_log_prob_at_action
+
+            ship_lp = continuous_fraction_log_prob_at_action(policy_loc, ship_fraction)
+        else:
+            ship_lp = _continuous_fraction_log_prob(policy_loc)
         ship_entropy = jnp.zeros_like(ship_lp)
         ship_lp = jnp.where(launch_active > 0.0, ship_lp, 0.0)
     else:
@@ -327,13 +330,18 @@ def _factored_step_log_prob_entropy(
     selected_bucket_mask = selected_bucket_mask.at[batch_idx, ship_bucket].set(True)
     selected_ship_logits = ship_logits[batch_idx, target_slot]
     if selected_ship_logits.shape[-1] == 1:
-        ship_logit = jnp.squeeze(selected_ship_logits, axis=-1)
+        policy_loc = jnp.squeeze(selected_ship_logits, axis=-1)
         selected_target_legal = target_mask[batch_idx, target_slot]
         if ship_fraction is not None:
-            ship_logit = _logit_from_fraction(ship_fraction)
+            from src.jax.ship_action import continuous_fraction_log_prob_at_action
+
+            policy_loc = jnp.where(
+                selected_target_legal, policy_loc, _SAFE_NEG_LOGIT
+            )
+            ship_lp = continuous_fraction_log_prob_at_action(policy_loc, ship_fraction)
         else:
-            ship_logit = jnp.where(selected_target_legal, ship_logit, _SAFE_NEG_LOGIT)
-        ship_lp = _continuous_fraction_log_prob(ship_logit)
+            policy_loc = jnp.where(selected_target_legal, policy_loc, _SAFE_NEG_LOGIT)
+            ship_lp = _continuous_fraction_log_prob(policy_loc)
         ship_entropy = jnp.zeros_like(ship_lp)
         ship_lp = jnp.where(launch_active > 0.0, ship_lp, 0.0)
     else:
@@ -482,8 +490,13 @@ def action_log_prob_and_entropy(
         axis=2,
     ).squeeze(axis=2)
     if selected_ship_logits.shape[-1] == 1:
-        ship_logit = selected_ship_logits[..., 0]
-        ship_lp = _continuous_fraction_log_prob(ship_logit)
+        policy_loc = selected_ship_logits[..., 0]
+        if ship_fraction is not None:
+            from src.jax.ship_action import continuous_fraction_log_prob_at_action
+
+            ship_lp = continuous_fraction_log_prob_at_action(policy_loc, ship_fraction)
+        else:
+            ship_lp = _continuous_fraction_log_prob(policy_loc)
         ship_entropy = jnp.zeros_like(ship_lp)
     else:
         ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)

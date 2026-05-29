@@ -1,0 +1,30 @@
+{
+  "label": "post-fix",
+  "jax_version": "0.10.0",
+  "devices": [
+    "cuda:0"
+  ],
+  "default_backend": "gpu",
+  "overrides": [
+    "model=transformer_factorized",
+    "opponents=self_play_only",
+    "seed=42",
+    "format=2p_4p_8env",
+    "training.rollout_steps=16",
+    "training.rollout_microbatch_envs=8"
+  ],
+  "updates": 30,
+  "warmup": 2,
+  "measured_updates": 30,
+  "num_envs": 16,
+  "rollout_steps": 16,
+  "seconds_total": 6.937535449000279,
+  "seconds_per_update_mean": 0.23125118163334263,
+  "env_steps_per_sec": 1107.021370407082,
+  "policy_loss": 0.025923658511116325,
+  "value_loss": 0.41602310768988293,
+  "approx_kl": 0.0008616871212022185,
+  "entropy": 4.5283869981765745,
+  "total_loss": 0.21129327348122995,
+  "mean_active_launches_per_turn": 2.5203125
+}

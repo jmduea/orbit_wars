@@ -305,12 +305,8 @@ def _joint_transition_batch(
         gamma=cfg.training.gamma,
         gae_lambda=cfg.training.gae_lambda,
     )
-    returns = jnp.broadcast_to(
-        returns_step[..., None], (rollout_steps, num_envs, sequence_k)
-    )
-    advantages = jnp.broadcast_to(
-        advantages_step[..., None], (rollout_steps, num_envs, sequence_k)
-    )
+    returns = returns_step
+    advantages = advantages_step
     if factorized:
         ship_bucket_mask = _factorized_ship_bucket_mask(
             cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=sequence_k

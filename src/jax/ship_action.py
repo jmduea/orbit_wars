@@ -37,9 +37,28 @@ def logit_from_fraction(fraction: jax.Array) -> jax.Array:
 
 
 def continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
-    """Log density of a logistic draw at ``logit`` (used for PPO replay)."""
+    """Log density of a standard logistic draw at latent ``logit``."""
 
     return -jax.nn.softplus(-logit) - jax.nn.softplus(logit)
+
+
+def continuous_fraction_log_prob_at_action(
+    policy_loc: jax.Array,
+    action_fraction: jax.Array,
+) -> jax.Array:
+    """Log density of a stored launch fraction under ``Logistic(policy_loc, 1)``.
+
+    Rollout draws ``z = policy_loc + epsilon`` with standard logistic ``epsilon``,
+    then maps ``fraction = sigmoid(z)``. Replay evaluates ``log p(fraction | policy_loc)``
+    via the change-of-variables through ``z = logit(fraction)``.
+    """
+
+    frac = jnp.clip(action_fraction.astype(jnp.float32), 1e-6, 1.0 - 1e-6)
+    z = logit_from_fraction(frac)
+    centered = z - policy_loc.astype(jnp.float32)
+    log_prob_z = -jax.nn.softplus(-centered) - jax.nn.softplus(centered)
+    log_abs_det_jacobian = -jnp.log(frac) - jnp.log1p(-frac)
+    return log_prob_z + log_abs_det_jacobian
 
 
 def ship_count_for_action(
