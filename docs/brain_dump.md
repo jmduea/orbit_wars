@@ -64,6 +64,8 @@ Centralized repository of all the things that i've felt the need to write down i
     - 1m step avg wall time
     - avgs w/compile time factored out
 
+- Add a debug metric that tracks the average number of ships per fleet launched (overall, by learner), idea is to help identify if the agent is learning "proper" ship sizing for fleet launches.
+
 ## Questions
 
 - What's the main cause of long compile time for training runs? Jax is known to be slow to compile, but not sure if the compile time of the average training run is within expected bounds.
@@ -96,3 +98,5 @@ Centralized repository of all the things that i've felt the need to write down i
     - There are a lot of config groups that are not being used and could be removed.
     - There are seemingly redundant/unused config values that could be removed.
     - Better documentation of config setup and usage is needed. Especially around what each value does and how it affects the training run.
+
+- Debug seed swapping during training. The seed scheduler should be swapping seeds periodically to help with training stability. Evidence of whether this is actually happening is needed.
