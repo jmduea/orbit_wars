@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+
+enabled: true
+stages:
+  - id: sp_2p
+    min_updates: 1000
+    cooldown_updates: 0
+    opponent_families:
+      latest: 0.8
+      historical: 0.2
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.0
+      turtle: 0.0
+      opportunistic: 0.0

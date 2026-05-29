@@ -507,19 +507,17 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-jax-train-split.md",
       "workflow": "deep-interview",
-      "status": "draft",
+      "status": "deferred",
       "title": "JAX train module split",
-      "spec_id": null,
-      "plan_id": null,
       "related_ids": [
         "jax-ppo-split",
         "src-reorganization",
         "async-artifact-pipeline"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": null,
-      "notes": "Follow-on to jax-ppo-split; deletes src/jax/train.py"
+      "completed_at": "2026-05-26",
+      "evidence": "Marked inactive on 2026-05-26 at user request; registered spec path .omg/specs/deep-interview-jax-train-split.md is absent from workspace, and no current execution should treat it as active backlog.",
+      "notes": "Deferred rather than complete because the spec file is missing and no completion evidence was available."
     },
     {
       "id": "test-efficiency",
@@ -961,6 +959,24 @@
       "notes": "Audit-only pass complete; implementation milestones not yet registered as separate manifest entries"
     },
     {
+      "id": "m1-factorized-vmap-kwonly",
+      "kind": "trace",
+      "path": ".omg/specs/deep-dive-trace-m1-factorized-vmap-kwonly.md",
+      "workflow": "deep-dive",
+      "status": "complete",
+      "title": "M1 factorized rollout vmap keyword-only crash",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "factored-pointer-decoder",
+        "policy-advances-audit"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-26",
+      "evidence": "Trace converged on _sample_factored_step_from_logits keyword-only signature plus per-env indexing bugs exposed by jax.vmap in M1 factorized rollout; current code has positional helper signature and tests/test_factored_step_vmap.py regression coverage.",
+      "notes": "Registered after cleanup so the historical trace remains discoverable but inactive."
+    },
+    {
       "id": "zero-launch-metrics-trace",
       "kind": "trace",
       "path": ".omg/specs/deep-dive-trace-zero-launch-metrics.md",
@@ -985,13 +1001,16 @@
       "workflow": "deep-dive",
       "status": "complete",
       "title": "Fix zero launch metrics (shield off + continuous fraction)",
+      "spec_id": null,
+      "plan_id": null,
       "related_ids": [
         "zero-launch-metrics-trace",
         "factored-pointer-decoder"
       ],
       "supersedes_id": null,
       "completed_at": "2026-05-25",
-      "evidence": "trajectory_shield.py unshielded bucket mask; builders.py continuous broadcast fix; action_codec.py replay parity; metrics.py ship_fraction launch count; tests/test_factorized_launch_metrics.py + test_trajectory_shield_factorized.py"
+      "evidence": "trajectory_shield.py unshielded bucket mask; builders.py continuous broadcast fix; action_codec.py replay parity; metrics.py ship_fraction launch count; tests/test_factorized_launch_metrics.py + test_trajectory_shield_factorized.py",
+      "notes": null
     },
     {
       "id": "ralplan-zero-launch-metrics",
@@ -1048,6 +1067,24 @@
       "completed_at": null,
       "evidence": "Consensus iter-1: Native W&B sweep first; local Kaggle launcher only for packaging, accelerator fallback, status/output sync; hybrid manifest deferred.",
       "notes": "User selected Native W&B first over hybrid manifest. Population MVP stops at W&B-backed shortlist; tournaments and self-play promotion follow later."
+    },
+    {
+      "id": "ralplan-kaggle-wandb-mvp-hardening",
+      "kind": "plan",
+      "path": ".omg/plans/ralplan-kaggle-wandb-mvp-hardening.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "Plan: Kaggle W&B MVP hardening",
+      "spec_id": null,
+      "plan_id": null,
+      "related_ids": [
+        "kaggle-wandb-population",
+        "ralplan-kaggle-wandb-population"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-26",
+      "evidence": "Offline-first hardening complete: preflight command, package summary/completeness, bounded worker calibration with worker-summary.json, W&B run resume/artifact metadata, shortlist latest checkpoint details, diagnostic launch/status/sync ledger, and tiny live-smoke docs. Verified with ruff format, py_compile, dry-run launch to /tmp/orbit-wars-kaggle-dry-run, package file inspection, package-summary/worker-env JSON inspection, dry-run ledger inspection, and git diff --check. Broad pytest/JAX/live Kaggle launch intentionally not run.",
+      "notes": null
     }
   ]
 }

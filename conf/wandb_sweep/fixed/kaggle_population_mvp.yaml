@@ -14,11 +14,13 @@ parameters:
   model:
     value: transformer_factorized
   format:
-    value: mix_2p_4p_16env
+    value: default
+  task:
+    value: default
   opponents:
-    value: self_play_curriculum
+    value: default
   curriculum:
-    value: self_play_staged
+    value: default
   artifacts:
     value: default
   artifacts.checkpoint_every:
@@ -30,4 +32,4 @@ parameters:
   artifacts.replay.enabled:
     value: false
   training.total_updates:
-    value: 500
+    value: 5000

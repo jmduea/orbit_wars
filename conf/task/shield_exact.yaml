@@ -6,4 +6,3 @@ trajectory_shield_enabled: true
 trajectory_shield_mode: exact
 trajectory_shield_final_validate_selected: false
 trajectory_shield_horizon: 500
-feature_history_steps: 10

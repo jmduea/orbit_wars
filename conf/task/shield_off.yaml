@@ -5,4 +5,4 @@ defaults:
 trajectory_shield_enabled: false
 trajectory_shield_mode: off
 trajectory_shield_final_validate_selected: false
-trajectory_shield_horizon: 0
+trajectory_shield_horizon: 1

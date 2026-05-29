@@ -1,0 +1,39 @@
+program: -m
+method: bayes
+metric:
+  name: samples_per_sec
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  output.campaign:
+    value: sps_experiment
+  telemetry.wandb.group:
+    value: sps_experiment
+  telemetry.wandb.tags:
+    value: [sps_experiment]
+  telemetry.wandb.log_artifacts:
+    value: false
+  training.total_updates:
+    value: 30
+  curriculum:
+    value: "off"
+  format:
+    values: [2p_32env, 4p_32env, 2p_4p_32_env]
+  opponents:
+    values: [noop_only, self_play_only]
+  training.rollout_steps:
+    values: [64, 128, 256, 512, 768, 1024]
+  training.rotate_format_rollouts:
+    values: [true, false]
+  training.rollout_microbatch_envs:
+    values: [4, 8, 16, 32]
+  training.update_chunk_rows_min:
+    values: [256, 512, 1024, 2048]
+  training.update_chunk_rows_max:
+    values: [2048, 4096, 8192]

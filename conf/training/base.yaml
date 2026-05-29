@@ -14,7 +14,7 @@ max_grad_norm: 0.5
 
 update_chunk_rows_min: 1024
 update_chunk_rows_max: 4096
-rollout_microbatch_envs: 16
+rollout_microbatch_envs: 32
 
 rotate_format_rollouts: false
 lean_rollout_metrics: true

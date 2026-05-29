@@ -33,6 +33,96 @@
           "created_at": "2026-05-21T02:32:29.270Z"
         }
       ]
+    },
+    {
+      "id": "b7da0507",
+      "objective": "Get Kaggle W&B population worker (sweep 6utit9rs, H100) through bootstrap, calibration, and training start successfully.",
+      "status": "active",
+      "created_at": "2026-05-27T00:58:01.021Z",
+      "updated_at": "2026-05-27T14:09:44.765Z",
+      "checkpoints": [
+        {
+          "id": "4ecec078",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "v20 logging identified verify_gpu_jax_plugins failure: xla_cuda12 plugin missing after jax[cuda12] install on Kaggle. Implemented explicit uv pip install jax-cuda12-plugin jax-cuda12-pjrt step; tests pass. Launching v21.",
+          "note": "bootstrap fix for missing cuda12 plugin wheels",
+          "created_at": "2026-05-27T00:58:06.852Z"
+        },
+        {
+          "id": "3b71866e",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "v22 pushed (kernel version 22) with venv pip install for jax-cuda12-plugin[with-cuda], UV_PROJECT_ENVIRONMENT on all uv bootstrap steps, and pip-list diagnostics on verify failure. Tests: 23 passed in test_kaggle_jax_backend + test_kaggle_wandb_population.",
+          "note": "Launching v22 after v21 verify_gpu_jax_plugins failure (plugins missing in .venv)",
+          "created_at": "2026-05-27T01:07:01.019Z"
+        },
+        {
+          "id": "44fd2f14",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "v26 Kaggle log synced via file-pattern showed verify_gpu_jax_plugins failed after uv_pip_install_jax_cuda12_stack because xla_cuda12 imported stale jax_cuda13_plugin.cuda_plugin_extension and JAX version detection reported system jax 0.7.2. Patched src/orchestration/kaggle_jax.py so all uv pip show/list/install/uninstall operations target .venv/bin/python. Focused verification passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" => 23 passed. make test-fast still has unrelated baseline failures (e.g. candidate_count expected 4 vs resolved 8).",
+          "note": "v26 failure diagnosed; venv-targeted uv pip bootstrap fix implemented",
+          "created_at": "2026-05-27T02:26:22.128Z"
+        },
+        {
+          "id": "b7a3b1f6",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "Rendered worker package verified to omit raw WANDB_API_KEY and include only WANDB_API_KEY_SECRET_NAME=WANDB_API_KEY. Pushed Kaggle kernel jonduea/orbit-wars-w-b-population-worker version 27 on NvidiaH100 with sweep 6utit9rs, sweep YAML conf/sweeps/wandb/kaggle_population_long.yaml, and timeout 43200 seconds.",
+          "note": "v27 launched with venv-targeted JAX bootstrap and no packaged W&B key",
+          "created_at": "2026-05-27T02:30:36.935Z"
+        },
+        {
+          "id": "c8bf86f9",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "After removing the rejected standalone/no-W&B fallback, focused tests passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" => 25 passed. Re-rendered package verified worker-env omits raw WANDB_API_KEY and contains WANDB_API_KEY_SECRET_NAME=WANDB_API_KEY; package contains no standalone fallback strings. Pushed Kaggle kernel jonduea/orbit-wars-w-b-population-worker version 28 on NvidiaH100 with sweep 6utit9rs and timeout 43200 seconds.",
+          "note": "v28 launched after user fixed Kaggle WANDB_API_KEY secret",
+          "created_at": "2026-05-27T02:47:22.074Z"
+        },
+        {
+          "id": "72590a86",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "v28 remained Kaggle RUNNING but produced no logs and no W&B run after repeated checks, consistent with long/silent bootstrap. Implemented package-only bootstrap optimization: Nvidia Kaggle packages rewrite pyproject jax[cuda13] dependency to plain jax and omit stale uv.lock so the worker avoids installing CUDA13 before explicit CUDA12 stack setup. Focused tests passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" => 26 passed. Rendered package verified no raw WANDB_API_KEY, WANDB_API_KEY_SECRET_NAME=WANDB_API_KEY, no jax[cuda13] in rendered pyproject, no uv.lock, no rejected fallback strings. Pushed Kaggle kernel version 29 on NvidiaH100 for sweep 6utit9rs.",
+          "note": "v29 launched with optimized Kaggle GPU dependency package",
+          "created_at": "2026-05-27T02:59:35.324Z"
+        },
+        {
+          "id": "2061befe",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "Added bootstrap progress prints for Kaggle dependency setup and changed uv sync to uv sync --no-dev. Focused verification passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" => 26 passed. Rendered package verified no raw WANDB_API_KEY, WANDB_API_KEY_SECRET_NAME=WANDB_API_KEY, no jax[cuda13] in rendered pyproject, no uv.lock, and bootstrap progress marker present. Pushed Kaggle kernel version 30 on NvidiaH100 for sweep 6utit9rs.",
+          "note": "v30 launched with visible bootstrap and no-dev dependency sync",
+          "created_at": "2026-05-27T03:03:45.481Z"
+        },
+        {
+          "id": "6e8a50ae",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "Added CUDA12 NVIDIA runtime package installation after version-aligned JAX CUDA12 plugin install in src/orchestration/kaggle_jax.py; focused tests passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" -> 27 passed, 1 warning.",
+          "note": "Kaggle GPU bootstrap fix verified locally",
+          "created_at": "2026-05-27T13:57:57.545Z"
+        },
+        {
+          "id": "8486809a",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "Rendered Kaggle package verified: no raw WANDB_API_KEY, WANDB_API_KEY_SECRET_NAME=WANDB_API_KEY, no jax[cuda13] in pyproject, no uv.lock, and new uv_pip_install_cuda12_runtime bootstrap marker with nvidia-cusparse-cu12 included. Pushed Kaggle kernel jonduea/orbit-wars-w-b-population-worker version 31 on NvidiaH100, sweep 6utit9rs, timeout 43200 seconds.",
+          "note": "v31 launched with CUDA12 runtime bootstrap",
+          "created_at": "2026-05-27T13:58:45.760Z"
+        },
+        {
+          "id": "e70d6f7c",
+          "goal_id": "b7da0507",
+          "status": "checkpoint",
+          "evidence": "After user noted Kaggle variable/output persistence may be enabled, changed worker bootstrap so ORBIT_WARS_WORKER_VENV defaults to /tmp/orbit_wars_worker_venv in the packaged environment while local default remains .venv. Focused tests passed: rtk uv run --group dev pytest tests/test_kaggle_jax_backend.py tests/test_kaggle_wandb_population.py -m \"not slow and not jax\" -> 27 passed, 1 warning. Rendered package verified no raw WANDB_API_KEY, ORBIT_WARS_WORKER_VENV=/tmp/orbit_wars_worker_venv, no jax[cuda13], no uv.lock, and CUDA12 runtime bootstrap present. Pushed Kaggle version 32 on NvidiaH100, sweep 6utit9rs, timeout 43200 seconds.",
+          "note": "v32 launched with /tmp worker venv to avoid persisted Kaggle outputs",
+          "created_at": "2026-05-27T14:09:44.765Z"
+        }
+      ]
     }
-  ]
+  ],
+  "active_goal_id": "b7da0507"
 }

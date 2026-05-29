@@ -4,3 +4,6 @@ defaults:
 
 metric_groups:
   trajectory_shield_debug: false
+
+wandb:
+  tags: ["shield_off"]

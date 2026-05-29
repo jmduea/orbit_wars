@@ -8,11 +8,13 @@ from typing import Mapping, Sequence
 class AcceleratorPreference:
     """Ordered Kaggle accelerator fallback policy."""
 
+    # Single-GPU Kaggle machine shapes only, highest VRAM class first.
     accelerator_ids: tuple[str, ...] = (
         "NvidiaH100",
         "NvidiaRtxPro6000",
         "NvidiaTeslaA100",
         "NvidiaL4",
+        "NvidiaL4X1",
         "NvidiaTeslaT4Highmem",
         "NvidiaTeslaT4",
         "NvidiaTeslaP100",
@@ -65,6 +67,8 @@ class ShortlistRow:
     name: str
     state: str
     checkpoint_artifact: str | None
+    checkpoint_artifact_version: str | None = None
+    checkpoint_artifact_aliases: tuple[str, ...] = ()
     metrics: Mapping[str, float] = field(default_factory=dict)
     config: Mapping[str, object] = field(default_factory=dict)
 
@@ -85,7 +89,9 @@ class ShortlistRow:
         return (1000.0 * stability) + reward + 0.0001 * min(samples, ppo_samples)
 
 
-def rank_shortlist(rows: Sequence[ShortlistRow], *, limit: int = 10) -> list[ShortlistRow]:
+def rank_shortlist(
+    rows: Sequence[ShortlistRow], *, limit: int = 10
+) -> list[ShortlistRow]:
     """Rank completed checkpointed candidates ahead of partial diagnostics."""
 
     return sorted(

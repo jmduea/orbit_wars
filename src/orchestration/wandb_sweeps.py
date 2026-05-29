@@ -49,12 +49,17 @@ def rows_from_wandb_runs(runs: Sequence[Any]) -> list[ShortlistRow]:
         summary = getattr(run, "summary", {}) or {}
         config = getattr(run, "config", {}) or {}
         artifacts = _checkpoint_artifacts(run)
+        checkpoint = artifacts[0] if artifacts else {}
         rows.append(
             ShortlistRow(
                 run_id=str(getattr(run, "id", getattr(run, "name", "unknown"))),
                 name=str(getattr(run, "name", "unknown")),
                 state=str(getattr(run, "state", "unknown")),
-                checkpoint_artifact=artifacts[0] if artifacts else None,
+                checkpoint_artifact=_optional_str(checkpoint.get("name")),
+                checkpoint_artifact_version=_optional_str(checkpoint.get("version")),
+                checkpoint_artifact_aliases=tuple(
+                    str(alias) for alias in checkpoint.get("aliases", ())
+                ),
                 metrics={
                     key: float(summary[key])
                     for key in (
@@ -85,14 +90,69 @@ def shortlist_from_api(
     return rank_shortlist(rows_from_wandb_runs(list(runs)), limit=limit)
 
 
-def _checkpoint_artifacts(run: Any) -> list[str]:
+def _checkpoint_artifacts(run: Any) -> list[dict[str, object]]:
     try:
         logged = run.logged_artifacts()
     except Exception:
         return []
-    names: list[str] = []
+    rows: list[dict[str, object]] = []
     for artifact in logged:
         artifact_type = str(getattr(artifact, "type", ""))
         if artifact_type == "checkpoint":
-            names.append(str(getattr(artifact, "name", "checkpoint")))
-    return names
+            name = str(getattr(artifact, "name", "checkpoint"))
+            rows.append(
+                {
+                    "name": name,
+                    "version": _artifact_version(artifact, name),
+                    "aliases": _artifact_aliases(artifact),
+                    "update": _artifact_update(artifact),
+                }
+            )
+    return sorted(rows, key=_checkpoint_sort_key, reverse=True)
+
+
+def _artifact_aliases(artifact: Any) -> tuple[str, ...]:
+    aliases = getattr(artifact, "aliases", ()) or ()
+    result: list[str] = []
+    for alias in aliases:
+        result.append(str(getattr(alias, "alias", alias)))
+    return tuple(sorted(result))
+
+
+def _artifact_version(artifact: Any, name: str) -> str | None:
+    version = getattr(artifact, "version", None)
+    if version:
+        return str(version)
+    if ":" in name:
+        return name.rsplit(":", 1)[1]
+    return None
+
+
+def _artifact_update(artifact: Any) -> int:
+    metadata = getattr(artifact, "metadata", {}) or {}
+    try:
+        return int(metadata.get("update", -1))
+    except (TypeError, ValueError, AttributeError):
+        return -1
+
+
+def _checkpoint_sort_key(row: Mapping[str, object]) -> tuple[int, int, int]:
+    aliases = {str(alias) for alias in row.get("aliases", ())}
+    version = str(row.get("version") or "")
+    version_number = -1
+    if version.startswith("v"):
+        try:
+            version_number = int(version[1:])
+        except ValueError:
+            pass
+    return (
+        1 if "latest" in aliases else 0,
+        int(row.get("update", -1)),
+        version_number,
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)

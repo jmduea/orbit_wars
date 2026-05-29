@@ -18,6 +18,7 @@ class TelemetryLogger:
         self._enabled = bool(cfg.telemetry.wandb.enabled)
         self._log_model_every = max(int(cfg.telemetry.wandb.log_model_every), 1)
         self._last_wandb_step: int | None = None
+        self._run_metadata = dict(run_metadata or {})
         self._init(run_metadata or {})
 
     def _init(self, run_metadata: dict[str, Any]) -> None:
@@ -51,12 +52,16 @@ class TelemetryLogger:
             reinit=True,
             job_type=str(run_metadata.get("job_type", "train")),
             dir=str(wandb_dir) if wandb_dir else None,
+            id=os.environ.get("WANDB_RUN_ID") or None,
+            resume=os.environ.get("WANDB_RESUME") or None,
         )
         if self._run is not None:
             resolved_cfg = self._flatten(asdict(self._cfg))
             existing_keys = set(self._run.config.keys())
             missing_keys = {
-                key: value for key, value in resolved_cfg.items() if key not in existing_keys
+                key: value
+                for key, value in resolved_cfg.items()
+                if key not in existing_keys
             }
             if missing_keys:
                 self._run.config.update(missing_keys, allow_val_change=True)
@@ -98,18 +103,45 @@ class TelemetryLogger:
         self._last_wandb_step += 1
         return self._last_wandb_step
 
-    def log_artifact(self, path: str | Path, *, name: str, artifact_type: str) -> None:
+    def log_artifact(
+        self,
+        path: str | Path,
+        *,
+        name: str,
+        artifact_type: str,
+        metadata: dict[str, object] | None = None,
+        aliases: list[str] | None = None,
+    ) -> None:
         if not self.active or not self._cfg.telemetry.wandb.log_artifacts:
             return
         artifact_path = Path(path)
         if not artifact_path.exists():
             return
-        artifact = self._wandb.Artifact(name=name, type=artifact_type)
+        artifact = self._wandb.Artifact(
+            name=name,
+            type=artifact_type,
+            metadata=metadata,
+        )
         artifact.add_file(str(artifact_path))
-        self._run.log_artifact(artifact)
+        self._run.log_artifact(artifact, aliases=aliases)
 
     def log_checkpoint(self, path: str | Path, *, update: int) -> None:
-        self.log_artifact(path, name=f"checkpoint-u{update}", artifact_type="checkpoint")
+        metadata = {
+            "update": int(update),
+            "run_name": self._cfg.run_name,
+            "campaign": self._run_metadata.get("campaign"),
+            "run_id": self._run_metadata.get("run_id"),
+            "wandb_run_id": getattr(self._run, "id", None),
+        }
+        self.log_artifact(
+            path,
+            name=f"checkpoint-u{update}",
+            artifact_type="checkpoint",
+            metadata={
+                key: value for key, value in metadata.items() if value is not None
+            },
+            aliases=["latest", f"update-{int(update)}"],
+        )
 
     def log_replay(self, path: str | Path, *, update: int) -> None:
         self.log_artifact(path, name=f"replay-u{update}", artifact_type="replay")
@@ -121,5 +153,7 @@ class TelemetryLogger:
         self._run = None
 
 
-def build_telemetry(cfg: TrainConfig, run_metadata: dict[str, Any] | None = None) -> TelemetryLogger:
+def build_telemetry(
+    cfg: TrainConfig, run_metadata: dict[str, Any] | None = None
+) -> TelemetryLogger:
     return TelemetryLogger(cfg, run_metadata=run_metadata)

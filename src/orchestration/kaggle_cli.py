@@ -7,8 +7,9 @@ from typing import Protocol, Sequence
 
 
 class CommandRunner(Protocol):
-    def __call__(self, command: Sequence[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-        ...
+    def __call__(
+        self, command: Sequence[str], *, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 def _default_runner(
@@ -45,6 +46,7 @@ class KaggleKernelRef:
 class KaggleKernelStatus:
     ref: KaggleKernelRef
     raw: str
+    returncode: int = 0
 
     @property
     def normalized(self) -> str:
@@ -55,6 +57,8 @@ class KaggleKernelStatus:
             return "failed"
         if "running" in text or "queued" in text:
             return "running"
+        if self.returncode != 0:
+            return "failed"
         return "unknown"
 
 
@@ -89,7 +93,11 @@ class KaggleCli:
             [self._executable, "kernels", "status", str(ref)],
             cwd=None,
         )
-        return KaggleKernelStatus(ref=ref, raw=(result.stdout or result.stderr))
+        return KaggleKernelStatus(
+            ref=ref,
+            raw=(result.stdout or result.stderr),
+            returncode=result.returncode,
+        )
 
     def files(self, ref: KaggleKernelRef) -> subprocess.CompletedProcess[str]:
         return self._runner([self._executable, "kernels", "files", str(ref)], cwd=None)

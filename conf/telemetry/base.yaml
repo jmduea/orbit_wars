@@ -4,8 +4,8 @@ metric_groups:
   timing: true
   curriculum: false
   opponent_composition: false
-  action_decision: true
-  game_state: true
+  action_decision: false
+  game_state: false
   trajectory_shield_debug: false
   historical_pool: false
   events: true

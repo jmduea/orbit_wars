@@ -1,0 +1,41 @@
+program: -m
+method: grid
+metric:
+  name: overall_win_rate
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  output.campaign:
+    value: opp_experiment
+  telemetry.wandb.group:
+    value: opp_experiment
+  telemetry.wandb.tags:
+    value:
+      [
+        random_only,
+        noop_only,
+        self_play_only,
+        nearest_only,
+        2p_32env,
+        4p_32env,
+        2p_4p_16env,
+        curriculum_off,
+      ]
+  telemetry.wandb.enabled:
+    value: true
+  telemetry.wandb.log_artifacts:
+    value: true
+  format:
+    values: [2p_32env, 4p_32env, 2p_4p_16env]
+  opponents:
+    values: [random_only, noop_only, self_play_only, nearest_only]
+  training.total_updates:
+    values: [30, 50, 100]
+  curriculum:
+    value: "off"

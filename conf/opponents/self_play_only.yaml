@@ -4,7 +4,7 @@ defaults:
 
 self_play:
   enabled: true
-  update_interval: 50
+  update_interval: 10
   deterministic: true
 
 mode:
@@ -14,8 +14,8 @@ mode:
 
 mix:
   weights:
-    latest: 1.0
-    historical: 0.0
+    latest: 0.5
+    historical: 0.5
     nearest_sniper: 0.0
     turtle: 0.0
     opportunistic: 0.0
@@ -25,7 +25,7 @@ mix:
 
 snapshot:
   pool_size: 2
-  interval_updates: 250
+  interval_updates: 10
   deterministic: true
   selection: uniform
   fallback: latest
