@@ -89,3 +89,10 @@ Centralized repository of all the things that i've felt the need to write down i
     /home/jmduea/projects/orbit_wars/outputs/campaigns/default/runs/20260526T174954Z-s42-f83967b0/logs/78036470-1.json
     ```
 
+- Current kaggle population worker pipeline is broken and needs to be fixed. The kernel gets uploaded to kaggle, but then fails to run, fails to pick up wandb secret as well. Manual workarounds work to make the worker run by importing the kaggle notebook into colab and running the worker manually. No manual workaround currently works to get the worker to run in kaggle.
+
+- Current config setup is a bit messy and needs to be cleaned up.
+
+    - There are a lot of config groups that are not being used and could be removed.
+    - There are seemingly redundant/unused config values that could be removed.
+    - Better documentation of config setup and usage is needed. Especially around what each value does and how it affects the training run.
