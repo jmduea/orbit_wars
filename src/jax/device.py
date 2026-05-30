@@ -79,16 +79,6 @@ def configure_jax_runtime_for_host() -> None:
         os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 
-def configure_jax_platform_for_host() -> None:
-    """Avoid probing CUDA plugins on hosts without visible NVIDIA hardware.
-
-    Deprecated compatibility wrapper; new code should call
-    :func:`configure_jax_runtime_for_host`.
-    """
-
-    configure_jax_runtime_for_host()
-
-
 def ensure_jax_accelerator_backend() -> None:
     """Fail fast when the requested Kaggle accelerator backend is unavailable."""
 
@@ -127,8 +117,3 @@ def ensure_jax_accelerator_backend() -> None:
         "intentional."
     )
 
-
-def ensure_cuda_jax_if_nvidia_present() -> None:
-    """Deprecated compatibility wrapper for accelerator backend checks."""
-
-    ensure_jax_accelerator_backend()

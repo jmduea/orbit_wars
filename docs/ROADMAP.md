@@ -16,7 +16,6 @@
 
 | Item | Link |
 |------|------|
-| Config cleanup: remove unused groups/values, document Hydra usage | [#98](https://github.com/jmduea/orbit_wars/issues/98) |
 | Verify seed scheduler swaps during training | [#99](https://github.com/jmduea/orbit_wars/issues/99) |
 | JAX compile time: within expected bounds? | [#100](https://github.com/jmduea/orbit_wars/issues/100) |
 | What is `survival_time` and how does it relate to performance? | [#101](https://github.com/jmduea/orbit_wars/issues/101) |
@@ -35,7 +34,9 @@
 
 | Item | Link |
 |------|------|
-| _(none yet — close items via GitHub issues or move rows here)_ | — |
+| Config cleanup: presets, legacy models, OMG clutter, Hydra launch recipes | [#98](https://github.com/jmduea/orbit_wars/issues/98) |
+| Normalized ship differential terminal reward mode | — |
+| ROADMAP system + GitHub issue workflow | — |
 
 _Last triaged: 2026-05-30_
 

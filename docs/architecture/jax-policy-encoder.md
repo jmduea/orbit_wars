@@ -9,10 +9,8 @@ up to `max_moves_k` launches per turn.
 ```mermaid
 flowchart LR
     TB[TurnBatch] --> DISPATCH{model.architecture}
-    DISPATCH -->|gnn_pointer| GNN[PlanetEdgeBackboneEncoder]
     DISPATCH -->|planet_graph_transformer| TX[PlanetGraphTransformerEncoder]
-    GNN --> OUT[PlanetEdgeEncoderOutput]
-    TX --> OUT
+    TX --> OUT[PlanetEdgeEncoderOutput]
     OUT --> DEC[AutoregressivePointerDecoder]
     DEC --> ACT[target_logits + ship_logits + value]
 ```

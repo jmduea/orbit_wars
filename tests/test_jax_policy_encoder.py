@@ -22,7 +22,6 @@ from src.jax.encoders.planet_encoder_common import (
     planet_self_attention_mask,
 )
 from src.jax.policy import (
-    build_gnn_pointer_policy,
     build_jax_policy,
     build_planet_graph_transformer_policy,
     make_synthetic_turn_batch,
@@ -35,7 +34,7 @@ def _task_cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def _train_cfg(*, architecture: str, pointer_decoder: str = "joint_flat") -> TrainConfig:
+def _train_cfg(*, architecture: str, pointer_decoder: str = "factorized_topk") -> TrainConfig:
     cfg = TrainConfig()
     cfg.model.architecture = architecture
     cfg.model.pointer_decoder = pointer_decoder
@@ -66,23 +65,17 @@ def test_planet_graph_transformer_forward_shapes() -> None:
     _, batch, output = _init_and_apply(policy, cfg)
 
     k_slots = edge_k(cfg.task)
-    edge_count = MAX_PLANETS * k_slots + 1
-    assert output.target_logits.shape == (2, cfg.model.max_moves_k, edge_count)
+    assert output.source_logits.shape == (2, cfg.model.max_moves_k, MAX_PLANETS)
+    assert output.target_logits.shape == (2, cfg.model.max_moves_k, k_slots)
     assert output.ship_logits.shape == (
         2,
         cfg.model.max_moves_k,
-        edge_count,
+        k_slots,
         cfg.task.ship_bucket_count,
     )
     assert output.value.shape == (2,)
     assert batch.planet_features.shape[1] == MAX_PLANETS
 
-
-def test_gnn_pointer_forward_shapes_after_tgt_fusion() -> None:
-    cfg = _train_cfg(architecture="gnn_pointer")
-    policy = build_gnn_pointer_policy(cfg)
-    _, _, output = _init_and_apply(policy, cfg)
-    assert output.value.shape == (2,)
 
 
 def test_transformer_layer_depth_changes_param_tree() -> None:
@@ -132,9 +125,9 @@ def test_spatial_bias_prefers_closer_planets() -> None:
 
 
 def test_build_jax_policy_dispatches_transformer() -> None:
-    cfg = _train_cfg(architecture="planet_graph_transformer", pointer_decoder="joint_flat")
+    cfg = _train_cfg(architecture="planet_graph_transformer", pointer_decoder="factorized_topk")
     policy = build_jax_policy(cfg)
-    assert policy.__class__.__name__ == "ComposablePlanetPolicy"
+    assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
 
 def test_build_jax_policy_dispatches_factorized_transformer() -> None:
@@ -146,7 +139,6 @@ def test_build_jax_policy_dispatches_factorized_transformer() -> None:
 
 
 def test_encoder_backbone_metadata_mapping() -> None:
-    assert encoder_backbone_for_architecture("gnn_pointer") == "planet_gnn"
     assert (
         encoder_backbone_for_architecture("planet_graph_transformer")
         == "planet_self_attention"

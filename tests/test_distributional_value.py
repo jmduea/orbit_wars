@@ -73,7 +73,7 @@ def test_build_value_head_distributional_and_forward_shape() -> None:
 
 
 def test_compose_hydra_train_config_accepts_distributional_value_head() -> None:
-    cfg = compose_hydra_train_config(["model=distributional_value"])
+    cfg = compose_hydra_train_config(["model=transformer_factorized"])
     assert cfg.model.value_head == "distributional"
     assert cfg.model.value_bins == 51
     assert cfg.model.value_max == 1.0

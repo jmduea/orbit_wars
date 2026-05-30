@@ -14,6 +14,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import RewardConfig, TaskConfig
+from src.game.rewards import apply_early_terminal_reward_shaping_jax
 from src.game.constants import (
     BOARD_SIZE,
     MAX_FLEET_SPEED,
@@ -759,7 +760,7 @@ def _terminal(
             "score_share, survival_plus_rank, or normalized_ship_differential; "
             f"got {mode!r}."
         )
-    reward = _apply_early_terminal_reward_shaping_jax(reward, game.step, reward_cfg)
+    reward = apply_early_terminal_reward_shaping_jax(reward, game.step, reward_cfg)
     return (
         done,
         reward,
@@ -770,20 +771,6 @@ def _terminal(
         ship_differential,
         survival_time,
     )
-
-
-def _apply_early_terminal_reward_shaping_jax(
-    reward: jax.Array, step_index: jax.Array, cfg: RewardConfig
-) -> jax.Array:
-    if not cfg.early_terminal_reward_shaping_enabled:
-        return reward
-    horizon = jnp.asarray(
-        max(int(cfg.early_terminal_reward_shaping_horizon), 1),
-        dtype=jnp.float32,
-    )
-    step_number = jnp.maximum(step_index.astype(jnp.float32) + 1.0, 1.0)
-    bonus = jnp.maximum(horizon - step_number, 0.0) / horizon
-    return reward * (1.0 + bonus)
 
 
 def _ship_advantage(game: JaxGameState, player: jax.Array):

@@ -17,7 +17,7 @@ from src.training.curriculum import CurriculumController
 
 def _v2_cfg(*, player_count: int = 2) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.task.player_count = player_count
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16

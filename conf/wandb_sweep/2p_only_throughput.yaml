@@ -7,7 +7,6 @@ defaults:
   - metric: samples_per_sec
   - fixed: throughput_2p
   - space: throughput_2p
-  - override fixed: no_artifacts
   - _self_
 
 name: 2p_only_throughput

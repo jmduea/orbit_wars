@@ -37,12 +37,9 @@ from src.telemetry import build_telemetry
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
-from .device import (
-    configure_jax_platform_for_host,
-    ensure_cuda_jax_if_nvidia_present,
-)
+from .device import configure_jax_runtime_for_host, ensure_jax_accelerator_backend
 
-configure_jax_platform_for_host()
+configure_jax_runtime_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
 
 import jax.numpy as jnp  # noqa: E402
@@ -63,6 +60,11 @@ from .policy import build_jax_policy  # noqa: E402
 from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
 from .rollout.collect import collect_rollout_jax  # noqa: E402
 from .rollout.types import JaxTransitionBatch  # noqa: E402
+from .normalization import (
+    init_observation_norm_state,
+    normalize_transition_batch,
+    update_norm_state_from_transitions,
+)  # noqa: E402
 from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
 
 
@@ -171,6 +173,7 @@ def _init_rollout_group(
         stage_view=None,
         historical_params_pool=None,
         update_idx=jnp.asarray(0, dtype=jnp.int32),
+        norm_state=None,
     ):
         if microbatch_envs >= group_cfg.training.num_envs:
             return collect_rollout_jax(
@@ -183,6 +186,7 @@ def _init_rollout_group(
                 stage_view=stage_view,
                 historical_params_pool=historical_params_pool,
                 update=update_idx,
+                norm_state=norm_state,
             )
         return _collect_rollout_microbatched(
             rollout_key,
@@ -195,6 +199,7 @@ def _init_rollout_group(
             stage_view=stage_view,
             historical_params_pool=historical_params_pool,
             update=update_idx,
+            norm_state=norm_state,
         )
 
     collect_fn = jax.jit(collect_fn)
@@ -489,6 +494,7 @@ def _collect_rollout_microbatched(
     stage_view=None,
     historical_params_pool=None,
     update=jnp.asarray(0, dtype=jnp.int32),
+    norm_state=None,
 ) -> tuple[jax.Array, JaxEnvState, TurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
     env_count = int(cfg.training.num_envs)
     micro = int(microbatch_envs)
@@ -520,6 +526,7 @@ def _collect_rollout_microbatched(
             historical_params_pool=historical_params_pool,
             update=update,
             env_index_offset=start,
+            norm_state=norm_state,
         )
         return next_state, next_batch, chunk_transitions, chunk_metrics
 
@@ -899,7 +906,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         Path to the JSONL metrics log for this run.
     """
 
-    ensure_cuda_jax_if_nvidia_present()
+    ensure_jax_accelerator_backend()
 
     key = jax.random.PRNGKey(cfg.seed)
     _, rollout_init_key, policy_key = jax.random.split(key, 3)
@@ -917,6 +924,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         print(
             f"Resuming JAX training from {resume_checkpoint} at update {start_update}"
         )
+    norm_state = (
+        init_observation_norm_state(rollout_groups[0].turn_batch)
+        if cfg.model.normalize_observations
+        else None
+    )
     update_fn = jax.jit(
         lambda ts, transitions: ppo_update_jax(ts, policy, transitions, cfg)
     )
@@ -1128,6 +1140,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     stage_view,
                     historical_pool.params,
                     jnp.asarray(update, dtype=jnp.int32),
+                    norm_state,
                 )
                 group_env_steps, group_samples = jax.device_get(
                     jnp.asarray(
@@ -1150,6 +1163,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 merged_groups[group_idx] = updated_group
             rollout_groups = merged_groups
             transitions = concatenate_transition_batches(transitions_by_group)
+            if norm_state is not None and cfg.model.normalize_observations:
+                ppo_transitions = normalize_transition_batch(
+                    transitions, norm_state, cfg.model
+                )
+            else:
+                ppo_transitions = transitions
             rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
             rollout_scalar_keys = (
                 *_BASE_ROLLOUT_SCALAR_KEYS,
@@ -1171,13 +1190,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             ppo_start = time.perf_counter()
             metrics_accum: dict[str, jax.Array] | None = None
             for _ in range(cfg.training.epochs):
-                train_state, update_metrics = update_fn(train_state, transitions)
+                train_state, update_metrics = update_fn(train_state, ppo_transitions)
                 metrics_accum = (
                     update_metrics
                     if metrics_accum is None
                     else jax.tree.map(jnp.add, metrics_accum, update_metrics)
                 )
             assert metrics_accum is not None
+            if norm_state is not None and cfg.model.normalize_observations:
+                norm_state = update_norm_state_from_transitions(norm_state, transitions)
             metrics = jax.tree.map(
                 lambda x: x / float(max(cfg.training.epochs, 1)), metrics_accum
             )

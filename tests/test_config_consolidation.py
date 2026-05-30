@@ -4,10 +4,24 @@ from itertools import product
 from pathlib import Path
 
 import pytest
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from scripts.compare_attention_candidates import DEFAULT_CONFIGS
 from src.config import compose_hydra_train_config
+
+SWEEP_COMPOSE_RECIPES = ("budget", "2p_only_throughput", "4p_only_throughput")
+
+LAUNCH_RECIPES: dict[str, list[str]] = {
+    "smoke": [
+        "training=smoke",
+        "format=2p_16env",
+        "curriculum=off",
+        "opponents=noop_only",
+        "telemetry=throughput_only",
+        "artifacts=disabled",
+    ],
+    "shield_cheap": ["task=shield_cheap", "telemetry=default"],
+}
 
 
 def test_root_config_composes_from_responsibility_groups() -> None:
@@ -37,7 +51,7 @@ def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> N
             "training.total_updates=2",
             "task.candidate_count=12",
             "reward.reward_production_delta=0.01",
-            "format=mix_2p_4p_16env",
+            "format=2p_4p_16env",
             "telemetry.wandb.group=capacity",
         ]
     )
@@ -67,11 +81,11 @@ def test_legacy_overrides_are_rejected(legacy_override: str) -> None:
         compose_hydra_train_config([legacy_override])
 
 
-def test_compare_script_default_configs_compose() -> None:
-    for overrides in DEFAULT_CONFIGS.values():
-        cfg = compose_hydra_train_config(overrides)
-        assert cfg.model.architecture == "planet_graph_transformer"
-        assert cfg.task.candidate_count in {8, 16, 24}
+@pytest.mark.parametrize("name,overrides", LAUNCH_RECIPES.items())
+def test_launch_recipe_composes(name: str, overrides: list[str]) -> None:
+    del name
+    cfg = compose_hydra_train_config(overrides)
+    assert cfg.model.architecture == "planet_graph_transformer"
 
 
 def test_output_campaign_slug_is_validated() -> None:
@@ -115,9 +129,20 @@ def test_wandb_sweep_campaign_samples_compose_full() -> None:
 
 
 def _iter_sweep_compose_cases(*, full_grid: bool):
-    sweep_dir = Path("conf/sweeps/wandb")
-    for path in sorted(sweep_dir.glob("*.yaml")):
-        sweep = OmegaConf.to_container(OmegaConf.load(path), resolve=False)
+    from hydra.core.global_hydra import GlobalHydra
+
+    config_dir = Path(__file__).resolve().parents[1] / "conf"
+    for recipe in SWEEP_COMPOSE_RECIPES:
+        GlobalHydra.instance().clear()
+        with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
+            sweep = OmegaConf.to_container(
+                compose(
+                    config_name="sweep_gen",
+                    overrides=[f"wandb_sweep={recipe}"],
+                ),
+                resolve=True,
+            )
+        GlobalHydra.instance().clear()
         parameters = sweep["parameters"]
         keys = []
         value_sets = []
@@ -130,7 +155,9 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
                 # W&B bayes/uniform sweeps are not grid-enumerable; smoke with min.
                 values = [spec["min"]]
             else:
-                raise KeyError(f"Unsupported sweep parameter spec for {key!r}: {spec!r}")
+                raise KeyError(
+                    f"Unsupported sweep parameter spec for {key!r}: {spec!r}"
+                )
             keys.append(key)
             value_sets.append(values)
 
@@ -147,9 +174,8 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
 
 
 def test_baseline_sweep_scaffolding_is_discoverable() -> None:
-    expected = {"kaggle_population_mvp.yaml"}
-    sweep_dir = Path("conf/sweeps/wandb")
-    assert expected <= {path.name for path in sweep_dir.glob("*.yaml")}
+    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_population_mvp.yaml")
+    assert fixed_path.is_file()
 
 
 def _hydra_value(value: object) -> str:

@@ -1,5 +1,0 @@
-defaults:
-  - shield_cheap
-  - _self_
-
-feature_history_steps: 15

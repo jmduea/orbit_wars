@@ -121,7 +121,7 @@ def test_estimate_training_overrides_scales_down_heavier_models() -> None:
 
 
 def test_mixed_format_overrides_keep_microbatch_compatible_with_group_envs() -> None:
-    hydra_overrides = ("format=mix_2p_4p_16env",)
+    hydra_overrides = ("format=2p_4p_16env",)
     overrides = estimate_training_overrides(
         HardwareProfile("gpu", "test", 24),
         {"hidden_size": 140, "planet_transformer_layers": 1},
@@ -143,7 +143,7 @@ def test_mixed_format_overrides_keep_microbatch_compatible_with_group_envs() -> 
 
 
 def test_finalize_rollout_shape_overrides_repairs_bad_microbatch() -> None:
-    hydra_overrides = ("format=mix_2p_4p_16env",)
+    hydra_overrides = ("format=2p_4p_16env",)
     repaired = finalize_rollout_shape_overrides(
         (
             "training.num_envs=24",

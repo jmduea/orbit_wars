@@ -9,7 +9,7 @@ from src.jax.benchmark import (
 
 
 def test_rollout_group_summary_uses_format_owned_env_counts() -> None:
-    cfg = compose_hydra_train_config(["format=mix_2p_4p_16env"])
+    cfg = compose_hydra_train_config(["format=2p_4p_16env"])
     summary = rollout_group_summary(cfg)
 
     assert len(summary) == 2
@@ -18,7 +18,7 @@ def test_rollout_group_summary_uses_format_owned_env_counts() -> None:
 
 
 def test_production_benchmark_payload_includes_group_metadata() -> None:
-    cfg = compose_hydra_train_config(["format=mix_2p_4p_16env"])
+    cfg = compose_hydra_train_config(["format=2p_4p_16env"])
     groups = rollout_group_summary(cfg)
     payload = production_benchmark_payload(
         ProductionBenchmarkResult(

@@ -1,6 +1,0 @@
-defaults:
-  - override /task: shield_off
-  - override /telemetry: shield_off
-  - _self_
-
-run_name: shield_off

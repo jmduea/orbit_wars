@@ -76,7 +76,7 @@ def test_hydra_runtime_output_dir_is_the_run_envelope(
 
 def test_compose_run_name_prioritizes_comparison_fields() -> None:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.format.rollout_groups = [
         {"name": "two_player", "player_count": 2, "num_envs": 8},
         {"name": "four_player", "player_count": 4, "num_envs": 8},
@@ -88,7 +88,7 @@ def test_compose_run_name_prioritizes_comparison_fields() -> None:
     run_name = compose_run_name(cfg)
 
     assert re.fullmatch(
-        rf"gnn_pointer-mix2p4p-selfplay-u500-env16-s42-{RUN_NAME_TIMESTAMP_RE}",
+        rf"planet_graph_transformer-mix2p4p-selfplay-u500-env16-s42-{RUN_NAME_TIMESTAMP_RE}",
         run_name,
     )
 

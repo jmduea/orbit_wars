@@ -70,7 +70,7 @@ def main() -> None:
                 "Examples:\n"
                 "  uv run ow train print_resolved_config=true\n"
                 "  uv run ow make wandb_sweep=shield_cheap_history\n"
-                "  uv run ow preset=shield_cheap\n"
+                "  uv run ow train task=shield_cheap training.total_updates=10\n"
             )
         case _:
             raise SystemExit(

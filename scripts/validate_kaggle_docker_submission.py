@@ -35,6 +35,7 @@ RUNTIME_FILES = (
     "features/registry.py",
     "game/__init__.py",
     "game/constants.py",
+    "game/rewards.py",
     "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
@@ -171,18 +172,14 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
     model_cfg = _require_dict(config_dict, "model")
     training_cfg = _require_dict(config_dict, "training")
     architecture = str(model_cfg.get("architecture", "")).strip().lower()
-    if architecture not in {
-        "gnn_pointer",
-        "gnn_pointer_v2",
-        "planet_graph_transformer",
-    }:
+    if architecture not in {"planet_graph_transformer"}:
         raise ValidationError("unsupported_architecture", f"Unsupported architecture: {architecture!r}")
 
     feature_metadata = _to_plain_data(checkpoint.get("feature_metadata", {}))
     if not isinstance(feature_metadata, dict):
         feature_metadata = {}
     stored_decoder = feature_metadata.get("pointer_decoder")
-    model_decoder = str(model_cfg.get("pointer_decoder", "joint_flat")).strip().lower()
+    model_decoder = str(model_cfg.get("pointer_decoder", "factorized_topk")).strip().lower()
     if stored_decoder is not None and str(stored_decoder) != model_decoder:
         raise ValidationError(
             "checkpoint_schema_failed",
@@ -480,11 +477,11 @@ class RewardConfig:
 
 @dataclass(slots=True)
 class ModelConfig:
-    architecture: str = "gnn_pointer"
+    architecture: str = "planet_graph_transformer"
     value_head: str = "shared"
     value_bins: int = 51
     value_max: float = 1.0
-    pointer_decoder: str = "joint_flat"
+    pointer_decoder: str = "factorized_topk"
     decoder_carry: bool = False
     hidden_size: int = 128
     attention_heads: int = 4

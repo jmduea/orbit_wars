@@ -10,18 +10,15 @@ training/workstation.yaml
 format/2p_4p_16env.yaml
 ```
 
-`format/mix_2p_4p_*` names are **deprecated aliases** that compose the matching `2p_4p_*` group; prefer `2p_4p_*` in new configs and docs.
+## Launch recipes (multi-group overrides)
 
-## Use a preset when multiple groups should change together
+When several groups should change together, pass explicit Hydra overrides:
 
-Particularly useful for making sure that logging/telemetry stays on when it should and gets disabled when it's not needed.
-
-Examples:
-
-```bash
-preset/shield_off.yaml
-preset/smoke.yaml
-```
+| Recipe | Overrides |
+| --- | --- |
+| smoke | `training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled` |
+| shield_cheap | `task=shield_cheap telemetry=default` |
+| shield_tiered | `task=shield_tiered telemetry=default` |
 
 ## Use `wandb_sweep/fixed` for values that stay fixed across a sweep
 
@@ -29,8 +26,11 @@ Example:
 
 ```yaml
 parameters:
-  preset:
+  task:
     value: shield_cheap
+
+  output.campaign:
+    value: shield_cheap_sweep
 ```
 
 ## Use `wandb_sweep/space` for values W&B should vary
@@ -48,13 +48,7 @@ parameters:
 ### Print resolved config
 
 ```bash
-uv run ow train preset=shield_cheap print_resolved_config=true
-```
-
-### Check a preset
-
-```bash
-uv run ow train preset=smoke print_resolved_config=true
+uv run ow train task=shield_cheap print_resolved_config=true
 ```
 
 ### Generate a sweep and inspect it
@@ -68,7 +62,7 @@ cat artifacts/sweeps/shield_cheap_history.yaml
 
 ```bash
 uv run ow train \
-  preset=shield_cheap \
+  task=shield_cheap \
   training.lr=0.0003 \
   task.feature_history_steps=10 \
   task.trajectory_shield_horizon=50
@@ -78,21 +72,19 @@ uv run ow train \
 
 ### 1. Create or update normal configs in `task/`, `training/`, `model/`, etc
 
-### 2. Compose them into a `preset/*.yaml`
-
-### 3. Verify with
+### 2. Verify with direct overrides
 
 ```bash
-uv run ow train preset=<preset_name> print_resolved_config=true
+uv run ow train task=shield_cheap print_resolved_config=true
 ```
 
-### 4. Run a smoke test
+### 3. Run a smoke test
 
 ```bash
-uv run ow train preset=smoke
+uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
 ```
 
-### 5. If running many trials, define
+### 4. If running many trials, define
 
 ```bash
 wandb_sweep/fixed/*.yaml
@@ -100,8 +92,8 @@ wandb_sweep/space/*.yaml
 wandb_sweep/<recipe>.yaml
 ```
 
-### 6. Generate the W&B sweep YAML
+### 5. Generate the W&B sweep YAML
 
-### 7. Register with W&B
+### 6. Register with W&B
 
-### 8. Run the W&B agent
+### 7. Run the W&B agent

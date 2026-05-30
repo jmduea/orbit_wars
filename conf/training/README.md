@@ -21,7 +21,6 @@ Examples
 ```bash
 uv run ow train training=smoke
 uv run ow train training=workstation
-uv run ow train training=ablation
 ```
 
 Use `training=smoke` for quick config and pipeline checks.

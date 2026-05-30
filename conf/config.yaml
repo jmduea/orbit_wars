@@ -8,13 +8,10 @@ defaults:
   - opponents: default
   - telemetry: default
   - artifacts: default
-  - optional sweep_space: none
-  - optional preset: null
   - _self_
 
 seed: 42
 run_name: default
-device: auto
 heldout_eval_seed_set: []
 print_resolved_config: false
 resume_checkpoint: null

@@ -13,7 +13,7 @@ from src.training.curriculum import CurriculumController
 
 def _v2_smoke_cfg(*, rollout_steps: int) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16
     cfg.model.hidden_size = 16

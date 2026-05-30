@@ -8,7 +8,7 @@ from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.jax.decoder_carry import empty_decoder_hidden, reset_decoder_hidden_on_done
 from src.jax.env import batched_reset
-from src.jax.policy import build_gnn_pointer_policy, make_synthetic_turn_batch
+from src.jax.policy import build_planet_graph_transformer_policy, make_synthetic_turn_batch
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.train_state import init_train_state
 from src.opponents.jax_actions.builders import _sample_shielded_sequence_with_params
@@ -22,7 +22,7 @@ def _task_cfg(**kwargs) -> TaskConfig:
 
 def _train_cfg(*, decoder_carry: bool) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 64
     cfg.model.max_moves_k = 2
@@ -56,7 +56,7 @@ def test_reset_decoder_hidden_on_done() -> None:
 
 def test_policy_returns_decoder_hidden_when_carry_enabled() -> None:
     cfg = _train_cfg(decoder_carry=True)
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(0))
     params = policy.init(jax.random.PRNGKey(1), batch)
     carry_in = empty_decoder_hidden(2, cfg.model.hidden_size)
@@ -72,7 +72,7 @@ def test_policy_returns_decoder_hidden_when_carry_enabled() -> None:
 
 def test_policy_decoder_hidden_none_when_carry_disabled() -> None:
     cfg = _train_cfg(decoder_carry=False)
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     batch = make_synthetic_turn_batch(1, cfg.task, key=jax.random.PRNGKey(2))
     params = policy.init(jax.random.PRNGKey(3), batch)
     output = policy.apply(params, batch, deterministic=True)
@@ -82,7 +82,7 @@ def test_policy_decoder_hidden_none_when_carry_disabled() -> None:
 def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
     cfg = _sampler_cfg(pointer_decoder="factorized_topk")
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(4), 1), cfg.task)
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     params = policy.init(jax.random.PRNGKey(5), batch)
     carry_in = jnp.full((1, cfg.model.hidden_size), 0.25, dtype=jnp.float32)
 
@@ -115,40 +115,6 @@ def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
     )
 
 
-def test_joint_sampler_carry_matches_replay_from_incoming_hidden() -> None:
-    cfg = _sampler_cfg(pointer_decoder="joint_flat")
-    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(7), 1), cfg.task)
-    policy = build_gnn_pointer_policy(cfg)
-    params = policy.init(jax.random.PRNGKey(8), batch)
-    carry_in = jnp.full((1, cfg.model.hidden_size), -0.15, dtype=jnp.float32)
-
-    sample = _sample_shielded_sequence_with_params(
-        jax.random.PRNGKey(9),
-        state.game,
-        batch,
-        params,
-        policy,
-        cfg,
-        deterministic=True,
-        deterministic_eval=True,
-        decoder_hidden_in=carry_in,
-    )
-    replay = policy.apply(
-        params,
-        batch,
-        player_count=jnp.full((1,), cfg.task.player_count, dtype=jnp.int32),
-        target_sequence=sample.target_index,
-        decoder_hidden=carry_in,
-        deterministic=True,
-    )
-
-    np.testing.assert_allclose(
-        np.asarray(sample.decoder_hidden_out),
-        np.asarray(replay.decoder_hidden),
-        rtol=1e-6,
-        atol=1e-6,
-    )
-
 
 def test_rollout_initializes_env_state_decoder_hidden_for_scan_structure() -> None:
     cfg = _sampler_cfg(pointer_decoder="factorized_topk")
@@ -157,7 +123,7 @@ def test_rollout_initializes_env_state_decoder_hidden_for_scan_structure() -> No
     cfg.training.rollout_steps = 1
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(10), 1), cfg.task)
     assert state.decoder_hidden is None
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(11), policy, cfg)
 
     _key, next_state, _batch, transitions, _metrics = collect_rollout_jax(
