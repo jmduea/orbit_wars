@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Roadmap (human index)
+    url: https://github.com/jmduea/orbit_wars/blob/main/docs/ROADMAP.md
+    about: Now / Next / Later status before opening an issue
+  - name: Brain dump (inbox)
+    url: https://github.com/jmduea/orbit_wars/blob/main/docs/brain_dump.md
+    about: Quick capture for ideas and questions — triage into ROADMAP weekly

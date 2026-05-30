@@ -1,0 +1,34 @@
+name: Task
+description: Clear chore with a done state
+title: "[task]: "
+labels: ["type:task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Link from [docs/ROADMAP.md](docs/ROADMAP.md) when promoted to **Next** or **Now**.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Acceptance criteria (bullet list)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:kaggle
+        - area:train
+        - area:config
+        - area:features
+        - area:infra
+    validations:
+      required: true

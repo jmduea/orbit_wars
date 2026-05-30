@@ -1,0 +1,30 @@
+name: Research
+description: Question or spike; may close as answered without code
+title: "[research]: "
+labels: ["type:research"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What evidence would answer this? (benchmark, doc cite, metric definition)
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:kaggle
+        - area:train
+        - area:config
+        - area:features
+        - area:infra
+    validations:
+      required: true

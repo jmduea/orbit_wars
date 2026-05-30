@@ -2,6 +2,8 @@
 
 Centralized repository of all the things that i've felt the need to write down in relation to this project ranging from ideas to questions and issues that need to be addressed.
 
+**Triage:** Active priorities live in [ROADMAP.md](ROADMAP.md). Capture here first; during weekly triage promote **Issues** → ROADMAP **Now**/**Next** (and open a GitHub issue with `type:*` + `area:*` labels). **Ideas** stay here or move to ROADMAP **Later**.
+
 ## Ideas
 
 - Add informative wandb.tags for config groups that:
@@ -31,28 +33,6 @@ Centralized repository of all the things that i've felt the need to write down i
         # 4p_num_envs = floor(num_envs * 4p_weight)
         # would need to adress how we handle cases where the total num_envs is not a multiple of the number of players (i.e. 64 * 0.8 = 51.2)
     ```
-
-- Update terminal_reward mode from binary_win to normalized ship differential
-
-    - binary_win is a pretty sparse reward, and also doesn't completely capture how kaggle handles determining the winner.
-
-        - From kaggle docs:
-        ```
-        Scoring and Termination
-        The game ends when:
-        - Step limit reached: 500 turns.
-        - Elimination: Only one player (or zero) remains with any planets or fleets.
-        - Final score = total ships on owned planets + total ships in owned fleets. Highest score wins.
-        ```
-
-    - Ideally, we take the normalized ship differential and scale it to be between -1 and 1.
-        - 1 signifies winning by elimination
-        - -1 signifies losing by elimination
-        - 0 signifies an ABSOLUTE tie, i.e. the exact same number of ships on owned planets and owned fleets (HIGHLY UNLIKELY)
-        - anything from -.99->-0.01 represents a loss, with severity of loss increasing as the value approaches -1
-        - anything from 0.01->0.99 represents a win, with severity of win increasing as the value approaches 1
-
-    - My hunch is that this reward scale is more interpretable for agents than the current binary_win reward.
 
 - Implement tournament system, ranking based on official ranking system and use tourney evals locally to evaluate the performance of the best performing agents.
 

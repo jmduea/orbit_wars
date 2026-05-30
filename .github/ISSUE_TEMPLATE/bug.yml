@@ -1,0 +1,36 @@
+name: Bug
+description: Broken behavior or regression
+title: "[bug]: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Add one row to [docs/ROADMAP.md](docs/ROADMAP.md) **Now** or **Next** if this blocks current work.
+        Labels: `type:bug` + one `area:*` (see [.github/labels.yml](.github/labels.yml)).
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction / evidence
+      description: Commands, log paths, run IDs, or submission artifacts
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:kaggle
+        - area:train
+        - area:config
+        - area:features
+        - area:infra
+    validations:
+      required: true

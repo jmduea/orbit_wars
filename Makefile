@@ -1,6 +1,10 @@
 setup:
 	uv sync --group dev
 
+roadmap-check:
+	uv run python scripts/roadmap.py validate
+	uv run --group dev pytest tests/test_roadmap.py -q
+
 test:
 	uv run --group dev pytest
 

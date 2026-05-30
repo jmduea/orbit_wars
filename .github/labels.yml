@@ -1,0 +1,34 @@
+# Sync with: gh workflow run sync-labels.yml (or push to main touching this file)
+- name: type:bug
+  color: d73a4a
+  description: Broken behavior or regression
+- name: type:task
+  color: 1d76db
+  description: Chores with a clear done state (config, docs, tooling)
+- name: type:research
+  color: 5319e7
+  description: Question or spike; may close as answered without code
+- name: type:idea
+  color: cccccc
+  description: Not committed to execution; promote or close when stale
+- name: area:kaggle
+  color: 0075ca
+  description: Submission, kernels, population worker, competition
+- name: area:train
+  color: 0e8a16
+  description: JAX training loop, curriculum, rewards, opponents
+- name: area:config
+  color: fbca04
+  description: Hydra, schema, conf/
+- name: area:features
+  color: bfdadc
+  description: Encoding, policy, environment features
+- name: area:infra
+  color: d4c5f9
+  description: W&B, artifacts, CI, scripts, orchestration
+- name: blocked
+  color: b60205
+  description: Cannot proceed without external dependency or decision
+- name: portfolio
+  color: fef2c0
+  description: Highlight for README / portfolio narrative (valid submit, repro train)

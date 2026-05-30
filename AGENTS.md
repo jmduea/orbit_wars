@@ -126,6 +126,14 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - **Codex:** mirrored project skills in `.agents/skills/`, custom agents in `.codex/agents/`, hooks in `.codex/hooks.json`, and the OMG MCP server from `.codex/config.toml`.
 - The deep-interview → ralplan → omg-autopilot path depends on `mcp-server/dist/` being current; after TypeScript MCP edits, run `npm run build` in `mcp-server/` before relying on the workflow.
 
+## Human Roadmap (priority index)
+
+- **`docs/ROADMAP.md`** is the human-facing Now / Next / Later index (≤3 **Now**, ≤5 **Done**). Update **on transition only** (start, finish, abandon work)—not every session.
+- **Before choosing work:** `uv run python scripts/roadmap.py agent` (JSON: ROADMAP + active manifest). **Human Now wins** over manifest backlog for priority.
+- **After editing ROADMAP:** `uv run python scripts/roadmap.py validate` or `make roadmap-check` (also runs in CI on `docs/ROADMAP.md` changes).
+- **Inbox:** `docs/brain_dump.md` — weekly triage into ROADMAP; blockers should get GitHub issues (`type:*` + `area:*`, see `.github/labels.yml`).
+- **Agent execution packages** still use `.omg/workflow-manifest.json`; link manifest `notes` to ROADMAP/issue when a package enters **Now**.
+
 ## Generated And Local Artifacts
 
 - Ignore local training outputs and telemetry when making code changes: `outputs/`, `wandb/`, `artifacts/`, and Hydra run directories are runtime artifacts.
@@ -140,7 +148,7 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested.
 - Never use `pytest-xdist` or parallel pytest workers on WSL2/CUDA hosts.
 - Before treating `.omg/specs/` or `.omg/plans/` markdown as active backlog, consult `.omg/workflow-manifest.json` (or `omg_workflow_manifest_list(active_only=true)`).
-- Create git commits only when explicitly requested.
+- Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
 - Do not start test runs (`make test-fast`, domain targets, or `pytest`) when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
 
 ## Learned Workspace Facts

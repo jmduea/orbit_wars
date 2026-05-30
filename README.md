@@ -2,6 +2,8 @@
 
 Orbit Wars is a Python 3.12 reinforcement-learning project managed with `uv` and launched through Hydra.
 
+**Status:** [Roadmap](docs/ROADMAP.md) · [Open issues](https://github.com/jmduea/orbit_wars/issues?q=is%3Aopen)
+
 The canonical training entrypoint composes responsibility-based config groups from `conf/`, see the [README.md](conf/README.md) & [GUIDANCE.md](config/GUIDANCE.md) for more info.
 
 ```bash
