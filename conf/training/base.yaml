@@ -1,5 +1,8 @@
 rollout_steps: 500
 num_envs: 32
+format_weights:
+  2: 1.0
+  4: 0.0
 total_updates: 100
 
 epochs: 2

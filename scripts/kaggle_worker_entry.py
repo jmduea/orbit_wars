@@ -40,7 +40,7 @@ _CUDA_DRIVER_LIBRARY_DIR_CANDIDATES: tuple[str, ...] = (
 _HYDRA_CONFIG_GROUP_KEYS: frozenset[str] = frozenset(
     {
         "model",
-        "format",
+        "training",
         "opponents",
         "curriculum",
         "reward",

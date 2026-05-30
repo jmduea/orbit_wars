@@ -21,8 +21,8 @@ parameters:
     value: self_play_curriculum
   model:
     value: transformer_factorized
-  format:
-    value: 2p_32env
+  training:
+    value: 2p_32
   training.rollout_microbatch_envs:
     value: 32
   training.total_updates:

@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 
 DEFAULT_TAG_CONFIG_GROUPS: tuple[str, ...] = (
     "model",
-    "format",
+    "training",
     "opponents",
     "curriculum",
     "reward",

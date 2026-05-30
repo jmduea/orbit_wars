@@ -10,6 +10,25 @@ from src.artifacts.run_paths import (
     resolve_run_paths,
     write_run_manifests,
 )
+
+def _configure_rollout_groups(cfg, groups):
+    if not groups:
+        cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
+        return
+    active = [group for group in groups if int(group.get("num_envs", 0)) > 0]
+    if len(active) == 1:
+        group = active[0]
+        cfg.training.num_envs = int(group["num_envs"])
+        cfg.training.format_weights = {int(group["player_count"]): 1.0}
+        return
+    total = sum(int(group["num_envs"]) for group in active)
+    cfg.training.num_envs = total
+    cfg.training.rotate_format_rollouts = False
+    cfg.training.format_weights = {
+        int(group["player_count"]): int(group["num_envs"]) / float(total)
+        for group in active
+    }
+
 from src.config import TrainConfig
 from src.config.runtime import _orbit_sweep_subdir
 
@@ -94,10 +113,10 @@ def test_hydra_runtime_output_dir_is_the_run_envelope(
 def test_compose_run_name_prioritizes_comparison_fields() -> None:
     cfg = TrainConfig()
     cfg.model.architecture = "planet_graph_transformer"
-    cfg.format.rollout_groups = [
+    _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 8},
         {"name": "four_player", "player_count": 4, "num_envs": 8},
-    ]
+    ])
     cfg.opponents.self_play.enabled = True
     cfg.training.total_updates = 500
     cfg.seed = 42
@@ -115,7 +134,7 @@ def test_compose_run_name_includes_hydra_job_when_present(monkeypatch) -> None:
     cfg = TrainConfig()
     cfg.model.architecture = "attention"
     cfg.task.player_count = 2
-    cfg.format.rollout_groups = []
+    _configure_rollout_groups(cfg, [])
     cfg.opponents.self_play.enabled = False
     cfg.opponents.mix.weights = {"random": 1.0, "latest": 0.0}
     cfg.training.total_updates = 1000

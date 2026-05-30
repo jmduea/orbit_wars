@@ -12,6 +12,10 @@ from src.telemetry.metric_registry import (
     validate_scalar_update_metric_name,
 )
 
+from .rollout_allocation import (
+    validate_curriculum_format_weights,
+    validate_rollout_allocation,
+)
 from .schema import (
     ArtifactsConfig,
     RewardConfig,
@@ -124,7 +128,7 @@ def validate_hydra_overrides(overrides: list[str]) -> None:
     """Validate Hydra CLI overrides compose into a runtime config.
 
     Args:
-        overrides: Hydra override strings (for example ``format=2p_4p_16env``).
+        overrides: Hydra override strings (for example ``training=workstation_mixed_2p4p``).
 
     Raises:
         hydra.errors.MissingConfigException: Unknown config group or option.
@@ -268,6 +272,8 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     _apply_telemetry_defaults(cfg)
 
     _validate_curriculum_config(cfg)
+    validate_curriculum_format_weights(cfg)
+    validate_rollout_allocation(cfg)
 
     opponents = cfg.opponents
     if not opponents.self_play.enabled:
@@ -393,11 +399,6 @@ def _validate_curriculum_config(cfg: TrainConfig) -> None:
     curriculum = cfg.curriculum
     if not curriculum.enabled:
         return
-    if cfg.format.phases:
-        raise ValueError(
-            "format.phases is not supported when curriculum.enabled is true; "
-            "migrate progressive difficulty to curriculum.stages."
-        )
     if not curriculum.stages:
         raise ValueError(
             "curriculum.stages must be non-empty when curriculum.enabled is true."

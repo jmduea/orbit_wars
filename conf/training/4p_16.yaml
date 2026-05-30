@@ -1,0 +1,8 @@
+defaults:
+  - base
+  - _self_
+
+num_envs: 16
+format_weights:
+  2: 0.0
+  4: 1.0

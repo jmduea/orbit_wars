@@ -2,8 +2,8 @@
 # Search space recovered from W&B sweep fbrzfxcw (bayes, optimize samples_per_sec).
 
 parameters:
-  format:
-    values: [2p_32env, 4p_32env, 2p_4p_32env]
+  training:
+    values: [2p_32, 4p_32, mixed_2p4p_32_total]
   opponents:
     values: [noop_only, self_play_only]
   training.rollout_steps:

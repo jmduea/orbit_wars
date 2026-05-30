@@ -33,9 +33,9 @@ _None — pick from **Next** after planning._
 |------|------|
 | Git landing: merge worktree to main, block issue/* push | [#135](https://github.com/jmduea/orbit_wars/issues/135) · `land-issue` `docs/MULTI_AGENT.md` |
 | Multi-agent coordination (per-issue impl-gates, stale claims, playbook) | [#134](https://github.com/jmduea/orbit_wars/issues/134) · `docs/MULTI_AGENT.md` `make test-fast` |
+| Remove `format` config group; derive rollout groups from `training.num_envs` + weights | [#126](https://github.com/jmduea/orbit_wars/issues/126) · `src/config/rollout_allocation.py` `make test-fast` |
 | Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) · [#125](https://github.com/jmduea/orbit_wars/pull/125) · `docs/architecture/tournament-eval.md` `make test-domain-artifacts` |
 | VRAM telemetry + W&B-backed comfort profile | [#123](https://github.com/jmduea/orbit_wars/issues/123) · `docs/benchmarks/vram-profile-sps-experiment.md` |
-| Define `survival_time` metric and relation to performance (research) | [#101](https://github.com/jmduea/orbit_wars/issues/101) · `docs/benchmarks/issue-101-survival-time.md` |
 
 _Last triaged: 2026-05-30_
 

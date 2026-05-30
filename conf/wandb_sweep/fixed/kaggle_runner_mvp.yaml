@@ -13,8 +13,6 @@ parameters:
     value: true
   model:
     value: transformer_factorized
-  format:
-    value: default
   task:
     value: default
   opponents:

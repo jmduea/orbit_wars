@@ -19,7 +19,7 @@ wandb:
   tags_from_config_groups: true
   tag_config_groups:
     - model
-    - format
+    - training
     - opponents
     - curriculum
     - reward

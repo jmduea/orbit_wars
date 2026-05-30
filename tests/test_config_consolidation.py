@@ -8,6 +8,7 @@ from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 from src.config import compose_hydra_train_config
+from src.config.rollout_allocation import resolve_rollout_group_specs
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
@@ -19,8 +20,7 @@ SWEEP_COMPOSE_RECIPES = (
 
 LAUNCH_RECIPES: dict[str, list[str]] = {
     "smoke": [
-        "training=smoke",
-        "format=2p_16env",
+        "training=smoke_2p_16",
         "curriculum=off",
         "opponents=noop_only",
         "telemetry=throughput_only",
@@ -35,7 +35,7 @@ def test_root_config_composes_from_responsibility_groups() -> None:
 
     assert cfg.task.candidate_count == 6
     assert cfg.training.total_updates == 100
-    assert cfg.format.rollout_groups
+    assert resolve_rollout_group_specs(cfg)
     assert cfg.curriculum.enabled is True
     assert len(cfg.curriculum.stages) == 1
     assert cfg.curriculum.stages[0]["id"] == "sp_2p"
@@ -66,7 +66,7 @@ def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> N
             "training.total_updates=2",
             "task.candidate_count=12",
             "reward.reward_production_delta=0.01",
-            "format=2p_4p_16env",
+            "training=mixed_2p4p_16_total",
             "telemetry.wandb.group=capacity",
         ]
     )
@@ -74,7 +74,7 @@ def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> N
     assert cfg.training.total_updates == 2
     assert cfg.task.candidate_count == 12
     assert cfg.reward.reward_production_delta == 0.01
-    assert cfg.format.rollout_groups[0]["num_envs"] == 16
+    assert resolve_rollout_group_specs(cfg)[0].num_envs == 16
     assert cfg.telemetry.wandb.group == "capacity"
 
 
@@ -84,6 +84,7 @@ def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> N
         "ppo.total_updates=3",
         "env.candidate_count=16",
         "wandb.group=legacy_override",
+        "format=2p_16env",
         "training_format.rollout_groups=[]",
         "self_play_enabled=false",
         "self_play_pool_size=0",

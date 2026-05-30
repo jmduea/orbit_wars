@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from src.config import TrainConfig
+from src.config.rollout_allocation import rollout_player_counts, run_name_env_count
 
 SWEPT_KEY_EXCLUDE_PREFIXES: tuple[str, ...] = (
     "seed",
@@ -47,7 +48,7 @@ _KEY_SHORT_NAMES: dict[str, str] = {
     "training.update_chunk_rows_min": "ucmin",
     "training.update_chunk_rows_max": "ucmax",
     "training.total_updates": "u",
-    "format": "fmt",
+    "training": "tr",
 }
 
 def _hydra_job_num() -> int | None:
@@ -72,19 +73,7 @@ def _run_name_component(value: str) -> str:
 
 
 def _rollout_player_counts(cfg: TrainConfig) -> list[int]:
-    groups = cfg.format.rollout_groups
-    if groups:
-        return sorted(
-            {int(group.get("player_count", cfg.task.player_count)) for group in groups}
-        )
-    if cfg.format.format_mix:
-        return sorted(
-            {
-                int(entry.get("player_count", cfg.task.player_count))
-                for entry in cfg.format.format_mix
-            }
-        )
-    return [int(cfg.task.player_count)]
+    return rollout_player_counts(cfg)
 
 
 def _format_run_name_component(cfg: TrainConfig) -> str:
@@ -111,10 +100,7 @@ def _opponent_run_name_component(cfg: TrainConfig) -> str:
 
 
 def _run_name_env_count(cfg: TrainConfig) -> int:
-    groups = cfg.format.rollout_groups
-    if groups:
-        return sum(int(group.get("num_envs", 0)) for group in groups)
-    return int(cfg.training.num_envs)
+    return run_name_env_count(cfg)
 
 
 _CHOICE_VALUE_PREFIXES: tuple[str, ...] = (
@@ -415,7 +401,7 @@ def compose_run_name_prefix(cfg: TrainConfig, swept_keys: frozenset[str]) -> str
     parts: list[str] = []
     if not _swept_matches(swept_keys, ("model.",)):
         parts.append(_run_name_component(str(cfg.model.architecture)))
-    if not _swept_matches(swept_keys, ("format.", "task.player_count", "format")):
+    if not _swept_matches(swept_keys, ("training.", "training.format_weights", "task.player_count")):
         parts.append(_format_run_name_component(cfg))
     if not _swept_matches(swept_keys, ("opponents.",)):
         parts.append(_opponent_run_name_component(cfg))
@@ -423,7 +409,7 @@ def compose_run_name_prefix(cfg: TrainConfig, swept_keys: frozenset[str]) -> str
         parts.append(f"u{int(cfg.training.total_updates)}")
     if not _swept_matches(
         swept_keys,
-        ("training.num_envs", "format.rollout_groups", "format.format_mix", "format"),
+        ("training.num_envs", "training.format_weights"),
     ):
         parts.append(f"env{_run_name_env_count(cfg)}")
     if not _swept_matches(swept_keys, ("seed",)):

@@ -1,8 +1,8 @@
 # @package _global_
 
 parameters:
-  format:
-    values: [4p_16env, 4p_32env]
+  training:
+    values: [4p_16, 4p_32]
   training.rollout_steps:
     values: [64, 128, 250, 500]
   training.minibatch_size:

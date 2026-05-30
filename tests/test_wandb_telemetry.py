@@ -24,7 +24,7 @@ from src.telemetry.wandb_tags import (
 )
 
 THROUGHPUT_2P_SPACE = {
-    "format": {"values": ["2p_16env", "2p_32env"]},
+    "training": {"values": ["2p_16", "2p_32"]},
     "training.rollout_steps": {"values": [250, 500]},
     "training.num_envs": {"value": 16},
     "seed": {"value": 42},
@@ -36,11 +36,11 @@ def test_build_sweep_run_suffix_is_deterministic_and_compact() -> None:
     params = {
         "training.lr": 0.0003,
         "training.rollout_steps": 250,
-        "format": "mix_2p_4p_16env",
+        "training": "mixed_2p4p_16_rotating",
     }
     assert build_sweep_run_suffix(params) == build_sweep_run_suffix(
         {
-            "format": "mix_2p_4p_16env",
+            "training": "mixed_2p4p_16_rotating",
             "training.lr": 0.0003,
             "training.rollout_steps": 250,
         }
@@ -48,7 +48,7 @@ def test_build_sweep_run_suffix_is_deterministic_and_compact() -> None:
     suffix = build_sweep_run_suffix(params)
     assert "lr3e-4" in suffix
     assert "rs250" in suffix
-    assert "fmt2p4p16env" in suffix
+    assert "trmixed2p4p16rotating" in suffix
     assert "mix_" not in suffix
 
 
@@ -65,7 +65,7 @@ def test_detect_swept_keys_excludes_seed_and_output_paths() -> None:
     }
     job = parse_override_entries(
         [
-            "format=2p_16env",
+            "training=2p_16",
             "training.rollout_steps=250",
             "seed=7",
             "output.campaign=other",
@@ -74,7 +74,7 @@ def test_detect_swept_keys_excludes_seed_and_output_paths() -> None:
     )
     swept = detect_swept_keys(job_overrides=job, sweep_parameters=parameters)
     assert "training.rollout_steps" in swept
-    assert "format" in swept
+    assert "training" in swept
     assert "seed" not in swept
     assert "output.campaign" not in swept
     assert "output.wandb_dir" not in swept
@@ -156,21 +156,21 @@ def test_derive_config_group_tags_from_choices() -> None:
         allowlist=DEFAULT_TAG_CONFIG_GROUPS,
         choices={
             "model": "transformer_factorized",
-            "format": "2p_4p_16env",
+            "training": "mixed_2p4p_16_total",
             "opponents": "random",
         },
     )
     assert tags == [
-        "format:2p_4p_16env",
         "model:transformer_factorized",
         "opponents:random",
+        "training:mixed_2p4p_16_total",
     ]
 
 
 def test_derive_config_group_tags_respects_allowlist() -> None:
     tags = derive_config_group_tags(
         allowlist=["model"],
-        choices={"model": "default", "format": "2p_16env"},
+        choices={"model": "default", "training": "2p_16"},
     )
     assert tags == ["model:default"]
 
@@ -178,9 +178,9 @@ def test_derive_config_group_tags_respects_allowlist() -> None:
 def test_merge_wandb_tags_sorted_dedupe() -> None:
     merged = merge_wandb_tags(
         manual=["beta", "alpha", "beta"],
-        derived=["format:2p_16env", "alpha"],
+        derived=["training:2p_16", "alpha"],
     )
-    assert merged == ["alpha", "beta", "format:2p_16env"]
+    assert merged == ["alpha", "beta", "training:2p_16"]
 
 
 class _FakeWandbRun:
@@ -208,7 +208,10 @@ def test_telemetry_logger_merges_manual_and_derived_tags(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
     monkeypatch.setattr(
         "src.telemetry.wandb_tags._hydra_runtime_choices",
-        lambda: {"model": "transformer_factorized", "format": "2p_4p_16env"},
+        lambda: {
+            "model": "transformer_factorized",
+            "training": "mixed_2p4p_16_total",
+        },
     )
     cfg = TrainConfig()
     cfg.telemetry.wandb.enabled = True
@@ -218,10 +221,10 @@ def test_telemetry_logger_merges_manual_and_derived_tags(monkeypatch) -> None:
 
     tags = fake_wandb.init_kwargs["tags"]
     assert tags == [
-        "format:2p_4p_16env",
         "manual",
         "model:legacy",
         "model:transformer_factorized",
+        "training:mixed_2p4p_16_total",
     ]
 
 

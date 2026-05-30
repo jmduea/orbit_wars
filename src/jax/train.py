@@ -34,6 +34,7 @@ from src.artifacts.pipeline import (
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
+from src.config.rollout_allocation import infer_static_format_weights, resolve_rollout_group_specs
 from src.telemetry import build_telemetry
 from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.training.curriculum import CurriculumController
@@ -104,39 +105,15 @@ def _copy_config_for_rollout_group(
 
 
 def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
-    """Resolve rollout group declarations for Option A mixed-format training.
+    """Resolve rollout group declarations for mixed-format training."""
 
-    The JAX trainer keeps independent 2-player and 4-player environment states
-    and compiles one collector per declared static format. If no groups are
-    configured, it uses the single-format collector for the configured task.
-    """
-
-    raw_groups = cfg.format.rollout_groups
-    groups: list[dict[str, int | str]] = []
-    for index, group in enumerate(raw_groups):
-        player_count = int(group.get("player_count", cfg.task.player_count))
-        if player_count not in {2, 4}:
-            raise ValueError(
-                f"JAX rollout groups support player_count 2 or 4, got {player_count}."
-            )
-        num_envs = int(group.get("num_envs", cfg.training.num_envs))
-        if num_envs <= 0:
-            continue
-        groups.append(
-            {
-                "name": str(group.get("name", f"{player_count}p_{index}")),
-                "player_count": player_count,
-                "num_envs": num_envs,
-            }
-        )
-    if groups:
-        return groups
     return [
         {
-            "name": f"{cfg.task.player_count}p",
-            "player_count": int(cfg.task.player_count),
-            "num_envs": int(cfg.training.num_envs),
+            "name": spec.name,
+            "player_count": spec.player_count,
+            "num_envs": spec.num_envs,
         }
+        for spec in resolve_rollout_group_specs(cfg)
     ]
 
 
@@ -1008,7 +985,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             heldout_eval_seed_set=cfg.heldout_eval_seed_set,
         ),
     )
-    curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    curriculum = CurriculumController(
+        cfg.curriculum,
+        cfg.opponents.snapshot,
+        static_format_weights=infer_static_format_weights(cfg),
+    )
     historical_pool = _init_historical_snapshot_pool(
         train_state.params, cfg.opponents.snapshot.pool_size
     )

@@ -6,8 +6,8 @@ parameters:
     value: transformer_factorized
   curriculum:
     value: "off"
-  format:
-    value: 2p_4p_32env
+  training:
+    value: mixed_2p4p_32_total
   opponents:
     value: self_play_only
   output.campaign:

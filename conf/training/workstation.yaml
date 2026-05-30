@@ -3,7 +3,10 @@ defaults:
   - _self_
 
 rollout_steps: 128
-num_envs: 32
+num_envs: 16
+format_weights:
+  2: 0.5
+  4: 0.5
 total_updates: 500
 epochs: 2
 minibatch_size: 512

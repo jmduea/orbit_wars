@@ -60,9 +60,16 @@ class CurriculumStage:
 class CurriculumController:
     """Host-side staged curriculum controller that emits immutable JAX stage views."""
 
-    def __init__(self, curriculum_cfg: Any, snapshot_cfg: Any | None = None) -> None:
+    def __init__(
+        self,
+        curriculum_cfg: Any,
+        snapshot_cfg: Any | None = None,
+        *,
+        static_format_weights: dict[int, float] | None = None,
+    ) -> None:
         self.enabled = bool(getattr(curriculum_cfg, "enabled", False))
         self.snapshot_selection = str(getattr(snapshot_cfg, "selection", "uniform"))
+        self.static_format_weights = dict(static_format_weights or {2: 1.0, 4: 1.0})
         raw_stages = list(getattr(curriculum_cfg, "stages", []) or [])
         if not self.enabled or not raw_stages:
             raw_stages = [
@@ -88,7 +95,9 @@ class CurriculumController:
         return self.stage.id
 
     def current_format_weights(self) -> dict[int, float]:
-        return self.stage.format_weights or {2: 1.0, 4: 1.0}
+        if self.stage.format_weights:
+            return self.stage.format_weights
+        return dict(self.static_format_weights)
 
     def state_dict(self) -> dict[str, object]:
         return {

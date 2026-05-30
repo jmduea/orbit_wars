@@ -352,7 +352,7 @@ def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
     overrides = worker._config_to_overrides(
         {
             "model": "transformer_factorized",
-            "format": "mix_2p_4p_16env",
+            "training": "mixed_2p4p_16_rotating",
             "opponents": "self_play_curriculum",
             "curriculum": "self_play_staged",
             "training.lr": 0.0003,
@@ -361,7 +361,7 @@ def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
     )
 
     assert "model=transformer_factorized" in overrides
-    assert "format=mix_2p_4p_16env" in overrides
+    assert "training=mixed_2p4p_16_rotating" in overrides
     assert "opponents=self_play_curriculum" in overrides
     assert "curriculum=self_play_staged" in overrides
     assert "training.lr=0.0003" in overrides

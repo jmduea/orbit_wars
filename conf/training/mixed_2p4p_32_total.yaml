@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+num_envs: 64
+format_weights:
+  2: 0.5
+  4: 0.5
+rotate_format_rollouts: false

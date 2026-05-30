@@ -75,7 +75,8 @@ class TrainingConfig:
     """PPO rollout, optimization, and loss hyperparameters."""
 
     rollout_steps: int = 32
-    num_envs: int = 4  # TODO: let format config handle this, remove from here
+    num_envs: int = 4
+    format_weights: dict[int, float] = field(default_factory=dict)
     total_updates: int = 200
     epochs: int = 4
     minibatch_size: int = 512
@@ -101,13 +102,6 @@ class TrainingConfig:
     plateau_window: int = 10  # TODO: curriculum?
     plateau_delta: float = 0.0  # TODO: curriculum?
     debug_replay_parity: bool = False
-
-
-@dataclass(slots=True)
-class FormatConfig:
-    format_mix: list[dict[str, Any]] = field(default_factory=list)
-    rollout_groups: list[dict[str, Any]] = field(default_factory=list)
-    phases: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -156,7 +150,7 @@ class WandBConfig:
     tag_config_groups: list[str] = field(
         default_factory=lambda: [
             "model",
-            "format",
+            "training",
             "opponents",
             "curriculum",
             "reward",
@@ -321,7 +315,6 @@ class TrainConfig:
     task: TaskConfig = field(default_factory=TaskConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
-    format: FormatConfig = field(default_factory=FormatConfig)
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     opponents: OpponentsConfig = field(default_factory=OpponentsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)

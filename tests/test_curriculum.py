@@ -4,6 +4,25 @@ import pytest
 from omegaconf import OmegaConf
 
 import jax
+
+def _configure_rollout_groups(cfg, groups):
+    if not groups:
+        cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
+        return
+    active = [group for group in groups if int(group.get("num_envs", 0)) > 0]
+    if len(active) == 1:
+        group = active[0]
+        cfg.training.num_envs = int(group["num_envs"])
+        cfg.training.format_weights = {int(group["player_count"]): 1.0}
+        return
+    total = sum(int(group["num_envs"]) for group in active)
+    cfg.training.num_envs = total
+    cfg.training.rotate_format_rollouts = False
+    cfg.training.format_weights = {
+        int(group["player_count"]): int(group["num_envs"]) / float(total)
+        for group in active
+    }
+
 from src.config import (
     TrainConfig,
     compose_hydra_train_config,
@@ -352,10 +371,10 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.telemetry.wandb.enabled = False
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
-    cfg.format.rollout_groups = [
+    _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 1},
         {"name": "four_player", "player_count": 4, "num_envs": 1},
-    ]
+    ])
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 1

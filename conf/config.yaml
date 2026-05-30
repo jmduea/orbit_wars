@@ -3,7 +3,6 @@ defaults:
   - task: default
   - reward: default
   - training: default
-  - format: default
   - curriculum: default
   - opponents: default
   - telemetry: default

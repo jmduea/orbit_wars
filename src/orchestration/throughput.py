@@ -39,9 +39,8 @@ def estimate_training_overrides(
     env_budget = int(memory_gb * 2.0 / pressure)
     num_envs = _round_to_multiple(max(min(env_budget, 96), 8), 8)
     group_counts = rollout_group_env_counts(hydra_overrides, default_num_envs=num_envs)
-    fixes_groups = format_fixes_rollout_group_envs(hydra_overrides)
     per_group_envs = min(group_counts)
-    sizing_envs = sum(group_counts) if fixes_groups else num_envs
+    sizing_envs = _rollout_sizing_env_count(hydra_overrides, default_num_envs=num_envs)
 
     microbatch_envs = _round_to_multiple(max(min(per_group_envs // 2, 32), 4), 4)
     microbatch_envs = largest_compatible_microbatch(microbatch_envs, group_counts)
@@ -59,7 +58,7 @@ def estimate_training_overrides(
         f"training.update_chunk_rows_min={min(chunk_max, 2048)}",
         f"training.update_chunk_rows_max={chunk_max}",
     ]
-    if not fixes_groups:
+    if not _has_training_group_override(hydra_overrides):
         overrides.insert(0, f"training.num_envs={num_envs}")
     return finalize_rollout_shape_overrides(tuple(overrides), hydra_overrides)
 
@@ -74,9 +73,8 @@ def calibration_grid(
     parsed = dict(item.split("=", 1) for item in base_overrides)
     rollout_steps = int(parsed["training.rollout_steps"])
     group_counts = rollout_group_env_counts(hydra_overrides)
-    fixes_groups = format_fixes_rollout_group_envs(hydra_overrides)
 
-    if fixes_groups:
+    if _split_rollout_groups(hydra_overrides):
         total_envs = sum(group_counts)
         per_group = min(group_counts)
         micro_candidates = _compatible_microbatch_candidates(group_counts, per_group)
@@ -131,28 +129,13 @@ def rollout_group_env_counts(
         return [default_num_envs]
 
     from src.config import compose_hydra_train_config
+    from src.config.rollout_allocation import resolve_rollout_group_specs
 
     cfg = compose_hydra_train_config(list(hydra_overrides))
-    counts: list[int] = []
-    for group in cfg.format.rollout_groups:
-        num_envs = int(group.get("num_envs", cfg.training.num_envs))
-        if num_envs > 0:
-            counts.append(num_envs)
-    if counts:
-        return counts
+    specs = resolve_rollout_group_specs(cfg)
+    if specs:
+        return [spec.num_envs for spec in specs]
     return [int(cfg.training.num_envs)]
-
-
-def format_fixes_rollout_group_envs(hydra_overrides: Sequence[str] | None) -> bool:
-    """Return True when format YAML owns per-group env counts."""
-
-    if not hydra_overrides:
-        return False
-
-    from src.config import compose_hydra_train_config
-
-    cfg = compose_hydra_train_config(list(hydra_overrides))
-    return any(int(group.get("num_envs", 0)) > 0 for group in cfg.format.rollout_groups)
 
 
 def largest_compatible_microbatch(
@@ -175,7 +158,7 @@ def finalize_rollout_shape_overrides(
     overrides: Sequence[str],
     hydra_overrides: Sequence[str] | None,
 ) -> tuple[str, ...]:
-    """Normalize rollout shape overrides against resolved format groups."""
+    """Normalize rollout shape overrides against resolved rollout groups."""
 
     group_counts = rollout_group_env_counts(hydra_overrides)
     parsed = dict(item.split("=", 1) for item in overrides)
@@ -190,11 +173,48 @@ def finalize_rollout_shape_overrides(
                 tuple(normalized), "training.rollout_microbatch_envs", micro
             )
         )
-    if format_fixes_rollout_group_envs(hydra_overrides):
-        normalized = [
-            item for item in normalized if not item.startswith("training.num_envs=")
-        ]
     return tuple(normalized)
+
+
+def _split_rollout_groups(hydra_overrides: Sequence[str] | None) -> bool:
+    if not hydra_overrides:
+        return False
+    from src.config import compose_hydra_train_config
+    from src.config.rollout_allocation import resolve_rollout_group_specs
+
+    cfg = compose_hydra_train_config(list(hydra_overrides))
+    specs = resolve_rollout_group_specs(cfg)
+    return len(specs) > 1 and not bool(cfg.training.rotate_format_rollouts)
+
+
+def _rollout_sizing_env_count(
+    hydra_overrides: Sequence[str] | None,
+    *,
+    default_num_envs: int,
+) -> int:
+    group_counts = rollout_group_env_counts(
+        hydra_overrides, default_num_envs=default_num_envs
+    )
+    if not hydra_overrides:
+        return default_num_envs
+    from src.config import compose_hydra_train_config
+
+    cfg = compose_hydra_train_config(list(hydra_overrides))
+    if cfg.training.rotate_format_rollouts:
+        return max(group_counts)
+    if len(group_counts) > 1:
+        return sum(group_counts)
+    return group_counts[0]
+
+
+def _has_training_group_override(hydra_overrides: Sequence[str] | None) -> bool:
+    for item in hydra_overrides or []:
+        if "=" not in item:
+            continue
+        key = item.split("=", 1)[0]
+        if key == "training":
+            return True
+    return False
 
 
 def _compatible_microbatch_candidates(

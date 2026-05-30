@@ -14,6 +14,7 @@ from src.artifacts.checkpoint_compat import (
     pointer_decoder_for_model,
 )
 from src.config import TrainConfig
+from src.config.rollout_allocation import rollout_player_counts, run_name_env_count
 
 
 @dataclass(slots=True)
@@ -107,26 +108,11 @@ def _opponent_run_name_component(cfg: TrainConfig) -> str:
 
 
 def _run_name_env_count(cfg: TrainConfig) -> int:
-    groups = cfg.format.rollout_groups
-    if groups:
-        return sum(int(group.get("num_envs", 0)) for group in groups)
-    return int(cfg.training.num_envs)
+    return run_name_env_count(cfg)
 
 
 def _rollout_player_counts(cfg: TrainConfig) -> list[int]:
-    groups = cfg.format.rollout_groups
-    if groups:
-        return sorted(
-            {int(group.get("player_count", cfg.task.player_count)) for group in groups}
-        )
-    if cfg.format.format_mix:
-        return sorted(
-            {
-                int(entry.get("player_count", cfg.task.player_count))
-                for entry in cfg.format.format_mix
-            }
-        )
-    return [int(cfg.task.player_count)]
+    return rollout_player_counts(cfg)
 
 
 def _run_name_component(value: str) -> str:

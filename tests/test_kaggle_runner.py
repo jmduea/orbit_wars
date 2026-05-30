@@ -134,7 +134,7 @@ def test_estimate_training_overrides_scales_down_heavier_models() -> None:
 
 
 def test_mixed_format_overrides_keep_microbatch_compatible_with_group_envs() -> None:
-    hydra_overrides = ("format=2p_4p_16env",)
+    hydra_overrides = ("training=mixed_2p4p_16_total",)
     overrides = estimate_training_overrides(
         HardwareProfile("gpu", "test", 24),
         {"hidden_size": 140, "planet_transformer_layers": 1},
@@ -156,7 +156,7 @@ def test_mixed_format_overrides_keep_microbatch_compatible_with_group_envs() -> 
 
 
 def test_finalize_rollout_shape_overrides_repairs_bad_microbatch() -> None:
-    hydra_overrides = ("format=2p_4p_16env",)
+    hydra_overrides = ("training=mixed_2p4p_16_total",)
     repaired = finalize_rollout_shape_overrides(
         (
             "training.num_envs=24",
@@ -166,11 +166,11 @@ def test_finalize_rollout_shape_overrides_repairs_bad_microbatch() -> None:
         hydra_overrides,
     )
 
-    assert not any(item.startswith("training.num_envs=") for item in repaired)
     micro = _override_int(repaired, "training.rollout_microbatch_envs")
     assert micro == largest_compatible_microbatch(
         12, rollout_group_env_counts(hydra_overrides)
     )
+    assert _override_int(repaired, "training.num_envs") == 24
 
 
 def test_shortlist_ranks_finished_checkpointed_runs_first() -> None:
@@ -426,12 +426,12 @@ def test_run_launch_rejects_invalid_hydra_override_before_push(monkeypatch) -> N
         sweep_yaml=launcher.DEFAULT_SWEEP,
         run_type="smoke",
         no_wandb=True,
-        standalone_overrides=["format=2p_4p_16envb"],
+        standalone_overrides=["training=mixed_2p4p_16_totalb"],
         accelerators=("NvidiaTeslaP100",),
         dry_run=False,
     )
 
-    with pytest.raises(MissingConfigException, match="2p_4p_16envb"):
+    with pytest.raises(MissingConfigException, match="mixed_2p4p_16_totalb"):
         launcher.run_launch(args)
 
     assert not pushed
@@ -444,10 +444,10 @@ def test_run_preflight_rejects_invalid_hydra_override() -> None:
         title="test",
         sweep_yaml=launcher.DEFAULT_SWEEP,
         no_wandb=True,
-        standalone_overrides=["format=2p_4p_16envb"],
+        standalone_overrides=["training=mixed_2p4p_16_totalb"],
     )
 
-    with pytest.raises(MissingConfigException, match="2p_4p_16env"):
+    with pytest.raises(MissingConfigException, match="mixed_2p4p_16_total"):
         launcher.run_preflight(args)
 
 

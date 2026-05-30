@@ -15,6 +15,25 @@ from types import SimpleNamespace
 import jax
 import pytest
 
+
+def _configure_rollout_groups(cfg, groups):
+    if not groups:
+        cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
+        return
+    active = [group for group in groups if int(group.get("num_envs", 0)) > 0]
+    if len(active) == 1:
+        group = active[0]
+        cfg.training.num_envs = int(group["num_envs"])
+        cfg.training.format_weights = {int(group["player_count"]): 1.0}
+        return
+    total = sum(int(group["num_envs"]) for group in active)
+    cfg.training.num_envs = total
+    cfg.training.rotate_format_rollouts = False
+    cfg.training.format_weights = {
+        int(group["player_count"]): int(group["num_envs"]) / float(total)
+        for group in active
+    }
+
 from src.config import TrainConfig
 from src.game.constants import MAX_PLANETS, MAX_STEPS
 from src.jax.env import batched_reset
@@ -573,10 +592,10 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 1
     cfg.opponents.mode.opponent = "random"
-    cfg.format.rollout_groups = [
+    _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 2},
         {"name": "four_player", "player_count": 4, "num_envs": 2},
-    ]
+    ])
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(41), policy, cfg)
     _key, groups = init_rollout_groups(jax.random.PRNGKey(40), cfg, policy)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from src.config import TrainConfig
+from src.config.rollout_allocation import infer_static_format_weights
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +70,11 @@ def run_production_benchmark(
     historical_pool = _init_historical_snapshot_pool(
         train_state.params, cfg.opponents.snapshot.pool_size
     )
-    curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    curriculum = CurriculumController(
+        cfg.curriculum,
+        cfg.opponents.snapshot,
+        static_format_weights=infer_static_format_weights(cfg),
+    )
     update_fn = jax.jit(
         lambda ts, transitions: ppo_update_jax(ts, policy, transitions, cfg)
     )

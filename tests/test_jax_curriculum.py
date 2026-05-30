@@ -10,6 +10,25 @@ import json
 
 import pytest
 
+
+def _configure_rollout_groups(cfg, groups):
+    if not groups:
+        cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
+        return
+    active = [group for group in groups if int(group.get("num_envs", 0)) > 0]
+    if len(active) == 1:
+        group = active[0]
+        cfg.training.num_envs = int(group["num_envs"])
+        cfg.training.format_weights = {int(group["player_count"]): 1.0}
+        return
+    total = sum(int(group["num_envs"]) for group in active)
+    cfg.training.num_envs = total
+    cfg.training.rotate_format_rollouts = False
+    cfg.training.format_weights = {
+        int(group["player_count"]): int(group["num_envs"]) / float(total)
+        for group in active
+    }
+
 from src.config import TrainConfig
 from src.jax.train import run_jax_training
 
@@ -83,14 +102,14 @@ def _v2_curriculum_training_cfg(*, player_count: int, four_player_num_envs: int)
     cfg.model.gnn_k_neighbors = 3
     cfg.model.gnn_message_passing_layers = 1
     cfg.model.max_moves_k = 2
-    cfg.format.rollout_groups = [
+    _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 1 if player_count == 2 else 0},
         {
             "name": "four_player",
             "player_count": 4,
             "num_envs": four_player_num_envs,
         },
-    ]
+    ])
     cfg.training.num_envs = 1
     cfg.training.rollout_steps = 1
     cfg.training.total_updates = 3
@@ -152,8 +171,8 @@ def test_v2_training_loop_self_play_staged_2p_only(tmp_path, monkeypatch) -> Non
 def test_v2_training_loop_self_play_staged_4p_only(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA", "1")
     cfg = _v2_curriculum_training_cfg(player_count=4, four_player_num_envs=1)
-    cfg.format.rollout_groups = [
+    _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 0},
         {"name": "four_player", "player_count": 4, "num_envs": 1},
-    ]
+    ])
     _assert_v2_curriculum_training_logs(tmp_path, cfg)

@@ -4,6 +4,9 @@ defaults:
 
 rollout_steps: 8
 num_envs: 2
+format_weights:
+  2: 1.0
+  4: 0.0
 total_updates: 2
 epochs: 1
 minibatch_size: 32

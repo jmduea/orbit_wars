@@ -24,8 +24,6 @@ parameters:
     value: true
   model:
     value: transformer_factorized
-  format:
-    value: default
   opponents:
     value: default
   curriculum:
