@@ -337,8 +337,8 @@ def test_wrap_up_blocks_when_issue_not_in_done(tmp_path: Path) -> None:
     from scripts import roadmap_claims
 
     result = roadmap_claims.wrap_up_check(
-        issue=99,
-        evidence="make test-fast passed; commit abc; updated ROADMAP Done row for #99",
+        issue=101,
+        evidence="make test-fast passed; commit abc; updated ROADMAP Done row for #101",
         skip_github=True,
     )
     assert result["passed"] is False
