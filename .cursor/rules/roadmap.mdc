@@ -15,7 +15,7 @@ globs:
 | Surface | Role |
 |---------|------|
 | `docs/ROADMAP.md` | **Now / Next / Later** (≤3 Now, ≤5 Done) |
-| GitHub issues | Detail, acceptance criteria, portfolio |
+| GitHub issues | Detail, acceptance criteria; `milestone` for showcase-worthy closes |
 | `.omg/workflow-manifest.json` | Active agent spec/plan packages only |
 | `docs/brain_dump.md` | **Retired** — redirect only; do not triage |
 

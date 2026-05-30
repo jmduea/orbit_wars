@@ -29,6 +29,6 @@
 - name: blocked
   color: b60205
   description: Cannot proceed without external dependency or decision
-- name: portfolio
+- name: milestone
   color: fef2c0
-  description: Highlight for README / portfolio narrative (valid submit, repro train)
+  description: Externally visible win worth citing (valid submit, repro train, competition milestone)
