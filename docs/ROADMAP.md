@@ -7,9 +7,7 @@
 
 ## Now
 
-| Item | Link |
-|------|------|
-| Kaggle submission fails docker validation | [#96](https://github.com/jmduea/orbit_wars/issues/96) |
+_None — pick from **Next** after planning._
 
 ## Next
 
@@ -29,6 +27,16 @@
 | Local tournament / ranking eval for best agents | — |
 | VRAM profile from W&B run data | — |
 | Debug metric: average ships per fleet launch | — |
+| **Test cleanup:** Delete broken duplicate `test_jax_policy_gnn.py` (P0) | [#102](https://github.com/jmduea/orbit_wars/issues/102) |
+| **Test cleanup:** Retire v1 trajectory shield tests; migrate v2 (P0) | [#103](https://github.com/jmduea/orbit_wars/issues/103) |
+| **Test cleanup:** Consolidate JAX rollout + PPO integration smokes (P1) | [#104](https://github.com/jmduea/orbit_wars/issues/104) |
+| **Test cleanup:** Deduplicate opponent-slot metric assertions (P1) | [#105](https://github.com/jmduea/orbit_wars/issues/105) |
+| **Test cleanup:** Merge redundant on-policy KL tests (P1) | [#106](https://github.com/jmduea/orbit_wars/issues/106) |
+| **Test cleanup:** Consolidate feature registry / planet-dim tests (P1) | [#107](https://github.com/jmduea/orbit_wars/issues/107) |
+| **Test cleanup:** Merge factorized trajectory shield test modules (P1) | [#108](https://github.com/jmduea/orbit_wars/issues/108) |
+| **Test cleanup:** Consolidate telemetry + metric validation tests (P1) | [#109](https://github.com/jmduea/orbit_wars/issues/109) |
+| **Test cleanup:** Update legacy joint-decoder test artifacts (P1) | [#110](https://github.com/jmduea/orbit_wars/issues/110) |
+| **Test cleanup:** Low-value tests, mirrors, metadata, conftest (P2) | [#111](https://github.com/jmduea/orbit_wars/issues/111) |
 
 ## Done (last 5)
 

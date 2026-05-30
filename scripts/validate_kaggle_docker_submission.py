@@ -439,6 +439,58 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def resolve_submission_root() -> Path:
+    """Return the directory containing packaged submission artifacts.
+
+    Mirrors the resolver embedded in generated ``main.py``. Kaggle loads agents via
+    ``exec()`` without ``__file__``; ``kaggle_environments`` appends ``dirname(main.py)``
+    to ``sys.path`` before executing the agent module.
+    """
+
+    for entry in sys.path:
+        candidate = Path(entry)
+        if (candidate / "runtime_artifact.pkl").is_file():
+            return candidate
+    cwd = Path.cwd()
+    if (cwd / "runtime_artifact.pkl").is_file():
+        return cwd
+    return cwd
+
+
+def import_submission_kaggle_exec(extract_dir: Path) -> tuple[Any, float]:
+    """Load ``main.py`` the way ``kaggle_environments.agent.get_last_callable`` does."""
+
+    started = time.perf_counter()
+    main_path = extract_dir / "main.py"
+    raw = main_path.read_text(encoding="utf-8")
+    env: dict[str, Any] = {}
+    exec_dir = str(extract_dir.resolve())
+    sys.path.append(exec_dir)
+    try:
+        exec(compile(raw, str(main_path), "exec"), env)
+    except Exception as exc:
+        raise ValidationError(
+            "submission_import_failed", f"kaggle exec: {exc}"
+        ) from exc
+    finally:
+        if sys.path and sys.path[-1] == exec_dir:
+            sys.path.pop()
+
+    agent = env.get("agent")
+    if not callable(agent):
+        raise ValidationError(
+            "submission_import_failed",
+            "kaggle exec: main.py does not expose callable agent",
+        )
+    state = env.get("_STATE")
+    if state is None or not state.get("ready"):
+        raise ValidationError(
+            "setup_failed",
+            "kaggle exec: submission setup must finish at import time",
+        )
+    return agent, time.perf_counter() - started
+
+
 CONFIG_TEMPLATE = """from __future__ import annotations
 
 import dataclasses
@@ -536,7 +588,22 @@ from src.config import config_from_plain
 from src.jax.policy import build_jax_policy
 
 
-_ROOT = __import__("pathlib").Path(__file__).resolve().parent
+def _submission_root():
+    from pathlib import Path
+
+    import sys
+
+    for entry in sys.path:
+        candidate = Path(entry)
+        if (candidate / "runtime_artifact.pkl").is_file():
+            return candidate
+    cwd = Path(".")
+    if (cwd / "runtime_artifact.pkl").is_file():
+        return cwd
+    return cwd
+
+
+_ROOT = _submission_root()
 _ARTIFACT_PATH = _ROOT / "runtime_artifact.pkl"
 _MANIFEST_PATH = _ROOT / "manifest.json"
 _STATE = None
@@ -669,6 +736,7 @@ import tarfile
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 
 def main() -> int:
@@ -678,6 +746,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="submission-") as extract_text:
             extract_dir = Path(extract_text)
             extract_package(args.package, extract_dir)
+            import_submission_kaggle_exec(extract_dir)
             module, import_seconds = import_submission(extract_dir)
             artifact_load_seconds = setup_probe(module)
             first_action = first_action_probe(
@@ -766,6 +835,35 @@ def extract_package(package_path: Path, extract_dir: Path):
         raise PhaseError("package_layout_failed", str(exc)) from exc
     if not (extract_dir / "main.py").is_file():
         raise PhaseError("package_layout_failed", "missing root main.py")
+
+
+def import_submission_kaggle_exec(extract_dir: Path) -> tuple[Any, float]:
+    started = time.perf_counter()
+    main_path = extract_dir / "main.py"
+    raw = main_path.read_text(encoding="utf-8")
+    env: dict[str, Any] = {}
+    exec_dir = str(extract_dir.resolve())
+    sys.path.append(exec_dir)
+    try:
+        exec(compile(raw, str(main_path), "exec"), env)
+    except Exception as exc:
+        raise PhaseError("submission_import_failed", f"kaggle exec: {exc}") from exc
+    finally:
+        if sys.path and sys.path[-1] == exec_dir:
+            sys.path.pop()
+    agent = env.get("agent")
+    if not callable(agent):
+        raise PhaseError(
+            "submission_import_failed",
+            "kaggle exec: main.py does not expose callable agent",
+        )
+    state = env.get("_STATE")
+    if state is None or not state.get("ready"):
+        raise PhaseError(
+            "setup_failed",
+            "kaggle exec: submission setup must finish at import time",
+        )
+    return agent, time.perf_counter() - started
 
 
 def validate_member(member, extract_dir: Path):

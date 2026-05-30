@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -14,13 +15,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.artifacts.pipeline import (  # noqa: E402
-    load_optional_jobs,
-    load_pending_optional_jobs,
-)
+from src.artifacts.worker_env import bootstrap_artifact_worker_jax_env  # noqa: E402
+
+bootstrap_artifact_worker_jax_env()
+
 from src.artifacts.checkpoint_compat import (  # noqa: E402
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
+)
+from src.artifacts.pipeline import (  # noqa: E402
+    load_optional_jobs,
 )
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
 from src.artifacts.run_paths import atomic_write_json  # noqa: E402
@@ -126,6 +130,7 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
         check=False,
         text=True,
         capture_output=True,
+        env=dict(os.environ),
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "stdout.log").write_text(completed.stdout, encoding="utf-8")

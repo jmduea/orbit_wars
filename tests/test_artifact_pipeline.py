@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.artifacts.checkpoint_retention import prune_checkpoints
 from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointJob,
@@ -17,7 +18,6 @@ from src.artifacts.pipeline import (
     protected_paths_from_jobs,
     write_optional_job,
 )
-from src.artifacts.checkpoint_retention import prune_checkpoints
 
 
 def _payload(update: int) -> dict[str, object]:
@@ -406,9 +406,10 @@ def test_worker_accepts_custom_result_root_from_trusted_worker_option(
 
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
-    from src.jax import train as jax_train
     from src.config import TrainConfig
+    from src.jax import train as jax_train
 
+    monkeypatch.setenv("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA", "1")
     launched: dict[str, object] = {}
 
     class FakeProcess:
@@ -436,7 +437,20 @@ def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, m
     assert command[1] == str(Path("scripts/run_artifact_worker.py").resolve())
     assert str(tmp_path) in command
     assert launched["kwargs"]["start_new_session"] is True
+    assert launched["kwargs"]["env"]["JAX_PLATFORMS"] == "cpu"
     assert worker_state["process"].poll() is None
+
+
+def test_artifact_worker_subprocess_env_honors_cpu_override(monkeypatch) -> None:
+    from src.artifacts.worker_env import artifact_worker_subprocess_env
+
+    monkeypatch.setenv("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA", "1")
+    monkeypatch.setenv("JAX_PLATFORMS", "cuda,cpu")
+
+    env = artifact_worker_subprocess_env()
+
+    assert env["JAX_PLATFORMS"] == "cpu"
+    assert env["ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA"] == "1"
 
 
 def test_checkpoint_queue_rejects_invalid_size():

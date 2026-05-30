@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import pickle
+import sys
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -19,6 +20,8 @@ from scripts.validate_kaggle_docker_submission import (
     _to_plain_data,
     build_submission_package,
     export_runtime_artifact,
+    import_submission_kaggle_exec,
+    resolve_submission_root,
     validate_tarball_layout,
 )
 from src.config.schema import TrainConfig
@@ -170,13 +173,37 @@ def test_embedded_runtime_templates_compile() -> None:
     compile(MAIN_TEMPLATE, "generated_main.py", "exec")
     compile(IN_CONTAINER_VALIDATOR, "validate_submission.py", "exec")
     assert "_agent_v1" not in MAIN_TEMPLATE
+    assert "__file__" not in MAIN_TEMPLATE
+    assert "_submission_root" in MAIN_TEMPLATE
     assert "encoding_version" not in MAIN_TEMPLATE
     assert "empty_feature_history" in MAIN_TEMPLATE
     assert "jitted_encode" in MAIN_TEMPLATE
     assert "_initialize_submission()" in MAIN_TEMPLATE
     assert "compile_batched_feature_encode" in MAIN_TEMPLATE
     assert "deterministic_eval=True" in MAIN_TEMPLATE
+    assert "import_submission_kaggle_exec" in IN_CONTAINER_VALIDATOR
     assert "StepTimingBudget" in IN_CONTAINER_VALIDATOR
+
+
+def test_resolve_submission_root_finds_artifact_dir(tmp_path: Path) -> None:
+    package_root = tmp_path / "submission_pkg"
+    package_root.mkdir()
+    (package_root / "runtime_artifact.pkl").write_bytes(b"artifact")
+    sys_path_entry = str(package_root)
+    original_path = sys.path.copy()
+    sys.path.insert(0, sys_path_entry)
+    try:
+        assert resolve_submission_root() == package_root
+    finally:
+        sys.path[:] = original_path
+
+
+def test_import_submission_kaggle_exec_rejects_missing_agent(tmp_path: Path) -> None:
+    extract_dir = tmp_path / "extract"
+    extract_dir.mkdir()
+    (extract_dir / "main.py").write_text("x = 1\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="callable agent"):
+        import_submission_kaggle_exec(extract_dir)
 
 
 def test_export_runtime_artifact_accepts_planet_graph_transformer(tmp_path: Path) -> None:

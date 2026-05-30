@@ -69,6 +69,11 @@ Useful worker environment overrides:
 - `ORBIT_WARS_KAGGLE_ALLOW_CALIBRATION_FALLBACK`
 - `ORBIT_WARS_KAGGLE_ALLOW_CPU`
 
+## Competition submissions
+
+To package a checkpoint as `submission.tar.gz` and validate before upload, see
+[kaggle_submission.md](kaggle_submission.md).
+
 ## Notes
 
 - `ow train kaggle` always uses standalone mode (`--no-wandb`). W&B sweep creation

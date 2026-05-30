@@ -759,6 +759,8 @@ def _start_artifact_worker_if_needed(
     ]
     if result_root is not None:
         command.extend(["--result-root", str(result_root)])
+    from src.artifacts.worker_env import artifact_worker_subprocess_env
+
     stdout = stdout_path.open("a", encoding="utf-8")
     stderr = stderr_path.open("a", encoding="utf-8")
     worker_state["process"] = subprocess.Popen(
@@ -766,6 +768,7 @@ def _start_artifact_worker_if_needed(
         cwd=Path(__file__).resolve().parents[1],
         stdout=stdout,
         stderr=stderr,
+        env=artifact_worker_subprocess_env(),
         start_new_session=True,
     )
 
