@@ -11,7 +11,15 @@ _None — pick from **Next** after planning._
 
 ## Next
 
-_None — pick from **Later** after planning._
+| Item | Link |
+|------|------|
+| Telemetry: remove redundant exported metrics | [#127](https://github.com/jmduea/orbit_wars/issues/127) |
+| Telemetry: remove stubbed game-state / action-target rollout metrics | [#128](https://github.com/jmduea/orbit_wars/issues/128) |
+| Telemetry: stop device_get of rollout scalars not in update record | [#129](https://github.com/jmduea/orbit_wars/issues/129) |
+| Telemetry: apply metric_groups filtering at runtime | [#130](https://github.com/jmduea/orbit_wars/issues/130) |
+| Telemetry: gate PPO debug_* behind debug metric group | [#131](https://github.com/jmduea/orbit_wars/issues/131) |
+| Telemetry: gate heavy/sparse per-update fields (default off) | [#132](https://github.com/jmduea/orbit_wars/issues/132) |
+| Telemetry phase 2: split logs, event snapshots, registry prune (after #127–#132) | [#133](https://github.com/jmduea/orbit_wars/issues/133) |
 
 ## Later
 
