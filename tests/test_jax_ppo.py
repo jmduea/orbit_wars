@@ -152,6 +152,23 @@ def test_rollout_metric_aggregation_recomputes_rate_metrics():
     assert float(metrics["average_placement_4p"]) == pytest.approx(2.5)
 
 
+def test_merge_metric_dicts_skips_removed_action_target_metrics() -> None:
+    lean_chunk = {
+        "env_steps": jax.numpy.asarray(8.0),
+        "average_reward": jax.numpy.asarray(0.5),
+        "episode_done": jax.numpy.asarray(0.0),
+        "episode_reward_mean": jax.numpy.asarray(0.0),
+        "trajectory_shield_legal_non_noop_count": jax.numpy.asarray(0.0),
+        "trajectory_shield_original_non_noop_count": jax.numpy.asarray(0.0),
+    }
+
+    merged = _merge_metric_dicts([lean_chunk, lean_chunk])
+
+    assert "valid_non_noop_targets_per_row" not in merged
+    assert "only_noop_fraction" not in merged
+    assert float(merged["trajectory_shield_legal_non_noop_rate"]) == 0.0
+
+
 def test_merge_metric_dicts_defers_finalize_only_rates():
     first_chunk = _metric_chunk(
         episodes_2p=2.0,

@@ -74,14 +74,14 @@ def calibration_grid(
     rollout_steps = int(parsed["training.rollout_steps"])
     group_counts = rollout_group_env_counts(hydra_overrides)
 
-    if _split_rollout_groups(hydra_overrides):
-        total_envs = sum(group_counts)
+    if _profile_owns_rollout_budget(hydra_overrides):
         per_group = min(group_counts)
+        sizing_envs = _rollout_sizing_env_count(hydra_overrides, default_num_envs=per_group)
         micro_candidates = _compatible_microbatch_candidates(group_counts, per_group)
         variants: list[tuple[str, ...]] = []
         for micro in micro_candidates:
             minibatch = _round_to_multiple(
-                max(total_envs * rollout_steps // 4, 128),
+                max(sizing_envs * rollout_steps // 4, 128),
                 128,
             )
             variant = _replace_override(
@@ -174,6 +174,14 @@ def finalize_rollout_shape_overrides(
             )
         )
     return tuple(normalized)
+
+
+def _profile_owns_rollout_budget(hydra_overrides: Sequence[str] | None) -> bool:
+    """Return True when env parallelism is owned by a training profile, not sweeps."""
+
+    if _has_training_group_override(hydra_overrides):
+        return True
+    return _split_rollout_groups(hydra_overrides)
 
 
 def _split_rollout_groups(hydra_overrides: Sequence[str] | None) -> bool:

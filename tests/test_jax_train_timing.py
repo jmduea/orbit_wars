@@ -71,3 +71,21 @@ def test_build_per_format_timing_metrics_emits_inactive_format_zeros():
     assert metrics["rollout_env_steps_per_sec_4p"] == 0.0
     assert metrics["samples_per_sec_4p"] == 0.0
     assert metrics["rollout_samples_per_sec_4p"] == 0.0
+
+def test_rollout_metrics_for_update_record_omits_disabled_groups() -> None:
+    from src.jax.train import _rollout_metrics_for_update_record
+
+    cfg = SimpleNamespace(model=SimpleNamespace(max_moves_k=4))
+    rollout_scalars = {
+        "win_rate_2p": 0.5,
+        "stop_rate": 0.1,
+        "mean_active_launches_per_turn": 2.0,
+    }
+
+    metrics = _rollout_metrics_for_update_record(rollout_scalars, cfg)
+
+    assert "win_rate_2p" not in metrics
+    assert metrics["stop_rate"] == 0.1
+    assert metrics["mean_active_launches_per_turn"] == 2.0
+    assert metrics["stop_utilization_ratio"] == 0.5
+    assert "trajectory_shield_blocked_count" not in metrics

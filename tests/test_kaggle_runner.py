@@ -153,6 +153,28 @@ def test_mixed_format_overrides_keep_microbatch_compatible_with_group_envs() -> 
             count % variant_micro == 0
             for count in rollout_group_env_counts(hydra_overrides)
         )
+        assert not any(item.startswith("training.num_envs=") for item in variant)
+
+
+def test_rotate_training_profile_calibration_grid_uses_resolved_env_budget() -> None:
+    hydra_overrides = ("training=2p4p_16_rotate",)
+    overrides = estimate_training_overrides(
+        HardwareProfile("gpu", "test", 16),
+        {"hidden_size": 140, "planet_transformer_layers": 1},
+        {"feature_history_steps": 2, "trajectory_shield_horizon": 20},
+        hydra_overrides=hydra_overrides,
+    )
+
+    assert not any(item.startswith("training.num_envs=") for item in overrides)
+    variants = calibration_grid(overrides, hydra_overrides=hydra_overrides)
+    assert variants
+    for variant in variants:
+        assert not any(item.startswith("training.num_envs=") for item in variant)
+        variant_micro = _override_int(variant, "training.rollout_microbatch_envs")
+        assert all(
+            count % variant_micro == 0
+            for count in rollout_group_env_counts(hydra_overrides)
+        )
 
 
 def test_finalize_rollout_shape_overrides_repairs_bad_microbatch() -> None:

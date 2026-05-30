@@ -42,12 +42,7 @@ from src.telemetry.metric_registry import (
     filter_update_record,
     required_ppo_metric_names,
     required_rollout_scalar_names,
-)
-from src.telemetry.metric_registry import (
-    filter_event_record,
-    filter_update_record,
-    required_ppo_metric_names,
-    required_rollout_scalar_names,
+    ROLLOUT_OUTPUT_METRIC_NAMES,
 )
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
@@ -305,23 +300,25 @@ def _merge_metric_dicts(
         / metrics["episode_done"],
         0.0,
     )
-    metrics["valid_non_noop_targets_per_row"] = jnp.where(
-        metrics["valid_non_noop_target_rows"] > 0.0,
-        metrics["valid_non_noop_targets_sum"] / metrics["valid_non_noop_target_rows"],
-        0.0,
-    )
-    metrics["only_noop_fraction"] = jnp.where(
-        metrics["valid_non_noop_target_rows"] > 0.0,
-        metrics["only_noop_rows"] / metrics["valid_non_noop_target_rows"],
-        0.0,
-    )
-    metrics["trajectory_shield_legal_non_noop_rate"] = trajectory_shield_legal_rate(
-        legal=metrics["trajectory_shield_legal_non_noop_count"],
-        original=metrics["trajectory_shield_original_non_noop_count"],
-    )
-    return metrics
-
-
+    if "valid_non_noop_target_rows" in metrics:
+        metrics["valid_non_noop_targets_per_row"] = jnp.where(
+            metrics["valid_non_noop_target_rows"] > 0.0,
+            metrics["valid_non_noop_targets_sum"] / metrics["valid_non_noop_target_rows"],
+            0.0,
+        )
+        metrics["only_noop_fraction"] = jnp.where(
+            metrics["valid_non_noop_target_rows"] > 0.0,
+            metrics["only_noop_rows"] / metrics["valid_non_noop_target_rows"],
+            0.0,
+        )
+    if (
+        "trajectory_shield_legal_non_noop_count" in metrics
+        and "trajectory_shield_original_non_noop_count" in metrics
+    ):
+        metrics["trajectory_shield_legal_non_noop_rate"] = trajectory_shield_legal_rate(
+            legal=metrics["trajectory_shield_legal_non_noop_count"],
+            original=metrics["trajectory_shield_original_non_noop_count"],
+        )
     return metrics
 
 
@@ -1247,35 +1244,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "overall_win_rate": overall_win_rate,
                 "average_reward": average_reward,
                 "episode_reward_mean": episode_reward_mean,
-                "trajectory_shield_blocked_count": float(
-                    rollout_scalars["trajectory_shield_blocked_count"]
-                ),
-                "trajectory_shield_blocked_sun_count": float(
-                    rollout_scalars["trajectory_shield_blocked_sun_count"]
-                ),
-                "trajectory_shield_blocked_bounds_count": float(
-                    rollout_scalars["trajectory_shield_blocked_bounds_count"]
-                ),
-                "trajectory_shield_blocked_unintended_hit_count": float(
-                    rollout_scalars["trajectory_shield_blocked_unintended_hit_count"]
-                ),
-                "trajectory_shield_blocked_horizon_count": float(
-                    rollout_scalars["trajectory_shield_blocked_horizon_count"]
-                ),
-                "trajectory_shield_fallback_noop_count": float(
-                    rollout_scalars["trajectory_shield_fallback_noop_count"]
-                ),
-                "trajectory_shield_legal_non_noop_rate": float(
-                    rollout_scalars["trajectory_shield_legal_non_noop_rate"]
-                ),
-                "stop_rate": float(rollout_scalars["stop_rate"]),
-                "mean_active_launches_per_turn": float(
-                    rollout_scalars["mean_active_launches_per_turn"]
-                ),
-                "stop_utilization_ratio": float(
-                    rollout_scalars["mean_active_launches_per_turn"]
-                )
-                / max(float(cfg.model.max_moves_k), 1.0),
+                **_rollout_metrics_for_update_record(rollout_scalars, cfg),
                 "survival_time": survival_time,
                 "score_share": score_share,
                 "update_seconds": update_seconds,
@@ -1291,29 +1260,6 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "seed_scheduler_plateau_metric": cfg.training.plateau_metric,
                 "reseed_events": reseed_events,
                 **curriculum_telemetry,
-                "opponent_slots_total": float(rollout_scalars["opponent_slots_total"]),
-                "opponent_slots_latest": float(
-                    rollout_scalars["opponent_slots_latest"]
-                ),
-                "opponent_slots_historical": float(
-                    rollout_scalars["opponent_slots_historical"]
-                ),
-                "opponent_slots_random": float(
-                    rollout_scalars["opponent_slots_random"]
-                ),
-                "opponent_slots_noop": float(rollout_scalars["opponent_slots_noop"]),
-                "opponent_slots_nearest_sniper": float(
-                    rollout_scalars["opponent_slots_nearest_sniper"]
-                ),
-                "opponent_slots_turtle": float(
-                    rollout_scalars["opponent_slots_turtle"]
-                ),
-                "opponent_slots_opportunistic": float(
-                    rollout_scalars["opponent_slots_opportunistic"]
-                ),
-                "opponent_historical_fallback_latest_slots": float(
-                    rollout_scalars["opponent_historical_fallback_latest_slots"]
-                ),
                 "historical_pool_size": int(
                     jax.device_get(historical_pool.valid_mask).sum()
                 ),
@@ -1435,6 +1381,39 @@ def _historical_pool_snapshot_telemetry(
         "historical_snapshot_ids": historical_ids,
         "historical_snapshot_ages_updates": historical_ages,
     }
+
+
+def _rollout_metrics_for_update_record(
+    rollout_scalars: dict[str, float],
+    cfg: TrainConfig,
+) -> dict[str, float]:
+    """Merge optional rollout scalars selected by metric-group filtering."""
+
+    core_keys = frozenset(
+        {
+            "samples",
+            "env_steps",
+            "episode_done",
+            "average_reward",
+            "episode_reward_mean",
+            "win_rate_2p",
+            "first_place_rate_4p",
+            "average_placement_4p",
+            "overall_win_rate",
+            "survival_time",
+            "score_share",
+        }
+    )
+    metrics = {
+        key: float(rollout_scalars[key])
+        for key in rollout_scalars
+        if key in ROLLOUT_OUTPUT_METRIC_NAMES and key not in core_keys
+    }
+    if "mean_active_launches_per_turn" in rollout_scalars:
+        metrics["stop_utilization_ratio"] = float(
+            rollout_scalars["mean_active_launches_per_turn"]
+        ) / max(float(cfg.model.max_moves_k), 1.0)
+    return metrics
 
 
 def _split_debug_update_record(
