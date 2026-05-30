@@ -1035,7 +1035,7 @@
       "kind": "spec",
       "path": ".omg/specs/deep-interview-kaggle-wandb-population.md",
       "workflow": "deep-interview",
-      "status": "executing",
+      "status": "complete",
       "title": "Kaggle W&B population training",
       "spec_id": null,
       "plan_id": "ralplan-kaggle-wandb-population",
@@ -1045,16 +1045,16 @@
         "policy-advances-audit"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": "Deep interview approved: W&B-first one-command Kaggle workers, population MVP, accelerator fallback, throughput calibration, W&B checkpoint artifacts, shortlist generation.",
-      "notes": "First milestone is Population MVP; full tournaments deferred. ROADMAP Now: #97 (Kaggle population worker broken)."
+      "completed_at": "2026-05-30",
+      "evidence": "ROADMAP #97 closed: standalone Kaggle runner via `ow train kaggle` (850568a), Hydra override validation + launch kernel_id from push output (e98f452), OAuth credentials.json owner resolution + preflight-before-launch (20c8011). P100 smoke passed; docs/kaggle_runner.md. W&B-on-Kaggle population remains future work; standalone path unblocks Kaggle training.",
+      "notes": "Former ROADMAP Now #97. MVP hardening plan (ralplan-kaggle-wandb-mvp-hardening) was prerequisite; full W&B sweep-on-Kaggle deferred."
     },
     {
       "id": "ralplan-kaggle-wandb-population",
       "kind": "plan",
       "path": ".omg/plans/ralplan-kaggle-wandb-population.md",
       "workflow": "ralplan",
-      "status": "executing",
+      "status": "complete",
       "title": "Plan: Kaggle W&B population training",
       "spec_id": "kaggle-wandb-population",
       "plan_id": null,
@@ -1064,9 +1064,9 @@
         "kaggle-docker-validation"
       ],
       "supersedes_id": null,
-      "completed_at": null,
-      "evidence": "Consensus iter-1: Native W&B sweep first; local Kaggle launcher only for packaging, accelerator fallback, status/output sync; hybrid manifest deferred.",
-      "notes": "User selected Native W&B first over hybrid manifest. ROADMAP Now: #97."
+      "completed_at": "2026-05-30",
+      "evidence": "Execution complete for ROADMAP #97 MVP: ow train kaggle host routing, standalone worker packaging/JAX bootstrap, launch diagnostics, sync/status. Commits 850568a, e98f452, 20c8011.",
+      "notes": "Native W&B sweep-on-Kaggle and shortlist-from-artifacts remain follow-ups; not blocking #97 closure."
     },
     {
       "id": "ralplan-kaggle-wandb-mvp-hardening",

@@ -32,5 +32,5 @@ Centralized repository of all the things that i've felt the need to write down i
 ## Issues (migrated to ROADMAP / GitHub)
 
 - Kaggle docker validation failure → ROADMAP **Now** [#96](https://github.com/jmduea/orbit_wars/issues/96)
-- Population worker broken → ROADMAP **Now** [#97](https://github.com/jmduea/orbit_wars/issues/97)
+- Population worker broken → ROADMAP **Done** [#97](https://github.com/jmduea/orbit_wars/issues/97) (`850568a`, `e98f452`, `20c8011`)
 - Seed scheduler verification → [#99](https://github.com/jmduea/orbit_wars/issues/99)

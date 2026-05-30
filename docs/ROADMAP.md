@@ -10,7 +10,6 @@
 | Item | Link |
 |------|------|
 | Kaggle submission fails docker validation | [#96](https://github.com/jmduea/orbit_wars/issues/96) |
-| Kaggle population worker broken (W&B secret, kernel fails on Kaggle) | [#97](https://github.com/jmduea/orbit_wars/issues/97) |
 
 ## Next
 
@@ -35,6 +34,7 @@
 
 | Item | Link |
 |------|------|
+| Kaggle population worker (`ow train kaggle` standalone; P100 smoke) | [#97](https://github.com/jmduea/orbit_wars/issues/97) · `850568a` `e98f452` `20c8011` |
 | Config cleanup: presets, legacy models, OMG clutter, Hydra launch recipes | [#98](https://github.com/jmduea/orbit_wars/issues/98) |
 | Normalized ship differential terminal reward mode | — |
 | ROADMAP system + GitHub issue workflow | — |
