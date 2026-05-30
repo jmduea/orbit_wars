@@ -14,7 +14,6 @@ import jax.numpy as jnp
 
 import jax
 from src.config import RewardConfig, TaskConfig
-from src.game.rewards import apply_early_terminal_reward_shaping_jax
 from src.game.constants import (
     BOARD_SIZE,
     MAX_FLEET_SPEED,
@@ -24,6 +23,7 @@ from src.game.constants import (
     SUN_RADIUS,
     TOTAL_COMETS,
 )
+from src.jax.rewards import apply_early_terminal_reward_shaping_jax
 
 from .features import (
     FeatureHistory,

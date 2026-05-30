@@ -35,7 +35,7 @@ RUNTIME_FILES = (
     "features/registry.py",
     "game/__init__.py",
     "game/constants.py",
-    "game/rewards.py",
+    "jax/rewards.py",
     "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
