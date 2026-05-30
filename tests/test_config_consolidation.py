@@ -9,7 +9,13 @@ from omegaconf import OmegaConf
 
 from src.config import compose_hydra_train_config
 
-SWEEP_COMPOSE_RECIPES = ("budget", "2p_only_throughput", "4p_only_throughput")
+SWEEP_COMPOSE_RECIPES = (
+    "budget",
+    "2p_only_throughput",
+    "4p_only_throughput",
+    "sps_experiment",
+    "sps_experiment_stage2",
+)
 
 LAUNCH_RECIPES: dict[str, list[str]] = {
     "smoke": [

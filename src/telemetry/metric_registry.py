@@ -281,6 +281,28 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Fraction of update wall time spent in PPO optimization.",
     ),
     _metric(
+        "gpu_memory_used_gb",
+        "timing",
+        "Device memory in use after the update (GiB, driver-reported when available).",
+    ),
+    _metric(
+        "gpu_memory_total_gb",
+        "timing",
+        "Total device memory for the active GPU (GiB).",
+    ),
+    _metric(
+        "gpu_memory_peak_gb",
+        "timing",
+        "Running peak device memory observed since run start (GiB).",
+        protected=True,
+    ),
+    _metric(
+        "gpu_name",
+        "events",
+        "Observed GPU product name for the training run.",
+        record_kinds=("update", "event"),
+    ),
+    _metric(
         "seed_scheduler_policy",
         "curriculum",
         "Seed scheduling policy selected for the next update.",

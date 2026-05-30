@@ -1,0 +1,14 @@
+# @package _global_
+# Stage-2 search space from W&B sweep hrrvlbpp (random).
+
+parameters:
+  training.rollout_steps:
+    values: [450, 600, 750, 900]
+  training.update_chunk_rows_min:
+    distribution: int_uniform
+    min: 1200
+    max: 2400
+  training.update_chunk_rows_max:
+    distribution: int_uniform
+    min: 4500
+    max: 8200

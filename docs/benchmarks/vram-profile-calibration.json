@@ -1,0 +1,23 @@
+[
+  {
+    "run_id": "rtx5080-rs128-mb16",
+    "name": "planet_graph_transformer-mix2p4p-selfplay-u3-env32-s42-20260530T202134Z",
+    "state": "finished",
+    "gpu_name": "NVIDIA GeForce RTX 5080",
+    "gpu_memory_gb": 15.9208984375,
+    "gpu_memory_peak_gb": 14.6376953125,
+    "opponent": "selfplay",
+    "format_label": "mix2p4p",
+    "group_envs": 32,
+    "rollout_steps": 128,
+    "rollout_microbatch_envs": 16,
+    "total_updates": 3,
+    "pressure_index": 4096,
+    "env_steps_per_sec": 3944.36946813837,
+    "samples_per_sec": 19721.84734069185,
+    "update_seconds": 0.5192211370012956,
+    "elapsed_seconds": 216.41822950400092,
+    "compile_seconds_est": null,
+    "measurement_source": "local_jsonl"
+  }
+]

@@ -35,6 +35,7 @@ from src.artifacts.replay import maybe_write_jax_checkpoint_replay
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
 from src.telemetry import build_telemetry
+from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
@@ -941,6 +942,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
 
     ensure_jax_accelerator_backend()
 
+    gpu_tracker = GpuMemoryTracker()
     key = jax.random.PRNGKey(cfg.seed)
     _, rollout_init_key, policy_key = jax.random.split(key, 3)
     policy = build_jax_policy(cfg=cfg)
@@ -977,6 +979,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "wandb_dir": str(run_context.wandb_dir),
             "wandb_artifact_dir": str(run_context.wandb_artifact_dir),
             "wandb_data_dir": str(run_context.wandb_data_dir),
+            **gpu_tracker.run_metadata(),
         },
     )
     telemetry = build_telemetry(
@@ -1548,6 +1551,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 },
                 "curriculum_phase_id": curriculum_telemetry["curriculum_stage_id"],
                 "curriculum_phase_events": list(update_events),
+                **gpu_tracker.sample_update_metrics(),
             }
             append_jsonl(log_path, record)
             telemetry.log(record, step=update)

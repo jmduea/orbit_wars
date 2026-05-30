@@ -1,0 +1,18 @@
+# @package _global_
+# Fixed axes for the sps_experiment throughput campaign (W&B sweep fbrzfxcw).
+
+parameters:
+  model:
+    value: transformer_factorized
+  curriculum:
+    value: "off"
+  output.campaign:
+    value: sps_experiment
+  telemetry.wandb.group:
+    value: sps_experiment
+  telemetry.wandb.log_artifacts:
+    value: false
+  telemetry.wandb.tags:
+    value: [sps_experiment]
+  training.total_updates:
+    value: 30

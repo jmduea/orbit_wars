@@ -18,7 +18,6 @@ _None — pick from **Later** after planning._
 | Item | Link |
 |------|------|
 | Define `num_envs` via training weights instead of format YAML | — |
-| VRAM profile from W&B run data | — |
 | Debug metric: average ships per fleet launch | — |
 
 ## Done (last 5)
@@ -26,10 +25,10 @@ _None — pick from **Later** after planning._
 | Item | Link |
 |------|------|
 | Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) · [#125](https://github.com/jmduea/orbit_wars/pull/125) · `docs/architecture/tournament-eval.md` `make test-domain-artifacts` |
+| VRAM telemetry + W&B-backed comfort profile | [#123](https://github.com/jmduea/orbit_wars/issues/123) · `docs/benchmarks/vram-profile-sps-experiment.md` |
 | Define `survival_time` metric and relation to performance (research) | [#101](https://github.com/jmduea/orbit_wars/issues/101) · `docs/benchmarks/issue-101-survival-time.md` |
 | Verify seed scheduler swaps during training | [#99](https://github.com/jmduea/orbit_wars/issues/99) · `test_seed_scheduler.py` `test_jax_seed_scheduler.py` |
 | JAX compile time vs expected bounds (research) | [#100](https://github.com/jmduea/orbit_wars/issues/100) · `docs/benchmarks/issue-100-jax-compile-time.md` |
-| Output hygiene v2: promotion, W&B best artifacts, sweep naming, Hydra tags | [#112](https://github.com/jmduea/orbit_wars/issues/112) [#113](https://github.com/jmduea/orbit_wars/issues/113) [#114](https://github.com/jmduea/orbit_wars/issues/114) [#115](https://github.com/jmduea/orbit_wars/issues/115) [#116](https://github.com/jmduea/orbit_wars/issues/116) [#117](https://github.com/jmduea/orbit_wars/issues/117) · `make test-domain-config` |
 
 _Last triaged: 2026-05-30_
 
