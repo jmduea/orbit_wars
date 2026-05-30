@@ -36,3 +36,6 @@ test-domain-artifacts:
 
 test-domain-curriculum:
 	uv run --group dev pytest tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"
+
+roadmap-session-check:
+	uv run python scripts/roadmap.py check-session --require-clean

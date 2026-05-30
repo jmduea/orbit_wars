@@ -136,6 +136,9 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - **Strict gate (optional):** `ORBIT_WARS_IMPL_GATE=1` and `roadmap.py gate --request "…" --require-allowed` before editing `src/`, `conf/`, `tests/`.
 - **After editing ROADMAP:** `make roadmap-check`. **Human Now wins** over manifest backlog.
 - **New work:** add **Later** row first; open GitHub issues after phase 3 (execution plan), not at idea time.
+
+- **Multi-agent:** one `roadmap.py claim --issue N --path …` per implementing agent; `roadmap.py claims` before work; `wrap-up --issue N --evidence` after `gh issue close` (verifies CLOSED + evidence); `check-session` before stopping.
+- Set `ORBIT_WARS_AGENT_ID` per Cursor session (e.g. `cursor-a`, `cursor-b`) to avoid claim collisions.
 - **Agent packages:** `.omg/workflow-manifest.json` active entries only; register/link when promoting to **Now**.
 
 ## Generated And Local Artifacts

@@ -149,3 +149,67 @@ def test_gate_blocks_without_approve_impl(monkeypatch: pytest.MonkeyPatch) -> No
     payload = implementation_gate(request="fix kaggle docker validation")
     assert payload["allowed"] is False
     assert payload["blockers"]
+
+
+def test_claim_path_overlap_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-a")
+    roadmap_claims.claim_issue(issue=1, owner="agent-a", paths=["src/orchestration/"])
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-b")
+    with pytest.raises(ValueError, match="overlap"):
+        roadmap_claims.claim_issue(issue=2, owner="agent-b", paths=["src/orchestration/kaggle_runner.py"])
+
+
+def test_wrap_up_requires_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import roadmap_claims
+
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
+    result = roadmap_claims.wrap_up_check(issue=99, evidence="short", skip_github=True)
+    assert result["passed"] is False
+    assert any("Evidence too short" in b for b in result["blockers"])
+
+
+def test_finalize_wrap_up_records_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-wrap")
+    roadmap_claims.claim_issue(issue=42, owner="agent-wrap", paths=["docs/"])
+    evidence = "make test-fast passed; commit deadbeef; updated ROADMAP Done row"
+    result = roadmap_claims.finalize_wrap_up(
+        issue=42, evidence=evidence, owner="agent-wrap", skip_github=True
+    )
+    assert result["passed"] is True
+    assert roadmap_claims.load_completion(42) is not None
+    assert roadmap_claims.load_claim(42) is None
+
+
+def test_check_session_flags_open_claim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+    import os
+    import subprocess
+    import sys
+
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-open")
+    roadmap_claims.claim_issue(issue=7, owner="agent-open", paths=["src/"])
+    env = os.environ.copy()
+    env["ORBIT_WARS_STATE_DIR"] = str(state)
+    env["ORBIT_WARS_AGENT_ID"] = "agent-open"
+    proc = subprocess.run(
+        [sys.executable, "scripts/roadmap.py", "check-session", "--require-clean"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout)
+    assert payload["passed"] is False

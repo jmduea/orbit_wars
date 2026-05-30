@@ -49,11 +49,18 @@ Before code:
 3. Promote ROADMAP rows to **Next** / **Now** (≤3)
 4. `omg_workflow_manifest_register` / update when using agent packages
 
-## Phase 4 — Approve implementation
+## Phase 4 — Claim (multi-agent)
 
 ```bash
-uv run python scripts/roadmap.py approve-impl --issue 96 --summary "docker validation fix"
-# or: --manifest-id kaggle-wandb-population
+export ORBIT_WARS_AGENT_ID=cursor-session-a   # unique per agent
+uv run python scripts/roadmap.py claims
+uv run python scripts/roadmap.py claim --issue 97 --path src/orchestration/ --path scripts/kaggle_wandb_population.py
+```
+
+## Phase 5 — Approve implementation
+
+```bash
+uv run python scripts/roadmap.py approve-impl --issue 97 --summary "population worker fix"
 ```
 
 Optional strict enforcement for agents:
@@ -63,17 +70,30 @@ export ORBIT_WARS_IMPL_GATE=1
 uv run python scripts/roadmap.py gate --request "<same request>" --require-allowed
 ```
 
-## Phase 5 — Implement
+## Phase 6 — Implement
 
 - Run tests per `AGENTS.md` tiers
 - `roadmap.py gate` should pass when strict mode is on
 
-## Phase 6 — Done
+## Phase 7 — Wrap-up (mandatory)
+
+```bash
+gh issue close 97 --comment "Evidence: make test-domain-artifacts; commit abc123; …"
+uv run python scripts/roadmap.py wrap-up --issue 97 --evidence "make test-domain-artifacts passed; commit abc123; fixed W&B secret in kernel metadata"
+uv run python scripts/roadmap.py check-wrap-up --issue 97 --require-passed
+```
+
+`wrap-up` requires:
+- GitHub issue **CLOSED** (via `gh`)
+- Evidence text ≥40 chars (tests, commit, paths)
+- Releases claim and clears impl-gate
+
+## Phase 8 — Done
 
 1. Close GitHub issue with evidence
 2. Move row to ROADMAP **Done** (≤5 rows)
 3. Manifest → `complete` with evidence
-4. `uv run python scripts/roadmap.py clear-impl`
+4. `uv run python scripts/roadmap.py check-session --require-clean`
 5. `uv run python scripts/roadmap.py validate`
 
 ## Hooks

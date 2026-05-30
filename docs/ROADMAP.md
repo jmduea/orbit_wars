@@ -51,9 +51,13 @@ No implementation in `src/`, `conf/`, or `tests/` until gates pass.
 | **1 — Intake** | `uv run python scripts/roadmap.py intake "<request>"` — must map to ROADMAP/issue or capture to **Later** |
 | **2 — Planning** | `/deep-interview` → `/ralplan` (or `/omg-autopilot` through spec approval) for non-trivial work |
 | **3 — Execution plan** | Chunk order, manifest register, create/update GitHub issues with AC, promote ROADMAP rows |
-| **4 — Approve impl** | `uv run python scripts/roadmap.py approve-impl --issue N` (or `--manifest-id id`) |
-| **5 — Implement** | Code/tests; `roadmap.py gate` should pass if `ORBIT_WARS_IMPL_GATE=1` |
-| **6 — Done** | Close issue, ROADMAP **Done**, manifest `complete`, `roadmap.py clear-impl` |
+| **4 — Claim** | `roadmap.py claim --issue N --path src/...` (one claim per issue; no path overlap) |
+| **5 — Approve impl** | `roadmap.py approve-impl --issue N` · branch `issue/N-short-slug` |
+| **6 — Implement** | Code/tests; `roadmap.py gate` when `ORBIT_WARS_IMPL_GATE=1` |
+| **7 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` |
+| **8 — Done** | ROADMAP **Done**, manifest `complete`, `roadmap.py check-session` clean |
+
+**Multi-agent:** `roadmap.py claims` before starting; `ORBIT_WARS_AGENT_ID` distinguishes owners. Session end must pass `check-session` (no open claims without wrap-up). See [OWNERSHIP.md](OWNERSHIP.md).
 
 **New ideas:** add a **Later** row (no issue until phase 3). **Do not** use `docs/brain_dump.md`.
 

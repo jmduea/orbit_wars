@@ -43,7 +43,9 @@ uv run python scripts/roadmap.py gate --request "<request>"   # use --require-al
 | `roadmap.py intake` | Map request → ROADMAP / planning path |
 | `roadmap.py approve-impl` | Allow implementation (writes `.omg/state/impl-gate.json`) |
 | `roadmap.py clear-impl` | Clear gate after Done |
-| `roadmap.py validate` | CI structure checks (bans brain_dump in Now/Next) |
+| `roadmap.py claim` / `claims` | Exclusive issue + path ownership |
+| `roadmap.py wrap-up` | Requires closed issue + evidence |
+| `roadmap.py check-session` | No open claims without wrap-up |
 
 ## Git
 

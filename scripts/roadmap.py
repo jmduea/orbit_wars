@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and inspect docs/ROADMAP.md; intake and implementation gates for agents."""
+"""ROADMAP validate, intake, claims, gates, and wrap-up checks for agents."""
 
 from __future__ import annotations
 
@@ -331,11 +331,16 @@ def _intake_next_steps(
         return [
             f"Run /{suggested_workflow} (or /omg-autopilot through spec approval)",
             "Produce execution plan: chunks, manifest register, GitHub issues with AC",
+            "Run: uv run python scripts/roadmap.py claim --issue N --path <dirs>",
             "Run: uv run python scripts/roadmap.py approve-impl --issue N",
         ]
     return [
+        "Run: uv run python scripts/roadmap.py claim --issue N --path <dirs>",
         "Run: uv run python scripts/roadmap.py approve-impl --issue N",
-        "Implement; run tests; close issue and update ROADMAP Done on completion",
+        "Implement on branch issue/N-*; run tests",
+        "gh issue close N --comment '<evidence>'",
+        "Run: uv run python scripts/roadmap.py wrap-up --issue N --evidence 'tests+commit'",
+        "Move ROADMAP row to Done; manifest complete",
     ]
 
 
@@ -352,8 +357,16 @@ def implementation_gate(*, request: str | None = None) -> dict:
     allowed = False
     blockers: list[str] = []
 
+    from scripts import roadmap_claims
+
     if impl and impl.get("approved"):
         allowed = True
+        if impl.get("issue"):
+            issue_num = int(str(impl["issue"]).lstrip("#"))
+            if roadmap_claims.load_claim(issue_num) is None:
+                blockers.append(
+                    f"No active claim for {impl['issue']}; run: roadmap.py claim --issue {issue_num} --path …"
+                )
         if request and intake:
             gate_issue = impl.get("issue")
             gate_manifest = impl.get("manifest_id")
@@ -412,6 +425,8 @@ def status_payload(doc: RoadmapDocument) -> dict:
 
 
 def agent_payload(doc: RoadmapDocument) -> dict:
+    from scripts import roadmap_claims
+
     active = load_manifest_active()
     impl = load_impl_gate()
     return {
@@ -431,19 +446,23 @@ def agent_payload(doc: RoadmapDocument) -> dict:
                 for entry in active
             ],
         },
+        "active_claims": roadmap_claims.load_all_claims(active_only=True),
         "workflow_phases": [
-            "0: roadmap.py agent + omg_workflow_manifest.py active",
+            "0: roadmap.py agent + omg_workflow_manifest.py active + roadmap.py claims",
             "1: roadmap.py intake",
             "2: /deep-interview or /ralplan (or /omg-autopilot through spec approval)",
             "3: execution plan → issues + manifest + ROADMAP promote",
-            "4: roadmap.py approve-impl",
-            "5: implement (roadmap.py gate)",
-            "6: close issue, ROADMAP Done, manifest complete, clear-impl",
+            "4: roadmap.py claim --issue N --path …",
+            "5: roadmap.py approve-impl + implement (gate)",
+            "6: gh issue close + roadmap.py wrap-up --issue N --evidence",
+            "7: ROADMAP Done, manifest complete",
         ],
         "agent_rules": [
+            "One claim per issue; no overlapping paths across active claims.",
             "Do not use docs/brain_dump.md; retired inbox — ROADMAP + issues only.",
             "Prefer ROADMAP Now over manifest when choosing what to work on next.",
             "No src/conf/tests edits until approve-impl (set ORBIT_WARS_IMPL_GATE=1 to enforce gate).",
+            "Session end: wrap-up required — closed GitHub issue + evidence (roadmap.py wrap-up).",
             "Create GitHub issues after execution planning (phase 3), not before for new work.",
             "After changing ROADMAP: uv run python scripts/roadmap.py validate",
         ],
@@ -525,6 +544,126 @@ def cmd_clear_impl(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_claim(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    if not args.issue:
+        print("claim requires --issue", file=sys.stderr)
+        return 1
+    owner = args.owner or roadmap_claims.default_agent_owner()
+    try:
+        payload = roadmap_claims.claim_issue(
+            issue=args.issue,
+            owner=owner,
+            paths=args.paths or [],
+            branch=args.branch,
+            manifest_id=args.manifest_id,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_claims(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    print(json.dumps({"claims": roadmap_claims.load_all_claims(active_only=True)}, indent=2))
+    return 0
+
+
+def cmd_wrap_up(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    if not args.issue:
+        print("wrap-up requires --issue", file=sys.stderr)
+        return 1
+    owner = args.owner or roadmap_claims.default_agent_owner()
+    result = roadmap_claims.finalize_wrap_up(
+        issue=args.issue,
+        evidence=args.evidence or "",
+        evidence_file=args.evidence_file,
+        owner=owner,
+        skip_github=args.skip_github_check,
+    )
+    print(json.dumps(result, indent=2))
+    if args.require_passed and not result.get("passed"):
+        return 1
+    return 0
+
+
+def cmd_check_wrap_up(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    if not args.issue:
+        print("check-wrap-up requires --issue", file=sys.stderr)
+        return 1
+    owner = args.owner or roadmap_claims.default_agent_owner()
+    result = roadmap_claims.wrap_up_check(
+        issue=args.issue,
+        evidence=args.evidence or "",
+        evidence_file=args.evidence_file,
+        owner=owner,
+        skip_github=args.skip_github_check,
+    )
+    print(json.dumps(result, indent=2))
+    if args.require_passed and not result.get("passed"):
+        return 1
+    return 0
+
+
+def cmd_release(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    if not args.issue:
+        print("release requires --issue", file=sys.stderr)
+        return 1
+    owner = args.owner or roadmap_claims.default_agent_owner()
+    try:
+        result = roadmap_claims.release_issue(
+            issue=args.issue, owner=owner, force=args.force
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("released") else 1
+
+
+def cmd_check_session(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    owner = args.owner or roadmap_claims.default_agent_owner()
+    claims = roadmap_claims.load_all_claims(active_only=True)
+    open_for_owner = []
+    for claim in claims:
+        if claim.get("owner") != owner:
+            continue
+        issue = int(claim["issue"])
+        completion = roadmap_claims.load_completion(issue)
+        if not (completion and completion.get("wrapped_up")):
+            open_for_owner.append(claim)
+    payload = {
+        "owner": owner,
+        "open_claims": open_for_owner,
+        "passed": len(open_for_owner) == 0,
+        "blockers": [
+            f"Issue #{c['issue']} claimed without wrap-up (run: roadmap.py wrap-up --issue {c['issue']} --evidence '…')"
+            for c in open_for_owner
+        ],
+    }
+    print(json.dumps(payload, indent=2))
+    allow_open = os.environ.get("ORBIT_WARS_ALLOW_OPEN_CLAIMS", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if args.require_clean and not payload["passed"] and not allow_open:
+        return 1
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -538,6 +677,12 @@ def main() -> int:
             "gate",
             "approve-impl",
             "clear-impl",
+            "claim",
+            "claims",
+            "wrap-up",
+            "check-wrap-up",
+            "release",
+            "check-session",
         ),
         default="validate",
     )
@@ -556,6 +701,37 @@ def main() -> int:
         action="store_true",
         help="exit 1 when gate denies implementation",
     )
+    parser.add_argument(
+        "--path",
+        action="append",
+        dest="paths",
+        help="path prefix for claim (repeatable)",
+    )
+    parser.add_argument("--branch", help="git branch for this issue claim")
+    parser.add_argument("--owner", help="agent owner id (default ORBIT_WARS_AGENT_ID)")
+    parser.add_argument("--evidence", help="wrap-up evidence text")
+    parser.add_argument("--evidence-file", help="optional file merged into evidence")
+    parser.add_argument(
+        "--skip-github-check",
+        action="store_true",
+        help="skip gh issue closed verification (tests only)",
+    )
+    parser.add_argument(
+        "--require-passed",
+        action="store_true",
+        help="exit 1 when wrap-up/check-wrap-up fails",
+    )
+    parser.add_argument(
+        "--require-clean",
+        action="store_true",
+        help="exit 1 when check-session finds open claims",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="force release without wrap-up (abandon claim)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "validate":
@@ -570,6 +746,19 @@ def main() -> int:
         return cmd_gate(args)
     if args.command == "approve-impl":
         return cmd_approve_impl(args)
+
+    if args.command == "claim":
+        return cmd_claim(args)
+    if args.command == "claims":
+        return cmd_claims(args)
+    if args.command == "wrap-up":
+        return cmd_wrap_up(args)
+    if args.command == "check-wrap-up":
+        return cmd_check_wrap_up(args)
+    if args.command == "release":
+        return cmd_release(args)
+    if args.command == "check-session":
+        return cmd_check_session(args)
     return cmd_clear_impl(args)
 
 
