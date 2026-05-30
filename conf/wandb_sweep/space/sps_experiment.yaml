@@ -3,7 +3,7 @@
 
 parameters:
   training:
-    values: [2p_32, 4p_32, mixed_2p4p_32_total]
+    values: [2p_32, 4p_32, mixed_2p4p_64_split]
   opponents:
     values: [noop_only, self_play_only]
   training.rollout_steps:

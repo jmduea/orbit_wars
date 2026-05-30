@@ -36,11 +36,11 @@ def test_build_sweep_run_suffix_is_deterministic_and_compact() -> None:
     params = {
         "training.lr": 0.0003,
         "training.rollout_steps": 250,
-        "training": "mixed_2p4p_16_rotating",
+        "training": "mixed_2p4p_16_rotate",
     }
     assert build_sweep_run_suffix(params) == build_sweep_run_suffix(
         {
-            "training": "mixed_2p4p_16_rotating",
+            "training": "mixed_2p4p_16_rotate",
             "training.lr": 0.0003,
             "training.rollout_steps": 250,
         }
@@ -48,7 +48,7 @@ def test_build_sweep_run_suffix_is_deterministic_and_compact() -> None:
     suffix = build_sweep_run_suffix(params)
     assert "lr3e-4" in suffix
     assert "rs250" in suffix
-    assert "trmixed2p4p16rotating" in suffix
+    assert "trmixed2p4p16rotate" in suffix
     assert "mix_" not in suffix
 
 
@@ -156,14 +156,14 @@ def test_derive_config_group_tags_from_choices() -> None:
         allowlist=DEFAULT_TAG_CONFIG_GROUPS,
         choices={
             "model": "transformer_factorized",
-            "training": "mixed_2p4p_16_total",
+            "training": "mixed_2p4p_32_split",
             "opponents": "random",
         },
     )
     assert tags == [
         "model:transformer_factorized",
         "opponents:random",
-        "training:mixed_2p4p_16_total",
+        "training:mixed_2p4p_32_split",
     ]
 
 
@@ -210,7 +210,7 @@ def test_telemetry_logger_merges_manual_and_derived_tags(monkeypatch) -> None:
         "src.telemetry.wandb_tags._hydra_runtime_choices",
         lambda: {
             "model": "transformer_factorized",
-            "training": "mixed_2p4p_16_total",
+            "training": "mixed_2p4p_32_split",
         },
     )
     cfg = TrainConfig()
@@ -224,7 +224,7 @@ def test_telemetry_logger_merges_manual_and_derived_tags(monkeypatch) -> None:
         "manual",
         "model:legacy",
         "model:transformer_factorized",
-        "training:mixed_2p4p_16_total",
+        "training:mixed_2p4p_32_split",
     ]
 
 

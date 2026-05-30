@@ -22,7 +22,7 @@ def test_allocate_split_remainder_tie_breaks_to_lower_player_count() -> None:
 
 
 def test_per_group_mode_when_rotating() -> None:
-    cfg = compose_hydra_train_config(["training=mixed_2p4p_16_rotating"])
+    cfg = compose_hydra_train_config(["training=mixed_2p4p_16_rotate"])
     specs = resolve_rollout_group_specs(cfg)
     assert len(specs) == 2
     assert all(spec.num_envs == 16 for spec in specs)
@@ -30,7 +30,7 @@ def test_per_group_mode_when_rotating() -> None:
 
 
 def test_split_mode_total_env_count() -> None:
-    cfg = compose_hydra_train_config(["training=mixed_2p4p_16_total"])
+    cfg = compose_hydra_train_config(["training=mixed_2p4p_32_split"])
     specs = resolve_rollout_group_specs(cfg)
     assert sum(spec.num_envs for spec in specs) == 32
     assert run_name_env_count(cfg) == 32
@@ -51,7 +51,7 @@ def test_single_format_infers_from_task_when_weights_empty() -> None:
 
 def test_split_mode_rejects_too_few_envs_for_mixed_formats() -> None:
     with pytest.raises(ValueError, match="too small for split mode"):
-        compose_hydra_train_config(["training=mixed_2p4p_8_total", "training.num_envs=1"])
+        compose_hydra_train_config(["training=mixed_2p4p_16_split", "training.num_envs=1"])
 
 
 def test_legacy_format_override_is_rejected() -> None:

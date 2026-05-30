@@ -14,10 +14,10 @@ def test_parse_train_default_local() -> None:
 
 
 def test_parse_train_hydra_override_implies_local() -> None:
-    route = train_hosts.parse_train_argv(["training=mixed_2p4p_16_total"])
+    route = train_hosts.parse_train_argv(["training=mixed_2p4p_32_split"])
 
     assert route.host == "local"
-    assert route.hydra_overrides == ["training=mixed_2p4p_16_total"]
+    assert route.hydra_overrides == ["training=mixed_2p4p_32_split"]
 
 
 def test_parse_train_explicit_local() -> None:
@@ -29,13 +29,13 @@ def test_parse_train_explicit_local() -> None:
 
 def test_parse_train_kaggle_launch_forwards_overrides() -> None:
     route = train_hosts.parse_train_argv(
-        ["kaggle", "training=mixed_2p4p_16_total", "training.total_updates=500"]
+        ["kaggle", "training=mixed_2p4p_32_split", "training.total_updates=500"]
     )
 
     assert route.host == "kaggle"
     assert route.subcommand is None
     assert route.hydra_overrides == [
-        "training=mixed_2p4p_16_total",
+        "training=mixed_2p4p_32_split",
         "training.total_updates=500",
     ]
 
@@ -63,7 +63,7 @@ def test_parse_train_kaggle_rejects_create_sweep() -> None:
 def test_build_kaggle_argv_default_launch_standalone_p100() -> None:
     route = train_hosts.TrainRoute(
         host="kaggle",
-        hydra_overrides=["training=mixed_2p4p_16_rotating"],
+        hydra_overrides=["training=mixed_2p4p_16_rotate"],
     )
     argv = train_hosts._build_kaggle_argv(route)
 
@@ -74,7 +74,7 @@ def test_build_kaggle_argv_default_launch_standalone_p100() -> None:
     assert "--accelerator" in argv
     assert argv[argv.index("--accelerator") + 1] == "NvidiaTeslaP100"
     assert "--override" in argv
-    assert argv[argv.index("--override") + 1] == "training=mixed_2p4p_16_rotating"
+    assert argv[argv.index("--override") + 1] == "training=mixed_2p4p_16_rotate"
 
 
 def test_dispatch_kaggle_calls_runner(monkeypatch) -> None:
@@ -124,15 +124,15 @@ def test_dispatch_local_calls_hydra(monkeypatch) -> None:
 
 def test_dispatch_kaggle_rejects_invalid_format_before_launch() -> None:
     route = train_hosts.parse_train_argv(
-        ["kaggle", "--run-type", "smoke", "training=mixed_2p4p_16_totalb"]
+        ["kaggle", "--run-type", "smoke", "training=mixed_2p4p_32_splitb"]
     )
 
-    with pytest.raises(MissingConfigException, match="mixed_2p4p_16_totalb"):
+    with pytest.raises(MissingConfigException, match="mixed_2p4p_32_splitb"):
         train_hosts.dispatch(route)
 
 
 def test_validate_hydra_overrides_lists_valid_training_options() -> None:
-    with pytest.raises(MissingConfigException, match="mixed_2p4p_16_total"):
+    with pytest.raises(MissingConfigException, match="mixed_2p4p_32_split"):
         from src.config import validate_hydra_overrides
 
-        validate_hydra_overrides(["training=mixed_2p4p_16_totalb"])
+        validate_hydra_overrides(["training=mixed_2p4p_32_splitb"])
