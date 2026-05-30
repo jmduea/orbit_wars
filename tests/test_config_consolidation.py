@@ -66,7 +66,7 @@ def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> N
             "training.total_updates=2",
             "task.candidate_count=12",
             "reward.reward_production_delta=0.01",
-            "training=mixed_2p4p_32_split",
+            "training=2p4p_32_split",
             "telemetry.wandb.group=capacity",
         ]
     )

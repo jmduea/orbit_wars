@@ -7,7 +7,7 @@ parameters:
   curriculum:
     value: "off"
   training:
-    value: mixed_2p4p_64_split
+    value: 2p4p_64_split
   opponents:
     value: self_play_only
   output.campaign:

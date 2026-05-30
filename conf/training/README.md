@@ -8,8 +8,8 @@ PPO and rollout hyperparameters, including mixed 2p/4p rollout allocation.
 
 | `rotate_format_rollouts` | Meaning of the number in preset names | Example |
 | --- | --- | --- |
-| `false` (`*_split`) | **Total** parallel envs per update (split 50/50 → half per format) | `mixed_2p4p_32_split` → 16+16 = **32** active |
-| `true` (`*_rotate`) | **Active** envs on the single format collecting this update | `mixed_2p4p_16_rotate` → **16** envs per update |
+| `false` (`*_split`) | **Total** parallel envs per update (split 50/50 → half per format) | `2p4p_32_split` → 16+16 = **32** active |
+| `true` (`*_rotate`) | **Active** envs on the single format collecting this update | `2p4p_16_rotate` → **16** envs per update |
 
 Static mix when curriculum stages omit `format_weights` uses `training.format_weights`. Curriculum stages may override mix at runtime via `format_weights`.
 
@@ -19,12 +19,12 @@ Static mix when curriculum stages omit `format_weights` uses `training.format_we
 | --- | --- | --- |
 | `smoke` | 2 (2p-only) | Fast pipeline check |
 | `smoke_2p_16` | 16 (2p-only) | Smoke launch recipe |
-| `workstation` | 16 (`rotate`) | Same mix as `mixed_2p4p_16_rotate` + workstation PPO knobs |
+| `workstation` | 16 (`rotate`) | Same mix as `2p4p_16_rotate` + workstation PPO knobs |
 | `2p_16`, `2p_32`, `4p_16`, `4p_32` | name = total | Single-format runs |
-| `mixed_2p4p_16_split` | 16 (8+8) | Split mode |
-| `mixed_2p4p_32_split` | 32 (16+16) | Split mode; old `format=2p_4p_16env` equivalent |
-| `mixed_2p4p_64_split` | 64 (32+32) | Split mode; old `format=2p_4p_32env` equivalent |
-| `mixed_2p4p_16_rotate` | 16 active | One format per update |
+| `2p4p_16_split` | 16 (8+8) | Split mode |
+| `2p4p_32_split` | 32 (16+16) | Split mode; old `format=2p_4p_16env` equivalent |
+| `2p4p_64_split` | 64 (32+32) | Split mode; old `format=2p_4p_32env` equivalent |
+| `2p4p_16_rotate` | 16 active | One format per update |
 
 Typical fields:
 
@@ -48,5 +48,5 @@ Examples:
 ```bash
 uv run ow train training=smoke_2p_16 curriculum=off opponents=noop_only
 uv run ow train training=workstation
-uv run ow train training=mixed_2p4p_32_split training.total_updates=2
+uv run ow train training=2p4p_32_split training.total_updates=2
 ```
