@@ -701,6 +701,7 @@ def agent_payload(doc: RoadmapDocument) -> dict:
             "One claim per issue; no overlapping paths across active claims.",
             "Do not use docs/brain_dump.md; retired inbox — ROADMAP + issues only.",
             "Prefer ROADMAP Now over manifest when choosing what to work on next.",
+            "Empty Now/Next is valid — signals planning in progress; promote from Later when ready.",
             'Free-form chat: first command on implementation intent: roadmap.py begin "<user message>".',
             "No src/conf/tests edits until approve-impl; Cursor pre-tool hook enforces impl-gate.",
             "Session end: wrap-up + check-wrap-up + check-session --require-clean.",

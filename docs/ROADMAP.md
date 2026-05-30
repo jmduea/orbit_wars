@@ -1,7 +1,7 @@
 # Roadmap
 
 > Single priority index. Details in GitHub issues and `.omg/specs|plans/`.
-> Caps: **≤3** **Now**, **≤5** **Done**. Agent packages: `.omg/workflow-manifest.json`
+> Caps: **≤3** **Now**, **≤5** **Done**. **Now** and **Next** may be empty while planning. Agent packages: `.omg/workflow-manifest.json`
 
 **Phase:** submit-valid
 
@@ -11,9 +11,7 @@ _None — pick from **Next** after planning._
 
 ## Next
 
-| Item | Link |
-|------|------|
-| What is `survival_time` and how does it relate to performance? | [#101](https://github.com/jmduea/orbit_wars/issues/101) |
+_None — pick from **Later** after planning._
 
 ## Later
 
@@ -28,11 +26,11 @@ _None — pick from **Next** after planning._
 
 | Item | Link |
 |------|------|
+| Define `survival_time` metric and relation to performance (research) | [#101](https://github.com/jmduea/orbit_wars/issues/101) · `docs/benchmarks/issue-101-survival-time.md` |
 | Verify seed scheduler swaps during training | [#99](https://github.com/jmduea/orbit_wars/issues/99) · `test_seed_scheduler.py` `test_jax_seed_scheduler.py` |
 | JAX compile time vs expected bounds (research) | [#100](https://github.com/jmduea/orbit_wars/issues/100) · `docs/benchmarks/issue-100-jax-compile-time.md` |
 | Output hygiene v2: promotion, W&B best artifacts, sweep naming, Hydra tags | [#112](https://github.com/jmduea/orbit_wars/issues/112) [#113](https://github.com/jmduea/orbit_wars/issues/113) [#114](https://github.com/jmduea/orbit_wars/issues/114) [#115](https://github.com/jmduea/orbit_wars/issues/115) [#116](https://github.com/jmduea/orbit_wars/issues/116) [#117](https://github.com/jmduea/orbit_wars/issues/117) · `make test-domain-config` |
 | Test suite cleanup batch (duplicate smokes, shield v2, telemetry) | [#102](https://github.com/jmduea/orbit_wars/issues/102) [#103](https://github.com/jmduea/orbit_wars/issues/103) [#104](https://github.com/jmduea/orbit_wars/issues/104) [#105](https://github.com/jmduea/orbit_wars/issues/105) [#106](https://github.com/jmduea/orbit_wars/issues/106) [#107](https://github.com/jmduea/orbit_wars/issues/107) [#108](https://github.com/jmduea/orbit_wars/issues/108) [#109](https://github.com/jmduea/orbit_wars/issues/109) [#110](https://github.com/jmduea/orbit_wars/issues/110) [#111](https://github.com/jmduea/orbit_wars/issues/111) · `ffc9df7` |
-| Kaggle submission packaging (`__file__` fix, exec validation probe) | [#96](https://github.com/jmduea/orbit_wars/issues/96) · Kaggle episode 78216645 |
 
 _Last triaged: 2026-05-30_
 
