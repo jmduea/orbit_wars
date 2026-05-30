@@ -237,13 +237,10 @@ __marimo__/
 
 # OMG ephemeral session state (updated by hooks during agent sessions)
 .omg/state/
+.omg/autopilot/
 # Personal scratch docs (keep locally)
 /docs/brain_dump.md
 /docs/Issues.md
-# OMG completed workflow archives (manifest stays tracked)
-.omg/plans/
-.omg/specs/
-.omg/autopilot/
 # Cursor hook session state
 .cursor/hooks/state/
 # MCP session state
