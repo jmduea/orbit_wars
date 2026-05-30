@@ -14,7 +14,7 @@ For W&B sweeps:
 
 ```bash
 uv run ow make wandb_sweep=2p_only_throughput
-uv run wandb sweep artifacts/sweeps/2p_only_throughput.yaml
+uv run wandb sweep outputs/_meta/sweeps/2p_only_throughput.yaml
 uv run wandb agent <entity>/<project>/<sweep_id>
 ```
 
@@ -68,10 +68,10 @@ conf/wandb_sweep/*.yaml
 # Compose the peices parts together
 uv run ow make wandb_sweep=2p_only_throughput
 
-# sweep file generated at artifacts/sweeps/
+# sweep file generated at outputs/_meta/sweeps/
 
 # let wandb handle the rest
-wandb sweep artifacts/sweeps/2p_only_throughput.yaml
+wandb sweep outputs/_meta/sweeps/2p_only_throughput.yaml
 wandb agent ...
 ```
 

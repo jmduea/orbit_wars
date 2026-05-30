@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from src.config import TrainConfig
+from src.telemetry.wandb_run_name import apply_post_init_run_rename
+from src.telemetry.wandb_tags import derive_config_group_tags, merge_wandb_tags
 
 
 class TelemetryLogger:
@@ -41,11 +43,17 @@ class TelemetryLogger:
         except ImportError:
             return
         self._wandb = wandb
-        tags = list(self._cfg.telemetry.wandb.tags)
+        wandb_cfg = self._cfg.telemetry.wandb
+        derived_tags: list[str] = []
+        if wandb_cfg.tags_from_config_groups:
+            derived_tags = derive_config_group_tags(
+                allowlist=wandb_cfg.tag_config_groups,
+            )
+        tags = merge_wandb_tags(manual=wandb_cfg.tags, derived=derived_tags)
         self._run = wandb.init(
-            project=self._cfg.telemetry.wandb.project,
-            entity=self._cfg.telemetry.wandb.entity,
-            group=self._cfg.telemetry.wandb.group,
+            project=wandb_cfg.project,
+            entity=wandb_cfg.entity,
+            group=wandb_cfg.group,
             tags=tags,
             name=self._cfg.run_name,
             config={},
@@ -55,6 +63,7 @@ class TelemetryLogger:
             id=os.environ.get("WANDB_RUN_ID") or None,
             resume=os.environ.get("WANDB_RESUME") or None,
         )
+        apply_post_init_run_rename(self._run, self._cfg)
         if self._run is not None:
             resolved_cfg = self._flatten(asdict(self._cfg))
             existing_keys = set(self._run.config.keys())
@@ -141,6 +150,35 @@ class TelemetryLogger:
                 key: value for key, value in metadata.items() if value is not None
             },
             aliases=["latest", f"update-{int(update)}"],
+        )
+
+    def log_promoted_checkpoint(
+        self,
+        path: str | Path,
+        *,
+        update: int,
+        metric_name: str,
+        metric_value: float,
+    ) -> None:
+        """Upload a promoted checkpoint with best/promoted aliases."""
+
+        metadata = {
+            "update": int(update),
+            "run_name": self._cfg.run_name,
+            "campaign": self._run_metadata.get("campaign"),
+            "run_id": self._run_metadata.get("run_id"),
+            "metric_name": metric_name,
+            "metric_value": float(metric_value),
+            "wandb_run_id": getattr(self._run, "id", None),
+        }
+        self.log_artifact(
+            path,
+            name=f"checkpoint-promoted-u{update}",
+            artifact_type="checkpoint",
+            metadata={
+                key: value for key, value in metadata.items() if value is not None
+            },
+            aliases=["best", "promoted", f"update-{int(update)}"],
         )
 
     def log_replay(self, path: str | Path, *, update: int) -> None:

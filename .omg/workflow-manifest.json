@@ -1050,6 +1050,24 @@
       "notes": "Former ROADMAP Now #97. MVP hardening plan (ralplan-kaggle-wandb-mvp-hardening) was prerequisite; full W&B sweep-on-Kaggle deferred."
     },
     {
+      "id": "output-hygiene-v2",
+      "kind": "plan",
+      "path": ".omg/plans/output-storage-roadmap.md",
+      "workflow": "ralplan",
+      "status": "complete",
+      "title": "Output hygiene v2: promotion, W&B best artifacts, sweep naming",
+      "spec_id": "output-standardization",
+      "plan_id": null,
+      "related_ids": [
+        "output-standardization",
+        "output-standardization-plan"
+      ],
+      "supersedes_id": null,
+      "completed_at": "2026-05-30",
+      "evidence": "GitHub #112-#117 closed. Default W&B group follows output.campaign; Hydra override dirname, campaign promotion/current-best, W&B best-artifact upload, sweep naming, Hydra-derived W&B tags. make test-domain-config passed (47 tests).",
+      "notes": "Execution order completed: #112 → (#113|#117) → #114 → (#115|#116). ROADMAP Done row added 2026-05-30."
+    },
+    {
       "id": "ralplan-kaggle-wandb-population",
       "kind": "plan",
       "path": ".omg/plans/ralplan-kaggle-wandb-population.md",

@@ -15,6 +15,7 @@ run_name: default
 heldout_eval_seed_set: []
 print_resolved_config: false
 resume_checkpoint: null
+from_promoted: null
 
 output:
   root: outputs
@@ -32,4 +33,4 @@ hydra:
     dir: ${orbit_safe_rel:${output.root}}/campaigns/${orbit_slug:${output.campaign}}/runs/${orbit_slug:${output.run_id}}
   sweep:
     dir: ${orbit_safe_rel:${output.root}}/campaigns/${orbit_slug:${output.campaign}}
-    subdir: runs/${hydra.job.num}_${orbit_slug:${output.run_id}}
+    subdir: ${orbit_sweep_subdir:${hydra.job.num},${hydra.job.override_dirname},${output.run_id}}

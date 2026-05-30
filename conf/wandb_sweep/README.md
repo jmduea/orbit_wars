@@ -176,13 +176,13 @@ uv run ow make wandb_sweep={your_sweep_name}
 Expected output:
 
 ```bash
-Wrote artifacts/sweeps/{your_sweep_name}.yaml
+Wrote outputs/_meta/sweeps/{your_sweep_name}.yaml
 ```
 
 ### 2. Register sweep with W&B
 
 ```bash
-uv run wandb sweep artifacts/sweeps/{your_sweep_name}.yaml
+uv run wandb sweep outputs/_meta/sweeps/{your_sweep_name}.yaml
 ```
 
 W&B prints an agent command:

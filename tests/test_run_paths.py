@@ -11,6 +11,7 @@ from src.artifacts.run_paths import (
     write_run_manifests,
 )
 from src.config import TrainConfig
+from src.config.runtime import _orbit_sweep_subdir
 
 RUN_NAME_TIMESTAMP_RE = r"\d{8}T\d{6}Z"
 
@@ -51,7 +52,23 @@ def test_write_run_manifests_records_required_paths(tmp_path: Path) -> None:
     assert manifest["action_layout_version"] == 2
     assert manifest["paths"]["checkpoints_dir"] == str(context.checkpoints_dir)
     assert context.campaign_manifest_path.exists()
+    campaign_manifest = json.loads(
+        context.campaign_manifest_path.read_text(encoding="utf-8")
+    )
+    assert campaign_manifest["promotion_metric_name"] == "episode_reward_mean"
     assert (context.indexes_dir / "runs.jsonl").exists()
+
+
+def test_orbit_sweep_subdir_uses_override_dirname_when_present() -> None:
+    assert _orbit_sweep_subdir(3, "training.learning_rate=0.001", "run-abc") == (
+        "runs/training.learning_rate=0.001"
+    )
+
+
+def test_orbit_sweep_subdir_falls_back_to_job_num_and_run_id() -> None:
+    assert _orbit_sweep_subdir(7, "", "20260530T120000Z-s42-deadbeef") == (
+        "runs/7_20260530T120000Z-s42-deadbeef"
+    )
 
 
 def test_hydra_runtime_output_dir_is_the_run_envelope(

@@ -15,7 +15,25 @@ class _FakeWandbRun:
         pass
 
 
+class _FakeArtifact:
+    def __init__(
+        self,
+        name: str,
+        type: str,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        self.name = name
+        self.type = type
+        self.metadata = metadata or {}
+        self.file_path: str | None = None
+
+    def add_file(self, file_path: str) -> None:
+        self.file_path = file_path
+
+
 class _FakeWandb:
+    Artifact = _FakeArtifact
+
     def __init__(self) -> None:
         self.logs: list[tuple[dict[str, object], int | None]] = []
         self.init_kwargs: dict[str, object] = {}
@@ -82,3 +100,68 @@ def test_wandb_local_paths_are_configured_before_init(tmp_path: Path, monkeypatc
     assert wandb_dir.exists()
     assert artifact_dir.exists()
     assert data_dir.exists()
+
+
+class _FakeRunWithArtifacts(_FakeWandbRun):
+    def __init__(self) -> None:
+        super().__init__()
+        self.logged: list[tuple[_FakeArtifact, list[str]]] = []
+
+    def log_artifact(self, artifact: _FakeArtifact, *, aliases: list[str]) -> None:
+        self.logged.append((artifact, list(aliases)))
+
+
+def test_log_promoted_checkpoint_uses_best_and_promoted_aliases(
+    tmp_path: Path, monkeypatch
+) -> None:
+    fake_wandb = _FakeWandb()
+    fake_run = _FakeRunWithArtifacts()
+    fake_wandb.init = lambda **kwargs: fake_run  # type: ignore[method-assign]
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+
+    checkpoint_path = tmp_path / "jax_ckpt_000010.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    cfg = TrainConfig()
+    cfg.telemetry.wandb.enabled = True
+    cfg.telemetry.wandb.log_artifacts = True
+    logger = TelemetryLogger(
+        cfg,
+        {"campaign": "capacity", "run_id": "run-001"},
+    )
+    logger.log_promoted_checkpoint(
+        checkpoint_path,
+        update=10,
+        metric_name="episode_reward_mean",
+        metric_value=0.75,
+    )
+
+    assert fake_run.logged
+    _artifact, aliases = fake_run.logged[0]
+    assert "best" in aliases
+    assert "promoted" in aliases
+
+
+def test_log_checkpoint_not_called_when_log_artifacts_disabled(
+    tmp_path: Path, monkeypatch
+) -> None:
+    fake_wandb = _FakeWandb()
+    fake_run = _FakeRunWithArtifacts()
+    fake_wandb.init = lambda **kwargs: fake_run  # type: ignore[method-assign]
+    monkeypatch.setitem(sys.modules, "wandb", fake_wandb)
+
+    checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    cfg = TrainConfig()
+    cfg.telemetry.wandb.enabled = True
+    cfg.telemetry.wandb.log_artifacts = False
+    logger = TelemetryLogger(cfg)
+    logger.log_promoted_checkpoint(
+        checkpoint_path,
+        update=1,
+        metric_name="episode_reward_mean",
+        metric_value=0.1,
+    )
+
+    assert fake_run.logged == []

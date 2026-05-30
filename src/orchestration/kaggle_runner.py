@@ -25,6 +25,7 @@ from src.orchestration.wandb_sweeps import (
     add_population_metadata,
     create_sweep,
     load_sweep_config,
+    resolve_wandb_group_from_sweep,
     shortlist_from_api,
 )
 
@@ -867,9 +868,13 @@ def run_launch(args: PackageRequest | Any) -> None:
         raise SystemExit("--create-sweep cannot be used with --no-wandb.")
     sweep_id = args.sweep_id
     if args.create_sweep:
+        loaded_sweep = load_sweep_config(args.sweep_yaml)
+        group = resolve_wandb_group_from_sweep(
+            loaded_sweep, sweep_yaml_path=Path(args.sweep_yaml)
+        )
         sweep = add_population_metadata(
-            load_sweep_config(args.sweep_yaml),
-            group="kaggle_runner_mvp",
+            loaded_sweep,
+            group=group,
             tags=("kaggle", "population"),
         )
         if args.dry_run:

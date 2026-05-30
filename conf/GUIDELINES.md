@@ -55,7 +55,7 @@ uv run ow train task=shield_cheap print_resolved_config=true
 
 ```bash
 uv run ow make wandb_sweep=shield_cheap_history
-cat artifacts/sweeps/shield_cheap_history.yaml
+cat outputs/_meta/sweeps/shield_cheap_history.yaml
 ```
 
 ### Run one manual version of a sweep trial

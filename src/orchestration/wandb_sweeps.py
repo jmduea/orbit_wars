@@ -49,6 +49,24 @@ def load_standalone_config(path: Path) -> dict[str, Any]:
     return resolve_standalone_parameters(parameters)
 
 
+def resolve_wandb_group_from_sweep(
+    sweep: Mapping[str, Any],
+    *,
+    sweep_yaml_path: Path | None = None,
+) -> str:
+    """Resolve W&B group: sweep fixed group → output.campaign → YAML stem."""
+
+    parameters = sweep.get("parameters")
+    if isinstance(parameters, Mapping):
+        for key in ("telemetry.wandb.group", "output.campaign"):
+            spec = parameters.get(key)
+            if isinstance(spec, Mapping) and spec.get("value") is not None:
+                return str(spec["value"])
+    if sweep_yaml_path is not None:
+        return sweep_yaml_path.stem
+    return "default"
+
+
 def add_population_metadata(
     sweep: Mapping[str, Any],
     *,
@@ -181,8 +199,13 @@ def _checkpoint_sort_key(row: Mapping[str, object]) -> tuple[int, int, int]:
             version_number = int(version[1:])
         except ValueError:
             pass
+    alias_rank = 0
+    if "best" in aliases or "promoted" in aliases:
+        alias_rank = 2
+    elif "latest" in aliases:
+        alias_rank = 1
     return (
-        1 if "latest" in aliases else 0,
+        alias_rank,
         int(row.get("update", -1)),
         version_number,
     )

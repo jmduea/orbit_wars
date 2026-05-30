@@ -189,6 +189,52 @@ def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
     return replace(cfg, run_name=run_name, artifacts=artifacts, output=output), context
 
 
+def _merge_campaign_manifest_on_run_start(
+    cfg: TrainConfig,
+    context: RunContext,
+    created_at: str,
+) -> dict[str, object]:
+    """Seed or merge campaign promotion fields on run start."""
+
+    import warnings
+
+    promotion = cfg.artifacts.promotion
+    existing: dict[str, object] = {}
+    if context.campaign_manifest_path.exists():
+        raw = json.loads(context.campaign_manifest_path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            existing = raw
+
+    metric_name = str(promotion.metric_name or "").strip()
+    metric_mode = str(promotion.metric_mode or "max").strip().lower()
+    frozen_name = str(existing.get("promotion_metric_name", "")).strip()
+    frozen_mode = str(existing.get("promotion_metric_mode", "max")).strip().lower()
+
+    if frozen_name:
+        if metric_name and metric_name != frozen_name:
+            warnings.warn(
+                f"Campaign {context.campaign_slug!r} promotion metric "
+                f"{frozen_name!r} differs from run config {metric_name!r}.",
+                stacklevel=2,
+            )
+        metric_name = frozen_name
+        metric_mode = frozen_mode or metric_mode
+    elif promotion.enabled and metric_name:
+        existing["promotion_metric_name"] = metric_name
+        existing["promotion_metric_mode"] = metric_mode
+
+    return {
+        "campaign": context.campaign_slug,
+        "campaign_dir": str(context.campaign_dir),
+        "updated_at": created_at,
+        "default_retention_class": context.retention_class,
+        "promotion_metric_name": metric_name or existing.get("promotion_metric_name"),
+        "promotion_metric_mode": metric_mode or existing.get("promotion_metric_mode", "max"),
+        "current_best_value": existing.get("current_best_value"),
+        "current_best_run_id": existing.get("current_best_run_id"),
+    }
+
+
 def write_run_manifests(
     cfg: TrainConfig, context: RunContext, metadata: Mapping[str, object]
 ) -> None:
@@ -230,13 +276,7 @@ def write_run_manifests(
         "produced_artifacts": [],
         **dict(metadata),
     }
-    campaign_manifest = {
-        "campaign": context.campaign_slug,
-        "campaign_dir": str(context.campaign_dir),
-        "updated_at": created_at,
-        "default_retention_class": context.retention_class,
-        "current_best_metric": cfg.artifacts.checkpoint_retention.best_metric_name,
-    }
+    campaign_manifest = _merge_campaign_manifest_on_run_start(cfg, context, created_at)
     atomic_write_json(context.manifest_path, run_manifest)
     atomic_write_json(context.campaign_manifest_path, campaign_manifest)
     append_jsonl_atomic(

@@ -45,6 +45,15 @@ def test_root_config_composes_from_responsibility_groups() -> None:
     assert not hasattr(cfg, "save_dir")
 
 
+def test_wandb_group_defaults_to_output_campaign_when_unset() -> None:
+    cfg = compose_hydra_train_config()
+    assert cfg.telemetry.wandb.group == cfg.output.campaign
+
+    cfg_override = compose_hydra_train_config(["output.campaign=throughput_sweep"])
+    assert cfg_override.output.campaign == "throughput_sweep"
+    assert cfg_override.telemetry.wandb.group == "throughput_sweep"
+
+
 def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> None:
     cfg = compose_hydra_train_config(
         [

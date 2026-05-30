@@ -152,6 +152,17 @@ class WandBConfig:
     entity: str | None = None
     group: str | None = None
     tags: list[str] = field(default_factory=list)
+    tags_from_config_groups: bool = True
+    tag_config_groups: list[str] = field(
+        default_factory=lambda: [
+            "model",
+            "format",
+            "opponents",
+            "curriculum",
+            "reward",
+        ]
+    )
+    rename_from_swept_params: bool = True
     log_artifacts: bool = False
     log_model_every: int = 100
     watch_model: bool = False
@@ -216,6 +227,13 @@ class CheckpointRetentionConfig:
 
 
 @dataclass(slots=True)
+class PromotionConfig:
+    enabled: bool = True
+    metric_name: str = "episode_reward_mean"
+    metric_mode: str = "max"
+
+
+@dataclass(slots=True)
 class ArtifactPipelineConfig:
     enabled: bool = True
     checkpoint_queue_size: int = 1
@@ -252,6 +270,7 @@ class ArtifactsConfig:
     checkpoint_retention: CheckpointRetentionConfig = field(
         default_factory=CheckpointRetentionConfig
     )
+    promotion: PromotionConfig = field(default_factory=PromotionConfig)
 
 
 @dataclass(slots=True)
@@ -284,6 +303,7 @@ class TrainConfig:
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None
+    from_promoted: str | None = None
 
 
 def register_config_schemas() -> None:

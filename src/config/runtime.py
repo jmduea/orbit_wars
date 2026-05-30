@@ -45,6 +45,10 @@ def register_runtime_resolvers() -> None:
         OmegaConf.register_new_resolver("orbit_slug", _orbit_slug, use_cache=False)
     if not OmegaConf.has_resolver("orbit_safe_rel"):
         OmegaConf.register_new_resolver("orbit_safe_rel", _orbit_safe_rel, use_cache=False)
+    if not OmegaConf.has_resolver("orbit_sweep_subdir"):
+        OmegaConf.register_new_resolver(
+            "orbit_sweep_subdir", _orbit_sweep_subdir, use_cache=False
+        )
 
 
 def _orbit_run_id(seed: int = 42) -> str:
@@ -79,6 +83,16 @@ def _orbit_safe_rel(value: object) -> str:
     ):
         raise ValueError(f"unsafe relative output path: {raw!r}")
     return raw
+
+
+def _orbit_sweep_subdir(job_num: int, override_dirname: str, run_id: str) -> str:
+    """Hydra multirun subdir: override slug when present, else job num + run_id."""
+
+    slug = str(override_dirname or "").strip()
+    if slug:
+        return f"runs/{slug}"
+    safe_run_id = _orbit_slug(run_id)
+    return f"runs/{int(job_num)}_{safe_run_id}"
 
 
 __all__ = [
@@ -136,6 +150,7 @@ def train_config_from_omegaconf(
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    _apply_from_promoted(cfg)
     _validate_train_config(cfg)
     return cfg
 
@@ -145,6 +160,7 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         cfg.artifacts.checkpoint_retention.best_metric_name,
         field_name="artifacts.checkpoint_retention.best_metric_name",
     )
+    _validate_promotion_config(cfg)
     _validate_registered_update_metric_name(
         cfg.training.plateau_metric,
         field_name="training.plateau_metric",
@@ -249,6 +265,7 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     )
 
     _validate_output_config(cfg)
+    _apply_telemetry_defaults(cfg)
 
     _validate_curriculum_config(cfg)
 
@@ -276,6 +293,45 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
             )
+
+
+def _apply_from_promoted(cfg: TrainConfig) -> None:
+    """Resolve ``from_promoted`` into resume checkpoint and campaign context."""
+
+    campaign_slug = str(cfg.from_promoted or "").strip()
+    if not campaign_slug:
+        return
+    from src.artifacts.promotion import resolve_from_promoted
+
+    resolved = resolve_from_promoted(campaign_slug, cfg.output.root)
+    cfg.output.campaign = resolved["campaign"]
+    cfg.resume_checkpoint = resolved["checkpoint_path"]
+    cfg.from_promoted = None
+
+
+def _validate_promotion_config(cfg: TrainConfig) -> None:
+    promotion = cfg.artifacts.promotion
+    if not promotion.enabled:
+        return
+    metric_name = str(promotion.metric_name or "").strip()
+    if not metric_name:
+        raise ValueError(
+            "artifacts.promotion.metric_name must be set when promotion is enabled."
+        )
+    _validate_registered_update_metric_name(
+        metric_name,
+        field_name="artifacts.promotion.metric_name",
+    )
+    mode = str(promotion.metric_mode or "").strip().lower()
+    if mode not in {"max", "min"}:
+        raise ValueError("artifacts.promotion.metric_mode must be 'max' or 'min'.")
+
+
+def _apply_telemetry_defaults(cfg: TrainConfig) -> None:
+    """Fill telemetry defaults that derive from validated output config."""
+
+    if not cfg.telemetry.wandb.group:
+        cfg.telemetry.wandb.group = str(cfg.output.campaign)
 
 
 def _validate_output_config(cfg: TrainConfig) -> None:

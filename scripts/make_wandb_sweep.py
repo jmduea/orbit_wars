@@ -36,7 +36,7 @@ def main(cfg: DictConfig) -> None:
     if not isinstance(plain, dict):
         raise TypeError("Expected composed sweep config to be a mapping.")
 
-    out_dir = Path(str(plain.pop("out_dir", "artifacts/sweeps")))
+    out_dir = Path(str(plain.pop("out_dir", "outputs/_meta/sweeps")))
     out_dir.mkdir(parents=True, exist_ok=True)
 
     command_name = str(plain.pop("command_name", "ow_train"))
@@ -48,14 +48,25 @@ def main(cfg: DictConfig) -> None:
     name = str(plain.get("name") or "sweep")
     description = plain.pop("description", None)
 
+    metric = plain.get(
+        "metric",
+        {"name": "overall_win_rate", "goal": "maximize"},
+    )
+    goal = str(metric.get("goal", "maximize")).lower()
+    metric_mode = "max" if "max" in goal else "min"
+    parameters = dict(plain.get("parameters", {}))
+    parameters.setdefault(
+        "artifacts.promotion.metric_name", {"value": metric.get("name")}
+    )
+    parameters.setdefault(
+        "artifacts.promotion.metric_mode", {"value": metric_mode}
+    )
+
     sweep = {
         "method": plain.get("method", "grid"),
-        "metric": plain.get(
-            "metric",
-            {"name": "overall_win_rate", "goal": "maximize"},
-        ),
+        "metric": metric,
         "command": COMMANDS[command_name],
-        "parameters": plain.get("parameters", {}),
+        "parameters": parameters,
     }
 
     if plain.get("run_cap") is not None:

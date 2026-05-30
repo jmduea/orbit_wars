@@ -40,3 +40,8 @@ checkpoint_retention:
   best_metric_mode: max
   min_update_for_pruning: 0
   dry_run_pruning: false
+
+promotion:
+  enabled: true
+  metric_name: episode_reward_mean
+  metric_mode: max

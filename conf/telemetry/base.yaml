@@ -16,6 +16,14 @@ wandb:
   entity: jmduea-jdueadev
   group: null
   tags: []
+  tags_from_config_groups: true
+  tag_config_groups:
+    - model
+    - format
+    - opponents
+    - curriculum
+    - reward
+  rename_from_swept_params: true
   log_artifacts: false
   log_model_every: 100
   watch_model: false

@@ -32,8 +32,10 @@ from src.orchestration.throughput import (
     rollout_group_env_counts,
 )
 from src.orchestration.wandb_sweeps import (
+    _checkpoint_sort_key,
     add_population_metadata,
     resolve_standalone_parameters,
+    resolve_wandb_group_from_sweep,
 )
 
 
@@ -199,6 +201,37 @@ def test_add_population_metadata_preserves_existing_tags() -> None:
 
     assert result["parameters"]["telemetry.wandb.group"]["value"] == "group"
     assert result["parameters"]["telemetry.wandb.tags"]["value"] == ["base", "kaggle"]
+
+
+def test_resolve_wandb_group_from_sweep_prefers_fixed_group() -> None:
+    sweep = {
+        "parameters": {
+            "telemetry.wandb.group": {"value": "sweep_group"},
+            "output.campaign": {"value": "campaign_slug"},
+        }
+    }
+
+    assert resolve_wandb_group_from_sweep(sweep) == "sweep_group"
+
+
+def test_resolve_wandb_group_from_sweep_falls_back_to_yaml_stem(tmp_path: Path) -> None:
+    sweep = {"parameters": {"output.campaign": {"value": "campaign_slug"}}}
+    sweep_path = tmp_path / "throughput_2p.yaml"
+
+    assert resolve_wandb_group_from_sweep(sweep, sweep_yaml_path=sweep_path) == (
+        "campaign_slug"
+    )
+
+
+def test_checkpoint_sort_key_prefers_best_over_latest() -> None:
+    best = _checkpoint_sort_key(
+        {"aliases": ("best", "promoted"), "update": 10, "version": "v3"}
+    )
+    latest = _checkpoint_sort_key(
+        {"aliases": ("latest",), "update": 99, "version": "v9"}
+    )
+
+    assert best > latest
 
 
 def test_render_kernel_package_writes_metadata_and_env(tmp_path: Path) -> None:

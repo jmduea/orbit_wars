@@ -2,4 +2,4 @@ defaults:
   - wandb_sweep: default
   - _self_
 
-out_dir: artifacts/sweeps #TODO: check this doesn't break artifact_pipeline if used.
+out_dir: outputs/_meta/sweeps

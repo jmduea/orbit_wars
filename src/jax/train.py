@@ -20,6 +20,7 @@ from src.artifacts.checkpoint_compat import (
     validate_checkpoint_pointer_decoder_compatibility,
 )
 from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.artifacts.promotion import promote_if_better
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
@@ -1000,6 +1001,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     )
     checkpoint_failures: list[CheckpointResult] = []
     artifact_worker_state: dict[str, subprocess.Popen[object]] = {}
+    run_promotion_best: float | None = None
 
     def protected_artifact_paths() -> set[Path]:
         paths = {run_dir / "jax_ckpt_last.pkl"}
@@ -1009,6 +1011,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         return paths
 
     def handle_checkpoint_results(results: list[CheckpointResult]) -> None:
+        nonlocal run_promotion_best
         for result in results:
             event_record = {
                 "event": "checkpoint_result",
@@ -1072,7 +1075,34 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 f"checkpoint retention: {action_label} {len(pruning.deleted)} files, "
                 f"reclaimed_bytes={pruning.reclaimed_bytes}"
             )
-            telemetry.log_checkpoint(result.numbered_path, update=result.update)
+            promotion_attempt, run_promotion_best = promote_if_better(
+                cfg,
+                run_context,
+                checkpoint_path=result.numbered_path,
+                update=result.update,
+                log_path=log_path,
+                run_best_value=run_promotion_best,
+            )
+            if promotion_attempt.promoted:
+                append_jsonl(
+                    log_path,
+                    {
+                        "event": "checkpoint_promoted",
+                        "update": result.update,
+                        "metric_name": promotion_attempt.metric_name,
+                        "metric_value": promotion_attempt.metric_value,
+                        "promoted_manifest_path": str(
+                            promotion_attempt.promoted_manifest_path
+                        ),
+                    },
+                )
+                if cfg.telemetry.wandb.log_artifacts:
+                    telemetry.log_promoted_checkpoint(
+                        result.numbered_path,
+                        update=result.update,
+                        metric_name=promotion_attempt.metric_name,
+                        metric_value=float(promotion_attempt.metric_value or 0.0),
+                    )
             if not artifact_cfg.replay_async:
                 replay_meta_path = maybe_write_jax_checkpoint_replay(
                     cfg,

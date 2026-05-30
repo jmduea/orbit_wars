@@ -15,7 +15,7 @@ From the repository root:
 
 ```bash
 uv run python scripts/validate_kaggle_docker_submission.py \
-  --checkpoint outputs/campaigns/<campaign>/runs/<run_id>/jax_ckpt_last.pkl \
+  --checkpoint outputs/campaigns/<campaign>/runs/<run_id>/checkpoints/jax_ckpt_last.pkl \
   --output-dir /tmp/kaggle_submit \
   --player-count both
 ```
