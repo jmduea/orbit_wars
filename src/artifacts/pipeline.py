@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 CheckpointStatus = Literal["committed", "failed", "skipped", "coalesced"]
-OptionalJobKind = Literal["replay", "docker_validation"]
+OptionalJobKind = Literal["replay", "docker_validation", "tournament"]
 
 
 @dataclass(slots=True)

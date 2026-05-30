@@ -27,6 +27,7 @@ from src.artifacts.pipeline import (  # noqa: E402
     load_optional_jobs,
 )
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
+from src.artifacts.tournament.worker import run_tournament_promotion_job  # noqa: E402
 from src.artifacts.run_paths import atomic_write_json  # noqa: E402
 
 
@@ -167,6 +168,35 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
     )
 
 
+
+def _run_tournament_job(job: dict[str, object]) -> None:
+    job_file = Path(str(job["job_file"]))
+    result_dir = _job_result_dir(job, job_file)
+    tournament, promotion_attempt = run_tournament_promotion_job(job, result_dir=result_dir)
+    manifest_path = _job_manifest_path(job, result_dir)
+    atomic_write_json(
+        manifest_path,
+        {
+            "job_id": job["job_id"],
+            "kind": job.get("kind"),
+            "update": job["update"],
+            "checkpoint_path": str(job["checkpoint_path"]),
+            "tournament_id": tournament.tournament_id,
+            "leaderboard_path": str(result_dir / "leaderboard.json"),
+            "promoted": bool(promotion_attempt and promotion_attempt.promoted),
+            "promotion_reason": promotion_attempt.reason if promotion_attempt else "no_passing_row",
+            "status": "completed",
+        },
+    )
+    _write_status(
+        job_file,
+        "completed",
+        result_dir=str(result_dir),
+        result_manifest_path=str(manifest_path),
+        tournament_id=tournament.tournament_id,
+        promoted=bool(promotion_attempt and promotion_attempt.promoted),
+    )
+
 def _job_result_dir(
     job: dict[str, object],
     job_file: Path,
@@ -251,6 +281,8 @@ def main() -> int:
                     _run_replay_job(job)
                 elif job.get("kind") == "docker_validation":
                     _run_docker_validation_job(job)
+                elif job.get("kind") == "tournament":
+                    _run_tournament_job(job)
                 else:
                     raise ValueError(f"unsupported job kind: {job.get('kind')!r}")
             except Exception as exc:

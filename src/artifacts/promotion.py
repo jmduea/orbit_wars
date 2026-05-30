@@ -172,6 +172,30 @@ def promote_if_better(
             new_run_best,
         )
 
+    strategy = str(promotion.strategy or "metric").strip().lower()
+    if strategy == "tournament":
+        return (
+            PromotionAttempt(
+                promoted=False,
+                reason="tournament_only",
+                metric_name=metric_name,
+                metric_value=metric_value,
+                metric_mode=metric_mode,
+            ),
+            new_run_best,
+        )
+    if strategy == "hybrid":
+        return (
+            PromotionAttempt(
+                promoted=False,
+                reason="metric_eligible_queue_tournament",
+                metric_name=metric_name,
+                metric_value=metric_value,
+                metric_mode=metric_mode,
+            ),
+            new_run_best,
+        )
+
     now = datetime.now(timezone.utc).isoformat()
     overrides_path = context.run_dir / ".hydra" / "overrides.yaml"
     promoted_payload: dict[str, object] = {
