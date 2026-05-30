@@ -102,10 +102,48 @@ def test_agent_payload_includes_manifest_and_rules() -> None:
     payload = agent_payload(doc)
     assert "roadmap" in payload
     assert "manifest_active" in payload
-    assert payload["roadmap"]["counts"]["next"] >= 1
+    counts = payload["roadmap"]["counts"]
+    assert counts["now"] >= 0
+    assert counts["next"] >= 0
     assert any("brain_dump" in rule.lower() for rule in payload["agent_rules"])
     assert any("Done row" in rule for rule in payload["agent_rules"])
     assert "workflow_phases" in payload
+
+
+def test_agent_payload_allows_empty_now_and_next() -> None:
+    text = """# Roadmap
+
+**Phase:** planning
+
+## Now
+
+| Item | Link |
+|------|------|
+
+## Next
+
+| Item | Link |
+|------|------|
+
+## Later
+
+| Item | Link |
+|------|------|
+| Backlog item | — |
+
+## Done (last 5)
+
+| Item | Link |
+|------|------|
+
+_Last triaged: 2026-05-30_
+"""
+    doc = parse_roadmap(text)
+    errors = [message for message in validate_roadmap(doc) if not message.startswith("WARNING:")]
+    assert errors == [], errors
+    payload = agent_payload(doc)
+    assert payload["roadmap"]["counts"]["now"] == 0
+    assert payload["roadmap"]["counts"]["next"] == 0
 
 
 def test_parse_minimal_document() -> None:

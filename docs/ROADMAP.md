@@ -1,7 +1,7 @@
 # Roadmap
 
 > Single priority index. Details in GitHub issues and `.omg/specs|plans/`.
-> Caps: **≤3** **Now**, **≤5** **Done**. Agent packages: `.omg/workflow-manifest.json`
+> Caps: **≤3** **Now**, **≤5** **Done**. **Now** and **Next** may be empty while planning. Agent packages: `.omg/workflow-manifest.json`
 
 **Phase:** submit-valid
 
