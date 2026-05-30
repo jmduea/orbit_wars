@@ -32,7 +32,7 @@ _None — pick from **Next** after planning._
 
 | Item | Link |
 |------|------|
-| Test suite cleanup batch (duplicate smokes, shield v2, telemetry) | [#102](https://github.com/jmduea/orbit_wars/issues/102)–[#111](https://github.com/jmduea/orbit_wars/issues/111) |
+| Test suite cleanup batch (duplicate smokes, shield v2, telemetry) | [#102](https://github.com/jmduea/orbit_wars/issues/102) [#103](https://github.com/jmduea/orbit_wars/issues/103) [#104](https://github.com/jmduea/orbit_wars/issues/104) [#105](https://github.com/jmduea/orbit_wars/issues/105) [#106](https://github.com/jmduea/orbit_wars/issues/106) [#107](https://github.com/jmduea/orbit_wars/issues/107) [#108](https://github.com/jmduea/orbit_wars/issues/108) [#109](https://github.com/jmduea/orbit_wars/issues/109) [#110](https://github.com/jmduea/orbit_wars/issues/110) [#111](https://github.com/jmduea/orbit_wars/issues/111) · `ffc9df7` |
 | Kaggle submission packaging (`__file__` fix, exec validation probe) | [#96](https://github.com/jmduea/orbit_wars/issues/96) · Kaggle episode 78216645 |
 | Kaggle population worker (`ow train kaggle` standalone; P100 smoke) | [#97](https://github.com/jmduea/orbit_wars/issues/97) · `850568a` `e98f452` `20c8011` |
 | Config cleanup: presets, legacy models, OMG clutter, Hydra launch recipes | [#98](https://github.com/jmduea/orbit_wars/issues/98) |
