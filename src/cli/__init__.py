@@ -1,3 +1,5 @@
+"""Orbit Wars CLI entrypoint (``ow``)."""
+
 from __future__ import annotations
 
 import subprocess
@@ -21,15 +23,22 @@ def _run_hydra_entry(entry: Callable[[], None], argv: list[str]) -> None:
         sys.argv = original_argv
 
 
-def _run_train(args: list[str]) -> None:
+def _run_hydra_train(args: list[str]) -> None:
     from src.train import main as train_main
 
     _run_hydra_entry(train_main, ["ow train", *args])
 
 
+def _run_train(args: list[str]) -> None:
+    from src.cli import train_hosts
+
+    route = train_hosts.parse_train_argv(args)
+    train_hosts.dispatch(route)
+
+
 def _run_make(args: list[str]) -> None:
     script_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "make_wandb_sweep.py"
+        Path(__file__).resolve().parents[2] / "scripts" / "make_wandb_sweep.py"
     )
     if not script_path.exists():
         raise RuntimeError(f"Unable to find make script at {script_path}")
@@ -43,10 +52,6 @@ def _run_make(args: list[str]) -> None:
 def main() -> None:
     args = sys.argv[1:]
 
-    # Allow:
-    #   uv run ow train print_resolved_config=true
-    # and:
-    #   uv run ow print_resolved_config=true
     if not args or _is_hydra_override(args[0]):
         command = "train"
         command_args = args
@@ -64,13 +69,16 @@ def main() -> None:
         case "help" | "--help" | "-h":
             print(
                 "Usage:\n"
-                "  uv run ow train [HYDRA_OVERRIDES...]\n"
+                "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
+                "  uv run ow train kaggle [SUBCMD] [KAGGLE_OPTS] [HYDRA_OVERRIDES...]\n"
                 "  uv run ow make [MAKE_SCRIPT_OVERRIDES...]\n"
                 "  uv run ow [HYDRA_OVERRIDES...]\n\n"
                 "Examples:\n"
                 "  uv run ow train print_resolved_config=true\n"
+                "  uv run ow train kaggle format=2p_4p_16env training.total_updates=500\n"
+                "  uv run ow train kaggle status owner/kernel-slug\n"
+                "  uv run ow train kaggle sync owner/kernel-slug\n"
                 "  uv run ow make wandb_sweep=shield_cheap_history\n"
-                "  uv run ow train task=shield_cheap training.total_updates=10\n"
             )
         case _:
             raise SystemExit(

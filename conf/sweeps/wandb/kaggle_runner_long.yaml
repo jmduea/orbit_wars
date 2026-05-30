@@ -1,0 +1,54 @@
+program: -m
+method: random
+run_cap: 8
+metric:
+  name: episode_reward_mean
+  goal: maximize
+command:
+  - uv
+  - run
+  - python
+  - ${program}
+  - src.train
+  - ${args_no_hyphens}
+parameters:
+  output.campaign:
+    value: kaggle_runner_long
+  telemetry.wandb.group:
+    value: kaggle_runner_long
+  telemetry.wandb.tags:
+    value: [kaggle, population, population_long]
+  telemetry.wandb.enabled:
+    value: true
+  telemetry.wandb.log_artifacts:
+    value: true
+  model:
+    value: transformer_factorized
+  format:
+    value: default
+  opponents:
+    value: default
+  curriculum:
+    value: default
+  artifacts.checkpoint_every:
+    value: 250
+  artifacts.artifact_pipeline.enabled:
+    value: true
+  artifacts.artifact_pipeline.docker_validation_async:
+    value: false
+  artifacts.replay.enabled:
+    value: false
+  training.total_updates:
+    value: 5000
+  training.gamma:
+    values: [0.99, 0.999]
+  training.gae_lambda:
+    values: [0.95, 0.99]
+  training.lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.0006
+  training.ent_coef:
+    distribution: log_uniform_values
+    min: 0.001
+    max: 0.01

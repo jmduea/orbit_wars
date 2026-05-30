@@ -13,6 +13,42 @@ def load_sweep_config(path: Path) -> dict[str, Any]:
     return dict(yaml.safe_load(path.read_text(encoding="utf-8")))
 
 
+def resolve_standalone_parameters(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """Pick deterministic Hydra values from W&B sweep parameter specs.
+
+    Standalone Kaggle workers do not call ``wandb.agent``; they need a fixed
+    candidate without sampling. Fixed ``value`` entries win; ``values`` lists
+    use the first entry; log-uniform specs use ``min`` for reproducibility.
+    """
+
+    resolved: dict[str, Any] = {}
+    for key, raw_spec in parameters.items():
+        if not isinstance(key, str) or not isinstance(raw_spec, Mapping):
+            continue
+        spec = dict(raw_spec)
+        if "value" in spec:
+            resolved[key] = spec["value"]
+            continue
+        values = spec.get("values")
+        if isinstance(values, Sequence) and not isinstance(values, (str, bytes)):
+            if values:
+                resolved[key] = values[0]
+            continue
+        if "min" in spec:
+            resolved[key] = spec["min"]
+    return resolved
+
+
+def load_standalone_config(path: Path) -> dict[str, Any]:
+    """Load fixed Hydra overrides from a packaged W&B sweep YAML."""
+
+    sweep = load_sweep_config(path)
+    parameters = sweep.get("parameters")
+    if not isinstance(parameters, Mapping):
+        raise ValueError(f"sweep YAML must contain parameters: {path}")
+    return resolve_standalone_parameters(parameters)
+
+
 def add_population_metadata(
     sweep: Mapping[str, Any],
     *,

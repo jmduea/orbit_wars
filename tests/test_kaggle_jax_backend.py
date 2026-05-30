@@ -41,8 +41,9 @@ def _worker_module():
     return _WORKER_MODULE
 
 
-def test_sync_kaggle_worker_environment_installs_tpu_jax(monkeypatch) -> None:
+def test_sync_kaggle_worker_environment_installs_tpu_jax(monkeypatch, tmp_path: Path) -> None:
     commands: list[list[str]] = []
+    monkeypatch.setenv("ORBIT_WARS_WORKER_VENV", str(tmp_path / "worker_venv"))
 
     def fake_run(command, **kwargs):
         commands.append(list(command))
@@ -60,17 +61,20 @@ def test_sync_kaggle_worker_environment_installs_tpu_jax(monkeypatch) -> None:
 
     assert sync.returncode == 0
     assert sync.tpu_backend is True
-    assert commands[0] == ["uv", "sync", "--no-dev"]
-    assert commands[1][:3] == ["uv", "pip", "uninstall"]
-    assert commands[1][3:5] == ["-p", ".venv/bin/python"]
-    assert commands[2][:3] == ["uv", "pip", "install"]
-    assert commands[2][3:5] == ["-p", ".venv/bin/python"]
-    assert "-U" in commands[2]
-    assert "jax[tpu]" in commands[2]
+    step_names = [step["name"] for step in sync.steps]
+    assert "ensure_worker_venv" in step_names
+    assert "uv_sync" in step_names
+    assert any(cmd[:3] == ["uv", "sync", "--no-dev"] for cmd in commands)
+    assert any(cmd[:2] == ["uv", "venv"] for cmd in commands)
+    assert any(cmd[:3] == ["uv", "pip", "uninstall"] for cmd in commands)
+    assert any("jax[tpu]" in cmd for cmd in commands)
 
 
-def test_sync_kaggle_worker_environment_installs_cuda_jax_on_gpu(monkeypatch) -> None:
+def test_sync_kaggle_worker_environment_installs_cuda_jax_on_gpu(
+    monkeypatch, tmp_path: Path
+) -> None:
     commands: list[list[str]] = []
+    monkeypatch.setenv("ORBIT_WARS_WORKER_VENV", str(tmp_path / "worker_venv"))
 
     def fake_run(command, **kwargs):
         commands.append(list(command))
@@ -93,13 +97,20 @@ def test_sync_kaggle_worker_environment_installs_cuda_jax_on_gpu(monkeypatch) ->
 
     assert sync.returncode == 0
     assert sync.tpu_backend is False
-    assert any(cmd[:3] == ["uv", "sync", "--no-dev"] for cmd in commands)
     step_names = [step["name"] for step in sync.steps]
+    assert "probe_base_python_jax_cuda" in step_names
+    assert "ensure_worker_venv" in step_names
     assert "uv_sync" in step_names
+    assert any(cmd[:3] == ["uv", "sync", "--no-dev"] for cmd in commands)
+    assert any(cmd[:2] == ["uv", "venv"] for cmd in commands)
+    assert "--system-site-packages" in next(
+        cmd for cmd in commands if cmd[:2] == ["uv", "venv"]
+    )
     assert step_names[-1] in {
         "probe_existing_worker_jax_cuda",
         "verify_pinned_worker_jax_cuda",
     }
+    assert not any("jax[cuda12]" in " ".join(cmd) for cmd in commands)
 
 
 def test_cuda_wheel_library_path_includes_nvidia_lib_dirs(tmp_path: Path) -> None:
@@ -190,9 +201,12 @@ def test_log_bootstrap_failure_prints_step_summary(capsys) -> None:
     assert "network error" in captured
 
 
-def test_kaggle_worker_bootstrap_uv_sync_avoids_src_import(monkeypatch) -> None:
+def test_kaggle_worker_bootstrap_uv_sync_avoids_src_import(
+    monkeypatch, tmp_path: Path
+) -> None:
     worker = _worker_module()
     commands: list[list[str]] = []
+    monkeypatch.setenv("ORBIT_WARS_WORKER_VENV", str(tmp_path / "worker_venv"))
 
     def fake_run(command, **kwargs):
         commands.append(list(command))
@@ -210,11 +224,10 @@ def test_kaggle_worker_bootstrap_uv_sync_avoids_src_import(monkeypatch) -> None:
 
     assert result["returncode"] == 0
     assert result["tpu_backend"] is True
-    assert commands[0] == ["uv", "sync", "--no-dev"]
-    assert commands[1][:3] == ["uv", "pip", "uninstall"]
-    assert commands[1][3:5] == ["-p", ".venv/bin/python"]
-    assert commands[2][3:5] == ["-p", ".venv/bin/python"]
-    assert "jax[tpu]" in commands[2]
+    assert any(cmd[:3] == ["uv", "sync", "--no-dev"] for cmd in commands)
+    assert any(cmd[:2] == ["uv", "venv"] for cmd in commands)
+    assert any(cmd[:3] == ["uv", "pip", "uninstall"] for cmd in commands)
+    assert any("jax[tpu]" in cmd for cmd in commands)
 
 
 def test_kaggle_worker_bootstrap_failure_logs_failed_step(monkeypatch, capsys) -> None:
@@ -276,12 +289,70 @@ def test_kaggle_worker_loads_wandb_key_from_kaggle_secret(monkeypatch) -> None:
     assert os.environ["WANDB_API_KEY"] == "resolved-secret"
 
 
+def test_kaggle_worker_smoke_mode_applies_short_training_overrides() -> None:
+    worker = _worker_module()
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setenv("ORBIT_WARS_KAGGLE_RUN_TYPE", "smoke")
+        overrides = worker._apply_smoke_training_overrides(
+            ["training.total_updates=500", "training.num_envs=8"]
+        )
+        settings = worker._calibration_settings()
+        assert overrides == ["training.num_envs=8", "training.total_updates=10"]
+        assert settings["max_variants"] == 1
+        assert settings["timeout_seconds"] == 600
+    finally:
+        monkeypatch.undo()
+
+
+def test_kaggle_worker_standalone_mode_skips_wandb_secret(monkeypatch) -> None:
+    worker = _worker_module()
+    called = {"count": 0}
+
+    def fake_load_secret() -> dict[str, object]:
+        called["count"] += 1
+        return {"loaded": True, "source": "should-not-run"}
+
+    monkeypatch.setenv("ORBIT_WARS_KAGGLE_WORKER_MODE", "standalone")
+    monkeypatch.setattr(worker, "_load_wandb_api_key_from_kaggle_secret", fake_load_secret)
+    monkeypatch.setattr(worker, "_load_packaged_env", lambda: None)
+    monkeypatch.setattr(worker, "_write_summary", lambda summary: None)
+    monkeypatch.setattr(
+        worker,
+        "_ensure_uv_environment",
+        lambda summary: summary.update({"uv": "skipped"}),
+    )
+    monkeypatch.setattr(worker, "diagnostics", lambda: {"jax_platforms": ["cuda", "gpu"]})
+    monkeypatch.setattr(worker, "_ensure_accelerator", lambda summary: None)
+    monkeypatch.setattr(
+        worker,
+        "_run_standalone_worker",
+        lambda summary: summary.update({"status": "standalone_complete", "exit_code": 0}),
+    )
+
+    worker.main()
+
+    assert called["count"] == 0
+
+
+def test_kaggle_worker_is_standalone_mode() -> None:
+    worker = _worker_module()
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.delenv("ORBIT_WARS_KAGGLE_WORKER_MODE", raising=False)
+        assert worker._is_standalone_mode() is False
+        monkeypatch.setenv("ORBIT_WARS_KAGGLE_WORKER_MODE", "standalone")
+        assert worker._is_standalone_mode() is True
+    finally:
+        monkeypatch.undo()
+
+
 def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
     worker = _worker_module()
     overrides = worker._config_to_overrides(
         {
             "model": "transformer_factorized",
-            "format": "2p_4p_16env",
+            "format": "mix_2p_4p_16env",
             "opponents": "self_play_curriculum",
             "curriculum": "self_play_staged",
             "training.lr": 0.0003,
@@ -290,7 +361,7 @@ def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
     )
 
     assert "model=transformer_factorized" in overrides
-    assert "format=2p_4p_16env" in overrides
+    assert "format=mix_2p_4p_16env" in overrides
     assert "opponents=self_play_curriculum" in overrides
     assert "curriculum=self_play_staged" in overrides
     assert "training.lr=0.0003" in overrides

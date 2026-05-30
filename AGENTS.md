@@ -13,7 +13,10 @@
 - Install/sync Python dependencies: `uv sync --group dev`
 - Run tests: see **Test Selection For Coding Agents** below; default iteration is `make test-fast`
 - Run training with Hydra: `uv run python -m src.train model=attention training.total_updates=1000`
-- Print resolved training config without training: `uv run python -m src.train print_resolved_config=true`
+- Print resolved training config without training: `uv run ow train print_resolved_config=true`
+- Launch Kaggle training (standalone): `uv run ow train kaggle format=mix_2p_4p_16env`
+- Kaggle ops: `uv run ow train kaggle preflight|status|sync`
+- Legacy Kaggle script: `uv run python scripts/kaggle_runner.py` (deprecated: `kaggle_wandb_population.py`)
 - Build MCP server: from `mcp-server/`, run `npm run build`
 - Test MCP server: from `mcp-server/`, run `npm test`
 

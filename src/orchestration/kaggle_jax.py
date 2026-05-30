@@ -12,7 +12,7 @@ from src.orchestration.accelerators import is_tpu_accelerator
 
 LIBTPU_FIND_LINKS = "https://storage.googleapis.com/jax-releases/libtpu_releases.html"
 KAGGLE_WORKER_VENV_ENV = "ORBIT_WARS_WORKER_VENV"
-KAGGLE_JAX_BOOTSTRAP_PATCH_VERSION = "two-phase-jax-flax-aligned-v8"
+KAGGLE_JAX_BOOTSTRAP_PATCH_VERSION = "trust-base-jax-v9"
 
 # Kaggle base image currently reports working JAX CUDA 0.7.2 on T4.
 # Keep the worker venv aligned with that unless explicitly overridden.
@@ -166,12 +166,30 @@ def sync_kaggle_worker_environment(accelerator_id: str) -> UvEnvironmentSync:
     tpu_backend = is_tpu_accelerator(accelerator_id)
     nvidia_backend = accelerator_id.strip().lower().startswith("nvidia")
     steps: list[dict[str, object]] = []
+    trust_base_jax = False
 
     if nvidia_backend:
         print("bootstrap starting step: probe_base_python_jax_cuda", flush=True)
         base_probe = _probe_base_python_jax_cuda()
         steps.append(_optional_probe_step(base_probe))
         _print_probe_summary(base_probe)
+        trust_base_jax = _trust_base_jax() and int(base_probe.get("returncode", 1)) == 0
+        if trust_base_jax:
+            print(
+                "bootstrap trust-base-jax: using Kaggle base-image JAX CUDA; "
+                "skipping pinned reinstall unless worker probe fails",
+                flush=True,
+            )
+
+    print("bootstrap starting step: ensure_worker_venv", flush=True)
+    venv_step = _ensure_worker_venv(system_site_packages=trust_base_jax and nvidia_backend)
+    steps.append(venv_step)
+    if int(venv_step.get("returncode", 1)) != 0:
+        return UvEnvironmentSync(
+            returncode=int(venv_step.get("returncode", 1)),
+            tpu_backend=tpu_backend,
+            steps=tuple(steps),
+        )
 
     print("bootstrap starting step: uv_sync", flush=True)
     sync = subprocess.run(
@@ -234,6 +252,13 @@ def sync_kaggle_worker_environment(accelerator_id: str) -> UvEnvironmentSync:
     if int(existing_worker_cuda.get("returncode", 1)) == 0:
         _pin_current_process_for_jax_cuda()
         return UvEnvironmentSync(returncode=0, tpu_backend=False, steps=tuple(steps))
+
+    if trust_base_jax:
+        print(
+            "bootstrap trust-base-jax: worker CUDA probe failed after slim sync; "
+            "falling back to pinned JAX CUDA install",
+            flush=True,
+        )
 
     print("bootstrap starting step: uv_pip_install_pinned_jax_cuda", flush=True)
     install_stack = _install_pinned_jax_cuda_stack()
@@ -302,6 +327,41 @@ def _pin_current_process_for_jax_cuda() -> None:
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
     _set_ld_library_path_for_current_process()
+
+
+def _trust_base_jax() -> bool:
+    """Return True when the worker should inherit Kaggle base-image JAX CUDA."""
+
+    value = os.environ.get("ORBIT_WARS_KAGGLE_TRUST_BASE_JAX", "1").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _ensure_worker_venv(*, system_site_packages: bool) -> dict[str, object]:
+    """Create the worker venv before ``uv sync`` when it does not exist."""
+
+    venv = _venv_path()
+    if venv.exists():
+        return {
+            "name": "ensure_worker_venv",
+            "returncode": 0,
+            "stdout_tail": "venv already exists",
+            "stderr_tail": "",
+            "system_site_packages": system_site_packages,
+        }
+    command = ["uv", "venv"]
+    if system_site_packages:
+        command.append("--system-site-packages")
+    command.append(str(venv))
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=_uv_bootstrap_env(),
+    )
+    step = _completed_step("ensure_worker_venv", completed)
+    step["system_site_packages"] = system_site_packages
+    return step
 
 
 def _install_jax_tpu() -> subprocess.CompletedProcess[str]:

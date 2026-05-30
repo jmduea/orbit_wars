@@ -6,6 +6,23 @@ from pathlib import Path
 from typing import Protocol, Sequence
 
 
+def kaggle_push_supports_secret_flag(*, executable: str = "kaggle") -> bool:
+    """Return True when the installed Kaggle CLI exposes ``--secret`` on kernels push."""
+
+    try:
+        completed = subprocess.run(
+            [executable, "kernels", "push", "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+    help_text = completed.stdout or completed.stderr or ""
+    return "--secret" in help_text
+
+
 class CommandRunner(Protocol):
     def __call__(
         self, command: Sequence[str], *, cwd: Path | None = None
@@ -80,12 +97,16 @@ class KaggleCli:
         *,
         accelerator: str | None = None,
         timeout_seconds: int | None = None,
+        secrets: Sequence[str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         command = [self._executable, "kernels", "push", "-p", str(package_dir)]
         if accelerator:
             command.extend(["--accelerator", accelerator])
         if timeout_seconds is not None:
             command.extend(["--timeout", str(int(timeout_seconds))])
+        if secrets and kaggle_push_supports_secret_flag(executable=self._executable):
+            for secret in secrets:
+                command.extend(["--secret", secret])
         return self._runner(command, cwd=package_dir)
 
     def status(self, ref: KaggleKernelRef) -> KaggleKernelStatus:

@@ -4,7 +4,6 @@ import base64
 import hashlib
 import io
 import json
-import re
 import shutil
 import tarfile
 import textwrap
@@ -155,13 +154,21 @@ def _copy_pyproject_for_kaggle_gpu(
         target.write_text(text, encoding="utf-8")
         return True
 
-    rewritten = _rewrite_jax_cuda_extras_to_plain_jax(text)
+    rewritten = _strip_jax_runtime_dependencies(text)
     target.write_text(rewritten, encoding="utf-8")
     return rewritten == text
 
 
-def _rewrite_jax_cuda_extras_to_plain_jax(text: str) -> str:
-    return re.sub(r"jax\[(?:cuda|cuda12|cuda13)\]", "jax", text)
+def _strip_jax_runtime_dependencies(text: str) -> str:
+    """Remove JAX runtime deps from packaged GPU pyproject so uv sync does not reinstall JAX."""
+
+    lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith('"jax') or stripped.startswith("'jax"):
+            continue
+        lines.append(line)
+    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
 
 
 def _is_nvidia_accelerator(accelerator: str | None) -> bool:

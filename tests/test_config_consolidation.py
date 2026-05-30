@@ -174,7 +174,7 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
 
 
 def test_baseline_sweep_scaffolding_is_discoverable() -> None:
-    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_population_mvp.yaml")
+    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_runner_mvp.yaml")
     assert fixed_path.is_file()
 
 

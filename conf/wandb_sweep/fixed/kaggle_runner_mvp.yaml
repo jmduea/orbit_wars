@@ -2,9 +2,9 @@
 
 parameters:
   output.campaign:
-    value: kaggle_population_mvp
+    value: kaggle_runner_mvp
   telemetry.wandb.group:
-    value: kaggle_population_mvp
+    value: kaggle_runner_mvp
   telemetry.wandb.tags:
     value: [kaggle, population, population_mvp]
   telemetry.wandb.enabled:

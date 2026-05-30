@@ -5,7 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from scripts import kaggle_wandb_population as launcher
+from src.orchestration import kaggle_runner as launcher
 from src.orchestration.accelerators import KAGGLE_TPU_V5E8, is_tpu_accelerator
 from src.orchestration.kaggle_cli import KaggleCli, KaggleKernelRef
 from src.orchestration.kernel_package import render_kernel_package
@@ -23,7 +23,7 @@ from src.orchestration.throughput import (
     largest_compatible_microbatch,
     rollout_group_env_counts,
 )
-from src.orchestration.wandb_sweeps import add_population_metadata
+from src.orchestration.wandb_sweeps import add_population_metadata, resolve_standalone_parameters
 
 
 def test_accelerator_preference_ordered_fallback() -> None:
@@ -216,19 +216,152 @@ def test_prepare_uses_kaggle_secret_name_instead_of_raw_wandb_key(
         work_dir=tmp_path / "pkg",
         kernel_id="owner/kernel",
         title="Worker",
-        sweep_yaml=Path("conf/sweeps/wandb/kaggle_population_long.yaml"),
+        sweep_yaml=Path("conf/sweeps/wandb/kaggle_runner_long.yaml"),
         project="orbit_wars",
         entity="entity",
+        run_type=None,
+        no_wandb=False,
+        standalone_overrides=[],
     )
 
-    package = launcher._prepare(args, sweep_id="sweep", accelerator="NvidiaH100")
+    package = launcher.prepare(args, sweep_id="sweep", accelerator="NvidiaH100")
     env_text = (package.package_dir / "worker-env.json").read_text(encoding="utf-8")
     env = json.loads(env_text)
 
     assert env["WANDB_API_KEY_SECRET_NAME"] == "WANDB_API_KEY"
     assert env["ORBIT_WARS_WORKER_VENV"] == "/tmp/orbit_wars_worker_venv"
+    assert env["ORBIT_WARS_KAGGLE_TRUST_BASE_JAX"] == "1"
     assert "WANDB_API_KEY" not in env
     assert "raw-local-key" not in env_text
+
+
+def test_prepare_benchmark_run_type_sets_calibration_grid(tmp_path: Path) -> None:
+    args = argparse.Namespace(
+        work_dir=tmp_path / "pkg",
+        kernel_id="owner/kernel",
+        title="Worker",
+        sweep_yaml=Path("conf/sweeps/wandb/kaggle_runner_mvp.yaml"),
+        project="orbit_wars",
+        entity="entity",
+        run_type="benchmark",
+        no_wandb=True,
+        standalone_overrides=[],
+        calibration_max_variants=None,
+        calibration_warmup=None,
+        calibration_updates=None,
+        calibration_timeout_seconds=None,
+    )
+
+    package = launcher.prepare(args, sweep_id=None, accelerator="NvidiaTeslaP100")
+    env = json.loads((package.package_dir / "worker-env.json").read_text(encoding="utf-8"))
+
+    assert env["ORBIT_WARS_KAGGLE_RUN_TYPE"] == "benchmark"
+    assert env["ORBIT_WARS_KAGGLE_CALIBRATION_MAX_VARIANTS"] == "3"
+    assert env["ORBIT_WARS_KAGGLE_CALIBRATION_WARMUP"] == "2"
+    assert env["ORBIT_WARS_KAGGLE_CALIBRATION_UPDATES"] == "30"
+    assert env["ORBIT_WARS_KAGGLE_CALIBRATION_TIMEOUT_SECONDS"] == "3600"
+
+
+def test_prepare_standalone_without_run_type_omits_calibration_caps(
+    tmp_path: Path,
+) -> None:
+    args = argparse.Namespace(
+        work_dir=tmp_path / "pkg",
+        kernel_id="owner/kernel",
+        title="Worker",
+        sweep_yaml=Path("conf/sweeps/wandb/kaggle_runner_mvp.yaml"),
+        project="orbit_wars",
+        entity="entity",
+        run_type=None,
+        no_wandb=True,
+        standalone_overrides=[],
+        calibration_max_variants=None,
+        calibration_warmup=None,
+        calibration_updates=None,
+        calibration_timeout_seconds=None,
+    )
+
+    package = launcher.prepare(args, sweep_id=None, accelerator="NvidiaTeslaP100")
+    env = json.loads((package.package_dir / "worker-env.json").read_text(encoding="utf-8"))
+
+    assert env["ORBIT_WARS_KAGGLE_WORKER_MODE"] == "standalone"
+    assert "ORBIT_WARS_KAGGLE_CALIBRATION_MAX_VARIANTS" not in env
+
+
+def test_prepare_smoke_run_type_sets_short_defaults(tmp_path: Path) -> None:
+    args = argparse.Namespace(
+        work_dir=tmp_path / "pkg",
+        kernel_id="owner/kernel",
+        title="Worker",
+        sweep_yaml=Path("conf/sweeps/wandb/kaggle_runner_mvp.yaml"),
+        project="orbit_wars",
+        entity="entity",
+        run_type="smoke",
+        no_wandb=False,
+        standalone_overrides=[],
+        calibration_max_variants=None,
+        calibration_warmup=None,
+        calibration_updates=None,
+        calibration_timeout_seconds=None,
+    )
+
+    package = launcher.prepare(args, sweep_id="sweep", accelerator="NvidiaH100")
+    env = json.loads((package.package_dir / "worker-env.json").read_text(encoding="utf-8"))
+
+    assert env["ORBIT_WARS_KAGGLE_RUN_TYPE"] == "smoke"
+    assert env["ORBIT_WARS_KAGGLE_CALIBRATION_MAX_VARIANTS"] == "1"
+    assert env["ORBIT_WARS_KAGGLE_ALLOW_CALIBRATION_FALLBACK"] == "1"
+
+
+def test_prepare_standalone_mode_omits_wandb_secrets(tmp_path: Path) -> None:
+    args = argparse.Namespace(
+        work_dir=tmp_path / "pkg",
+        kernel_id="owner/kernel",
+        title="Worker",
+        sweep_yaml=Path("conf/sweeps/wandb/kaggle_runner_mvp.yaml"),
+        project="orbit_wars",
+        entity="entity",
+        run_type="smoke",
+        no_wandb=True,
+        standalone_overrides=["training.total_updates=12"],
+    )
+
+    package = launcher.prepare(args, sweep_id=None, accelerator="NvidiaTeslaP100")
+    env_text = (package.package_dir / "worker-env.json").read_text(encoding="utf-8")
+    env = json.loads(env_text)
+
+    assert env["ORBIT_WARS_KAGGLE_WORKER_MODE"] == "standalone"
+    assert env["WANDB_SWEEP_YAML"] == "conf/sweeps/wandb/kaggle_runner_mvp.yaml"
+    assert "WANDB_SWEEP_ID" not in env
+    assert "WANDB_API_KEY_SECRET_NAME" not in env
+    assert "WANDB_PROJECT" not in env
+    assert json.loads(env["ORBIT_WARS_KAGGLE_STANDALONE_OVERRIDES"]) == [
+        "training.total_updates=12"
+    ]
+    assert "WANDB_API_KEY" not in env_text
+
+
+def test_resolve_standalone_parameters_picks_first_values() -> None:
+    parameters = {
+        "training.gamma": {"values": [0.99, 0.999]},
+        "training.lr": {
+            "distribution": "log_uniform_values",
+            "min": 0.0001,
+            "max": 0.0006,
+        },
+        "model": {"value": "transformer_factorized"},
+    }
+
+    resolved = resolve_standalone_parameters(parameters)
+
+    assert resolved["training.gamma"] == 0.99
+    assert resolved["training.lr"] == 0.0001
+    assert resolved["model"] == "transformer_factorized"
+
+
+def test_default_sweep_points_at_conf_mvp_yaml() -> None:
+    assert launcher.DEFAULT_SWEEP.name == "kaggle_runner_mvp.yaml"
+    assert launcher.DEFAULT_SWEEP.parts[-3:] == ("sweeps", "wandb", "kaggle_runner_mvp.yaml")
 
 
 def test_render_kernel_package_rewrites_gpu_jax_dependency(tmp_path: Path) -> None:
@@ -270,11 +403,7 @@ def test_render_kernel_package_rewrites_gpu_jax_dependency(tmp_path: Path) -> No
     )
 
     pyproject = (package.package_dir / "pyproject.toml").read_text(encoding="utf-8")
-    assert "jax[cuda13]" not in pyproject
-    assert (
-        '"jax; sys_platform == \'linux\' and platform_machine == \'x86_64\'"'
-        in pyproject
-    )
+    assert "jax" not in pyproject.lower()
     assert not (package.package_dir / "uv.lock").exists()
 
 

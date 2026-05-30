@@ -18,11 +18,6 @@ for candidate in (SCRIPT_DIR, SCRIPT_DIR.parent):
     if candidate_text not in sys.path:
         sys.path.insert(0, candidate_text)
 
-from scripts.kaggle_runtime_env import (  # noqa: E402
-    add_worker_cuda_library_path,
-    isolate_worker_python_env,
-    pin_jax_platform_from_kaggle,
-)
 from src.orchestration.kaggle_jax import (  # noqa: E402
     format_bootstrap_failure,
     log_bootstrap_failure,
@@ -60,11 +55,17 @@ _HYDRA_CONFIG_GROUP_KEYS: frozenset[str] = frozenset(
 def main() -> None:
     print(f"ORBIT_WARS_WORKER_ENTRY_PATCH={KAGGLE_WORKER_ENTRY_PATCH_VERSION}", flush=True)
     _load_packaged_env()
-    wandb_secret = _load_wandb_api_key_from_kaggle_secret()
+    standalone = _is_standalone_mode()
+    wandb_secret: dict[str, object] | None
+    if standalone:
+        wandb_secret = {"skipped": True, "reason": "standalone worker mode"}
+    else:
+        wandb_secret = _load_wandb_api_key_from_kaggle_secret()
     summary: dict[str, Any] = {
         "status": "starting",
         "cwd": str(Path.cwd()),
         "env": _safe_worker_env(),
+        "worker_mode": "standalone" if standalone else "wandb",
         "wandb_secret": wandb_secret,
     }
     _write_summary(summary)
@@ -73,150 +74,205 @@ def main() -> None:
         summary["diagnostics"] = diagnostics()
         _write_summary(summary)
         _ensure_accelerator(summary)
-        sweep_id = os.environ.get("WANDB_SWEEP_ID")
-        if not sweep_id:
-            raise SystemExit(
-                "WANDB_SWEEP_ID is required for Kaggle population workers."
-            )
-        if not os.environ.get("WANDB_API_KEY"):
-            summary["wandb_secret_retry"] = _load_wandb_api_key_from_kaggle_secret()
-            _write_summary(summary)
-
-        if not os.environ.get("WANDB_API_KEY"):
-            raise SystemExit(
-                "WANDB_API_KEY is not available after retrying Kaggle Secrets. "
-                "Add or attach a Kaggle Secret named by WANDB_API_KEY_SECRET_NAME, "
-                "or provide WANDB_API_KEY through the worker environment. "
-                f"Secret status: {summary.get('wandb_secret_retry') or summary.get('wandb_secret')}"
-            )
-        wandb_project = os.environ.get("WANDB_PROJECT")
-        wandb_entity = os.environ.get("WANDB_ENTITY")
-        summary["sweep_id"] = sweep_id
-        summary["wandb_agent"] = {
-            "project": wandb_project or "",
-            "entity": wandb_entity or "",
-        }
-        _write_summary(summary)
-
-        import wandb  # type: ignore
-        from src.orchestration.throughput import (
-            calibration_grid,
-            estimate_training_overrides,
-            finalize_rollout_shape_overrides,
-        )
-
-        def run_candidate() -> None:
-            run = wandb.init(job_type="kaggle-population-worker")
-            run_finished = False
-            summary["wandb_run"] = {
-                "id": str(getattr(run, "id", "")),
-                "name": str(getattr(run, "name", "")),
-            }
-            _write_summary(summary)
-            try:
-                config = dict(wandb.config)
-                observed = _hardware_profile(summary)
-                base_overrides = _config_to_overrides(config)
-                hydra_overrides = tuple(base_overrides)
-                calibration_overrides = estimate_training_overrides(
-                    observed,
-                    _prefixed_config(config, "model."),
-                    _prefixed_config(config, "task."),
-                    hydra_overrides=hydra_overrides,
-                )
-                variants = calibration_grid(
-                    calibration_overrides,
-                    hydra_overrides=hydra_overrides,
-                )
-                settings = _calibration_settings()
-                calibration_results = _run_calibration(
-                    base_overrides, variants, settings
-                )
-                selected_overrides = finalize_rollout_shape_overrides(
-                    _select_calibration(
-                        calibration_results,
-                        calibration_overrides,
-                        allow_fallback=os.environ.get(
-                            "ORBIT_WARS_KAGGLE_ALLOW_CALIBRATION_FALLBACK"
-                        )
-                        == "1",
-                    ),
-                    hydra_overrides,
-                )
-                summary["hardware"] = {
-                    "accelerator_id": observed.accelerator_id,
-                    "gpu_name": observed.gpu_name,
-                    "memory_gb": observed.memory_gb,
-                }
-                summary["calibration"] = {
-                    "settings": settings,
-                    "estimated_overrides": list(calibration_overrides),
-                    "results": calibration_results,
-                    "selected_overrides": list(selected_overrides),
-                }
-                _write_summary(summary)
-                wandb.log(
-                    {
-                        "kaggle_worker/observed_gpu": observed.gpu_name,
-                        "kaggle_worker/observed_memory_gb": observed.memory_gb,
-                        "kaggle_worker/calibration_results": calibration_results,
-                        "kaggle_worker/selected_overrides": list(selected_overrides),
-                    },
-                    step=0,
-                )
-                overrides = list(base_overrides)
-                overrides.extend(selected_overrides)
-                overrides.extend(
-                    [
-                        "telemetry.wandb.enabled=true",
-                        "telemetry.wandb.log_artifacts=true",
-                        "artifacts.artifact_pipeline.docker_validation_async=false",
-                        "artifacts.replay.enabled=false",
-                    ]
-                )
-                command = _render_worker_train_command(tuple(overrides))
-                summary["final_command"] = command
-                _write_summary(summary)
-                print("worker command:", " ".join(command), flush=True)
-                env = _subprocess_env()
-                env.setdefault("WANDB_RUN_ID", run.id)
-                env.setdefault("WANDB_RESUME", "allow")
-                completed = subprocess.run(command, check=False, text=True, env=env)
-                summary["exit_code"] = completed.returncode
-                summary["status"] = (
-                    "completed" if completed.returncode == 0 else "failed"
-                )
-                _write_summary(summary)
-                run.summary["kaggle_worker_exit_code"] = completed.returncode
-                run.finish(exit_code=completed.returncode)
-                run_finished = True
-                if completed.returncode != 0:
-                    raise SystemExit(completed.returncode)
-            except BaseException as exc:
-                summary["status"] = "failed"
-                summary["error"] = _exception_message(exc)
-                summary.setdefault("exit_code", _exit_code(exc))
-                _write_summary(summary)
-                if not run_finished:
-                    run.finish(exit_code=_exit_code(exc))
-                raise
-
-        wandb.agent(
-            sweep_id,
-            function=run_candidate,
-            count=1,
-            entity=wandb_entity,
-            project=wandb_project,
-        )
-        if summary.get("status") == "failed":
-            raise SystemExit(int(summary.get("exit_code", 1)))
-        summary.setdefault("exit_code", 0)
-        summary["status"] = "agent_complete"
-        _write_summary(summary)
+        if standalone:
+            _run_standalone_worker(summary)
+        else:
+            _run_wandb_worker(summary)
     except BaseException as exc:
         summary["status"] = "failed"
         summary["error"] = _exception_message(exc)
         summary.setdefault("exit_code", _exit_code(exc))
+        _write_summary(summary)
+        raise
+
+
+def _run_standalone_worker(summary: dict[str, Any]) -> None:
+    config = _load_standalone_config()
+    summary["standalone_config"] = config
+    summary["standalone_overrides"] = list(_config_to_overrides(config))
+    _write_summary(summary)
+    _run_training_candidate(summary, config, wandb_run=None)
+    if summary.get("status") == "failed":
+        raise SystemExit(int(summary.get("exit_code", 1)))
+    summary.setdefault("exit_code", 0)
+    summary["status"] = "standalone_complete"
+    _write_summary(summary)
+
+
+def _run_wandb_worker(summary: dict[str, Any]) -> None:
+    sweep_id = os.environ.get("WANDB_SWEEP_ID")
+    if not sweep_id:
+        raise SystemExit(
+            "WANDB_SWEEP_ID is required for Kaggle population workers."
+        )
+    if not os.environ.get("WANDB_API_KEY"):
+        summary["wandb_secret_retry"] = _load_wandb_api_key_from_kaggle_secret()
+        _write_summary(summary)
+
+    if not os.environ.get("WANDB_API_KEY"):
+        raise SystemExit(
+            "WANDB_API_KEY is not available after retrying Kaggle Secrets. "
+            "Add or attach a Kaggle Secret named by WANDB_API_KEY_SECRET_NAME, "
+            "or provide WANDB_API_KEY through the worker environment. "
+            f"Secret status: {summary.get('wandb_secret_retry') or summary.get('wandb_secret')}"
+        )
+    wandb_project = os.environ.get("WANDB_PROJECT")
+    wandb_entity = os.environ.get("WANDB_ENTITY")
+    summary["sweep_id"] = sweep_id
+    summary["wandb_agent"] = {
+        "project": wandb_project or "",
+        "entity": wandb_entity or "",
+    }
+    _write_summary(summary)
+
+    import wandb  # type: ignore
+
+    def run_candidate() -> None:
+        run = wandb.init(job_type="kaggle-population-worker")
+        run_finished = False
+        summary["wandb_run"] = {
+            "id": str(getattr(run, "id", "")),
+            "name": str(getattr(run, "name", "")),
+        }
+        _write_summary(summary)
+        try:
+            _run_training_candidate(summary, dict(wandb.config), wandb_run=run)
+            run.summary["kaggle_worker_exit_code"] = summary.get("exit_code", 0)
+            run.finish(exit_code=int(summary.get("exit_code", 0)))
+            run_finished = True
+            if int(summary.get("exit_code", 0)) != 0:
+                raise SystemExit(int(summary.get("exit_code", 1)))
+        except BaseException as exc:
+            summary["status"] = "failed"
+            summary["error"] = _exception_message(exc)
+            summary.setdefault("exit_code", _exit_code(exc))
+            _write_summary(summary)
+            if not run_finished:
+                run.finish(exit_code=_exit_code(exc))
+            raise
+
+    wandb.agent(
+        sweep_id,
+        function=run_candidate,
+        count=1,
+        entity=wandb_entity,
+        project=wandb_project,
+    )
+    if summary.get("status") == "failed":
+        raise SystemExit(int(summary.get("exit_code", 1)))
+    summary.setdefault("exit_code", 0)
+    summary["status"] = "agent_complete"
+    _write_summary(summary)
+
+
+def _run_training_candidate(
+    summary: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    wandb_run: Any | None,
+) -> None:
+    from src.orchestration.throughput import (
+        calibration_grid,
+        estimate_training_overrides,
+        finalize_rollout_shape_overrides,
+    )
+
+    standalone = wandb_run is None
+    try:
+        observed = _hardware_profile(summary)
+        base_overrides = _config_to_overrides(config)
+        if standalone:
+            base_overrides.extend(_standalone_extra_overrides())
+        hydra_overrides = tuple(base_overrides)
+        calibration_overrides = estimate_training_overrides(
+            observed,
+            _prefixed_config(config, "model."),
+            _prefixed_config(config, "task."),
+            hydra_overrides=hydra_overrides,
+        )
+        variants = calibration_grid(
+            calibration_overrides,
+            hydra_overrides=hydra_overrides,
+        )
+        settings = _calibration_settings()
+        calibration_results = _run_calibration(base_overrides, variants, settings)
+        selected_overrides = finalize_rollout_shape_overrides(
+            _select_calibration(
+                calibration_results,
+                calibration_overrides,
+                allow_fallback=os.environ.get(
+                    "ORBIT_WARS_KAGGLE_ALLOW_CALIBRATION_FALLBACK"
+                )
+                == "1",
+            ),
+            hydra_overrides,
+        )
+        summary["hardware"] = {
+            "accelerator_id": observed.accelerator_id,
+            "gpu_name": observed.gpu_name,
+            "memory_gb": observed.memory_gb,
+        }
+        summary["calibration"] = {
+            "settings": settings,
+            "estimated_overrides": list(calibration_overrides),
+            "results": calibration_results,
+            "selected_overrides": list(selected_overrides),
+        }
+        _write_summary(summary)
+        if wandb_run is not None:
+            import wandb  # type: ignore
+
+            wandb.log(
+                {
+                    "kaggle_worker/observed_gpu": observed.gpu_name,
+                    "kaggle_worker/observed_memory_gb": observed.memory_gb,
+                    "kaggle_worker/calibration_results": calibration_results,
+                    "kaggle_worker/selected_overrides": list(selected_overrides),
+                },
+                step=0,
+            )
+        overrides = list(base_overrides)
+        overrides.extend(selected_overrides)
+        overrides = _apply_smoke_training_overrides(overrides)
+        if standalone:
+            overrides.extend(
+                [
+                    "telemetry.wandb.enabled=false",
+                    "telemetry.wandb.log_artifacts=false",
+                    "artifacts.artifact_pipeline.docker_validation_async=false",
+                    "artifacts.replay.enabled=false",
+                ]
+            )
+        else:
+            overrides.extend(
+                [
+                    "telemetry.wandb.enabled=true",
+                    "telemetry.wandb.log_artifacts=true",
+                    "artifacts.artifact_pipeline.docker_validation_async=false",
+                    "artifacts.replay.enabled=false",
+                ]
+            )
+        command = _render_worker_train_command(tuple(overrides))
+        summary["final_command"] = command
+        summary["selected_overrides"] = overrides
+        _write_summary(summary)
+        print("worker command:", " ".join(command), flush=True)
+        env = _subprocess_env()
+        if wandb_run is not None:
+            env.setdefault("WANDB_RUN_ID", wandb_run.id)
+            env.setdefault("WANDB_RESUME", "allow")
+        completed = subprocess.run(command, check=False, text=True, env=env)
+        summary["exit_code"] = completed.returncode
+        summary["checkpoint_paths"] = _collect_checkpoint_paths()
+        summary["status"] = "completed" if completed.returncode == 0 else "failed"
+        _write_summary(summary)
+        if completed.returncode != 0:
+            raise SystemExit(completed.returncode)
+    except BaseException as exc:
+        summary["status"] = "failed"
+        summary["error"] = _exception_message(exc)
+        summary.setdefault("exit_code", _exit_code(exc))
+        summary.setdefault("checkpoint_paths", _collect_checkpoint_paths())
         _write_summary(summary)
         raise
 
@@ -549,18 +605,82 @@ def _select_calibration(
 
 
 def _calibration_settings() -> dict[str, int]:
+    smoke = _is_smoke_run()
     return {
         "warmup": _env_int("ORBIT_WARS_KAGGLE_CALIBRATION_WARMUP", 0, minimum=0),
         "updates": _env_int("ORBIT_WARS_KAGGLE_CALIBRATION_UPDATES", 1, minimum=1),
         "max_variants": _env_int(
-            "ORBIT_WARS_KAGGLE_CALIBRATION_MAX_VARIANTS", 3, minimum=1
+            "ORBIT_WARS_KAGGLE_CALIBRATION_MAX_VARIANTS",
+            1 if smoke else 3,
+            minimum=1,
         ),
         "timeout_seconds": _env_int(
             "ORBIT_WARS_KAGGLE_CALIBRATION_TIMEOUT_SECONDS",
-            1800,
+            600 if smoke else 1800,
             minimum=1,
         ),
     }
+
+
+def _is_smoke_run() -> bool:
+    return os.environ.get("ORBIT_WARS_KAGGLE_RUN_TYPE", "").strip().lower() == "smoke"
+
+
+def _is_standalone_mode() -> bool:
+    return (
+        os.environ.get("ORBIT_WARS_KAGGLE_WORKER_MODE", "").strip().lower()
+        == "standalone"
+    )
+
+
+def _load_standalone_config() -> dict[str, Any]:
+    from src.orchestration.wandb_sweeps import load_standalone_config
+
+    sweep_yaml = os.environ.get("WANDB_SWEEP_YAML", "").strip()
+    if not sweep_yaml:
+        raise SystemExit(
+            "WANDB_SWEEP_YAML is required for standalone Kaggle workers."
+        )
+    path = Path(sweep_yaml)
+    if not path.is_file():
+        raise SystemExit(f"Packaged sweep YAML is missing: {path}")
+    return load_standalone_config(path)
+
+
+def _standalone_extra_overrides() -> list[str]:
+    raw = os.environ.get("ORBIT_WARS_KAGGLE_STANDALONE_OVERRIDES", "").strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = [item.strip() for item in raw.split(",") if item.strip()]
+    if not isinstance(parsed, list):
+        raise SystemExit(
+            "ORBIT_WARS_KAGGLE_STANDALONE_OVERRIDES must be a JSON list of Hydra overrides."
+        )
+    return [str(item) for item in parsed if str(item).strip()]
+
+
+def _collect_checkpoint_paths() -> list[str]:
+    root = Path("outputs")
+    if not root.exists():
+        return []
+    return sorted(str(path.resolve()) for path in root.rglob("jax_ckpt*.pkl"))
+
+
+def _apply_smoke_training_overrides(overrides: list[str]) -> list[str]:
+    """Apply short training defaults for smoke validation runs."""
+
+    if not _is_smoke_run():
+        return overrides
+    filtered = [
+        item
+        for item in overrides
+        if not item.startswith("training.total_updates=")
+    ]
+    filtered.append("training.total_updates=10")
+    return filtered
 
 
 def _without_training_shape_overrides(overrides: list[str]) -> list[str]:
@@ -609,7 +729,7 @@ def _load_wandb_api_key_from_kaggle_secret() -> dict[str, object]:
 
     max_wait_seconds = _env_int(
         "ORBIT_WARS_KAGGLE_SECRET_WAIT_SECONDS",
-        120,
+        30 if _is_smoke_run() else 120,
         minimum=0,
     )
     sleep_seconds = 2.0
@@ -884,11 +1004,16 @@ def _safe_worker_env() -> dict[str, str]:
         "ORBIT_WARS_KAGGLE_CALIBRATION_TIMEOUT_SECONDS",
         "ORBIT_WARS_KAGGLE_CALIBRATION_UPDATES",
         "ORBIT_WARS_KAGGLE_CALIBRATION_WARMUP",
+        "ORBIT_WARS_KAGGLE_RUN_TYPE",
+        "ORBIT_WARS_KAGGLE_STANDALONE_OVERRIDES",
+        "ORBIT_WARS_KAGGLE_TRUST_BASE_JAX",
+        "ORBIT_WARS_KAGGLE_WORKER_MODE",
         "WANDB_ENTITY",
         "WANDB_API_KEY_SECRET_NAME",
         "WANDB_PROJECT",
         "WANDB_RESUME",
         "WANDB_SWEEP_ID",
+        "WANDB_SWEEP_YAML",
     )
     return {key: os.environ[key] for key in keys if key in os.environ}
 
