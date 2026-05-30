@@ -90,6 +90,7 @@ __all__ = [
     "compose_hydra_train_config",
     "register_runtime_resolvers",
     "train_config_from_omegaconf",
+    "validate_hydra_overrides",
 ]
 
 
@@ -103,6 +104,21 @@ def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfi
     with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
         composed = compose(config_name="config", overrides=override_list)
     return train_config_from_omegaconf(composed, overrides=override_list)
+
+
+def validate_hydra_overrides(overrides: list[str]) -> None:
+    """Validate Hydra CLI overrides compose into a runtime config.
+
+    Args:
+        overrides: Hydra override strings (for example ``format=2p_4p_16env``).
+
+    Raises:
+        hydra.errors.MissingConfigException: Unknown config group or option.
+        ValueError: Post-compose runtime validation failure.
+    """
+
+    if overrides:
+        compose_hydra_train_config(overrides)
 
 
 def config_from_plain(data: dict[str, Any]) -> TrainConfig:

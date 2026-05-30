@@ -16,6 +16,8 @@ from src.orchestration.kaggle_cli import (
     KaggleCli,
     KaggleKernelRef,
     kaggle_push_supports_secret_flag,
+    parse_kernel_ref_from_text,
+    resolve_kaggle_username,
 )
 from src.orchestration.kernel_package import render_kernel_package
 from src.orchestration.population import AcceleratorPreference
@@ -89,6 +91,17 @@ class PackageRequest:
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
+
+
+def _validate_package_hydra_overrides(args: PackageRequest | Any) -> None:
+    """Fail fast on invalid Hydra overrides before packaging or kernel push."""
+
+    overrides = list(getattr(args, "standalone_overrides", []) or [])
+    if not overrides:
+        return
+    from src.config import validate_hydra_overrides
+
+    validate_hydra_overrides(overrides)
 
 
 def prepare(
@@ -340,6 +353,21 @@ def _looks_like_unsupported_accelerator_flag(stdout: str, stderr: str) -> bool:
     return any(pattern in text for pattern in patterns)
 
 
+def _resolve_launch_kernel_id(*, kernel_id: str, push_output: str) -> str:
+    """Return the pushed kernel ref for post-launch guidance."""
+
+    parsed = parse_kernel_ref_from_text(push_output)
+    if parsed is not None:
+        return parsed
+    ref = KaggleKernelRef.parse(kernel_id)
+    if ref.owner != "replace-me":
+        return str(ref)
+    owner = resolve_kaggle_username()
+    if owner:
+        return str(KaggleKernelRef(owner=owner, slug=ref.slug))
+    return str(ref)
+
+
 def _print_success(
     result: dict[str, Any],
     *,
@@ -350,6 +378,7 @@ def _print_success(
     output = str(result.get("stdout", "") or result.get("stderr", "")).strip()
     if output:
         print(output, flush=True)
+    kernel_id = _resolve_launch_kernel_id(kernel_id=kernel_id, push_output=output)
     kernel_url = f"https://www.kaggle.com/code/{kernel_id}"
     if standalone:
         checklist = {
@@ -445,12 +474,13 @@ def preflight(args: PackageRequest | Any) -> dict[str, Any]:
     else:
         _check_wandb(args.project, args.entity, checks)
         _check_kaggle_secret_attachment(checks)
-    if not os.environ.get("KAGGLE_USERNAME"):
+    if resolve_kaggle_username() is None:
         _record_check(
             checks,
             "kaggle_username_env",
             "warning",
-            "KAGGLE_USERNAME is not set; pass --kernel-id explicitly if your Kaggle owner differs.",
+            "KAGGLE_USERNAME is not set and kaggle.json username was not found; "
+            "pass --kernel-id explicitly if your Kaggle owner differs.",
         )
     return {
         "ok": not any(check["status"] == "error" for check in checks),
@@ -700,7 +730,7 @@ def _tail(text: str | None, *, limit: int = 2000) -> str:
 
 
 def default_kernel_id() -> str:
-    owner = os.environ.get("KAGGLE_USERNAME", "replace-me")
+    owner = resolve_kaggle_username() or "replace-me"
     return f"{owner}/orbit-wars-kaggle-runner"
 
 
@@ -794,6 +824,7 @@ def run_latest_checkpoint(args: PackageRequest | Any) -> None:
 def run_prepare(args: PackageRequest | Any) -> None:
     """Render a worker package and print summary JSON."""
 
+    _validate_package_hydra_overrides(args)
     accelerators = tuple(
         args.accelerators or AcceleratorPreference().accelerator_ids
     )
@@ -815,6 +846,7 @@ def run_prepare(args: PackageRequest | Any) -> None:
 def run_preflight(args: PackageRequest | Any) -> int:
     """Run preflight checks and print JSON; return exit code."""
 
+    _validate_package_hydra_overrides(args)
     payload = preflight(args)
     print(json.dumps(payload, indent=2, sort_keys=True))
     if any(check["status"] == "error" for check in payload["checks"]):
@@ -825,6 +857,7 @@ def run_preflight(args: PackageRequest | Any) -> int:
 def run_launch(args: PackageRequest | Any) -> None:
     """Create optional W&B sweep and launch kernel(s)."""
 
+    _validate_package_hydra_overrides(args)
     if args.create_sweep and args.no_wandb:
         raise SystemExit("--create-sweep cannot be used with --no-wandb.")
     sweep_id = args.sweep_id

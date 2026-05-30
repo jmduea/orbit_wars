@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import json
+import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, Sequence
+
+_KERNEL_URL_RE = re.compile(
+    r"https?://(?:www\.)?kaggle\.com/code/([^/\s]+/[^\s/?#]+)",
+    re.IGNORECASE,
+)
 
 
 def kaggle_push_supports_secret_flag(*, executable: str = "kaggle") -> bool:
@@ -57,6 +65,42 @@ class KaggleKernelRef:
 
     def __str__(self) -> str:
         return f"{self.owner}/{self.slug}"
+
+
+def _kaggle_config_path() -> Path:
+    config_dir = os.environ.get("KAGGLE_CONFIG_DIR")
+    if config_dir:
+        return Path(config_dir) / "kaggle.json"
+    return Path.home() / ".kaggle" / "kaggle.json"
+
+
+def resolve_kaggle_username() -> str | None:
+    """Return Kaggle owner from ``KAGGLE_USERNAME`` or ``kaggle.json``."""
+
+    env_username = os.environ.get("KAGGLE_USERNAME", "").strip()
+    if env_username:
+        return env_username
+    path = _kaggle_config_path()
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    username = str(data.get("username", "")).strip()
+    return username or None
+
+
+def parse_kernel_ref_from_text(text: str) -> str | None:
+    """Parse ``owner/slug`` from Kaggle kernel URLs in CLI output."""
+
+    match = _KERNEL_URL_RE.search(text)
+    if match is None:
+        return None
+    try:
+        return str(KaggleKernelRef.parse(match.group(1)))
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from hydra.errors import MissingConfigException
 
 from src.cli import train_hosts
 
@@ -119,3 +120,19 @@ def test_dispatch_local_calls_hydra(monkeypatch) -> None:
     )
 
     assert captured == [["print_resolved_config=true"]]
+
+
+def test_dispatch_kaggle_rejects_invalid_format_before_launch() -> None:
+    route = train_hosts.parse_train_argv(
+        ["kaggle", "--run-type", "smoke", "format=2p_4p_16envb"]
+    )
+
+    with pytest.raises(MissingConfigException, match="2p_4p_16envb"):
+        train_hosts.dispatch(route)
+
+
+def test_validate_hydra_overrides_lists_valid_format_options() -> None:
+    with pytest.raises(MissingConfigException, match="2p_4p_16env"):
+        from src.config import validate_hydra_overrides
+
+        validate_hydra_overrides(["format=2p_4p_16envb"])

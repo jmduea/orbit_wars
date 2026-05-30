@@ -5,9 +5,17 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+from hydra.errors import MissingConfigException
+
 from src.orchestration import kaggle_runner as launcher
 from src.orchestration.accelerators import KAGGLE_TPU_V5E8, is_tpu_accelerator
-from src.orchestration.kaggle_cli import KaggleCli, KaggleKernelRef
+from src.orchestration.kaggle_cli import (
+    KaggleCli,
+    KaggleKernelRef,
+    parse_kernel_ref_from_text,
+    resolve_kaggle_username,
+)
 from src.orchestration.kernel_package import render_kernel_package
 from src.orchestration.population import (
     AcceleratorPreference,
@@ -362,6 +370,118 @@ def test_resolve_standalone_parameters_picks_first_values() -> None:
 def test_default_sweep_points_at_conf_mvp_yaml() -> None:
     assert launcher.DEFAULT_SWEEP.name == "kaggle_runner_mvp.yaml"
     assert launcher.DEFAULT_SWEEP.parts[-3:] == ("sweeps", "wandb", "kaggle_runner_mvp.yaml")
+
+
+def test_run_launch_rejects_invalid_hydra_override_before_push(monkeypatch) -> None:
+    pushed = False
+
+    def fake_push(*args: object, **kwargs: object) -> dict[str, object]:
+        del args, kwargs
+        nonlocal pushed
+        pushed = True
+        return {"command": [], "returncode": 0, "stdout": "", "stderr": ""}
+
+    monkeypatch.setattr(launcher, "_push_kernel", fake_push)
+
+    args = launcher.PackageRequest(
+        work_dir=launcher.DEFAULT_WORK_DIR,
+        kernel_id="owner/kernel",
+        title="test",
+        sweep_yaml=launcher.DEFAULT_SWEEP,
+        run_type="smoke",
+        no_wandb=True,
+        standalone_overrides=["format=2p_4p_16envb"],
+        accelerators=("NvidiaTeslaP100",),
+        dry_run=False,
+    )
+
+    with pytest.raises(MissingConfigException, match="2p_4p_16envb"):
+        launcher.run_launch(args)
+
+    assert not pushed
+
+
+def test_run_preflight_rejects_invalid_hydra_override() -> None:
+    args = launcher.PackageRequest(
+        work_dir=launcher.DEFAULT_WORK_DIR,
+        kernel_id="owner/kernel",
+        title="test",
+        sweep_yaml=launcher.DEFAULT_SWEEP,
+        no_wandb=True,
+        standalone_overrides=["format=2p_4p_16envb"],
+    )
+
+    with pytest.raises(MissingConfigException, match="2p_4p_16env"):
+        launcher.run_preflight(args)
+
+
+def test_parse_kernel_ref_from_text_reads_kaggle_code_url() -> None:
+    ref = parse_kernel_ref_from_text(
+        "Kernel pushed to https://www.kaggle.com/code/jonduea/orbit-wars-kaggle-runner"
+    )
+
+    assert ref == "jonduea/orbit-wars-kaggle-runner"
+
+
+def test_resolve_kaggle_username_prefers_env(monkeypatch) -> None:
+    monkeypatch.setenv("KAGGLE_USERNAME", "from-env")
+
+    assert resolve_kaggle_username() == "from-env"
+
+
+def test_resolve_kaggle_username_reads_kaggle_json(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+    config_dir = tmp_path / "kaggle-config"
+    config_dir.mkdir()
+    (config_dir / "kaggle.json").write_text(
+        '{"username":"from-json","key":"secret"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KAGGLE_CONFIG_DIR", str(config_dir))
+
+    assert resolve_kaggle_username() == "from-json"
+
+
+def test_default_kernel_id_uses_resolved_owner(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+    config_dir = tmp_path / "kaggle-config"
+    config_dir.mkdir()
+    (config_dir / "kaggle.json").write_text(
+        '{"username":"jonduea","key":"secret"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KAGGLE_CONFIG_DIR", str(config_dir))
+
+    assert launcher.default_kernel_id() == "jonduea/orbit-wars-kaggle-runner"
+
+
+def test_print_success_checklist_uses_kernel_from_push_stdout(capsys) -> None:
+    launcher._print_success(
+        {
+            "stdout": (
+                "Your kernel is accessible at: "
+                "https://www.kaggle.com/code/jonduea/orbit-wars-kaggle-runner"
+            ),
+            "stderr": "",
+        },
+        kernel_id="replace-me/orbit-wars-kaggle-runner",
+        ledger=Path("/tmp/ledger.jsonl"),
+        standalone=True,
+    )
+
+    captured = capsys.readouterr().out
+    assert '"kernel_id": "jonduea/orbit-wars-kaggle-runner"' in captured
+    assert (
+        '"kernel_url": "https://www.kaggle.com/code/jonduea/orbit-wars-kaggle-runner"'
+        in captured
+    )
+    assert (
+        '"verify_output": "uv run ow train kaggle sync '
+        'jonduea/orbit-wars-kaggle-runner --force"'
+        in captured
+    )
 
 
 def test_render_kernel_package_rewrites_gpu_jax_dependency(tmp_path: Path) -> None:

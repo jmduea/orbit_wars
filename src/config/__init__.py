@@ -3,6 +3,7 @@ from .runtime import (
     config_from_plain,
     register_runtime_resolvers,
     train_config_from_omegaconf,
+    validate_hydra_overrides,
 )
 from .schema import (
     ArtifactPipelineConfig,
@@ -52,4 +53,5 @@ __all__ = [
     "config_from_plain",
     "register_runtime_resolvers",
     "train_config_from_omegaconf",
+    "validate_hydra_overrides",
 ]
