@@ -31,7 +31,10 @@ from src.orchestration.throughput import (
     largest_compatible_microbatch,
     rollout_group_env_counts,
 )
-from src.orchestration.wandb_sweeps import add_population_metadata, resolve_standalone_parameters
+from src.orchestration.wandb_sweeps import (
+    add_population_metadata,
+    resolve_standalone_parameters,
+)
 
 
 def test_accelerator_preference_ordered_fallback() -> None:
@@ -442,6 +445,21 @@ def test_resolve_kaggle_username_reads_kaggle_json(
     monkeypatch.setenv("KAGGLE_CONFIG_DIR", str(config_dir))
 
     assert resolve_kaggle_username() == "from-json"
+
+
+def test_resolve_kaggle_username_reads_credentials_json(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("KAGGLE_USERNAME", raising=False)
+    config_dir = tmp_path / "kaggle-config"
+    config_dir.mkdir()
+    (config_dir / "credentials.json").write_text(
+        '{"username":"from-oauth","access_token":"token"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KAGGLE_CONFIG_DIR", str(config_dir))
+
+    assert resolve_kaggle_username() == "from-oauth"
 
 
 def test_default_kernel_id_uses_resolved_owner(tmp_path: Path, monkeypatch) -> None:

@@ -67,20 +67,22 @@ class KaggleKernelRef:
         return f"{self.owner}/{self.slug}"
 
 
-def _kaggle_config_path() -> Path:
+def _kaggle_config_dir() -> Path:
     config_dir = os.environ.get("KAGGLE_CONFIG_DIR")
     if config_dir:
-        return Path(config_dir) / "kaggle.json"
-    return Path.home() / ".kaggle" / "kaggle.json"
+        return Path(config_dir)
+    return Path.home() / ".kaggle"
 
 
-def resolve_kaggle_username() -> str | None:
-    """Return Kaggle owner from ``KAGGLE_USERNAME`` or ``kaggle.json``."""
+def _kaggle_config_path() -> Path:
+    return _kaggle_config_dir() / "kaggle.json"
 
-    env_username = os.environ.get("KAGGLE_USERNAME", "").strip()
-    if env_username:
-        return env_username
-    path = _kaggle_config_path()
+
+def _kaggle_credentials_path() -> Path:
+    return _kaggle_config_dir() / "credentials.json"
+
+
+def _read_username_from_json(path: Path) -> str | None:
     if not path.is_file():
         return None
     try:
@@ -89,6 +91,20 @@ def resolve_kaggle_username() -> str | None:
         return None
     username = str(data.get("username", "")).strip()
     return username or None
+
+
+def resolve_kaggle_username() -> str | None:
+    """Return Kaggle owner from env, ``kaggle.json``, or OAuth ``credentials.json``."""
+
+    env_username = os.environ.get("KAGGLE_USERNAME", "").strip()
+    if env_username:
+        return env_username
+
+    legacy_username = _read_username_from_json(_kaggle_config_path())
+    if legacy_username:
+        return legacy_username
+
+    return _read_username_from_json(_kaggle_credentials_path())
 
 
 def parse_kernel_ref_from_text(text: str) -> str | None:

@@ -479,8 +479,9 @@ def preflight(args: PackageRequest | Any) -> dict[str, Any]:
             checks,
             "kaggle_username_env",
             "warning",
-            "KAGGLE_USERNAME is not set and kaggle.json username was not found; "
-            "pass --kernel-id explicitly if your Kaggle owner differs.",
+            "KAGGLE_USERNAME is not set and no username was found in kaggle.json "
+            "or credentials.json; pass --kernel-id explicitly if your Kaggle owner "
+            "differs.",
         )
     return {
         "ok": not any(check["status"] == "error" for check in checks),
@@ -858,6 +859,10 @@ def run_launch(args: PackageRequest | Any) -> None:
     """Create optional W&B sweep and launch kernel(s)."""
 
     _validate_package_hydra_overrides(args)
+    preflight_payload = preflight(args)
+    if not preflight_payload["ok"]:
+        print(json.dumps(preflight_payload, indent=2, sort_keys=True))
+        raise SystemExit(1)
     if args.create_sweep and args.no_wandb:
         raise SystemExit("--create-sweep cannot be used with --no-wandb.")
     sweep_id = args.sweep_id
