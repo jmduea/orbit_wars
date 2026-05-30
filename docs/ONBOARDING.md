@@ -156,6 +156,31 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 | `src/artifacts/run_paths.py` | Campaign/run directory layout |
 | `src/artifacts/checkpoint_retention.py` | Retention policy for checkpoints |
 
+#### Seed scheduler — config and observability
+
+Periodic rollout reseeding is **off by default** (`training.reseed_every_updates: 0`, `training.reseed_on_plateau: false`). Enable periodic swaps with Hydra, for example:
+
+```bash
+uv run python -m src.train training.reseed_every_updates=50
+```
+
+Plateau-triggered reseeding uses `training.plateau_metric`, `plateau_window`, and `plateau_delta`. When `heldout_eval_seed_set` is non-empty, reseeds draw from a shuffled pool instead of random jumps.
+
+During JAX training (`src/jax/train.py`), the scheduler runs **before each rollout**. When a swap fires, the PRNG key is replaced and a single-entry list is attached to the update record:
+
+| Field | Meaning |
+|-------|---------|
+| `reseed_events` | List of `{update, old_seed, new_seed, reason, policy}`; empty when no swap |
+| `seed_scheduler_policy` | Policy that would apply on the next reseed (`incremental`, `random_jump`, `shuffled_pool`) |
+| `seed_scheduler_plateau_metric` | Metric name monitored for plateau detection |
+
+These fields land in the run JSONL (`campaigns/*/runs/*/logs/*_jax.jsonl`) and in W&B when telemetry is enabled (`events` metric group).
+
+**Verify locally**
+
+- Fast unit coverage: `uv run --group dev pytest tests/test_seed_scheduler.py -m "not slow and not jax"`
+- End-to-end smoke (slow/JAX compile): `uv run --group dev pytest tests/test_jax_seed_scheduler.py -m slow`
+
 ### Hydra Configuration — high-signal files
 
 | Path | Role |
@@ -182,6 +207,8 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 | `test_telemetry.py`, `test_metric_registry.py` | Metrics and logging |
 | `test_artifact_pipeline.py`, `test_replay.py`, `test_run_paths.py` | Artifacts and paths |
 | `test_jax_train_timing.py` | Training loop timing smoke |
+| `test_seed_scheduler.py` | Seed scheduler policies and parse helpers |
+| `test_jax_seed_scheduler.py` | JAX JSONL `reseed_events` integration smoke |
 | `test_kaggle_submission_packager.py` | Submission packaging |
 
 ### Scripts
