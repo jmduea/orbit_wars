@@ -215,6 +215,9 @@ class OrbitWarsEnv:
             "terminal_score_share": (
                 terminal_diagnostics["terminal_score_share"] if done else 0.0
             ),
+            "terminal_ship_differential": (
+                terminal_diagnostics["terminal_ship_differential"] if done else 0.0
+            ),
             "terminal_survival_time": (
                 terminal_diagnostics["terminal_survival_time"] if done else 0.0
             ),
@@ -397,6 +400,22 @@ def terminal_reward_diagnostics(
     return diagnostics
 
 
+def normalized_ship_differential_reward(
+    scores: list[float], learner_index: int
+) -> float:
+    """Best-opponent normalized ship differential in [-1, 1] (0 on all-zero scores)."""
+
+    learner = float(scores[learner_index])
+    max_other = max(
+        (float(score) for i, score in enumerate(scores) if i != learner_index),
+        default=0.0,
+    )
+    denom = learner + max_other
+    if denom <= 0.0:
+        return 0.0
+    return (learner - max_other) / denom
+
+
 def terminal_reward_from_scores(
     scores: list[float],
     task_cfg: TaskConfig,
@@ -417,6 +436,9 @@ def terminal_reward_from_scores(
     is_first = 1.0 if learner_score == best_score and learner_score > 0.0 else 0.0
     total_score = sum(padded_scores)
     score_share = learner_score / total_score if total_score > 0.0 else 0.0
+    ship_differential = normalized_ship_differential_reward(
+        padded_scores, learner_index
+    )
     ranked_reward = (
         1.0 - 2.0 * (placement - 1.0) / (player_count - 1.0)
         if player_count > 1
@@ -431,10 +453,13 @@ def terminal_reward_from_scores(
         reward = score_share
     elif mode == "survival_plus_rank":
         reward = ranked_reward
+    elif mode == "normalized_ship_differential":
+        reward = ship_differential
     else:
         raise ValueError(
             "reward.terminal_reward_mode must be one of binary_win, ranked, "
-            f"score_share, or survival_plus_rank; got {mode!r}."
+            "score_share, survival_plus_rank, or normalized_ship_differential; "
+            f"got {mode!r}."
         )
     return {
         "terminal_reward_unscaled": float(reward),
@@ -442,6 +467,7 @@ def terminal_reward_from_scores(
         "terminal_placement": float(placement),
         "terminal_is_first": float(is_first),
         "terminal_score_share": float(score_share),
+        "terminal_ship_differential": float(ship_differential),
         "terminal_survival_time": 0.0,
         "terminal_ranked_reward": float(ranked_reward),
     }

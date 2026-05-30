@@ -66,6 +66,13 @@ WORKSTATION_VALIDATION_OVERRIDES = [
     "seed=42",
 ]
 
+DEFAULT_OVERRIDES = [
+    "model=transformer_factorized",
+    "opponents=self_play_only",
+    "curriculum=off",
+    "seed=42",
+]
+
 
 def _git_head_sha() -> str | None:
     try:
@@ -132,12 +139,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--overrides",
         nargs="*",
-        default=[
-            "model=transformer_factorized",
-            "opponents=self_play_only",
-            "curriculum=off",
-            "seed=42",
-        ],
+        default=None,
+        help="Hydra overrides; with --preset, merged after the preset bundle.",
     )
     parser.add_argument(
         "--preset",
@@ -177,8 +180,12 @@ def main() -> None:
     default_backend = jax.default_backend()
     if args.preset == "validation":
         overrides = list(WORKSTATION_VALIDATION_OVERRIDES)
-    else:
+        if args.overrides:
+            overrides.extend(args.overrides)
+    elif args.overrides is not None:
         overrides = list(args.overrides)
+    else:
+        overrides = list(DEFAULT_OVERRIDES)
     cfg = compose_hydra_train_config(overrides)
     group_specs = rollout_group_summary(cfg)
     total_envs = sum(int(spec["num_envs"]) for spec in group_specs)

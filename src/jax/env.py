@@ -135,6 +135,7 @@ class JaxStepResult(NamedTuple):
     terminal_placement: jax.Array
     terminal_is_first: jax.Array
     terminal_score_share: jax.Array
+    terminal_ship_differential: jax.Array
     terminal_survival_time: jax.Array
 
 
@@ -347,6 +348,7 @@ def _finish_step(
         learner_placement,
         learner_is_first,
         score_share,
+        ship_differential,
         survival_time,
     ) = _terminal(next_game, state.learner_player, cfg, reward_cfg)
     shaping = _shaping(previous_game, next_game, state.learner_player, reward_cfg)
@@ -379,6 +381,7 @@ def _finish_step(
         terminal_placement=jnp.where(done, learner_placement, 0.0),
         terminal_is_first=jnp.where(done, learner_is_first, 0.0),
         terminal_score_share=jnp.where(done, score_share, 0.0),
+        terminal_ship_differential=jnp.where(done, ship_differential, 0.0),
         terminal_survival_time=jnp.where(done, survival_time, 0.0),
     )
     return next_state, result
@@ -711,6 +714,21 @@ def _terminal(
         jnp.float32
     )
     score_share = jnp.where(total_score > 0.0, learner_score / total_score, 0.0)
+    learner_idx = jnp.clip(learner_player, 0, scores.shape[0] - 1)
+    max_other = jnp.max(
+        jnp.where(
+            jnp.arange(scores.shape[0], dtype=jnp.int32) == learner_idx,
+            -jnp.inf,
+            scores,
+        )
+    )
+    max_other = jnp.where(jnp.isfinite(max_other), max_other, 0.0)
+    ship_denom = learner_score + max_other
+    ship_differential = jnp.where(
+        ship_denom > 0.0,
+        (learner_score - max_other) / ship_denom,
+        0.0,
+    )
     player_count = jnp.asarray(owners.shape[0], dtype=jnp.float32)
     ranked_reward = jnp.where(
         player_count > 1.0,
@@ -733,13 +751,25 @@ def _terminal(
         reward = share_reward
     elif mode == "survival_plus_rank":
         reward = survival_rank_reward
+    elif mode == "normalized_ship_differential":
+        reward = ship_differential
     else:
         raise ValueError(
             "reward.terminal_reward_mode must be one of binary_win, ranked, "
-            f"score_share, or survival_plus_rank; got {mode!r}."
+            "score_share, survival_plus_rank, or normalized_ship_differential; "
+            f"got {mode!r}."
         )
     reward = _apply_early_terminal_reward_shaping_jax(reward, game.step, reward_cfg)
-    return done, reward, rank, placement, is_first, score_share, survival_time
+    return (
+        done,
+        reward,
+        rank,
+        placement,
+        is_first,
+        score_share,
+        ship_differential,
+        survival_time,
+    )
 
 
 def _apply_early_terminal_reward_shaping_jax(

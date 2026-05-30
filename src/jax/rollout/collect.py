@@ -316,6 +316,7 @@ def collect_rollout_jax(
             "terminal_placement": result.terminal_placement,
             "terminal_survival_time": result.terminal_survival_time,
             "terminal_score_share": result.terminal_score_share,
+            "terminal_ship_differential": result.terminal_ship_differential,
             **{
                 key: (
                     historical_fallback_slots

@@ -35,6 +35,7 @@ BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     "placement_4p_sum",
     "survival_time_sum",
     "score_share_sum",
+    "ship_differential_sum",
     "decision_count",
     "noop_count",
     "friendly_target_count",
@@ -114,6 +115,9 @@ def _base_episode_metrics(
         ),
         "survival_time_sum": (data["terminal_survival_time"] * done_float).sum(),
         "score_share_sum": (data["terminal_score_share"] * done_float).sum(),
+        "ship_differential_sum": (
+            data["terminal_ship_differential"] * done_float
+        ).sum(),
         "decision_count": decision_count,
         "noop_count": noop_count,
     }
@@ -185,6 +189,7 @@ def _core_metric_fields(
         "placement_4p_sum": base["placement_4p_sum"],
         "survival_time_sum": base["survival_time_sum"],
         "score_share_sum": base["score_share_sum"],
+        "ship_differential_sum": base["ship_differential_sum"],
         "decision_count": decision_count,
         "noop_count": noop_count,
         "friendly_target_count": ZERO_F32,

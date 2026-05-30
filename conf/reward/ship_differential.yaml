@@ -1,0 +1,5 @@
+defaults:
+  - terminal_only
+  - _self_
+
+terminal_reward_mode: normalized_ship_differential
