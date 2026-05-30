@@ -190,14 +190,22 @@ def branch_guard(
     if not open_claims:
         return {"allow": True, "skipped": "no open claim for owner"}
 
-    if len(open_claims) > 1:
+    if len(open_claims) > 1 and not issue_env:
         issues = ", ".join(f"#{int(c['issue'])}" for c in open_claims)
+        reason = (
+            f"Owner {owner!r} has multiple open claims ({issues}); "
+            f"set ORBIT_WARS_ISSUE_ID=<N> per parallel agent/subagent"
+        )
         return {
-            "allow": True,
-            "branch_warning": (
-                f"Owner {owner!r} has multiple open claims ({issues}); "
-                f"set ORBIT_WARS_ISSUE_ID=<N> per parallel agent/subagent"
-            ),
+            "allow": False,
+            "reason": reason,
+            "blockers": [reason],
+            "next_steps": [
+                "export ORBIT_WARS_ISSUE_ID=<issue-number>",
+                "export ORBIT_WARS_AGENT_ID=<unique-id>",
+                "uv run python scripts/roadmap.py claim --issue N --path … --setup-worktree",
+                "cd worktrees/issue-N/",
+            ],
         }
 
     claim = open_claims[0]
