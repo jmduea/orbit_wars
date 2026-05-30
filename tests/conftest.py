@@ -22,7 +22,6 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_jax_env.py": "jax_env",
     "test_jax_env_dispatch.py": "jax_env",
     "test_jax_env_parity.py": "jax_env",
-    "test_jax_policy_gnn.py": "policy",
     "test_jax_policy_encoder.py": "policy",
     "test_jax_policy_factorized_decoder.py": "policy",
     "test_trajectory_shield_factorized.py": "policy",
@@ -37,7 +36,6 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_artifact_pipeline.py": "artifacts",
     "test_replay.py": "artifacts",
     "test_kaggle_submission_packager.py": "artifacts",
-    "test_submission_runtime_metadata.py": "artifacts",
     "test_curriculum.py": "curriculum",
     "test_jax_train_timing.py": "curriculum",
 }
@@ -47,7 +45,6 @@ FULL_JAX_FILES = frozenset(
         "test_jax_env.py",
         "test_jax_env_dispatch.py",
         "test_jax_env_parity.py",
-        "test_jax_policy_gnn.py",
         "test_jax_ppo.py",
         "test_jax_rollout.py",
         "test_jax_scripted_opponents.py",
@@ -58,7 +55,6 @@ FULL_JAX_FILES = frozenset(
 JAX_TEST_NAMES = frozenset(
     {
         "test_recent_biased_snapshot_selection_prefers_newer_updates",
-        "test_jax_replay_actor_handles_sequence_policy_outputs",
         "test_python_and_jax_launch_reasons_match_for_sun_and_hit_modes",
     }
 )
@@ -71,7 +67,6 @@ SLOW_FILES = frozenset(
         "test_jax_curriculum.py",
         "test_jax_scripted_opponents.py",
         "test_jax_env.py",
-        "test_jax_policy_gnn.py",
         "test_jax_env_dispatch.py",
     }
 )
@@ -117,7 +112,6 @@ FAST_JAX_PPO_TESTS = frozenset(
         "test_gae_lambda_below_one_differs_from_monte_carlo",
         "test_invalid_gae_lambda_rejected_at_compose",
         "test_training_ppo_hyperparameters_compose_from_hydra",
-        "test_ppo_update_reports_near_zero_kl_for_on_policy_batch",
         "test_ppo_vf_and_ent_coefs_scale_reported_total_loss",
         "test_ppo_update_factorized_path_matches_on_policy_kl",
         "test_ppo_update_changes_params_after_optimizer_step",
@@ -132,10 +126,9 @@ FAST_JAX_PPO_TESTS = frozenset(
 
 SLOW_TRAJECTORY_SHIELD_TESTS = frozenset(
     {
-        "test_jax_batch_shield_reports_blocked_metrics_for_sun_crossing",
-        "test_jax_batch_shield_allows_static_launches_on_mixed_rotating_maps",
-        "test_jax_batch_shield_keeps_target_when_some_ship_buckets_are_safe",
-        "test_jax_batch_shield_recomputes_bucket_legality_from_remaining_ships",
+        "test_v2_batch_shield_allows_static_launches_on_mixed_rotating_maps",
+        "test_v2_batch_shield_keeps_target_when_some_ship_buckets_are_safe",
+        "test_v2_batch_shield_recomputes_bucket_legality_from_remaining_ships",
     }
 )
 

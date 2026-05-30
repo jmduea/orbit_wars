@@ -1,3 +1,14 @@
+"""JAX PPO and rollout integration tests (slow tier unless listed in FAST_JAX_PPO_TESTS).
+
+Ownership:
+- ``test_end_to_end_jax_rollout_and_update_smoke`` is the canonical 2p collect→PPO smoke.
+- ``test_ppo_update_jax_accepts_four_player_rollout_transitions`` is the canonical 4p
+  collect→PPO smoke.
+- Multi-update rollout health lives in ``tests/test_jax_rollout.py``.
+- Mixed 2p/4p format rollout collection lives in
+  ``test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit``.
+"""
+
 import pickle
 from types import SimpleNamespace
 

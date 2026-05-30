@@ -1,3 +1,11 @@
+"""JAX curriculum training-loop integration smokes (slow tier).
+
+Ownership:
+- End-to-end staged self-play training logs and promotion are asserted here.
+- Per-family opponent-slot rollout metrics live in ``tests/test_curriculum.py`` (CPU/JAX
+  collect) and ``tests/test_jax_scripted_opponents.py`` (scripted families).
+"""
+
 import json
 
 import pytest

@@ -10,22 +10,11 @@ from src.artifacts import replay
 from src.config import TrainConfig
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.jax.policy import JaxPolicyOutput
 from src.game.constants import MAX_PLANETS
 
 
 class _FakePolicy:
-    def apply(self, *_args, **_kwargs) -> JaxPolicyOutput:
-        target_logits = jnp.full((1, 1, 4), -10.0, dtype=jnp.float32)
-        target_logits = target_logits.at[0, 0, 1].set(10.0)
-        ship_logits = jnp.full((1, 1, 4, 2), -10.0, dtype=jnp.float32)
-        ship_logits = ship_logits.at[0, 0, 1, 1].set(10.0)
-        return JaxPolicyOutput(
-            target_logits=target_logits,
-            ship_logits=ship_logits,
-            value=jnp.zeros((1,), dtype=jnp.float32),
-            decoded_target_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
-        )
+    """Placeholder; replay test patches select_runtime_shielded_policy_actions."""
 
 
 def test_jax_replay_actor_uses_submission_runtime_path(monkeypatch, tmp_path: Path) -> None:

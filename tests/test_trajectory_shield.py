@@ -1,76 +1,33 @@
+from __future__ import annotations
+
 import math
 
-import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from src.config import TaskConfig, TrainConfig
+from src.config import TaskConfig
 from src.game.constants import MAX_PLANETS
-from src.game.types import GameState, PlanetState
-from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
-from src.features.registry import edge_k
-from src.jax.features import encode_turn
-from src.jax.action_codec import FactoredPolicyOutput
-from src.jax.policy import JaxPolicyOutput, edge_action_count
-from src.jax.submission_runtime import batch_game, batch_turn, select_runtime_shielded_policy_actions
 from src.game.trajectory_shield import (
-    apply_trajectory_shield_to_turn_batch,
-    mask_policy_output_for_shield,
+    apply_trajectory_shield_to_turn_batch_v2,
+    mask_policy_output_for_shield_v2,
     trajectory_shield_reason_for_launch,
     trajectory_shield_reason_for_launch_jax,
     trajectory_shield_reason_name,
 )
-
-
-class FakeShieldBatch:
-    def __init__(
-        self,
-        candidate_mask: jax.Array,
-        candidate_ids: jax.Array,
-        target_angles: jax.Array,
-        source_ids: jax.Array,
-        source_ships: jax.Array,
-    ) -> None:
-        self.candidate_mask = candidate_mask
-        self.candidate_ids = candidate_ids
-        self.target_angles = target_angles
-        self.source_ids = source_ids
-        self.source_ships = source_ships
-
-    def _replace(self, **kwargs):
-        return FakeShieldBatch(
-            kwargs.get("candidate_mask", self.candidate_mask),
-            kwargs.get("candidate_ids", self.candidate_ids),
-            kwargs.get("target_angles", self.target_angles),
-            kwargs.get("source_ids", self.source_ids),
-            kwargs.get("source_ships", self.source_ships),
-        )
-
-
-class FakeRuntimePolicy:
-    def __init__(self, unsafe_slot: int, safe_slot: int, candidate_count: int) -> None:
-        self.unsafe_slot = unsafe_slot
-        self.safe_slot = safe_slot
-        self.candidate_count = candidate_count
-
-    def apply(self, *_args, **_kwargs) -> JaxPolicyOutput:
-        target_logits = jnp.full((1, 1, self.candidate_count), -10.0, dtype=jnp.float32)
-        target_logits = target_logits.at[0, 0, 0].set(0.0)
-        target_logits = target_logits.at[0, 0, self.safe_slot].set(5.0)
-        target_logits = target_logits.at[0, 0, self.unsafe_slot].set(10.0)
-        ship_logits = jnp.zeros((1, 1, self.candidate_count, 4), dtype=jnp.float32)
-        ship_logits = ship_logits.at[0, 0, :, 1].set(4.0)
-        return JaxPolicyOutput(
-            target_logits=target_logits,
-            ship_logits=ship_logits,
-            value=jnp.zeros((1,), dtype=jnp.float32),
-            decoded_target_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
-        )
+from src.game.types import GameState, PlanetState
+from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
+from src.jax.features import encode_turn
+from src.jax.policy import JaxPolicyOutput
 
 
 def _cfg(**overrides) -> TaskConfig:
-    cfg = TaskConfig(candidate_count=4, ship_bucket_count=4, max_fleets=8)
+    cfg = TaskConfig(
+        candidate_count=4,
+        ship_bucket_count=4,
+        max_fleets=8,
+        trajectory_shield_mode="exact",
+    )
     for key, value in overrides.items():
         setattr(cfg, key, value)
     return cfg
@@ -80,7 +37,13 @@ def _planet(pid: int, owner: int, x: float, y: float, ships: int = 30) -> Planet
     return PlanetState(pid, owner, x, y, 2.0, ships, 1)
 
 
-def _state(planets: list[PlanetState], *, player: int = 0, step: int = 0, angular_velocity: float = 0.0) -> GameState:
+def _state(
+    planets: list[PlanetState],
+    *,
+    player: int = 0,
+    step: int = 0,
+    angular_velocity: float = 0.0,
+) -> GameState:
     return GameState(
         step=step,
         player=player,
@@ -124,7 +87,13 @@ def _jax_planets(planets: list[PlanetState]) -> JaxPlanetState:
     )
 
 
-def _jax_game(planets: list[PlanetState], *, player: int = 0, step: int = 0, angular_velocity: float = 0.0) -> JaxGameState:
+def _jax_game(
+    planets: list[PlanetState],
+    *,
+    player: int = 0,
+    step: int = 0,
+    angular_velocity: float = 0.0,
+) -> JaxGameState:
     planet_state = _jax_planets(planets)
     fleet_state = JaxFleetState(
         id=jnp.full((8,), -1, dtype=jnp.int32),
@@ -145,6 +114,22 @@ def _jax_game(planets: list[PlanetState], *, player: int = 0, step: int = 0, ang
         initial_planets=planet_state,
         fleets=fleet_state,
     )
+
+
+def _flat_edge_for_target(batch, target_id: int, *, src_row: int = 0) -> int:
+    k = batch.edge_mask.shape[-1]
+    for slot in range(k):
+        if int(batch.edge_tgt_ids[src_row, slot]) == target_id:
+            return src_row * k + slot
+    raise AssertionError(f"target {target_id} not found on source row {src_row}")
+
+
+def _edge_slot_for_target(batch, src_row: int, target_id: int) -> int:
+    k = batch.edge_mask.shape[-1]
+    for slot in range(k):
+        if int(batch.edge_tgt_ids[src_row, slot]) == target_id:
+            return slot
+    raise AssertionError(f"target {target_id} not found on source row {src_row}")
 
 
 def test_python_and_jax_launch_reasons_match_for_sun_and_hit_modes() -> None:
@@ -194,53 +179,44 @@ def test_python_and_jax_launch_reasons_match_for_sun_and_hit_modes() -> None:
         assert trajectory_shield_reason_name(reason_code) == expected
 
 
-def test_python_candidate_mask_keeps_targets_visible_while_shield_blocks_illegal_hits() -> None:
+def test_v2_shield_hit_mode_blocks_unintended_hits_but_non_friendly_allows() -> None:
     planets = [
         _planet(0, 0, 20.0, 20.0, ships=40),
         _planet(1, 1, 80.0, 20.0),
         _planet(2, -1, 50.0, 20.0),
     ]
-    source = planets[0]
-    angle_to_target = math.atan2(planets[1].y - source.y, planets[1].x - source.x)
-    target_slot = 1
-    fake_batch = FakeShieldBatch(
-        candidate_mask=jnp.asarray([[True, True, False, False]], dtype=bool),
-        candidate_ids=jnp.asarray([[-1, 1, -1, -1]], dtype=jnp.int32),
-        target_angles=jnp.asarray([[0.0, angle_to_target, 0.0, 0.0]], dtype=jnp.float32),
-        source_ids=jnp.asarray([0], dtype=jnp.int32),
-        source_ships=jnp.asarray([40.0], dtype=jnp.float32),
-    )
+    game = _jax_game(planets)
+    batch = encode_turn(game, _cfg())
+    target_slot = _edge_slot_for_target(batch, 0, 1)
 
-    assert bool(fake_batch.candidate_mask[0, target_slot])
-
-    selected_shielded = apply_trajectory_shield_to_turn_batch(
-        _jax_game(planets), fake_batch, _cfg()
-    )
-    non_friendly_shielded = apply_trajectory_shield_to_turn_batch(
-        _jax_game(planets),
-        fake_batch,
+    selected_shielded = apply_trajectory_shield_to_turn_batch_v2(game, batch, _cfg())
+    non_friendly_shielded = apply_trajectory_shield_to_turn_batch_v2(
+        game,
+        batch,
         _cfg(trajectory_shield_hit_mode="non_friendly"),
     )
 
-    assert not bool(selected_shielded.batch.candidate_mask[0, target_slot])
-    assert bool(non_friendly_shielded.batch.candidate_mask[0, target_slot])
+    assert not bool(selected_shielded.batch.edge_mask[0, target_slot])
+    assert bool(non_friendly_shielded.batch.edge_mask[0, target_slot])
 
 
-def test_mask_policy_output_for_shield_applies_bucket_masks_to_all_pointer_steps() -> None:
+def test_mask_policy_output_for_shield_v2_applies_bucket_masks_to_all_pointer_steps() -> None:
+    edge_count = 3
+    bucket_count = 4
     target_logits = jnp.asarray(
         [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]], dtype=jnp.float32
     )
-    ship_logits = jnp.zeros((1, 3, 3, 4), dtype=jnp.float32)
+    ship_logits = jnp.zeros((1, 3, edge_count, bucket_count), dtype=jnp.float32)
     policy_output = JaxPolicyOutput(
         target_logits=target_logits,
         ship_logits=ship_logits,
         value=jnp.asarray([0.0], dtype=jnp.float32),
         decoded_target_sequence=jnp.asarray([[-1, -1, -1]], dtype=jnp.int32),
     )
-    masked = mask_policy_output_for_shield(
+    masked = mask_policy_output_for_shield_v2(
         policy_output,
         jnp.asarray([[True, True, False]], dtype=bool),
-        ship_bucket_count=4,
+        bucket_count,
     )
 
     later_steps = np.asarray(masked.target_logits[0, 1:])
@@ -248,195 +224,83 @@ def test_mask_policy_output_for_shield_applies_bucket_masks_to_all_pointer_steps
     assert np.isfinite(later_steps[:, 1]).all()
     assert (later_steps[:, 2:] < -1.0e30).all()
     noop_ship_logits = np.asarray(masked.ship_logits[0, :, 0, :])
-    assert np.isfinite(noop_ship_logits[:, 0]).all()
-    assert (noop_ship_logits[:, 1:] < -1.0e30).all()
+    assert (noop_ship_logits[:, 0] < -1.0e30).all()
+    assert np.isfinite(noop_ship_logits[:, 1:]).all()
     real_ship_logits = np.asarray(masked.ship_logits[0, :, 1, :])
     assert (real_ship_logits[:, 0] < -1.0e30).all()
     assert np.isfinite(real_ship_logits[:, 1:]).all()
 
 
-def _flat_edge_for_target(batch, target_id: int, *, src_row: int = 0) -> int:
-    k = batch.edge_mask.shape[-1]
-    for slot in range(k):
-        if int(batch.edge_tgt_ids[src_row, slot]) == target_id:
-            return src_row * k + slot
-    raise AssertionError(f"target {target_id} not found on source row {src_row}")
-
-
-class FakeV2RuntimePolicy:
-    def __init__(self, unsafe_flat: int, safe_flat: int, edge_count: int, ship_bucket_count: int) -> None:
-        self.unsafe_flat = unsafe_flat
-        self.safe_flat = safe_flat
-        self.edge_count = edge_count
-        self.ship_bucket_count = ship_bucket_count
-
-    def apply(self, _params, batch, *, player_count, target_sequence=None, rng=None, deterministic=False, **kwargs):
-        del player_count, rng, deterministic, kwargs
-        env_count = batch.planet_features.shape[0]
-        k = batch.edge_mask.shape[-1]
-        seq_k = 1 if target_sequence is None else int(target_sequence.shape[1])
-        source_count = batch.planet_features.shape[1]
-        source_logits = jnp.full((env_count, seq_k, source_count), -10.0, dtype=jnp.float32)
-        target_logits = jnp.full((env_count, seq_k, k), -10.0, dtype=jnp.float32)
-        unsafe_src, unsafe_slot = divmod(self.unsafe_flat, k)
-        safe_src, safe_slot = divmod(self.safe_flat, k)
-        source_logits = source_logits.at[0, 0, unsafe_src].set(10.0)
-        source_logits = source_logits.at[0, 0, safe_src].set(5.0)
-        target_logits = target_logits.at[0, 0, unsafe_slot].set(10.0)
-        target_logits = target_logits.at[0, 0, safe_slot].set(5.0)
-        stop_logits = jnp.zeros((env_count, seq_k), dtype=jnp.float32)
-        ship_logits = jnp.zeros(
-            (env_count, seq_k, k, self.ship_bucket_count), dtype=jnp.float32
-        )
-        ship_logits = ship_logits.at[0, 0, :, 1].set(4.0)
-        return FactoredPolicyOutput(
-            source_logits=source_logits,
-            target_logits=target_logits,
-            stop_logits=stop_logits,
-            ship_logits=ship_logits,
-            value=jnp.zeros((env_count,), dtype=jnp.float32),
-            decoded_source_sequence=jnp.full((env_count, seq_k), -1, dtype=jnp.int32),
-            decoded_target_slot_sequence=jnp.full((env_count, seq_k), -1, dtype=jnp.int32),
-            decoded_stop_sequence=jnp.zeros((env_count, seq_k), dtype=jnp.int32),
-        )
-
-
-@pytest.mark.skip(reason="Factorized runtime path needs FactoredPolicyOutput integration fixture; see test_trajectory_shield_factorized.")
-def test_runtime_selector_chooses_safe_target_over_unsafe_high_logit() -> None:
-    task_cfg = _cfg(candidate_count=4, ship_bucket_count=4)
-    train_cfg = TrainConfig(task=task_cfg)
-    train_cfg.model.pointer_decoder = "factorized_topk"
-    planets = [
-        _planet(0, 0, 80.0, 50.0, ships=40),
-        _planet(1, 1, 20.0, 50.0),
-        _planet(2, 1, 80.0, 70.0),
-    ]
-    game = _jax_game(planets)
-    batch = encode_turn(game, task_cfg)
-    unsafe_flat = _flat_edge_for_target(batch, 1)
-    safe_flat = _flat_edge_for_target(batch, 2)
-    unsafe_slot = unsafe_flat % edge_k(task_cfg)
-    batch = batch._replace(
-        edge_mask=batch.edge_mask.at[0, unsafe_slot].set(True)
-    )
-    edge_count = edge_action_count(task_cfg)
-    policy = FakeV2RuntimePolicy(unsafe_flat, safe_flat, edge_count, task_cfg.ship_bucket_count)
-
-    action = select_runtime_shielded_policy_actions(
-        jax.random.PRNGKey(123),
-        policy,
-        {"params": {}},
-        batch_game(game),
-        batch_turn(batch),
-        train_cfg,
-        deterministic=True,
-    )
-
-    assert bool(jax.device_get(action.valid[0, 0]))
-    assert int(jax.device_get(action.ships[0, 0])) > 0
-    assert int(jax.device_get(action.source_id[0, 0])) == 0
-    safe_angle = math.atan2(planets[2].y - planets[0].y, planets[2].x - planets[0].x)
-    unsafe_angle = math.atan2(planets[1].y - planets[0].y, planets[1].x - planets[0].x)
-    chosen_angle = float(jax.device_get(action.angle[0, 0]))
-    assert abs(chosen_angle - safe_angle) < 1e-3
-    assert abs(chosen_angle - unsafe_angle) > 1e-3
-
-
-def test_jax_batch_shield_reports_blocked_metrics_for_sun_crossing() -> None:
-    cfg = _cfg()
-    planets = [_planet(0, 0, 80.0, 50.0, ships=40), _planet(1, 1, 20.0, 50.0)]
-    game = _jax_game(planets)
-    batch = encode_turn(_state(planets), cfg, env_index=0)
-    original_candidate_mask = jnp.asarray(batch.candidate_mask).at[:, 1:].set(True)
-    fake_batch = FakeShieldBatch(
-        candidate_mask=original_candidate_mask,
-        candidate_ids=jnp.asarray(
-            [context.candidate_ids for context in batch.contexts], dtype=jnp.int32
-        ),
-        target_angles=jnp.asarray(
-            [context.target_angles for context in batch.contexts], dtype=jnp.float32
-        ),
-        source_ids=jnp.asarray([context.source_id for context in batch.contexts], dtype=jnp.int32),
-        source_ships=jnp.asarray(
-            [context.source_ships for context in batch.contexts], dtype=jnp.float32
-        ),
-    )
-    shielded = apply_trajectory_shield_to_turn_batch(
-        game,
-        fake_batch,
-        cfg,
-    )
-
-    assert float(shielded.diagnostics.blocked_count) >= 1.0
-    assert float(shielded.diagnostics.blocked_sun_count) >= 1.0
-
-
-def test_jax_batch_shield_allows_static_launches_on_mixed_rotating_maps() -> None:
+def test_v2_batch_shield_allows_static_launches_on_mixed_rotating_maps() -> None:
     cfg = _cfg()
     planets = [
         _planet(0, 0, 90.0, 90.0, ships=40),
         _planet(1, 1, 90.0, 80.0),
         _planet(2, -1, 50.0, 20.0),
     ]
-    batch = FakeShieldBatch(
-        candidate_mask=jnp.asarray([[True, True, False, False]], dtype=bool),
-        candidate_ids=jnp.asarray([[-1, 1, -1, -1]], dtype=jnp.int32),
-        target_angles=jnp.asarray([[0.0, -math.pi / 2.0, 0.0, 0.0]], dtype=jnp.float32),
-        source_ids=jnp.asarray([0], dtype=jnp.int32),
-        source_ships=jnp.asarray([40.0], dtype=jnp.float32),
-    )
+    game = _jax_game(planets)
+    batch = encode_turn(game, cfg)
+    shielded = apply_trajectory_shield_to_turn_batch_v2(game, batch, cfg)
+    target_slot = _edge_slot_for_target(batch, 0, 1)
+    flat_edge = target_slot
 
-    shielded = apply_trajectory_shield_to_turn_batch(_jax_game(planets), batch, cfg)
-
-    assert bool(shielded.batch.candidate_mask[0, 1])
-    assert bool(shielded.ship_bucket_mask[0, 1, 1])
+    assert bool(shielded.batch.edge_mask[0, target_slot])
+    assert bool(shielded.ship_bucket_mask[flat_edge, 1])
     assert float(shielded.diagnostics.legal_non_noop_rate) == 1.0
 
 
-def test_jax_batch_shield_keeps_target_when_some_ship_buckets_are_safe() -> None:
+def test_v2_batch_shield_keeps_target_when_some_ship_buckets_are_safe() -> None:
     cfg = _cfg(trajectory_shield_horizon=1)
     planets = [_planet(0, 0, 20.0, 20.0, ships=1000), _planet(1, 1, 29.0, 20.0)]
-    batch = FakeShieldBatch(
-        candidate_mask=jnp.asarray([[True, True, False, False]], dtype=bool),
-        candidate_ids=jnp.asarray([[0, 1, -1, -1]], dtype=jnp.int32),
-        target_angles=jnp.asarray([[0.0, 0.0, 0.0, 0.0]], dtype=jnp.float32),
-        source_ids=jnp.asarray([0], dtype=jnp.int32),
-        source_ships=jnp.asarray([1000.0], dtype=jnp.float32),
-    )
+    game = _jax_game(planets)
+    batch = encode_turn(game, cfg)
+    shielded = apply_trajectory_shield_to_turn_batch_v2(game, batch, cfg)
+    target_slot = _edge_slot_for_target(batch, 0, 1)
+    flat_edge = target_slot
 
-    shielded = apply_trajectory_shield_to_turn_batch(_jax_game(planets), batch, cfg)
-
-    assert bool(shielded.batch.candidate_mask[0, 1])
-    assert not bool(shielded.ship_bucket_mask[0, 1, 0])
-    assert not bool(shielded.ship_bucket_mask[0, 1, 1])
-    assert bool(shielded.ship_bucket_mask[0, 1, 2])
-    assert bool(shielded.ship_bucket_mask[0, 1, 3])
+    assert bool(shielded.batch.edge_mask[0, target_slot])
+    assert not bool(shielded.ship_bucket_mask[flat_edge, 0])
+    assert not bool(shielded.ship_bucket_mask[flat_edge, 1])
+    assert bool(shielded.ship_bucket_mask[flat_edge, 2])
+    assert bool(shielded.ship_bucket_mask[flat_edge, 3])
 
 
-def test_jax_batch_shield_recomputes_bucket_legality_from_remaining_ships() -> None:
+def test_v2_batch_shield_recomputes_bucket_legality_from_remaining_ships() -> None:
     cfg = _cfg(trajectory_shield_horizon=1)
     planets = [_planet(0, 0, 20.0, 20.0, ships=1000), _planet(1, 1, 27.0, 20.0)]
-    batch = FakeShieldBatch(
-        candidate_mask=jnp.asarray([[True, True, False, False]], dtype=bool),
-        candidate_ids=jnp.asarray([[0, 1, -1, -1]], dtype=jnp.int32),
-        target_angles=jnp.asarray([[0.0, 0.0, 0.0, 0.0]], dtype=jnp.float32),
-        source_ids=jnp.asarray([0], dtype=jnp.int32),
-        source_ships=jnp.asarray([1000.0], dtype=jnp.float32),
-    )
+    game = _jax_game(planets)
+    batch = encode_turn(game, cfg)
+    full_ships = game.planets.ships
+    reduced_ships = full_ships.at[0].set(100.0)
 
-    initial = apply_trajectory_shield_to_turn_batch(
-        _jax_game(planets),
+    initial = apply_trajectory_shield_to_turn_batch_v2(
+        game,
         batch,
         cfg,
-        source_ships_override=jnp.asarray([1000.0], dtype=jnp.float32),
+        remaining_planet_ships=full_ships,
     )
-    later = apply_trajectory_shield_to_turn_batch(
-        _jax_game(planets),
+    later = apply_trajectory_shield_to_turn_batch_v2(
+        game,
         batch,
         cfg,
-        source_ships_override=jnp.asarray([100.0], dtype=jnp.float32),
+        remaining_planet_ships=reduced_ships,
     )
+    flat_edge = _edge_slot_for_target(batch, 0, 1)
 
-    assert bool(initial.ship_bucket_mask[0, 1, 1])
-    assert not bool(later.ship_bucket_mask[0, 1, 1])
-    assert bool(later.ship_bucket_mask[0, 1, 2])
+    assert bool(initial.ship_bucket_mask[flat_edge, 1])
+    assert not bool(later.ship_bucket_mask[flat_edge, 1])
+    assert bool(later.ship_bucket_mask[flat_edge, 2])
+
+def test_v2_batch_shield_reports_blocked_metrics_for_sun_crossing() -> None:
+    cfg = _cfg()
+    planets = [_planet(0, 0, 80.0, 50.0, ships=40), _planet(1, 1, 20.0, 50.0)]
+    game = _jax_game(planets)
+    batch = encode_turn(game, cfg)
+    target_slot = _edge_slot_for_target(batch, 0, 1)
+    batch = batch._replace(edge_mask=batch.edge_mask.at[0, target_slot].set(True))
+
+    shielded = apply_trajectory_shield_to_turn_batch_v2(game, batch, cfg)
+
+    assert float(shielded.diagnostics.blocked_count) >= 1.0
+    assert not bool(shielded.batch.edge_mask[0, target_slot])
+

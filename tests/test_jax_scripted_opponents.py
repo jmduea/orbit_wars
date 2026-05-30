@@ -1,3 +1,10 @@
+"""JAX scripted opponent action builders and opponent-slot metric tests (slow tier).
+
+Ownership:
+- Scripted family slot metrics (nearest_sniper, turtle, opportunistic) are asserted here.
+- Random/latest/historical family slot patterns live in ``tests/test_curriculum.py``.
+"""
+
 import jax
 import pytest
 
@@ -72,22 +79,28 @@ def test_edge_scripted_builders_emit_valid_actions(builder):
 
 @pytest.mark.jax
 @pytest.mark.parametrize(
-    ("family", "metric_key", "expected_total"),
+    ("family", "metric_key", "player_count", "expected_total"),
     [
-        ("nearest_sniper", "opponent_slots_nearest_sniper", 2.0),
-        ("turtle", "opponent_slots_turtle", 2.0),
-        ("opportunistic", "opponent_slots_opportunistic", 2.0),
+        ("nearest_sniper", "opponent_slots_nearest_sniper", 2, 2.0),
+        ("turtle", "opponent_slots_turtle", 2, 2.0),
+        ("opportunistic", "opponent_slots_opportunistic", 2, 2.0),
+        ("nearest_sniper", "opponent_slots_nearest_sniper", 4, 6.0),
     ],
 )
-def test_v2_two_player_self_play_scripted_family_slots(family, metric_key, expected_total):
-    cfg = _v2_cfg(player_count=2)
+def test_v2_self_play_scripted_family_slots(
+    family: str,
+    metric_key: str,
+    player_count: int,
+    expected_total: float,
+) -> None:
+    cfg = _v2_cfg(player_count=player_count)
     cfg.curriculum.stages = [{"id": family, "opponent_families": {family: 1.0}}]
-    reset_keys = jax.random.split(jax.random.PRNGKey(10), cfg.training.num_envs)
+    reset_keys = jax.random.split(jax.random.PRNGKey(10 + player_count), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     policy = build_jax_policy(cfg)
-    train_state = init_train_state(jax.random.PRNGKey(11), policy, cfg)
+    train_state = init_train_state(jax.random.PRNGKey(11 + player_count), policy, cfg)
     _key, _env_state, _turn_batch, _transitions, metrics = collect_rollout_jax(
-        jax.random.PRNGKey(12),
+        jax.random.PRNGKey(12 + player_count),
         env_state,
         turn_batch,
         train_state,
@@ -97,26 +110,3 @@ def test_v2_two_player_self_play_scripted_family_slots(family, metric_key, expec
     )
     assert float(metrics["opponent_slots_total"]) == expected_total
     assert float(metrics[metric_key]) == expected_total
-
-
-@pytest.mark.jax
-def test_v2_four_player_self_play_sniper_family_slots():
-    cfg = _v2_cfg(player_count=4)
-    cfg.curriculum.stages = [
-        {"id": "nearest_sniper", "opponent_families": {"nearest_sniper": 1.0}}
-    ]
-    reset_keys = jax.random.split(jax.random.PRNGKey(20), cfg.training.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
-    policy = build_jax_policy(cfg)
-    train_state = init_train_state(jax.random.PRNGKey(21), policy, cfg)
-    _key, _env_state, _turn_batch, _transitions, metrics = collect_rollout_jax(
-        jax.random.PRNGKey(22),
-        env_state,
-        turn_batch,
-        train_state,
-        policy,
-        cfg,
-        stage_view=_stage_view(cfg),
-    )
-    assert float(metrics["opponent_slots_total"]) == 6.0
-    assert float(metrics["opponent_slots_nearest_sniper"]) == 6.0

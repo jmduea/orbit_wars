@@ -3,9 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
+from omegaconf import OmegaConf
 
 from src.config.schema import TrainConfig
+from src.config import compose_hydra_train_config, train_config_from_omegaconf
 from src.telemetry.metric_registry import (
     DEFAULT_ENABLED_GROUPS,
     KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES,
@@ -13,6 +16,7 @@ from src.telemetry.metric_registry import (
     METRIC_GROUPS,
     enabled_metric_names,
     filter_metric_record,
+    filter_update_record,
     metric_definition,
     protected_metric_names,
 )
@@ -24,6 +28,65 @@ def _metric_groups(**overrides: bool) -> SimpleNamespace:
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def test_hydra_config_supports_metric_group_overrides():
+    cfg = compose_hydra_train_config(
+        [
+            "training.total_updates=1",
+            "telemetry.metric_groups.trajectory_shield_debug=true",
+            "telemetry.metric_groups.losses=false",
+        ]
+    )
+
+    assert cfg.telemetry.metric_groups.trajectory_shield_debug is True
+    assert cfg.telemetry.metric_groups.losses is False
+    assert cfg.telemetry.metric_groups.core_progress is True
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("training.plateau_metric", "average_episode_reward"),
+        ("training.plateau_metric", "opponent_composition"),
+        ("training.plateau_metric", "curriculum_stage_id"),
+        ("artifacts.checkpoint_retention.best_metric_name", "seed_scheduler_policy"),
+    ],
+)
+def test_non_scalar_or_unknown_retention_metrics_are_rejected(field: str, value: str):
+    cfg = OmegaConf.structured(TrainConfig)
+    OmegaConf.update(cfg, field, value)
+
+    with pytest.raises(
+        ValueError, match="registered canonical scalar telemetry metric"
+    ):
+        train_config_from_omegaconf(cfg)
+
+
+def test_filter_update_record_preserves_configured_retention_metric():
+    cfg = TrainConfig()
+    cfg.telemetry.metric_groups.losses = False
+    cfg.telemetry.metric_groups.opponent_composition = False
+    cfg.artifacts.checkpoint_retention.best_metric_name = "total_loss"
+
+    record = {
+        "update": 3,
+        "total_env_steps": 300,
+        "completed_episodes": 7,
+        "samples": 128,
+        "overall_win_rate": 0.5,
+        "win_rate_2p": 0.5,
+        "first_place_rate_4p": 0.0,
+        "episode_reward_mean": 0.25,
+        "env_steps_per_sec": 900.0,
+        "total_loss": 1.75,
+        "opponent_slots_total": 8.0,
+    }
+
+    filtered = filter_update_record(record, cfg)
+
+    assert filtered["total_loss"] == 1.75
+    assert "opponent_slots_total" not in filtered
 
 
 def test_metric_registry_names_are_unique_and_grouped():

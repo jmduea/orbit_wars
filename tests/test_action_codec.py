@@ -3,14 +3,13 @@ import numpy as np
 
 from src.jax.action_codec import (
     FactoredPolicyOutput,
-    JaxPolicyOutput,
-    action_log_prob_and_entropy,
     decode_flat_edge,
     factored_action_log_prob_and_entropy,
     factored_action_log_prob_with_shield,
     flat_edge_index,
     noop_edge_index,
 )
+from src.jax.ship_action import continuous_fraction_log_prob
 
 
 def test_flat_edge_index_roundtrip() -> None:
@@ -27,34 +26,15 @@ def test_noop_edge_index() -> None:
     assert noop_edge_index(7, max_planets=60) == 420
 
 
-def test_joint_continuous_ship_log_prob_uses_width_one_head() -> None:
-    output = JaxPolicyOutput(
-        target_logits=jnp.array([[0.0, 1.0]], dtype=jnp.float32),
-        ship_logits=jnp.array([[[[0.25], [-0.5]]]], dtype=jnp.float32),
-        value=jnp.zeros((1,), dtype=jnp.float32),
-        decoded_target_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
-    )
-
-    log_prob, entropy = action_log_prob_and_entropy(
-        output,
-        target_index=jnp.array([1], dtype=jnp.int32),
-        ship_bucket=jnp.array([1], dtype=jnp.int32),
-    )
-
-    expected_target_lp = jax_log_softmax(np.array([0.0, 1.0], dtype=np.float32))[1]
-    expected_ship_lp = -np.logaddexp(0.0, 0.5) - np.logaddexp(0.0, -0.5)
-    np.testing.assert_allclose(
-        np.asarray(log_prob), expected_target_lp + expected_ship_lp, rtol=1e-6
-    )
-    assert np.isfinite(np.asarray(entropy)).all()
-
-
 def test_factored_continuous_ship_log_prob_uses_width_one_head() -> None:
+    """Width-1 ship head uses logistic fraction density, not bucket categorical."""
+
+    ship_logit = 0.75
     output = FactoredPolicyOutput(
         source_logits=jnp.array([[0.0, 0.5]], dtype=jnp.float32),
         target_logits=jnp.array([[0.25, 0.0]], dtype=jnp.float32),
         stop_logits=jnp.array([[-2.0]], dtype=jnp.float32),
-        ship_logits=jnp.array([[[0.75], [-0.25]]], dtype=jnp.float32),
+        ship_logits=jnp.array([[[ship_logit]]], dtype=jnp.float32),
         value=jnp.zeros((1,), dtype=jnp.float32),
         decoded_source_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
         decoded_target_slot_sequence=jnp.full((1, 1), -1, dtype=jnp.int32),
@@ -70,7 +50,14 @@ def test_factored_continuous_ship_log_prob_uses_width_one_head() -> None:
         step_mask=jnp.array([1.0], dtype=jnp.float32),
     )
 
-    assert np.isfinite(np.asarray(log_prob)).all()
+    expected_source_lp = jax_log_softmax(np.array([0.0, 0.5], dtype=np.float32))[1]
+    expected_target_lp = jax_log_softmax(np.array([0.25, 0.0], dtype=np.float32))[0]
+    expected_ship_lp = float(
+        np.asarray(continuous_fraction_log_prob(jnp.array(ship_logit, dtype=jnp.float32)))
+    )
+    expected_stop_lp = float(np.log(1.0 / (1.0 + np.exp(-2.0))))
+    expected_total = expected_stop_lp + expected_source_lp + expected_target_lp + expected_ship_lp
+    np.testing.assert_allclose(np.asarray(log_prob), expected_total, rtol=1e-6)
     assert np.isfinite(np.asarray(entropy)).all()
 
 

@@ -1,4 +1,4 @@
-"""Unit tests for normalized ship differential terminal reward (JAX canonical)."""
+"""JAX integration tests for normalized ship differential terminal reward."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 
 
 def _normalized_ship_differential(scores: list[float], learner_index: int) -> float:
-    """Reference formula mirrored in src/jax/env._terminal."""
+    """Reference formula mirrored in ``src/jax/env._terminal`` (used by JAX tests only)."""
 
     learner = float(scores[learner_index])
     max_other = max(
@@ -18,24 +18,6 @@ def _normalized_ship_differential(scores: list[float], learner_index: int) -> fl
     if denom <= 0.0:
         return 0.0
     return (learner - max_other) / denom
-
-
-def test_normalized_ship_differential_elimination_and_tie() -> None:
-    assert _normalized_ship_differential([100.0, 0.0], 0) == pytest.approx(1.0)
-    assert _normalized_ship_differential([0.0, 100.0], 0) == pytest.approx(-1.0)
-    assert _normalized_ship_differential([30.0, 30.0], 0) == pytest.approx(0.0)
-    assert _normalized_ship_differential([0.0, 0.0], 0) == pytest.approx(0.0)
-
-
-def test_normalized_ship_differential_graded_outcomes() -> None:
-    assert _normalized_ship_differential([80.0, 20.0], 0) == pytest.approx(0.6)
-    assert _normalized_ship_differential([55.0, 45.0], 0) == pytest.approx(0.1)
-    assert _normalized_ship_differential([45.0, 55.0], 0) == pytest.approx(-0.1)
-
-
-def test_normalized_ship_differential_four_player_max_other() -> None:
-    reward = _normalized_ship_differential([40.0, 20.0, 20.0, 20.0], 0)
-    assert reward == pytest.approx(1.0 / 3.0)
 
 
 @pytest.mark.jax

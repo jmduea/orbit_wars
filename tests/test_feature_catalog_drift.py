@@ -32,12 +32,6 @@ def _cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def test_catalog_base_dim_matches_registry() -> None:
-    assert PLANET_FEATURE_CATALOG.base_dim == PLANET_FEATURE_SCHEMA.base_dim
-    assert EDGE_FEATURE_CATALOG.base_dim == EDGE_FEATURE_SCHEMA.base_dim
-    assert GLOBAL_FEATURE_CATALOG.base_dim == GLOBAL_FEATURE_SCHEMA.base_dim
-
-
 def test_encode_slices_match_planet_catalog_names() -> None:
     cfg = _cfg()
     state, _ = reset(jax.random.PRNGKey(11), cfg)

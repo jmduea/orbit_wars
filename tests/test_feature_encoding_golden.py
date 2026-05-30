@@ -109,6 +109,15 @@ def test_encode_v2_global_history_expands_dim() -> None:
     assert batch.global_features.shape == (global_feature_dim(cfg),)
 
 
+def test_encode_v2_planet_dim_ignores_history_steps() -> None:
+    cfg = _cfg(feature_history_steps=5)
+    state, _ = reset(jax.random.PRNGKey(9), cfg)
+    batch = encode_turn(state.game, cfg)
+    assert planet_feature_dim(cfg) == 13
+    assert batch.planet_features.shape == (MAX_PLANETS, planet_feature_dim(cfg))
+    assert batch.global_features.shape == (global_feature_dim(cfg),)
+
+
 @pytest.mark.jax
 def test_encode_v2_jit_vmap_smoke() -> None:
     cfg = _cfg()

@@ -369,28 +369,6 @@ def _small_factorized_cfg() -> TrainConfig:
 
 
 @pytest.mark.jax
-def test_ppo_update_reports_near_zero_kl_for_on_policy_batch() -> None:
-    cfg = _small_factorized_cfg()
-    num_envs = 2
-    key = jax.random.PRNGKey(0)
-    policy = build_jax_policy(cfg)
-    train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
-    turn_batch = make_synthetic_turn_batch(
-        num_envs, cfg.task, key=jax.random.fold_in(key, 2)
-    )
-    transitions, _output = _build_factorized_on_policy_transitions(
-        cfg,
-        train_state,
-        policy,
-        turn_batch,
-        rollout_steps=1,
-        reward=jnp.zeros((1, num_envs), dtype=jnp.float32),
-    )
-    _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
-
-    assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
-
-@pytest.mark.jax
 def test_ppo_vf_and_ent_coefs_scale_reported_total_loss() -> None:
     cfg = _small_factorized_cfg()
     cfg.training.vf_coef = 0.0
