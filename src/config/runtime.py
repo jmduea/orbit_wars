@@ -325,6 +325,13 @@ def _validate_promotion_config(cfg: TrainConfig) -> None:
     mode = str(promotion.metric_mode or "").strip().lower()
     if mode not in {"max", "min"}:
         raise ValueError("artifacts.promotion.metric_mode must be 'max' or 'min'.")
+    strategy = str(promotion.strategy or "metric").strip().lower()
+    if strategy not in {"metric", "tournament", "hybrid"}:
+        raise ValueError(
+            "artifacts.promotion.strategy must be 'metric', 'tournament', or 'hybrid'."
+        )
+    if strategy in {"hybrid", "tournament"}:
+        cfg.artifacts.tournament.enabled = True
 
 
 def _apply_telemetry_defaults(cfg: TrainConfig) -> None:

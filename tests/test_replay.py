@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import jax.numpy as jnp
 
-from src.artifacts import replay
+from src.artifacts.tournament.runner import build_checkpoint_agent
 from src.config import TrainConfig
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
@@ -26,7 +26,7 @@ def test_jax_replay_actor_uses_submission_runtime_path(monkeypatch, tmp_path: Pa
 
     checkpoint_path = tmp_path / "jax_ckpt_000100.pkl"
     with checkpoint_path.open("wb") as file:
-        pickle.dump({"params": {"fake": "params"}}, file)
+        pickle.dump({"params": {"fake": "params"}, "config": cfg}, file)
 
     fake_batch = TurnBatch(
         planet_features=jnp.zeros((MAX_PLANETS, 13), dtype=jnp.float32),
@@ -45,17 +45,19 @@ def test_jax_replay_actor_uses_submission_runtime_path(monkeypatch, tmp_path: Pa
         valid=jnp.array([True], dtype=bool),
     )
 
-    with patch("src.artifacts.replay.build_jax_policy", return_value=_FakePolicy()), patch(
-        "src.artifacts.replay.jax_game_from_observation"
-    ) as mock_game, patch(
-        "src.artifacts.replay.encode_turn", return_value=fake_batch
+    with patch(
+        "src.artifacts.tournament.runner.build_jax_policy", return_value=_FakePolicy()
+    ), patch("src.artifacts.tournament.runner.jax_game_from_observation") as mock_game, patch(
+        "src.artifacts.tournament.runner.encode_turn", return_value=fake_batch
     ), patch(
-        "src.artifacts.replay.select_runtime_shielded_policy_actions",
+        "src.artifacts.tournament.runner.select_runtime_shielded_policy_actions",
         return_value=fake_action,
     ), patch(
-        "src.artifacts.replay.moves_from_jax_action", return_value=[[7, 1.0, 3]]
+        "src.artifacts.tournament.runner.moves_from_jax_action", return_value=[[7, 1.0, 3]]
+    ), patch(
+        "src.artifacts.tournament.runner.validate_checkpoint_config_compatibility"
     ):
-        act = replay._build_jax_policy_actions(cfg, checkpoint_path)
+        act = build_checkpoint_agent(cfg, checkpoint_path)
         moves = act({"player": 0, "planets": []})
 
     assert moves == [[7, 1.0, 3]]

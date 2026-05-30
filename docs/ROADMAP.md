@@ -7,7 +7,9 @@
 
 ## Now
 
-_None — pick from **Next** after planning._
+| Item | Link |
+|------|------|
+| Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) |
 
 ## Next
 
@@ -18,7 +20,6 @@ _None — pick from **Later** after planning._
 | Item | Link |
 |------|------|
 | Define `num_envs` via training weights instead of format YAML | — |
-| Local tournament / ranking eval for best agents | — |
 | VRAM profile from W&B run data | — |
 | Debug metric: average ships per fleet launch | — |
 

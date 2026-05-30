@@ -227,10 +227,36 @@ class CheckpointRetentionConfig:
 
 
 @dataclass(slots=True)
+class PromotionTournamentConfig:
+    min_win_rate_vs_sniper: float = 0.55
+    min_win_rate_vs_incumbent: float = 0.51
+    min_first_place_rate_4p: float | None = None
+    require_head_to_head: bool = True
+
+
+@dataclass(slots=True)
 class PromotionConfig:
     enabled: bool = True
+    strategy: str = "metric"
     metric_name: str = "episode_reward_mean"
     metric_mode: str = "max"
+    tournament: PromotionTournamentConfig = field(
+        default_factory=PromotionTournamentConfig
+    )
+
+
+@dataclass(slots=True)
+class TournamentConfig:
+    enabled: bool = False
+    seeds: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
+    games_per_pair: int = 1
+    max_steps: int = 500
+    baselines: list[str] = field(default_factory=lambda: ["sniper"])
+    formats: list[str] = field(
+        default_factory=lambda: ["2p_vs_baseline", "2p_head_to_head"]
+    )
+    output_subdir: str = "tournament"
+    write_replays: bool = False
 
 
 @dataclass(slots=True)
@@ -271,6 +297,7 @@ class ArtifactsConfig:
         default_factory=CheckpointRetentionConfig
     )
     promotion: PromotionConfig = field(default_factory=PromotionConfig)
+    tournament: TournamentConfig = field(default_factory=TournamentConfig)
 
 
 @dataclass(slots=True)

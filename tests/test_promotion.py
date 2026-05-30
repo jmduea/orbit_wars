@@ -84,6 +84,62 @@ def test_promote_if_better_cas_max_updates_manifest_and_index(tmp_path: Path) ->
     assert second.reason == "run_best_unchanged"
 
 
+def test_promote_if_better_hybrid_defers_to_tournament(tmp_path: Path) -> None:
+    context = _run_context(tmp_path, campaign="hybrid")
+    cfg = TrainConfig()
+    cfg.output.root = str(tmp_path / "outputs")
+    cfg.artifacts.promotion.metric_name = "episode_reward_mean"
+    cfg.artifacts.promotion.metric_mode = "max"
+    cfg.artifacts.promotion.strategy = "hybrid"
+    write_run_manifests(cfg, context, {"job_type": "train", "backend": "jax"})
+
+    log_path = context.log_path
+    _write_metric_log(log_path, [{"update": 1, "episode_reward_mean": 0.9}])
+    checkpoint_path = context.checkpoints_dir / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    attempt, run_best = promote_if_better(
+        cfg,
+        context,
+        checkpoint_path=checkpoint_path,
+        update=1,
+        log_path=log_path,
+        run_best_value=None,
+    )
+
+    assert attempt.promoted is False
+    assert attempt.reason == "metric_eligible_queue_tournament"
+    assert run_best == pytest.approx(0.9)
+    assert not promoted_manifest_path(context.campaign_dir).exists()
+
+
+def test_promote_if_better_tournament_only_defers_to_worker(tmp_path: Path) -> None:
+    context = _run_context(tmp_path, campaign="tournament_only")
+    cfg = TrainConfig()
+    cfg.output.root = str(tmp_path / "outputs")
+    cfg.artifacts.promotion.metric_name = "episode_reward_mean"
+    cfg.artifacts.promotion.strategy = "tournament"
+    write_run_manifests(cfg, context, {"job_type": "train", "backend": "jax"})
+
+    log_path = context.log_path
+    _write_metric_log(log_path, [{"update": 1, "episode_reward_mean": 0.9}])
+    checkpoint_path = context.checkpoints_dir / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    attempt, run_best = promote_if_better(
+        cfg,
+        context,
+        checkpoint_path=checkpoint_path,
+        update=1,
+        log_path=log_path,
+        run_best_value=None,
+    )
+
+    assert attempt.promoted is False
+    assert attempt.reason == "tournament_only"
+    assert run_best == pytest.approx(0.9)
+
+
 def test_promote_if_better_respects_min_mode(tmp_path: Path) -> None:
     context = _run_context(tmp_path, campaign="latency")
     cfg = TrainConfig()

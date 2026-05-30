@@ -4,23 +4,9 @@ import json
 import random
 from pathlib import Path
 
-import jax
-
-from .checkpoint_compat import (
-    load_checkpoint_payload,
-    validate_checkpoint_config_compatibility,
-)
 from src.config import TrainConfig
-from src.jax.features import encode_turn
-from src.jax.policy import build_jax_policy
-from src.jax.submission_runtime import (
-    batch_game,
-    batch_turn,
-    jax_game_from_observation,
-    moves_from_jax_action,
-    select_runtime_shielded_policy_actions,
-)
-from src.opponents import build_opponent
+
+from .tournament.runner import build_baseline_agent, build_checkpoint_agent, run_match
 
 
 def _seed_for_update(cfg: TrainConfig, update: int) -> int:
@@ -30,50 +16,6 @@ def _seed_for_update(cfg: TrainConfig, update: int) -> int:
     if policy == "update":
         return int(cfg.seed + update)
     raise ValueError(f"Unsupported replay.seed_policy: {cfg.artifacts.replay.seed_policy!r}")
-
-
-def _reward_to_result(reward: float) -> str:
-    if reward > 0.0:
-        return "win"
-    if reward < 0.0:
-        return "loss"
-    return "draw"
-
-
-def _build_jax_policy_actions(cfg: TrainConfig, checkpoint_path: Path):
-    checkpoint = load_checkpoint_payload(checkpoint_path)
-    if not isinstance(checkpoint, dict) or "params" not in checkpoint:
-        raise ValueError(
-            f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
-        )
-    validate_checkpoint_config_compatibility(
-        checkpoint, checkpoint_path=checkpoint_path
-    )
-
-    params = checkpoint["params"]
-    if isinstance(params, dict) and "params" in params and len(params) == 1:
-        params = params["params"]
-    policy = build_jax_policy(
-        cfg=cfg,
-    )
-
-    def act(observation: object) -> list[list[float | int]]:
-        game = jax_game_from_observation(
-            observation, max_fleet_slots=int(cfg.task.max_fleets)
-        )
-        batch = encode_turn(game, cfg.task)
-        action = select_runtime_shielded_policy_actions(
-            jax.random.PRNGKey(_seed_for_update(cfg, 0)),
-            policy,
-            {"params": params},
-            batch_game(game),
-            batch_turn(batch),
-            cfg,
-            deterministic=True,
-        )
-        return moves_from_jax_action(action)
-
-    return act
 
 
 def maybe_write_jax_checkpoint_replay(
@@ -91,24 +33,22 @@ def maybe_write_jax_checkpoint_replay(
     if checkpoint_index % every_n != 0 and update != cfg.training.total_updates:
         return None
 
-    from kaggle_environments import make
-
     run_dir = checkpoint_path.parent
     replay_dir = output_dir or run_dir / cfg.artifacts.replay.output_dir
     replay_dir.mkdir(parents=True, exist_ok=True)
     seed = _seed_for_update(cfg, update)
-    learner_act = _build_jax_policy_actions(cfg, checkpoint_path)
+    learner_act = build_checkpoint_agent(cfg, checkpoint_path, act_seed=seed)
     earlier_checkpoint = _pick_earlier_checkpoint(run_dir, update)
     scenarios = [
         {
             "name": "2p_random",
             "num_agents": 2,
-            "opponents": [build_opponent("random")],
+            "opponents": [build_baseline_agent("random")],
         },
         {
             "name": "2p_sniper",
             "num_agents": 2,
-            "opponents": [build_opponent("sniper")],
+            "opponents": [build_baseline_agent("sniper")],
         },
     ]
     if earlier_checkpoint is not None:
@@ -116,18 +56,20 @@ def maybe_write_jax_checkpoint_replay(
             {
                 "name": "2p_earlier_ckpt",
                 "num_agents": 2,
-                "opponents": [_build_jax_policy_actions(cfg, earlier_checkpoint)],
+                "opponents": [build_checkpoint_agent(cfg, earlier_checkpoint, act_seed=seed)],
                 "extra": {"earlier_checkpoint": str(earlier_checkpoint)},
             }
         )
     opponents_4p: list[object] = [
-        build_opponent("random"),
-        build_opponent("sniper"),
+        build_baseline_agent("random"),
+        build_baseline_agent("sniper"),
     ]
     if earlier_checkpoint is not None:
-        opponents_4p.append(_build_jax_policy_actions(cfg, earlier_checkpoint))
+        opponents_4p.append(
+            build_checkpoint_agent(cfg, earlier_checkpoint, act_seed=seed)
+        )
     else:
-        opponents_4p.append(build_opponent("random"))
+        opponents_4p.append(build_baseline_agent("random"))
     scenarios.append(
         {
             "name": "4p_mixed",
@@ -144,30 +86,15 @@ def maybe_write_jax_checkpoint_replay(
     metadata_path: Path | None = None
     for index, scenario in enumerate(scenarios):
         env_seed = seed + index
-        env = make(
-            "orbit_wars", configuration={"seed": env_seed, "randomSeed": env_seed}, debug=False
+        agents = [learner_act, *scenario["opponents"]]
+        outcome, env = run_match(
+            match_id=f"replay_u{update:06d}_{scenario['name']}",
+            format_name=str(scenario["name"]),
+            seed=env_seed,
+            agent_ids=tuple(f"seat_{idx}" for idx in range(int(scenario["num_agents"]))),
+            agents=agents,
+            max_steps=int(cfg.artifacts.replay.max_steps),
         )
-        env.reset(num_agents=int(scenario["num_agents"]))
-        states = env.step([[] for _ in range(int(scenario["num_agents"]))])
-        step_count = 0
-        while step_count < max(int(cfg.artifacts.replay.max_steps), 1):
-            learner_obs = states[0].observation if states[0] is not None else {}
-            joint_actions: list[list[list[float | int]]] = [learner_act(learner_obs)]
-            for opp_idx, opponent in enumerate(scenario["opponents"], start=1):
-                opp_obs = states[opp_idx].observation if states[opp_idx] is not None else {}
-                if callable(opponent):
-                    joint_actions.append(opponent(opp_obs))
-                else:
-                    joint_actions.append(opponent.act(opp_obs))
-            states = env.step(joint_actions)
-            step_count += 1
-            status = states[0].status if states and states[0] is not None else "DONE"
-            if status != "ACTIVE":
-                break
-
-        reward_value = states[0].reward if states and states[0] is not None else 0.0
-        reward = float(reward_value) if reward_value is not None else 0.0
-        result = _reward_to_result(reward)
 
         replay_name = str(scenario["name"])
         html_path = replay_dir / f"replay_u{update:06d}_{replay_name}.html"
@@ -180,20 +107,15 @@ def maybe_write_jax_checkpoint_replay(
             "seed": env_seed,
             "scenario": replay_name,
             "num_agents": int(scenario["num_agents"]),
-            "result": result,
-            "reward": reward,
+            "result": outcome.results["seat_0"],
+            "reward": outcome.rewards["seat_0"],
             "html_path": str(html_path),
         }
         payload.update(scenario.get("extra", {}))
         metadata_path.write_text(
-        json.dumps(
-            payload,
-            indent=2,
-            sort_keys=True,
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
         )
-        + "\n",
-        encoding="utf-8",
-    )
     return metadata_path
 
 

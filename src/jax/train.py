@@ -734,6 +734,35 @@ def _queue_optional_jobs_if_due(
     return job_paths
 
 
+def _queue_tournament_job_if_eligible(
+    cfg: TrainConfig,
+    *,
+    update: int,
+    checkpoint_path: Path,
+    queue_dir: Path,
+    result_root: Path | None,
+    promotion_attempt_reason: str,
+) -> Path | None:
+    tournament_reasons = {"metric_eligible_queue_tournament", "tournament_only"}
+    if promotion_attempt_reason not in tournament_reasons:
+        return None
+    if cfg.artifacts.promotion.strategy in {"hybrid", "tournament"}:
+        cfg.artifacts.tournament.enabled = True
+    if not cfg.artifacts.tournament.enabled:
+        return None
+    return write_optional_job(
+        queue_dir,
+        kind="tournament",
+        update=update,
+        checkpoint_path=checkpoint_path,
+        payload={
+            "campaign": cfg.output.campaign,
+            "run_id": cfg.output.run_id,
+        },
+        result_root=result_root,
+    )
+
+
 def _start_artifact_worker_if_needed(
     cfg: TrainConfig,
     *,
@@ -1103,6 +1132,29 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         metric_name=promotion_attempt.metric_name,
                         metric_value=float(promotion_attempt.metric_value or 0.0),
                     )
+            tournament_job = _queue_tournament_job_if_eligible(
+                cfg,
+                update=result.update,
+                checkpoint_path=result.numbered_path,
+                queue_dir=artifact_queue_dir,
+                result_root=run_context.evaluations_dir,
+                promotion_attempt_reason=promotion_attempt.reason,
+            )
+            if tournament_job is not None:
+                append_jsonl(
+                    log_path,
+                    {
+                        "event": "tournament_job_queued",
+                        "update": result.update,
+                        "job_path": str(tournament_job),
+                    },
+                )
+                _start_artifact_worker_if_needed(
+                    cfg,
+                    queue_dir=artifact_queue_dir,
+                    result_root=run_context.evaluations_dir,
+                    worker_state=artifact_worker_state,
+                )
             if not artifact_cfg.replay_async:
                 replay_meta_path = maybe_write_jax_checkpoint_replay(
                     cfg,

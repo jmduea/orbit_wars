@@ -66,21 +66,26 @@ def main() -> None:
         case "make":
             _run_make(command_args)
 
+        case "eval":
+            from src.cli import eval as eval_cli
+
+            raise SystemExit(eval_cli.main(command_args))
+
         case "help" | "--help" | "-h":
             print(
                 "Usage:\n"
                 "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
                 "  uv run ow train kaggle [SUBCMD] [KAGGLE_OPTS] [HYDRA_OVERRIDES...]\n"
+                "  uv run ow eval tournament [OPTIONS]\n"
                 "  uv run ow make [MAKE_SCRIPT_OVERRIDES...]\n"
                 "  uv run ow [HYDRA_OVERRIDES...]\n\n"
                 "Examples:\n"
                 "  uv run ow train print_resolved_config=true\n"
-                "  uv run ow train kaggle format=2p_4p_16env training.total_updates=500\n"
+                "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_000100.pkl --vs-promoted\n"
                 "  uv run ow train kaggle status owner/kernel-slug\n"
-                "  uv run ow train kaggle sync owner/kernel-slug\n"
                 "  uv run ow make wandb_sweep=shield_cheap_history\n"
             )
         case _:
             raise SystemExit(
-                f"Unknown ow command: {command!r}. Valid commands: train, make"
+                f"Unknown ow command: {command!r}. Valid commands: train, eval, make"
             )
