@@ -54,17 +54,23 @@ uv run python scripts/roadmap.py gate --request "<user request>" --require-allow
 - Branch `issue/N-short-slug`
 - Tests per `AGENTS.md` tiers
 
-## Phase 7–8 — Wrap-up + Done
+## Phase 7–9 — ROADMAP Done, wrap-up, session end
+
+**Order matters** — do not push until `make roadmap-check` passes:
+
+1. Add a row under ROADMAP **Done** (≤5 items; drop oldest Done row if at cap).
+2. Remove the row from **Now** or **Next** (never leave a closed issue only in Later/Now).
+3. `make roadmap-check` (or `roadmap.py validate` + `pytest tests/test_roadmap.py -q`).
+4. Commit ROADMAP with the code change when possible (same PR).
 
 ```bash
 gh issue close N --comment "Evidence: …"
 uv run python scripts/roadmap.py wrap-up --issue N --evidence "tests + commit + paths (≥40 chars)"
 uv run python scripts/roadmap.py check-wrap-up --issue N --require-passed
 uv run python scripts/roadmap.py check-session --require-clean
-uv run python scripts/roadmap.py validate
 ```
 
-Move ROADMAP row to **Done**; manifest `complete` when applicable.
+`wrap-up` **blocks** when GitHub issue is closed (or `--skip-github-check` in tests) but the issue is not listed under **Done**. Manifest `complete` when applicable.
 
 ## Hooks
 

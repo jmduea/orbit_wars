@@ -135,6 +135,16 @@ def _extract_issue_ids(link: str) -> list[int]:
     return [int(match) for match in ISSUE_REF.findall(link)]
 
 
+def issue_ids_by_section(doc: RoadmapDocument) -> dict[int, list[str]]:
+    """Map GitHub issue number to ROADMAP sections that reference it."""
+    by_issue: dict[int, list[str]] = {}
+    for section in SECTION_ORDER:
+        for row in doc.sections.get(section, []):
+            for issue_id in _extract_issue_ids(row.link):
+                by_issue.setdefault(issue_id, []).append(section)
+    return by_issue
+
+
 def validate_roadmap(
     doc: RoadmapDocument,
     *,
@@ -198,6 +208,14 @@ def validate_roadmap(
 
     if len(done_rows) == 0:
         warnings.append("Done section is empty")
+
+    for issue_id, sections in issue_ids_by_section(doc).items():
+        unique_sections = list(dict.fromkeys(sections))
+        if len(unique_sections) > 1:
+            errors.append(
+                f"Issue #{issue_id} listed in {', '.join(unique_sections)}; "
+                "keep each issue in exactly one ROADMAP section"
+            )
 
     return errors + [f"WARNING: {message}" for message in warnings]
 
@@ -417,7 +435,10 @@ def intake_request(request: str, doc: RoadmapDocument) -> dict:
 
     best: tuple[float, str, RoadmapRow] | None = None
     min_match_score = 0.34
-    for section in ("now", "next", "later"):
+    sections = ("now", "next", "later")
+    if issue_ids_in_request:
+        sections = ("now", "next", "later", "done")
+    for section in sections:
         for row in doc.sections.get(section, []):
             score = _score_row_match(request_tokens, row)
             row_issues = _extract_issue_ids(row.link)
@@ -450,6 +471,9 @@ def intake_request(request: str, doc: RoadmapDocument) -> dict:
         requires_planning = False
         suggested_workflow = "quick"
     elif matched_section == "now" and matched_issues:
+        requires_planning = False
+        suggested_workflow = "execute"
+    elif matched_section == "done" and matched_issues:
         requires_planning = False
         suggested_workflow = "execute"
     elif matched_section in {"now", "next"}:
@@ -640,6 +664,8 @@ def agent_payload(doc: RoadmapDocument) -> dict:
             "Session end: wrap-up + check-wrap-up + check-session --require-clean.",
             "Create GitHub issues after execution planning (phase 3), not before for new work.",
             "After changing ROADMAP: uv run python scripts/roadmap.py validate",
+            "Before push after closing an issue: add ROADMAP Done row, remove from Now/Next, then make roadmap-check.",
+            "wrap-up fails if the issue is not under ROADMAP Done (when GitHub issue is CLOSED).",
         ],
     }
 

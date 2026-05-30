@@ -42,6 +42,7 @@ _None — pick from **Next** after planning._
 
 | Item | Link |
 |------|------|
+| Kaggle submission packaging (`__file__` fix, exec validation probe) | [#96](https://github.com/jmduea/orbit_wars/issues/96) · Kaggle episode 78216645 |
 | Kaggle population worker (`ow train kaggle` standalone; P100 smoke) | [#97](https://github.com/jmduea/orbit_wars/issues/97) · `850568a` `e98f452` `20c8011` |
 | Config cleanup: presets, legacy models, OMG clutter, Hydra launch recipes | [#98](https://github.com/jmduea/orbit_wars/issues/98) |
 | Normalized ship differential terminal reward mode | — |
@@ -62,8 +63,9 @@ Free-form chat is fine — agents run the funnel without slash commands. No impl
 | **4 — Claim** | `roadmap.py claim --issue N --path src/...` (one claim per issue; no path overlap) |
 | **5 — Approve impl** | `roadmap.py approve-impl --issue N` · branch `issue/N-short-slug` |
 | **6 — Implement** | Code/tests; `roadmap.py gate --require-allowed` (`ORBIT_WARS_IMPL_GATE` on by default) |
-| **7 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` |
-| **8 — Done** | ROADMAP **Done**, manifest `complete`, `roadmap.py check-session` clean |
+| **7 — ROADMAP Done** | Add **Done** row (≤5 cap), remove from **Now**/**Next**, run `make roadmap-check` |
+| **8 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` (fails if issue not in **Done**) |
+| **9 — Session end** | manifest `complete`, `roadmap.py check-session` clean |
 
 **Multi-agent:** `roadmap.py claims` before starting; `ORBIT_WARS_AGENT_ID` distinguishes owners. Session end must pass `check-session` (no open claims without wrap-up). See [OWNERSHIP.md](OWNERSHIP.md).
 

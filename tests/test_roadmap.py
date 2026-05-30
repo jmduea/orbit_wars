@@ -19,6 +19,7 @@ from scripts.roadmap import (
     implementation_gate,
     intake_request,
     is_implementation_path,
+    issue_ids_by_section,
     parse_roadmap,
     save_impl_gate,
     validate_roadmap,
@@ -48,8 +49,9 @@ def test_agent_payload_includes_manifest_and_rules() -> None:
     payload = agent_payload(doc)
     assert "roadmap" in payload
     assert "manifest_active" in payload
-    assert payload["roadmap"]["counts"]["now"] >= 1
+    assert payload["roadmap"]["counts"]["next"] >= 1
     assert any("brain_dump" in rule.lower() for rule in payload["agent_rules"])
+    assert any("Done row" in rule for rule in payload["agent_rules"])
     assert "workflow_phases" in payload
 
 
@@ -86,6 +88,22 @@ _Last triaged: 2026-01-15_
     assert doc.last_triaged == date(2026, 1, 15)
     assert len(doc.sections["now"]) == 1
     assert doc.sections["now"][0] == RoadmapRow(item="Alpha", link="#1")
+
+
+def test_validate_rejects_issue_in_multiple_sections() -> None:
+    doc = RoadmapDocument(
+        phase="p",
+        last_triaged=date(2026, 5, 1),
+        sections={
+            "now": [RoadmapRow(item="Open", link="[#96](https://github.com/jmduea/orbit_wars/issues/96)")],
+            "next": [],
+            "later": [],
+            "done": [RoadmapRow(item="Closed", link="[#96](https://github.com/jmduea/orbit_wars/issues/96)")],
+        },
+    )
+    assert issue_ids_by_section(doc)[96] == ["now", "done"]
+    errors = [m for m in validate_roadmap(doc) if not m.startswith("WARNING:")]
+    assert any("Issue #96" in e and "now, done" in e for e in errors)
 
 
 def test_validate_rejects_too_many_now() -> None:
@@ -133,11 +151,11 @@ def test_validate_rejects_brain_dump_link_in_now() -> None:
     assert any("brain_dump" in e for e in errors)
 
 
-def test_intake_matches_kaggle_validation_now() -> None:
+def test_intake_matches_kaggle_validation_done() -> None:
     doc = parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
-    result = intake_request("fix kaggle docker validation submission", doc)
+    result = intake_request("fix kaggle docker validation submission #96", doc)
     assert result["matched"] is True
-    assert result["roadmap_section"] == "now"
+    assert result["roadmap_section"] == "done"
     assert 96 in result["issue_ids"]
 
 
@@ -149,8 +167,11 @@ def test_intake_unknown_request_captures_to_later() -> None:
     assert result["requires_planning"] is True
 
 
-def test_gate_blocks_without_approve_impl(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_blocks_without_approve_impl(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("ORBIT_WARS_IMPL_GATE", "1")
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", tmp_path / "no-gate.json")
     payload = implementation_gate(request="fix kaggle docker validation")
     assert payload["allowed"] is False
     assert payload["blockers"]
@@ -171,9 +192,10 @@ def test_extract_paths_from_write_payload() -> None:
 
 
 def test_hook_guard_blocks_src_without_impl_gate(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("ORBIT_WARS_HOOK_DISABLE", raising=False)
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", tmp_path / "no-gate.json")
     result = hook_guard(paths=["src/jax/train.py"])
     assert result["allow"] is False
     assert (
@@ -207,6 +229,7 @@ def test_begin_work_matches_issue_96(
     )
     payload = begin_work("work on issue #96 docker validation")
     assert payload["intake"]["matched"] is True
+    assert payload["intake"]["roadmap_section"] == "done"
     assert payload["primary_issue"] == 96
     assert "next_steps" in payload
 
@@ -238,20 +261,49 @@ def test_wrap_up_requires_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert any("Evidence too short" in b for b in result["blockers"])
 
 
-def test_finalize_wrap_up_records_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wrap_up_blocks_when_issue_not_in_done(tmp_path: Path) -> None:
+    from scripts import roadmap_claims
+
+    result = roadmap_claims.wrap_up_check(
+        issue=99,
+        evidence="make test-fast passed; commit abc; updated ROADMAP Done row for #99",
+        skip_github=True,
+    )
+    assert result["passed"] is False
+    assert result["roadmap_section"] == "next"
+    assert any("ROADMAP Next" in b for b in result["blockers"])
+
+
+def test_wrap_up_passes_when_issue_in_done(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import roadmap_claims
+
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
+    result = roadmap_claims.wrap_up_check(
+        issue=96,
+        evidence="make test-domain-artifacts passed; Kaggle episode 78216645; commit f6231fc",
+        skip_github=True,
+    )
+    assert result["passed"] is True
+    assert result.get("roadmap_section") == "done"
+
+
+def test_finalize_wrap_up_records_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from scripts import roadmap_claims
 
     state = tmp_path / "state"
     monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
     monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-wrap")
-    roadmap_claims.claim_issue(issue=42, owner="agent-wrap", paths=["docs/"])
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", state / "impl-gate.json")
+    roadmap_claims.claim_issue(issue=96, owner="agent-wrap", paths=["docs/"])
     evidence = "make test-fast passed; commit deadbeef; updated ROADMAP Done row"
     result = roadmap_claims.finalize_wrap_up(
-        issue=42, evidence=evidence, owner="agent-wrap", skip_github=True
+        issue=96, evidence=evidence, owner="agent-wrap", skip_github=True
     )
     assert result["passed"] is True
-    assert roadmap_claims.load_completion(42) is not None
-    assert roadmap_claims.load_claim(42) is None
+    assert roadmap_claims.load_completion(96) is not None
+    assert roadmap_claims.load_claim(96) is None
 
 
 def test_check_session_flags_open_claim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

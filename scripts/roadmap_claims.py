@@ -18,13 +18,15 @@ def state_dir() -> Path:
 
 
 def claims_dir() -> Path:
-    env = os.environ.get("ORBIT_WARS_claims_dir()", "").strip()
+    env = os.environ.get("ORBIT_WARS_CLAIMS_DIR", "").strip()
     return Path(env) if env else state_dir() / "claims"
 
 
 def completions_dir() -> Path:
-    env = os.environ.get("ORBIT_WARS_completions_dir()", "").strip()
+    env = os.environ.get("ORBIT_WARS_COMPLETIONS_DIR", "").strip()
     return Path(env) if env else state_dir() / "completions"
+
+
 CLAIM_TTL_HOURS = 168
 MIN_EVIDENCE_CHARS = 40
 
@@ -261,14 +263,40 @@ def wrap_up_check(
         )
 
     section = roadmap_section_for_issue(issue)
-    if section == "now":
-        warnings.append(
-            f"Issue #{issue} still listed under ROADMAP Now; move row to Done after wrap-up"
+    gh_closed = gh_data is not None and str(gh_data.get("state", "")).upper() == "CLOSED"
+    if section == "done":
+        pass
+    elif section == "now":
+        msg = (
+            f"Issue #{issue} still under ROADMAP Now; add a Done row and remove from Now "
+            "before wrap-up (then make roadmap-check)"
         )
+        if gh_closed or skip_github:
+            blockers.append(msg)
+        else:
+            warnings.append(msg)
     elif section == "next":
-        warnings.append(f"Issue #{issue} still under ROADMAP Next; move to Done when closing work")
+        msg = (
+            f"Issue #{issue} still under ROADMAP Next; move to Done before wrap-up "
+            "(then make roadmap-check)"
+        )
+        if gh_closed or skip_github:
+            blockers.append(msg)
+        else:
+            warnings.append(msg)
+    elif section == "later":
+        warnings.append(
+            f"Issue #{issue} is under ROADMAP Later; promote to Done when closing work"
+        )
     elif section is None:
-        warnings.append(f"Issue #{issue} not found in ROADMAP tables")
+        msg = (
+            f"Issue #{issue} not found in ROADMAP tables; add a Done row with [#{issue}](...) "
+            "before wrap-up"
+        )
+        if gh_closed or skip_github:
+            blockers.append(msg)
+        else:
+            warnings.append(msg)
 
     impl = load_impl_gate()
     impl_issue = impl.get("issue") if impl else None
