@@ -19,6 +19,8 @@ Optional: `source scripts/agent_env.sh` sets `ORBIT_WARS_IMPL_GATE=1`, `ORBIT_WA
 
 **Parallel workers:** `claim --setup-worktree` → work in `worktrees/issue-N/`; unique `ORBIT_WARS_AGENT_ID` + `ORBIT_WARS_ISSUE_ID` per subagent. Hooks block `src/conf/tests` on `main` once the claim records a branch (null branch claims are grandfathered).
 
+**Multitask coordinators:** before spawning executor subagents, ensure each worker has its own claim, `ORBIT_WARS_ISSUE_ID`, and worktree. Parent must not delegate `wrap-up` without per-issue evidence; run `check-session --require-clean` in the parent turn; do not trust subagent prose alone for completion.
+
 ## Enforcement
 
 - **Pre-tool hook** denies `src/` / `conf/` / `tests/` writes without approved `.omg/state/impl-gate.json`.

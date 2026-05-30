@@ -260,6 +260,70 @@ def test_claim_path_overlap_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyP
         roadmap_claims.claim_issue(issue=2, owner="agent-b", paths=["src/orchestration/kaggle_runner.py"])
 
 
+def test_claim_rejects_comma_separated_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-comma")
+    with pytest.raises(ValueError, match="comma"):
+        roadmap_claims.claim_issue(
+            issue=3,
+            owner="agent-comma",
+            paths=["src/,tests/"],
+        )
+
+
+def test_approve_impl_blocks_overwrite_without_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+
+    from scripts.roadmap import cmd_approve_impl
+
+    gate = tmp_path / "impl-gate.json"
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", gate)
+    save_impl_gate({"approved": True, "issue": "#1", "summary": "first"})
+    args = argparse.Namespace(issue=2, manifest_id=None, summary="second", force=False)
+    assert cmd_approve_impl(args) == 1
+    loaded = json.loads(gate.read_text(encoding="utf-8"))
+    assert loaded["issue"] == "#1"
+
+
+def test_begin_rejects_multiple_issue_refs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "scripts.roadmap.WORK_SESSION_PATH", tmp_path / "work-session.json"
+    )
+    with pytest.raises(ValueError, match="multiple issues"):
+        begin_work("fix #1 and also #2 in one session")
+
+
+def test_begin_allows_multiple_issue_refs_with_batch_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "scripts.roadmap.WORK_SESSION_PATH", tmp_path / "work-session.json"
+    )
+    payload = begin_work("fix #1 and also #2 in one session", batch_ok=True)
+    assert payload["request"] == "fix #1 and also #2 in one session"
+    assert payload["may_implement"] is False
+
+
+def test_begin_issue_override_sets_primary_issue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "scripts.roadmap.WORK_SESSION_PATH", tmp_path / "work-session.json"
+    )
+    payload = begin_work("implement quantum blockchain", issue=42)
+    assert payload["primary_issue"] == 42
+    assert payload["issue"] == 42
+    assert 42 in payload["intake"]["issue_ids"]
+
+
 def test_wrap_up_requires_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from scripts import roadmap_claims
 

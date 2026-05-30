@@ -88,6 +88,38 @@ def test_branch_guard_blocks_main_when_branch_set(
     assert "main" in result.get("reason", "")
 
 
+def test_branch_guard_denies_multiple_claims_without_issue_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-multi")
+    monkeypatch.delenv("ORBIT_WARS_ISSUE_ID", raising=False)
+    monkeypatch.setenv("ORBIT_WARS_BRANCH_ENFORCE", "1")
+    roadmap_claims.claim_issue(
+        issue=10,
+        owner="agent-multi",
+        paths=["src/jax/"],
+        branch="issue/10",
+        setup_worktree=False,
+    )
+    roadmap_claims.claim_issue(
+        issue=11,
+        owner="agent-multi",
+        paths=["tests/"],
+        branch="issue/11",
+        setup_worktree=False,
+    )
+    monkeypatch.setattr("scripts.roadmap_git.current_branch", lambda _root=None: "issue/10")
+
+    result = branch_guard(owner="agent-multi", repo_root=tmp_path)
+    assert result["allow"] is False
+    assert "multiple open claims" in result.get("reason", "").lower()
+    assert result.get("next_steps")
+
+
 def test_hook_guard_blocks_src_on_main_with_branch_claim(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

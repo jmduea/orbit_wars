@@ -21,6 +21,8 @@ cursor_to_copilot = {
     "Shell": "runInTerminal",
     "Read": "readFile",
     "Write": "editFiles",
+    "StrReplace": "editFiles",
+    "ApplyPatch": "editFiles",
     "Delete": "deleteFile",
     "Grep": "grep",
     "Task": "task",

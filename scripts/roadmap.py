@@ -410,14 +410,38 @@ def save_work_session(payload: dict) -> None:
     WORK_SESSION_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def begin_work(request: str) -> dict:
-    """Run agent + intake + gate for free-form user text; persist session for the hook."""
+def begin_work(
+    request: str,
+    *,
+    issue: int | None = None,
+    batch_ok: bool = False,
+) -> dict:
+    """Run agent + intake + gate for free-form user text; persist session for the hook.
+
+    Args:
+        request: Verbatim user request text.
+        issue: Optional GitHub issue number (``begin --issue N`` sugar).
+        batch_ok: When false, reject request text containing multiple ``#NNN`` refs.
+    """
     request = request.strip()
     if not request:
         raise ValueError("begin requires non-empty request text")
 
+    issue_ids_in_request = [int(n) for n in ISSUE_REF.findall(request)]
+    if len(issue_ids_in_request) > 1 and not batch_ok:
+        refs = ", ".join(f"#{n}" for n in issue_ids_in_request)
+        raise ValueError(
+            f"begin request references multiple issues ({refs}); "
+            "use one issue per session or pass --batch-ok"
+        )
+
     doc = parse_roadmap(load_roadmap_text())
     intake = intake_request(request, doc)
+    if issue is not None:
+        intake_issue_ids = list(intake.get("issue_ids") or [])
+        if issue not in intake_issue_ids:
+            intake_issue_ids.insert(0, issue)
+        intake = {**intake, "issue_ids": intake_issue_ids, "issue_override": issue}
     gate = implementation_gate(request=request)
     may_implement = bool(
         gate["allowed"]
@@ -425,10 +449,11 @@ def begin_work(request: str) -> dict:
         and not intake.get("requires_planning")
     )
     issue_ids = intake.get("issue_ids") or []
-    primary_issue = issue_ids[0] if issue_ids else None
+    primary_issue = issue if issue is not None else (issue_ids[0] if issue_ids else None)
 
     payload = {
         "request": request,
+        "issue": issue,
         "intake": intake,
         "gate": {
             "allowed": gate["allowed"],
@@ -738,7 +763,11 @@ def cmd_begin(args: argparse.Namespace) -> int:
         print("begin requires non-empty request text", file=sys.stderr)
         return 1
     try:
-        payload = begin_work(args.request)
+        payload = begin_work(
+            args.request,
+            issue=args.issue,
+            batch_ok=args.batch_ok,
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -789,6 +818,24 @@ def cmd_approve_impl(args: argparse.Namespace) -> int:
     if not args.issue and not args.manifest_id:
         print("approve-impl requires --issue and/or --manifest-id", file=sys.stderr)
         return 1
+    existing = load_impl_gate()
+    if existing and existing.get("approved") and not args.force:
+        new_issue = f"#{args.issue}" if args.issue else None
+        old_issue = existing.get("issue")
+        old_manifest = existing.get("manifest_id")
+        conflict = False
+        if new_issue and old_issue and new_issue != old_issue:
+            conflict = True
+        if args.manifest_id and old_manifest and args.manifest_id != old_manifest:
+            conflict = True
+        if conflict:
+            print(
+                "approve-impl blocked: existing gate is approved for "
+                f"issue={old_issue!r} manifest_id={old_manifest!r}. "
+                "Pass --force to overwrite or run clear-impl first.",
+                file=sys.stderr,
+            )
+            return 1
     payload = {
         "approved": True,
         "issue": f"#{args.issue}" if args.issue else None,
@@ -980,7 +1027,7 @@ def main() -> int:
         help="request text for intake/gate/begin",
     )
     parser.add_argument("--strict-links", action="store_true")
-    parser.add_argument("--issue", type=int, help="GitHub issue number for approve-impl")
+    parser.add_argument("--issue", type=int, help="GitHub issue number (begin/claim/approve-impl)")
     parser.add_argument("--manifest-id", help="manifest entry id for approve-impl")
     parser.add_argument("--summary", help="short description stored in impl-gate")
     parser.add_argument(
@@ -1032,7 +1079,12 @@ def main() -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="force release without wrap-up (abandon claim)",
+        help="force release without wrap-up (abandon claim) or overwrite approved impl-gate",
+    )
+    parser.add_argument(
+        "--batch-ok",
+        action="store_true",
+        help="allow begin request text with multiple #NNN issue references",
     )
 
     args = parser.parse_args()
