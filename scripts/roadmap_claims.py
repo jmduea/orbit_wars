@@ -126,6 +126,13 @@ def claim_issue(
     if not paths:
         raise ValueError("claim requires at least one --path")
 
+    for path in paths:
+        if "," in path:
+            raise ValueError(
+                f"claim path {path!r} contains a comma; "
+                "repeat --path for each directory instead of comma-separated paths"
+            )
+
     resolved_branch = branch
     if not resolved_branch:
         title_slug: str | None = slug

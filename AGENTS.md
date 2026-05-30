@@ -138,6 +138,7 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 - **New work:** add **Later** row first; open GitHub issues after phase 3 (execution plan), not at idea time.
 
 - **Multi-agent:** one `claim --issue N --path … --setup-worktree` per worker; unique `ORBIT_WARS_AGENT_ID` + `ORBIT_WARS_ISSUE_ID=N`; edit `src/conf/tests` only inside `worktrees/issue-N/` on `issue/N-*` (hook blocks `main` once the claim stores a branch). `roadmap.py claims` before work; **before push:** ROADMAP **Done** + `make roadmap-check`; `wrap-up` after `gh issue close`; `check-session` before stopping.
+- **Multitask coordinator MUST:** run `claims` before and after workers; never delegate `wrap-up` without per-issue evidence from each worker; run `check-session --require-clean` in the parent turn; do not treat subagent completion prose as verified evidence.
 - Set `ORBIT_WARS_AGENT_ID` per Cursor session (e.g. `cursor-a`, `cursor-b`) to avoid claim collisions.
 - **Agent packages:** `.omg/workflow-manifest.json` active entries only; register/link when promoting to **Now**.
 
