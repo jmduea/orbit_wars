@@ -1,0 +1,83 @@
+{
+  "label": "terminal-reward-ship-diff-100u",
+  "commit_sha": "c2c5ef20f86a77c00f03e0f05cbe49629a6d99ed",
+  "tier": "workstation",
+  "jax_version": "0.10.0",
+  "devices": [
+    "cuda:0"
+  ],
+  "default_backend": "gpu",
+  "overrides": [
+    "model=transformer_factorized",
+    "format=2p_4p_16env",
+    "training=workstation",
+    "opponents=self_play_only",
+    "curriculum=off",
+    "telemetry.wandb.enabled=false",
+    "artifacts.artifact_pipeline.enabled=false",
+    "seed=42",
+    "reward=terminal_only",
+    "reward=ship_differential"
+  ],
+  "updates": 100,
+  "warmup": 2,
+  "measured_updates": 100,
+  "format": "2p_4p_16env",
+  "num_envs": 32,
+  "rollout_groups": [
+    {
+      "name": "two_player",
+      "player_count": 2,
+      "num_envs": 16
+    },
+    {
+      "name": "four_player",
+      "player_count": 4,
+      "num_envs": 16
+    }
+  ],
+  "rollout_steps": 128,
+  "rollout_microbatch_envs": 16,
+  "compile_seconds_to_update_3": 229.79719683599978,
+  "seconds_total": 205.67040102598548,
+  "seconds_per_update_mean": 2.056704010259855,
+  "rollout_seconds_mean": 1.9454485076403216,
+  "update_seconds_mean": 0.11125278293962765,
+  "rollout_seconds_total": 194.54485076403216,
+  "update_seconds_total": 11.125278293962765,
+  "env_steps_per_sec": 1991.535962183732,
+  "policy_loss": 0.0035889336268883198,
+  "value_loss": 1.4853715117275714,
+  "approx_kl": 0.0011996102335251634,
+  "entropy": 3.2175453162193297,
+  "total_loss": 0.7301869693025946,
+  "mean_active_launches_per_turn": 0.735478515625,
+  "overall_win_rate": 0.26535714566707613,
+  "snapshots": [
+    {
+      "update": 50,
+      "curriculum_stage_id": "default_latest",
+      "policy_loss": -0.012734217569231987,
+      "value_loss": 0.893236517906189,
+      "approx_kl": 0.001404759706929326,
+      "entropy": 1.6887197494506836,
+      "total_loss": 0.4254404604434967,
+      "mean_active_launches_per_turn": 0.556640625,
+      "overall_win_rate": 1.0,
+      "survival_time": 0.9979999860127767
+    },
+    {
+      "update": 100,
+      "curriculum_stage_id": "default_latest",
+      "policy_loss": 0.0036040847189724445,
+      "value_loss": 0.5207158327102661,
+      "approx_kl": 0.0016286264872178435,
+      "entropy": 2.408536434173584,
+      "total_loss": 0.25191932916641235,
+      "mean_active_launches_per_turn": 1.82080078125,
+      "overall_win_rate": 0.0,
+      "survival_time": 0.0
+    }
+  ],
+  "snapshots_all_finite": true
+}

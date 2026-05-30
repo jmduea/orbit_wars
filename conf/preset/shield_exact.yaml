@@ -1,6 +1,0 @@
-defaults:
-  - override /task: shield_exact
-  - override /telemetry: shield_debug
-  - _self_
-
-run_name: shield_exact

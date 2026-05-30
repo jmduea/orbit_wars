@@ -1,6 +1,8 @@
 # @package _global_
 
 parameters:
+  artifacts:
+    value: disabled
   telemetry:
     value: throughput_only
   output.campaign:

@@ -22,7 +22,7 @@ from src.jax.train import (
 
 def test_end_to_end_jax_rollout_and_update_smoke():
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
@@ -514,7 +514,7 @@ def test_collect_rollout_jax_emits_training_scalar_metric_contract():
 
 def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks():
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.model.max_moves_k = 3
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2

@@ -113,11 +113,6 @@ def test_validate_rejects_intercept_anchor_mismatch() -> None:
         validate_checkpoint_feature_compatibility(checkpoint, env_cfg)
 
 
-def test_feature_metadata_includes_encoder_backbone_for_gnn() -> None:
-    metadata = feature_metadata(_task(), model_cfg=ModelConfig(architecture="gnn_pointer"))
-    assert metadata["encoder_backbone"] == "planet_gnn"
-
-
 def test_feature_metadata_includes_encoder_backbone_for_transformer() -> None:
     metadata = feature_metadata(
         _task(), model_cfg=ModelConfig(architecture="planet_graph_transformer")
@@ -151,7 +146,7 @@ def test_feature_metadata_includes_factorized_pointer_decoder() -> None:
     metadata = feature_metadata(
         _task(),
         model_cfg=ModelConfig(
-            architecture="gnn_pointer",
+            architecture="planet_graph_transformer",
             pointer_decoder="factorized_topk",
         ),
     )
@@ -163,9 +158,9 @@ def test_validate_rejects_pointer_decoder_mismatch() -> None:
     from src.config import TrainConfig
 
     cfg = TrainConfig()
-    cfg.model.pointer_decoder = "joint_flat"
+    cfg.model.pointer_decoder = "factorized_topk"
     stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
-    stored["pointer_decoder"] = "factorized_topk"
+    stored["pointer_decoder"] = "joint_flat"
     stored["action_layout_version"] = 2
 
     from src.artifacts.checkpoint_compat import validate_checkpoint_pointer_decoder_compatibility

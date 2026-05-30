@@ -70,9 +70,7 @@ METADATA_KEYS = (
     "action_layout_version",
 )
 
-POINTER_DECODER_JOINT_FLAT = "joint_flat"
 POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
-ACTION_LAYOUT_JOINT_FLAT = 1
 ACTION_LAYOUT_FACTORIZED_TOPK = 2
 
 
@@ -80,8 +78,6 @@ def encoder_backbone_for_architecture(architecture: str) -> str:
     """Map ``model.architecture`` to the checkpoint encoder-backbone slug."""
 
     normalized = architecture.strip().lower()
-    if normalized in {"gnn_pointer", "gnn_pointer_v2"}:
-        return "planet_gnn"
     if normalized == "planet_graph_transformer":
         return "planet_self_attention"
     raise ValueError(
@@ -92,10 +88,8 @@ def encoder_backbone_for_architecture(architecture: str) -> str:
 def pointer_decoder_for_model(model_cfg: ModelConfig) -> str:
     """Map ``ModelConfig`` to the checkpoint pointer-decoder slug."""
 
-    raw = getattr(model_cfg, "pointer_decoder", POINTER_DECODER_JOINT_FLAT)
+    raw = getattr(model_cfg, "pointer_decoder", POINTER_DECODER_FACTORIZED_TOPK)
     normalized = str(raw).strip().lower()
-    if normalized in {POINTER_DECODER_JOINT_FLAT, "joint", "flat"}:
-        return POINTER_DECODER_JOINT_FLAT
     if normalized in {
         POINTER_DECODER_FACTORIZED_TOPK,
         "factorized",
@@ -104,7 +98,7 @@ def pointer_decoder_for_model(model_cfg: ModelConfig) -> str:
         return POINTER_DECODER_FACTORIZED_TOPK
     raise ValueError(
         f"Unsupported pointer_decoder {raw!r}. Expected "
-        f"{POINTER_DECODER_JOINT_FLAT!r} or {POINTER_DECODER_FACTORIZED_TOPK!r}."
+        f"{POINTER_DECODER_FACTORIZED_TOPK!r}."
     )
 
 
@@ -117,8 +111,6 @@ def is_factorized_pointer_decoder(model_cfg: ModelConfig) -> bool:
 def action_layout_version_for_pointer_decoder(pointer_decoder: str) -> int:
     """Return the integer action-layout version for a pointer decoder slug."""
 
-    if pointer_decoder == POINTER_DECODER_JOINT_FLAT:
-        return ACTION_LAYOUT_JOINT_FLAT
     if pointer_decoder == POINTER_DECODER_FACTORIZED_TOPK:
         return ACTION_LAYOUT_FACTORIZED_TOPK
     raise ValueError(f"Unsupported pointer_decoder slug: {pointer_decoder!r}")

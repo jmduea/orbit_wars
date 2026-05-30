@@ -51,7 +51,7 @@ class RewardConfig:
 class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
-    architecture: str = "gnn_pointer"
+    architecture: str = "planet_graph_transformer"
     value_head: str = (
         "shared"  # format_routed for 2p/4p routing; distributional for C51 critic
     )
@@ -105,7 +105,6 @@ class TrainingConfig:
 
 @dataclass(slots=True)
 class FormatConfig:
-    format_schedule: list[dict[str, Any]] = field(default_factory=list)
     format_mix: list[dict[str, Any]] = field(default_factory=list)
     rollout_groups: list[dict[str, Any]] = field(default_factory=list)
     phases: list[dict[str, Any]] = field(default_factory=list)
@@ -200,7 +199,6 @@ class OpponentsConfig:
 class ReplayConfig:
     enabled: bool = False
     every_n_checkpoints: int = 1
-    opponent: str = "random"
     seed_policy: str = "update"
     max_steps: int = 500
     output_dir: str = "replays"
@@ -273,7 +271,6 @@ class OutputConfig:
 class TrainConfig:
     seed: int = 42
     run_name: str = "ow"
-    device: str = "auto"
     model: ModelConfig = field(default_factory=ModelConfig)
     task: TaskConfig = field(default_factory=TaskConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -283,7 +280,6 @@ class TrainConfig:
     opponents: OpponentsConfig = field(default_factory=OpponentsConfig)
     telemetry: TelemetryConfig = field(default_factory=TelemetryConfig)
     artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
-    sweep_space: dict = field(default_factory=dict)
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     print_resolved_config: bool = False

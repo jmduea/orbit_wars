@@ -1,21 +1,41 @@
 # **Orbit Wars Configuration Guide**
 
-This folder contains the Hydra configuration system for Orbit Wars training, evaluation, W&B sweeps, artifacts, telemetry, and experiment presets.
+This folder contains the Hydra configuration system for Orbit Wars training, evaluation, W&B sweeps, artifacts, telemetry, and experiment overrides.
 
 The intended workflow is:
 
 ```bash
-uv run ow train preset=smoke
-uv run ow train preset=shield_cheap
+uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
+uv run ow train task=shield_cheap
 uv run ow train print_resolved_config=true
 ```
 
 For W&B sweeps:
 
 ```bash
-uv run ow make wandb_sweep=2p_only_throughput.yaml
+uv run ow make wandb_sweep=2p_only_throughput
 uv run wandb sweep artifacts/sweeps/2p_only_throughput.yaml
 uv run wandb agent <entity>/<project>/<sweep_id>
+```
+
+---
+
+## **Launch recipes**
+
+Common multi-group launches use direct Hydra overrides instead of preset bundles:
+
+| Recipe | Overrides |
+| --- | --- |
+| smoke | `training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled` |
+| shield_cheap | `task=shield_cheap telemetry=default` |
+| shield_tiered | `task=shield_tiered telemetry=default` |
+
+Examples:
+
+```bash
+uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
+uv run ow train task=shield_cheap
+uv run ow train task=shield_tiered telemetry=shield_debug
 ```
 
 ---
@@ -34,9 +54,9 @@ conf/
 
 uv run ow train \
     task=shield_cheap \
-    training/default \
-    model/transformer_factorized \
-    artifacts/default
+    training=default \
+    model=transformer_factorized \
+    artifacts=default
 ```
 
 A W&B sweep:
@@ -74,24 +94,13 @@ defaults:
   - opponents: default
   - telemetry: default
   - artifacts: default
-  - optional sweep_space: none
-  - optional preset: null
   - _self_
 ```
 
-Use `preset=*` for most experiment launches/targeted overrides.
-
-Examples:
+Check out the resolved config:
 
 ```bash
-uv run ow train preset=smoke
-uv run ow train preset=shield_tiered_debug
-```
-
-Check out the resolved config with a preset override:
-
-```bash
-uv run ow train preset=smoke print_resolved_config=true
+uv run ow train print_resolved_config=true
 ```
 
 ## **Config Organization Standards**
@@ -104,16 +113,11 @@ conf/<group>/default.yaml       # what the root config selects by default
 conf/<group>/<variant>.yaml     # meaningful override profiles
 ```
 
-Cross-group experiment compositions belong in:
-
-```bash
-conf/preset/*.yaml
-```
-
 Sweep-only metadata belongs in:
 
 ```bash
 conf/wandb_sweep/space/*.yaml
+conf/wandb_sweep/fixed/*.yaml
 ```
 
 Runtime configs and sweep configs should be kept seperate:
@@ -176,10 +180,6 @@ Follow links to readme's for more info
 
     Defines checkpoints, replay, Agent validation via Kaggle Docker image, and artifact pipeline behavior.
 
-- ### TODO: [presets/](presets/README.md)
-
-    Compose multiple config groups into a named experiment.
-
 - ### [wandb_sweep/](wandb_sweep/README.md)
 
     Handles .yaml sweep composition, read the README.md for an in-depth guide.
@@ -189,32 +189,31 @@ Follow links to readme's for more info
 ### **Smoke test**
 
 ```bash
-uv run ow train preset=smoke print_resolved_config=true
-uv run ow train preset=smoke
+uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled print_resolved_config=true
 ```
 
 ### **Cheap shield training**
 
 ```bash
-uv run ow train preset=shield_cheap
+uv run ow train task=shield_cheap
 ```
 
 ### **Tiered shield debug**
 
 ```bash
-uv run ow train preset=shield_tiered_debug
+uv run ow train task=shield_tiered telemetry=shield_debug
 ```
 
 ### **Override individual fields**
 
 ```bash
-uv run ow train preset=shield_cheap training.total_updates=10
+uv run ow train task=shield_cheap training.total_updates=10
 ```
 
 ```bash
-uv run ow train preset=shield_cheap task.feature_history_steps=15
+uv run ow train task=shield_cheap task.feature_history_steps=15
 ```
 
 ```bash
-uv run ow train preset=shield_cheap telemetry.wandb.enabled=false
+uv run ow train task=shield_cheap telemetry.wandb.enabled=false
 ```

@@ -5,15 +5,15 @@
 A normal Hydra run executes one config:
 
 ```bash
-uv run ow train preset=shield_cheap
+uv run ow train task=shield_cheap
 ```
 
 A W&B sweep executes ***many*** configs:
 
 ```bash
-Run 1: preset=shield_cheap training.lr=0.0001
-Run 2: preset=shield_cheap training.lr=0.0003
-Run 3: preset=shield_cheap training.lr=0.0006
+Run 1: task=shield_cheap training.lr=0.0001
+Run 2: task=shield_cheap training.lr=0.0003
+Run 3: task=shield_cheap training.lr=0.0006
 ...
 ```
 
@@ -58,8 +58,8 @@ Metric and method are pretty well covered by W&B documentation, so if you need t
 # @package _global_
 
 parameters:
-  preset:
-    value: shield_cheap # custom preset
+  task:
+    value: shield_cheap
 
   output.campaign:
     value: shield_cheap_sweep 

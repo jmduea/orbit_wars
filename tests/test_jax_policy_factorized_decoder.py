@@ -12,7 +12,7 @@ from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
-from src.jax.policy import build_gnn_pointer_policy, make_synthetic_turn_batch
+from src.jax.policy import build_planet_graph_transformer_policy, make_synthetic_turn_batch
 
 
 def _task_cfg(**kwargs) -> TaskConfig:
@@ -23,12 +23,12 @@ def _task_cfg(**kwargs) -> TaskConfig:
 
 def _train_cfg(*, pointer_decoder: str = "factorized_topk") -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.model.pointer_decoder = pointer_decoder
     cfg.model.hidden_size = 64
     cfg.model.max_moves_k = 3
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
+    cfg.model.attention_heads = 4
+    cfg.model.planet_transformer_layers = 1
     cfg.task = _task_cfg()
     return cfg
 
@@ -37,7 +37,7 @@ def test_factorized_pointer_decoder_forward_shapes() -> None:
     cfg = _train_cfg(pointer_decoder="factorized_topk")
     assert pointer_decoder_for_model(cfg.model) == POINTER_DECODER_FACTORIZED_TOPK
 
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(0))
     params = policy.init(jax.random.PRNGKey(1), batch)
     output = policy.apply(params, batch, deterministic=True)
@@ -60,7 +60,7 @@ def test_factorized_pointer_decoder_forward_shapes() -> None:
 
 def test_factorized_pointer_masks_illegal_sources() -> None:
     cfg = _train_cfg(pointer_decoder="factorized_topk")
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     batch = make_synthetic_turn_batch(1, cfg.task, key=jax.random.PRNGKey(2))
     batch = batch._replace(
         edge_mask=jnp.zeros_like(batch.edge_mask),
@@ -72,22 +72,4 @@ def test_factorized_pointer_masks_illegal_sources() -> None:
     np.testing.assert_array_equal(
         np.asarray(output.source_logits),
         np.full(np.asarray(output.source_logits).shape, illegal),
-    )
-
-
-def test_joint_flat_default_unchanged() -> None:
-    cfg = _train_cfg(pointer_decoder="joint_flat")
-    policy = build_gnn_pointer_policy(cfg)
-    batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(4))
-    params = policy.init(jax.random.PRNGKey(5), batch)
-    output = policy.apply(params, batch, deterministic=True)
-
-    k_slots = edge_k(cfg.task)
-    edge_count = MAX_PLANETS * k_slots + 1
-    assert output.target_logits.shape == (2, cfg.model.max_moves_k, edge_count)
-    assert output.ship_logits.shape == (
-        2,
-        cfg.model.max_moves_k,
-        edge_count,
-        cfg.task.ship_bucket_count,
     )

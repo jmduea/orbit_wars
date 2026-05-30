@@ -48,8 +48,8 @@ def _fake_config() -> SimpleNamespace:
             terminal_reward_mode="binary_win",
         ),
         model=SimpleNamespace(
-            architecture="gnn_pointer",
-            pointer_decoder="joint_flat",
+            architecture="planet_graph_transformer",
+            pointer_decoder="factorized_topk",
             hidden_size=16,
             attention_heads=4,
             max_moves_k=3,
@@ -87,7 +87,7 @@ def test_export_runtime_artifact_strips_training_state(tmp_path: Path) -> None:
     artifact = export_runtime_artifact(checkpoint)
 
     assert artifact["checkpoint_update"] == 7
-    assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
+    assert artifact["config"]["model"]["architecture"] == "planet_graph_transformer"
     assert "opt_state" not in artifact
     assert "rng_key" not in artifact
     assert artifact["params"]["dense"]["kernel"].shape == (2, 2)
@@ -101,7 +101,7 @@ def test_plain_data_tolerates_old_pickled_dataclass_missing_new_field() -> None:
 
     assert "artifact_pipeline" in data["artifacts"]
     assert "replay_backend" not in data["artifacts"]["artifact_pipeline"]
-    assert data["model"]["architecture"] == "gnn_pointer"
+    assert data["model"]["architecture"] == "planet_graph_transformer"
 
 
 def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None:
@@ -179,10 +179,10 @@ def test_embedded_runtime_templates_compile() -> None:
     assert "StepTimingBudget" in IN_CONTAINER_VALIDATOR
 
 
-def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
+def test_export_runtime_artifact_accepts_planet_graph_transformer(tmp_path: Path) -> None:
     checkpoint = tmp_path / "jax_ckpt_v2.pkl"
     config = _fake_config()
-    config.model.architecture = "gnn_pointer"
+    config.model.architecture = "planet_graph_transformer"
     payload = {
         "update": 3,
         "params": {
@@ -206,7 +206,7 @@ def test_export_runtime_artifact_accepts_gnn_pointer(tmp_path: Path) -> None:
 
     artifact = export_runtime_artifact(checkpoint)
 
-    assert artifact["config"]["model"]["architecture"] == "gnn_pointer"
+    assert artifact["config"]["model"]["architecture"] == "planet_graph_transformer"
     assert artifact["feature_metadata"]["schema_version"] == 5
 
 
@@ -215,7 +215,7 @@ def test_export_runtime_artifact_includes_factorized_pointer_decoder(
 ) -> None:
     checkpoint = tmp_path / "jax_ckpt_factorized.pkl"
     config = _fake_config()
-    config.model.architecture = "gnn_pointer"
+    config.model.architecture = "planet_graph_transformer"
     config.model.pointer_decoder = "factorized_topk"
     payload = {
         "update": 5,

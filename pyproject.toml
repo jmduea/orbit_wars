@@ -15,7 +15,6 @@ dependencies = [
     "hydra-core",
     "wandb>=0.27.0",
     "kaggle>=2.1.2",
-    "wrapt>=2.2.1",
 ]
 
 [project.scripts]

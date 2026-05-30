@@ -8,7 +8,7 @@ from src.config.schema import TaskConfig
 from src.features.registry import edge_k
 from src.game.trajectory_shield import ship_count_for_fraction_jax, validate_continuous_ship_launch_jax
 from src.jax.env import reset
-from src.jax.policy import build_gnn_pointer_policy, make_synthetic_turn_batch
+from src.jax.policy import build_planet_graph_transformer_policy, make_synthetic_turn_batch
 from src.jax.ship_action import fraction_from_logit, ship_action_logit_width
 from src.opponents.jax_actions.builders import build_action_from_factored_batch
 
@@ -21,7 +21,7 @@ def _task_cfg(**kwargs) -> TaskConfig:
 
 def _train_cfg(*, continuous: bool) -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
+    cfg.model.architecture = "planet_graph_transformer"
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 64
     cfg.model.max_moves_k = 2
@@ -43,7 +43,7 @@ def test_ship_count_for_fraction_jax() -> None:
 def test_factorized_decoder_ship_logit_width_one_in_continuous_mode() -> None:
     cfg = _train_cfg(continuous=True)
     assert ship_action_logit_width(cfg) == 1
-    policy = build_gnn_pointer_policy(cfg)
+    policy = build_planet_graph_transformer_policy(cfg)
     batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(1))
     params = policy.init(jax.random.PRNGKey(2), batch)
     output = policy.apply(params, batch, deterministic=True)

@@ -21,10 +21,8 @@ from src.jax.env import (
 from src.jax.features import TurnBatch
 from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
-from src.artifacts.checkpoint_compat import is_factorized_pointer_decoder
 from src.opponents.jax_actions.builders import (
     _sample_shielded_sequence_with_params,
-    build_action_from_edge_batch,
     build_action_from_factored_batch,
     owned_planet_ships,
 )
@@ -44,7 +42,19 @@ from src.opponents.pool import (
 )
 from src.training.curriculum import StageView, default_stage_view
 
+from src.jax.normalization import ObservationNormState, normalize_turn_batch
+
 from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
+
+
+def _policy_turn_batch(
+    batch: TurnBatch,
+    norm_state: ObservationNormState | None,
+    cfg: TrainConfig,
+) -> TurnBatch:
+    if norm_state is None or not cfg.model.normalize_observations:
+        return batch
+    return normalize_turn_batch(batch, norm_state, cfg.model)
 
 
 def collect_rollout_jax(
@@ -59,6 +69,7 @@ def collect_rollout_jax(
     historical_params_pool: dict | None = None,
     update: int = 0,
     env_index_offset: int | jax.Array = 0,
+    norm_state: ObservationNormState | None = None,
 ):
     del update
     if cfg.task.player_count not in (2, 4):
@@ -95,33 +106,29 @@ def collect_rollout_jax(
 
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache, decoder_hidden = carry
+        policy_batch = _policy_turn_batch(batch, norm_state, cfg)
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
         sample = _sample_shielded_sequence_with_params(
             learner_key,
             state.game,
-            batch,
+            policy_batch,
             train_state.params,
             policy,
             cfg,
             deterministic=False,
             decoder_hidden_in=decoder_hidden,
         )
-        if is_factorized_pointer_decoder(cfg.model):
-            learner_action = build_action_from_factored_batch(
-                state.game,
-                batch,
-                sample.source_index,
-                sample.target_slot,
-                sample.ship_bucket,
-                sample.stop_flag,
-                sample.step_mask,
-                cfg,
-                ship_fraction=sample.ship_fraction,
-            )
-        else:
-            learner_action = build_action_from_edge_batch(
-                state.game, batch, sample.target_index, sample.ship_bucket, cfg
-            )
+        learner_action = build_action_from_factored_batch(
+            state.game,
+            batch,
+            sample.source_index,
+            sample.target_slot,
+            sample.ship_bucket,
+            sample.stop_flag,
+            sample.step_mask,
+            cfg,
+            ship_fraction=sample.ship_fraction,
+        )
 
         single_family_id = _single_stage_family_id(active_stage_view)
         effective_single_family_id = _maybe_effective_single_family_id(

@@ -8,7 +8,6 @@ import pytest
 import jax
 from src.config import TrainConfig, compose_hydra_train_config
 from src.game.constants import MAX_PLANETS
-from src.jax.action_codec import action_log_prob_and_entropy
 from src.jax.policy import build_jax_policy, make_synthetic_turn_batch
 from src.jax.ppo_update import (
     discounted_returns,
@@ -152,24 +151,11 @@ def test_invalid_gae_lambda_rejected_at_compose() -> None:
         compose_hydra_train_config(["training.gae_lambda=1.5"])
 
 
-def _joint_ship_bucket_mask(
-    cfg: TrainConfig, *, rollout_steps: int, num_envs: int, sequence_k: int
-) -> jax.Array:
-    from src.jax.policy import edge_action_count
-
-    edge_count = edge_action_count(cfg.task)
-    return jnp.ones(
-        (rollout_steps, num_envs, sequence_k, edge_count, cfg.task.ship_bucket_count),
-        dtype=bool,
-    )
-
-
 def _factorized_ship_bucket_mask(
     cfg: TrainConfig, *, rollout_steps: int, num_envs: int, sequence_k: int
 ) -> jax.Array:
     from src.features.registry import edge_k
-    from src.game.constants import MAX_PLANETS
-
+    
     k_slots = edge_k(cfg.task)
     return jnp.ones(
         (
@@ -190,8 +176,7 @@ def _sparse_factorized_ship_bucket_mask(
     """Per-source bucket legality that differs across planets (rollout-realistic)."""
 
     from src.features.registry import edge_k
-    from src.game.constants import MAX_PLANETS
-
+    
     k_slots = edge_k(cfg.task)
     mask = jnp.zeros(
         (
@@ -208,46 +193,6 @@ def _sparse_factorized_ship_bucket_mask(
     mask = mask.at[..., 0, 0, 0].set(True)
     mask = mask.at[..., 1, 1, 1].set(True)
     return mask
-
-
-def _joint_behavior_log_prob(
-    cfg: TrainConfig,
-    params: dict,
-    policy: object,
-    turn_batch,
-    target_index: jax.Array,
-    ship_bucket: jax.Array,
-    ship_bucket_mask: jax.Array,
-) -> jax.Array:
-    from src.features.registry import edge_k
-    from src.game.trajectory_shield import mask_policy_output_for_shield_v2
-
-    num_envs = int(turn_batch.planet_features.shape[0])
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    output = policy.apply(
-        params,
-        turn_batch,
-        player_count=player_count,
-        target_sequence=target_index,
-    )
-    k_slots = edge_k(cfg.task)
-    edge_action_mask = jnp.concatenate(
-        [
-            turn_batch.edge_mask.reshape(num_envs, MAX_PLANETS * k_slots),
-            jnp.ones((num_envs, 1), dtype=bool),
-        ],
-        axis=1,
-    )
-    masked_output = mask_policy_output_for_shield_v2(
-        output,
-        edge_action_mask,
-        cfg.task.ship_bucket_count,
-        ship_bucket_mask[0],
-    )
-    log_prob, _entropy = action_log_prob_and_entropy(
-        masked_output, target_index, ship_bucket
-    )
-    return log_prob
 
 
 def _factorized_behavior_log_prob(
@@ -283,7 +228,7 @@ def _factorized_behavior_log_prob(
     return replay.log_prob
 
 
-def _joint_transition_batch(
+def _factorized_transition_batch(
     cfg: TrainConfig,
     turn_batch,
     *,
@@ -293,7 +238,6 @@ def _joint_transition_batch(
     log_prob: jax.Array,
     value: jax.Array,
     reward: jax.Array,
-    factorized: bool = False,
 ) -> JaxTransitionBatch:
     num_envs = int(turn_batch.planet_features.shape[0])
     sequence_k = int(target_index.shape[1])
@@ -307,14 +251,9 @@ def _joint_transition_batch(
     )
     returns = returns_step
     advantages = advantages_step
-    if factorized:
-        ship_bucket_mask = _factorized_ship_bucket_mask(
-            cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=sequence_k
-        )
-    else:
-        ship_bucket_mask = _joint_ship_bucket_mask(
-            cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=sequence_k
-        )
+    ship_bucket_mask = _factorized_ship_bucket_mask(
+        cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=sequence_k
+    )
     player_count = jnp.full(
         (rollout_steps, num_envs), cfg.task.player_count, dtype=jnp.int32
     )
@@ -353,13 +292,73 @@ def _joint_transition_batch(
     )
 
 
-def _small_joint_cfg() -> TrainConfig:
+def _build_factorized_on_policy_transitions(
+    cfg: TrainConfig,
+    train_state,
+    policy,
+    turn_batch,
+    *,
+    rollout_steps: int,
+    reward: jax.Array,
+    ship_bucket_mask_fn=_factorized_ship_bucket_mask,
+):
+    num_envs = int(turn_batch.planet_features.shape[0])
+    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
+    source_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
+    target_slot_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
+    output = policy.apply(
+        train_state.params,
+        turn_batch,
+        player_count=player_count,
+        source_sequence=source_sequence,
+        target_slot_sequence=target_slot_sequence,
+    )
+    ship_bucket = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
+    stop_flag = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
+    step_mask = jnp.ones((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
+    source_index = output.decoded_source_sequence
+    target_slot = output.decoded_target_slot_sequence
+    ship_bucket_mask = ship_bucket_mask_fn(
+        cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
+    )
+    log_prob = _factorized_behavior_log_prob(
+        cfg,
+        train_state.params,
+        policy,
+        turn_batch,
+        source_index,
+        target_slot,
+        ship_bucket,
+        stop_flag,
+        step_mask,
+        ship_bucket_mask,
+    )
+    transitions = _factorized_transition_batch(
+        cfg,
+        turn_batch,
+        rollout_steps=rollout_steps,
+        target_index=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
+        ship_bucket=ship_bucket,
+        log_prob=log_prob,
+        value=output.value,
+        reward=reward,
+    )
+    return transitions._replace(
+        source_index=source_index[None, ...],
+        target_slot=target_slot[None, ...],
+        stop_flag=stop_flag[None, ...].astype(jnp.int32),
+        step_mask=step_mask[None, ...],
+        ship_bucket_mask=ship_bucket_mask,
+    ), output
+
+
+def _small_factorized_cfg() -> TrainConfig:
     cfg = TrainConfig()
-    cfg.model.architecture = "gnn_pointer"
-    cfg.model.pointer_decoder = "joint_flat"
+    cfg.model.architecture = "planet_graph_transformer"
+    cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 16
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
+    cfg.model.attention_heads = 2
+    cfg.model.planet_transformer_layers = 1
     cfg.model.max_moves_k = 2
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16
@@ -371,7 +370,7 @@ def _small_joint_cfg() -> TrainConfig:
 
 @pytest.mark.jax
 def test_ppo_update_reports_near_zero_kl_for_on_policy_batch() -> None:
-    cfg = _small_joint_cfg()
+    cfg = _small_factorized_cfg()
     num_envs = 2
     key = jax.random.PRNGKey(0)
     policy = build_jax_policy(cfg)
@@ -379,87 +378,38 @@ def test_ppo_update_reports_near_zero_kl_for_on_policy_batch() -> None:
     turn_batch = make_synthetic_turn_batch(
         num_envs, cfg.task, key=jax.random.fold_in(key, 2)
     )
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    output = policy.apply(
-        train_state.params,
-        turn_batch,
-        player_count=player_count,
-        target_sequence=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
-    )
-    target_index = jnp.argmax(output.target_logits, axis=-1)
-    ship_bucket = jnp.zeros_like(target_index)
-    ship_bucket_mask = _joint_ship_bucket_mask(
-        cfg, rollout_steps=1, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
-    )
-    log_prob = _joint_behavior_log_prob(
+    transitions, _output = _build_factorized_on_policy_transitions(
         cfg,
-        train_state.params,
+        train_state,
         policy,
         turn_batch,
-        target_index,
-        ship_bucket,
-        ship_bucket_mask,
-    )
-    transitions = _joint_transition_batch(
-        cfg,
-        turn_batch,
         rollout_steps=1,
-        target_index=target_index,
-        ship_bucket=ship_bucket,
-        log_prob=log_prob,
-        value=output.value,
         reward=jnp.zeros((1, num_envs), dtype=jnp.float32),
     )
-
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
 
-
 @pytest.mark.jax
 def test_ppo_vf_and_ent_coefs_scale_reported_total_loss() -> None:
-    cfg = _small_joint_cfg()
+    cfg = _small_factorized_cfg()
     cfg.training.vf_coef = 0.0
     cfg.training.ent_coef = 0.0
     num_envs = 2
-    key = jax.random.PRNGKey(10)
+    key = jax.random.PRNGKey(0)
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
     turn_batch = make_synthetic_turn_batch(
         num_envs, cfg.task, key=jax.random.fold_in(key, 2)
     )
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    output = policy.apply(
-        train_state.params,
-        turn_batch,
-        player_count=player_count,
-        target_sequence=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
-    )
-    target_index = jnp.argmax(output.target_logits, axis=-1)
-    ship_bucket = jnp.zeros_like(target_index)
-    ship_bucket_mask = _joint_ship_bucket_mask(
-        cfg, rollout_steps=1, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
-    )
-    log_prob = _joint_behavior_log_prob(
+    transitions, _output = _build_factorized_on_policy_transitions(
         cfg,
-        train_state.params,
+        train_state,
         policy,
         turn_batch,
-        target_index,
-        ship_bucket,
-        ship_bucket_mask,
-    )
-    transitions = _joint_transition_batch(
-        cfg,
-        turn_batch,
         rollout_steps=1,
-        target_index=target_index,
-        ship_bucket=ship_bucket,
-        log_prob=log_prob,
-        value=output.value,
         reward=jnp.array([[0.5, -0.25]], dtype=jnp.float32),
     )
-
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["total_loss"]) == pytest.approx(
@@ -468,11 +418,9 @@ def test_ppo_vf_and_ent_coefs_scale_reported_total_loss() -> None:
     assert float(metrics["value_loss"]) > 0.0
     assert float(metrics["entropy"]) > 0.0
 
-
 @pytest.mark.jax
 def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
-    cfg = _small_joint_cfg()
-    cfg.model.pointer_decoder = "factorized_topk"
+    cfg = _small_factorized_cfg()
     num_envs = 2
     key = jax.random.PRNGKey(20)
     policy = build_jax_policy(cfg)
@@ -480,66 +428,27 @@ def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
     turn_batch = make_synthetic_turn_batch(
         num_envs, cfg.task, key=jax.random.fold_in(key, 2)
     )
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    source_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    target_slot_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    output = policy.apply(
-        train_state.params,
-        turn_batch,
-        player_count=player_count,
-        source_sequence=source_sequence,
-        target_slot_sequence=target_slot_sequence,
-    )
-    ship_bucket = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    stop_flag = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
-    step_mask = jnp.ones((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
-    source_index = output.decoded_source_sequence
-    target_slot = output.decoded_target_slot_sequence
-    ship_bucket_mask = _factorized_ship_bucket_mask(
-        cfg, rollout_steps=1, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
-    )
-    log_prob = _factorized_behavior_log_prob(
+    transitions, _output = _build_factorized_on_policy_transitions(
         cfg,
-        train_state.params,
+        train_state,
         policy,
         turn_batch,
-        source_index,
-        target_slot,
-        ship_bucket,
-        stop_flag,
-        step_mask,
-        ship_bucket_mask,
-    )
-    transitions = _joint_transition_batch(
-        cfg,
-        turn_batch,
         rollout_steps=1,
-        target_index=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
-        ship_bucket=ship_bucket,
-        log_prob=log_prob,
-        value=output.value,
         reward=jnp.zeros((1, num_envs), dtype=jnp.float32),
-        factorized=True,
     )
-    transitions = transitions._replace(
-        source_index=source_index[None, ...],
-        target_slot=target_slot[None, ...],
-        stop_flag=stop_flag[None, ...].astype(jnp.int32),
-        step_mask=step_mask[None, ...],
-    )
-
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
     assert float(metrics["loss_sample_count_2p"]) > 0.0
 
 
+
+
 @pytest.mark.jax
 def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
     """Sparse per-source bucket masks must match rollout masking (not planet-aggregated)."""
 
-    cfg = _small_joint_cfg()
-    cfg.model.pointer_decoder = "factorized_topk"
+    cfg = _small_factorized_cfg()
     num_envs = 2
     key = jax.random.PRNGKey(21)
     policy = build_jax_policy(cfg)
@@ -547,105 +456,42 @@ def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
     turn_batch = make_synthetic_turn_batch(
         num_envs, cfg.task, key=jax.random.fold_in(key, 2)
     )
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    source_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    target_slot_sequence = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    output = policy.apply(
-        train_state.params,
-        turn_batch,
-        player_count=player_count,
-        source_sequence=source_sequence,
-        target_slot_sequence=target_slot_sequence,
-    )
-    ship_bucket = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32)
-    stop_flag = jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
-    step_mask = jnp.ones((num_envs, cfg.model.max_moves_k), dtype=jnp.float32)
-    source_index = output.decoded_source_sequence
-    target_slot = output.decoded_target_slot_sequence
-    ship_bucket_mask = _sparse_factorized_ship_bucket_mask(
-        cfg, rollout_steps=1, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
-    )
-    log_prob = _factorized_behavior_log_prob(
+    transitions, _output = _build_factorized_on_policy_transitions(
         cfg,
-        train_state.params,
+        train_state,
         policy,
         turn_batch,
-        source_index,
-        target_slot,
-        ship_bucket,
-        stop_flag,
-        step_mask,
-        ship_bucket_mask,
-    )
-    assert jnp.isfinite(log_prob).all()
-    transitions = _joint_transition_batch(
-        cfg,
-        turn_batch,
         rollout_steps=1,
-        target_index=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
-        ship_bucket=ship_bucket,
-        log_prob=log_prob,
-        value=output.value,
         reward=jnp.zeros((1, num_envs), dtype=jnp.float32),
-        factorized=True,
+        ship_bucket_mask_fn=_sparse_factorized_ship_bucket_mask,
     )
-    transitions = transitions._replace(
-        source_index=source_index[None, ...],
-        target_slot=target_slot[None, ...],
-        stop_flag=stop_flag[None, ...].astype(jnp.int32),
-        step_mask=step_mask[None, ...],
-        ship_bucket_mask=ship_bucket_mask,
-    )
-
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
     assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
 
 
+
+
 @pytest.mark.jax
 def test_ppo_update_changes_params_after_optimizer_step() -> None:
-    cfg = _small_joint_cfg()
-    cfg.training.lr = 0.05
+    cfg = _small_factorized_cfg()
     num_envs = 2
+    cfg.training.lr = 0.05
     key = jax.random.PRNGKey(30)
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
     turn_batch = make_synthetic_turn_batch(
         num_envs, cfg.task, key=jax.random.fold_in(key, 2)
     )
-    player_count = jnp.full((num_envs,), cfg.task.player_count, dtype=jnp.int32)
-    output = policy.apply(
-        train_state.params,
-        turn_batch,
-        player_count=player_count,
-        target_sequence=jnp.zeros((num_envs, cfg.model.max_moves_k), dtype=jnp.int32),
-    )
-    target_index = jnp.argmax(output.target_logits, axis=-1)
-    ship_bucket = jnp.zeros_like(target_index)
-    ship_bucket_mask = _joint_ship_bucket_mask(
-        cfg, rollout_steps=1, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
-    )
-    log_prob = _joint_behavior_log_prob(
+    transitions, _output = _build_factorized_on_policy_transitions(
         cfg,
-        train_state.params,
+        train_state,
         policy,
         turn_batch,
-        target_index,
-        ship_bucket,
-        ship_bucket_mask,
-    )
-    transitions = _joint_transition_batch(
-        cfg,
-        turn_batch,
         rollout_steps=1,
-        target_index=target_index,
-        ship_bucket=ship_bucket,
-        log_prob=log_prob,
-        value=output.value,
         reward=jnp.array([[1.0, -1.0]], dtype=jnp.float32),
     )
-
     next_state, _metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     flat_before = jax.tree.leaves(train_state.params)
@@ -655,22 +501,10 @@ def test_ppo_update_changes_params_after_optimizer_step() -> None:
         for before, after in zip(flat_before, flat_after, strict=True)
     )
 
-
 @pytest.mark.jax
-@pytest.mark.parametrize(
-    ("architecture", "checkpointing"),
-    [
-        ("gnn_pointer", False),
-        ("gnn_pointer", True),
-        ("planet_graph_transformer", False),
-        ("planet_graph_transformer", True),
-    ],
-)
-def test_gradient_checkpointing_encoder_init_apply_smoke(
-    architecture: str, checkpointing: bool
-) -> None:
-    cfg = _small_joint_cfg()
-    cfg.model.architecture = architecture
+@pytest.mark.parametrize("checkpointing", [False, True])
+def test_gradient_checkpointing_encoder_init_apply_smoke(checkpointing: bool) -> None:
+    cfg = _small_factorized_cfg()
     cfg.model.attention_heads = 2
     cfg.model.planet_transformer_layers = 1
     cfg.training.enable_gradient_checkpointing = checkpointing

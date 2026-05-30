@@ -6,7 +6,7 @@ from src.jax.submission_runtime import apply_feature_metadata_to_model_config
 
 def test_apply_feature_metadata_sets_pointer_decoder() -> None:
     cfg = TrainConfig()
-    cfg.model.pointer_decoder = "joint_flat"
+    cfg.model.pointer_decoder = "factorized_topk"
 
     updated = apply_feature_metadata_to_model_config(
         cfg,
