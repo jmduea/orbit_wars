@@ -12,6 +12,8 @@ Default touch surfaces by GitHub label `area:*`. Declare narrower paths in `road
 
 **Rules:** one active `claim` per issue; overlapping paths across claims are rejected. One branch per issue (`issue/NN-slug`) in a dedicated git worktree (`worktrees/issue-NN/`).
 
+**Playbook:** see [MULTI_AGENT.md](MULTI_AGENT.md) for coordinator/worker checklists, stale-claim recovery, and per-issue impl-gates.
+
 **Parallel agents**
 
 | Variable | Purpose |

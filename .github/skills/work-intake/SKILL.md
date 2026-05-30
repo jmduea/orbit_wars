@@ -32,9 +32,9 @@ Read JSON output:
 | `requires_planning: true` | `/ralplan` or `/deep-interview` before approve-impl |
 | `primary_issue` | Default GitHub issue for claim/approve/wrap-up |
 
-**Do not** edit `src/`, `conf/`, or `tests/` until `approve-impl` succeeds. Cursor **pre-tool hook** blocks those paths without `.omg/state/impl-gate.json`.
+**Do not** edit `src/`, `conf/`, or `tests/` until `approve-impl` succeeds. Hook checks **per-issue** gates at `.omg/state/impl-gates/issue-N.json` (via `ORBIT_WARS_ISSUE_ID`).
 
-`docs/brain_dump.md` is **retired** — never triage it.
+**Git:** commit in the worktree on `issue/N-*`; **do not** `git push` issue branches. Land with `roadmap.py land-issue --issue N` at repo root; push `main` only when the user asks. See `docs/MULTI_AGENT.md`.
 
 ## Phase 2–3 — Planning (when `requires_planning`)
 
@@ -46,10 +46,12 @@ Read JSON output:
 
 ```bash
 uv run python scripts/roadmap.py claims
+uv run python scripts/roadmap.py claims --stale    # before parallel work
+uv run python scripts/roadmap.py release-stale --apply   # optional cleanup
 export ORBIT_WARS_ISSUE_ID=N
 export ORBIT_WARS_AGENT_ID="cursor-issue-N"   # unique per parallel worker
 uv run python scripts/roadmap.py claim --issue N --path <dirs> --setup-worktree
-# Open the printed worktrees/issue-N/ path as this agent's workspace (or cd there).
+uv run python scripts/roadmap.py agent-workspace --issue N   # open worktree in Cursor
 uv run python scripts/roadmap.py approve-impl --issue N --summary "<short scope>"
 uv run python scripts/roadmap.py gate --request "<user request>" --require-allowed
 ```
@@ -64,7 +66,7 @@ When a parent agent spawns executor subagents for parallel work:
 2. **One issue per executor** — never bundle multiple issues in one worker.
 3. **Task prompt must include** `export ORBIT_WARS_AGENT_ID=…` and `export ORBIT_WARS_ISSUE_ID=N` (unique per worker).
 4. **Require** `claim --setup-worktree` and cwd `worktrees/issue-N/` before implementation edits.
-5. **Parent waits** for workers, runs `check-session --require-clean` in the parent turn, and does not run parallel executors on the shared repo root without worktrees.
+5. **Parent waits** for workers, runs `check-session --global --require-clean` in the parent turn, and does not run parallel executors on the shared repo root without worktrees.
 
 ## Phase 6 — Implement
 

@@ -108,6 +108,26 @@ if [ "$TOOL_NAME" = "runInTerminal" ]; then
   fi
 fi
 
+# Guard: block push of agent issue branches (land on main instead)
+if [ "$TOOL_NAME" = "runInTerminal" ]; then
+  if echo "$TOOL_INPUT" | grep -qE '\bgit\s+push\b'; then
+    PUSH_JSON=""
+    if [ -n "${STDIN_DATA:-}" ]; then
+      PUSH_JSON=$(printf '%s' "$TOOL_INPUT" | python3 "$WORKSPACE/scripts/roadmap.py" push-guard --repo-root "$WORKSPACE" 2>/dev/null || true)
+    else
+      PUSH_JSON=$(printf '%s' "$TOOL_INPUT" | python3 "$WORKSPACE/scripts/roadmap.py" push-guard --repo-root "$WORKSPACE" 2>/dev/null || true)
+    fi
+    if [ -n "$PUSH_JSON" ]; then
+      PUSH_DECISION=$(printf '%s' "$PUSH_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('decision','approve'))" 2>/dev/null || echo "approve")
+      if [ "$PUSH_DECISION" = "deny" ]; then
+        PUSH_REASON=$(printf '%s' "$PUSH_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('reason','issue branch push blocked'))" 2>/dev/null || echo "issue branch push blocked")
+        python3 -c 'import json,sys; print(json.dumps({"decision":"deny","reason":sys.argv[1]}))' "$PUSH_REASON"
+        exit 0
+      fi
+    fi
+  fi
+fi
+
 # Guard: prevent force push
 if [ "$TOOL_NAME" = "runInTerminal" ]; then
   if echo "$TOOL_INPUT" | grep -qE 'git\s+push\s+.*(--force([^a-zA-Z0-9_-]|$)|-f([^a-zA-Z0-9_-]|$))' && ! echo "$TOOL_INPUT" | grep -qE '\-\-force-with-lease'; then

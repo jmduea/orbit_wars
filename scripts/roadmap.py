@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ROADMAP_PATH = REPO_ROOT / "docs" / "ROADMAP.md"
 MANIFEST_PATH = REPO_ROOT / ".omg" / "workflow-manifest.json"
 IMPL_GATE_PATH = REPO_ROOT / ".omg" / "state" / "impl-gate.json"
+IMPL_GATES_DIR = REPO_ROOT / ".omg" / "state" / "impl-gates"
 ARCHIVED_BRAIN_DUMP = "docs/archive/brain_dump.md"
 
 SECTION_ORDER = ("now", "next", "later", "done")
@@ -232,24 +233,158 @@ def load_manifest_active() -> list[dict]:
     ]
 
 
-def load_impl_gate() -> dict | None:
-    if not IMPL_GATE_PATH.exists():
+def _read_gate_file(path: Path) -> dict | None:
+    if not path.exists():
         return None
     try:
-        data = json.loads(IMPL_GATE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return None
     return data if isinstance(data, dict) else None
 
 
-def save_impl_gate(payload: dict) -> None:
-    IMPL_GATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    IMPL_GATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+def _write_gate_file(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def clear_impl_gate() -> None:
-    if IMPL_GATE_PATH.exists():
-        IMPL_GATE_PATH.unlink()
+def impl_gate_path_for_issue(issue: int) -> Path:
+    """Filesystem path for a per-issue implementation gate."""
+    return IMPL_GATES_DIR / f"issue-{issue}.json"
+
+
+def parse_issue_env() -> int | None:
+    """Parse ``ORBIT_WARS_ISSUE_ID`` when set to an integer issue number."""
+    raw = os.environ.get("ORBIT_WARS_ISSUE_ID", "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def load_impl_gate(*, issue: int | None = None) -> dict | None:
+    """Load the impl gate for ``issue``, or resolve from agent context when omitted."""
+    resolved, gate = resolve_impl_gate_for_agent(explicit_issue=issue)
+    _ = resolved
+    return gate
+
+
+def load_impl_gate_for_issue(issue: int) -> dict | None:
+    """Load per-issue gate, falling back to legacy global gate when it matches."""
+    per_issue = _read_gate_file(impl_gate_path_for_issue(issue))
+    if per_issue and per_issue.get("approved"):
+        return per_issue
+    legacy = _read_gate_file(IMPL_GATE_PATH)
+    if legacy and legacy.get("approved") and legacy.get("issue") == f"#{issue}":
+        return legacy
+    return per_issue if per_issue else None
+
+
+def list_approved_impl_gates() -> list[dict]:
+    """Return all approved impl gates (per-issue files plus legacy global)."""
+    gates: list[dict] = []
+    seen_issues: set[int] = set()
+    if IMPL_GATES_DIR.exists():
+        for path in sorted(IMPL_GATES_DIR.glob("issue-*.json")):
+            data = _read_gate_file(path)
+            if not (data and data.get("approved")):
+                continue
+            issue_raw = data.get("issue")
+            if isinstance(issue_raw, str) and issue_raw.startswith("#"):
+                try:
+                    seen_issues.add(int(issue_raw.lstrip("#")))
+                except ValueError:
+                    pass
+            gates.append(data)
+    legacy = _read_gate_file(IMPL_GATE_PATH)
+    if legacy and legacy.get("approved"):
+        issue_raw = legacy.get("issue")
+        issue_num: int | None = None
+        if isinstance(issue_raw, str) and issue_raw.startswith("#"):
+            try:
+                issue_num = int(issue_raw.lstrip("#"))
+            except ValueError:
+                issue_num = None
+        if issue_num is None or issue_num not in seen_issues:
+            gates.append(legacy)
+    return gates
+
+
+def resolve_impl_gate_for_agent(
+    *,
+    explicit_issue: int | None = None,
+) -> tuple[int | None, dict | None]:
+    """Resolve which impl gate applies for hook/gate checks in the current agent context."""
+    from scripts import roadmap_claims
+
+    issue_env = explicit_issue if explicit_issue is not None else parse_issue_env()
+    if issue_env is not None:
+        return issue_env, load_impl_gate_for_issue(issue_env)
+
+    owner = roadmap_claims.default_agent_owner()
+    open_claims: list[dict] = []
+    for claim in roadmap_claims.load_all_claims(active_only=True):
+        if claim.get("owner") != owner:
+            continue
+        issue_num = int(claim["issue"])
+        if roadmap_claims.load_completion(issue_num):
+            continue
+        open_claims.append(claim)
+
+    if len(open_claims) == 1:
+        issue_num = int(open_claims[0]["issue"])
+        return issue_num, load_impl_gate_for_issue(issue_num)
+
+    legacy = _read_gate_file(IMPL_GATE_PATH)
+    if legacy and legacy.get("approved") and len(open_claims) == 0:
+        issue_raw = legacy.get("issue")
+        resolved: int | None = None
+        if isinstance(issue_raw, str) and issue_raw.startswith("#"):
+            try:
+                resolved = int(issue_raw.lstrip("#"))
+            except ValueError:
+                resolved = None
+        return resolved, legacy
+
+    return None, None
+
+
+def save_impl_gate(payload: dict, *, issue: int | None = None) -> None:
+    """Persist an approved impl gate (per-issue when ``issue`` or payload issue is set)."""
+    issue_num = issue
+    if issue_num is None:
+        issue_raw = payload.get("issue")
+        if isinstance(issue_raw, str) and issue_raw.startswith("#"):
+            try:
+                issue_num = int(issue_raw.lstrip("#"))
+            except ValueError:
+                issue_num = None
+    if issue_num is not None:
+        _write_gate_file(impl_gate_path_for_issue(issue_num), payload)
+        legacy = _read_gate_file(IMPL_GATE_PATH)
+        if legacy and legacy.get("issue") == payload.get("issue"):
+            IMPL_GATE_PATH.unlink(missing_ok=True)
+        return
+    _write_gate_file(IMPL_GATE_PATH, payload)
+
+
+def clear_impl_gate(*, issue: int | None = None, all_gates: bool = False) -> None:
+    """Remove impl gate file(s). ``all_gates`` clears every per-issue gate and legacy."""
+    if all_gates:
+        if IMPL_GATES_DIR.exists():
+            for path in IMPL_GATES_DIR.glob("issue-*.json"):
+                path.unlink(missing_ok=True)
+        IMPL_GATE_PATH.unlink(missing_ok=True)
+        return
+    if issue is not None:
+        impl_gate_path_for_issue(issue).unlink(missing_ok=True)
+        legacy = _read_gate_file(IMPL_GATE_PATH)
+        if legacy and legacy.get("issue") == f"#{issue}":
+            IMPL_GATE_PATH.unlink(missing_ok=True)
+        return
+    IMPL_GATE_PATH.unlink(missing_ok=True)
 
 
 def _normalize_tokens(text: str) -> set[str]:
@@ -591,7 +726,7 @@ def _intake_next_steps(
 def implementation_gate(*, request: str | None = None) -> dict:
     doc = parse_roadmap(load_roadmap_text())
     intake = intake_request(request, doc) if request else None
-    impl = load_impl_gate()
+    resolved_issue, impl = resolve_impl_gate_for_agent()
     strict = _impl_gate_strict_enabled()
 
     allowed = False
@@ -601,8 +736,13 @@ def implementation_gate(*, request: str | None = None) -> dict:
 
     if impl and impl.get("approved"):
         allowed = True
-        if impl.get("issue"):
-            issue_num = int(str(impl["issue"]).lstrip("#"))
+        gate_issue_raw = impl.get("issue")
+        if gate_issue_raw:
+            issue_num = int(str(gate_issue_raw).lstrip("#"))
+            if resolved_issue is not None and issue_num != resolved_issue:
+                blockers.append(
+                    f"impl-gate is for #{issue_num} but ORBIT_WARS_ISSUE_ID={resolved_issue}"
+                )
             if roadmap_claims.load_claim(issue_num) is None:
                 blockers.append(
                     f"No active claim for {impl['issue']}; run: roadmap.py claim --issue {issue_num} --path …"
@@ -624,8 +764,12 @@ def implementation_gate(*, request: str | None = None) -> dict:
     elif _is_trivial_request(request or ""):
         allowed = True
     else:
+        issue_hint = ""
+        if resolved_issue is not None:
+            issue_hint = f" for issue #{resolved_issue}"
         blockers.append(
-            "No approved implementation gate (.omg/state/impl-gate.json). "
+            f"No approved implementation gate{issue_hint} "
+            f"(.omg/state/impl-gates/issue-N.json). "
             "Complete planning phases then: roadmap.py approve-impl --issue N"
         )
 
@@ -645,6 +789,7 @@ def implementation_gate(*, request: str | None = None) -> dict:
         "allowed": allowed,
         "strict_mode": strict,
         "impl_gate": impl,
+        "resolved_issue": resolved_issue,
         "intake": intake,
         "blockers": blockers,
         "next_steps": [] if allowed else (intake or {}).get("next_steps", []),
@@ -668,11 +813,12 @@ def agent_payload(doc: RoadmapDocument) -> dict:
     from scripts import roadmap_claims
 
     active = load_manifest_active()
-    impl = load_impl_gate()
+    approved_gates = list_approved_impl_gates()
     return {
         "canonical_human_priority": "docs/ROADMAP.md Now section",
         "canonical_agent_packages": ".omg/workflow-manifest.json (active statuses only)",
-        "impl_gate_approved": bool(impl and impl.get("approved")),
+        "impl_gate_approved": bool(approved_gates),
+        "impl_gates_approved": approved_gates,
         "roadmap": status_payload(doc),
         "manifest_active": {
             "total": len(active),
@@ -703,9 +849,12 @@ def agent_payload(doc: RoadmapDocument) -> dict:
             "Prefer ROADMAP Now over manifest when choosing what to work on next.",
             "Empty Now/Next is valid — signals planning in progress; promote from Later when ready.",
             'Free-form chat: first command on implementation intent: roadmap.py begin "<user message>".',
-            "No src/conf/tests edits until approve-impl; Cursor pre-tool hook enforces impl-gate.",
-            "Session end: wrap-up + check-wrap-up + check-session --require-clean.",
+            "No src/conf/tests edits until approve-impl; hook uses per-issue impl-gates (ORBIT_WARS_ISSUE_ID).",
+            "Session end: wrap-up + check-wrap-up + check-session --require-clean (use --global for coordinators).",
             "Parallel agents: one ORBIT_WARS_AGENT_ID + ORBIT_WARS_ISSUE_ID per issue; claim --setup-worktree.",
+            "Before parallel work: roadmap.py claims --stale; release-stale --apply to drop finished claims.",
+            "After claim: roadmap.py agent-workspace --issue N → open worktrees/issue-N/ as agent workspace.",
+            "Land work: commit in worktree, then roadmap.py land-issue --issue N at repo root; push main only when user asks.",
             "Create GitHub issues after execution planning (phase 3), not before for new work.",
             "After changing ROADMAP: uv run python scripts/roadmap.py validate",
             "Before push after closing an issue: add ROADMAP Done row, remove from Now/Next, then make roadmap-check.",
@@ -819,21 +968,12 @@ def cmd_approve_impl(args: argparse.Namespace) -> int:
     if not args.issue and not args.manifest_id:
         print("approve-impl requires --issue and/or --manifest-id", file=sys.stderr)
         return 1
-    existing = load_impl_gate()
-    if existing and existing.get("approved") and not args.force:
-        new_issue = f"#{args.issue}" if args.issue else None
-        old_issue = existing.get("issue")
-        old_manifest = existing.get("manifest_id")
-        conflict = False
-        if new_issue and old_issue and new_issue != old_issue:
-            conflict = True
-        if args.manifest_id and old_manifest and args.manifest_id != old_manifest:
-            conflict = True
-        if conflict:
+    if args.issue:
+        existing = load_impl_gate_for_issue(args.issue)
+        if existing and existing.get("approved") and not args.force:
             print(
-                "approve-impl blocked: existing gate is approved for "
-                f"issue={old_issue!r} manifest_id={old_manifest!r}. "
-                "Pass --force to overwrite or run clear-impl first.",
+                f"approve-impl blocked: issue #{args.issue} already has an approved gate. "
+                "Pass --force to overwrite.",
                 file=sys.stderr,
             )
             return 1
@@ -844,14 +984,22 @@ def cmd_approve_impl(args: argparse.Namespace) -> int:
         "summary": args.summary or "",
         "approved_at": datetime.now(timezone.utc).isoformat(),
     }
-    save_impl_gate(payload)
+    save_impl_gate(payload, issue=args.issue)
     print(json.dumps(payload, indent=2))
     return 0
 
 
 def cmd_clear_impl(args: argparse.Namespace) -> int:
+    if getattr(args, "all_gates", False):
+        clear_impl_gate(all_gates=True)
+        print("all impl-gates cleared")
+        return 0
+    if args.issue:
+        clear_impl_gate(issue=args.issue)
+        print(f"impl-gate cleared for issue #{args.issue}")
+        return 0
     clear_impl_gate()
-    print("impl-gate cleared")
+    print("legacy impl-gate cleared")
     return 0
 
 
@@ -901,8 +1049,104 @@ def cmd_worktree(args: argparse.Namespace) -> int:
 def cmd_claims(args: argparse.Namespace) -> int:
     from scripts import roadmap_claims
 
+    if getattr(args, "stale", False):
+        stale = roadmap_claims.find_stale_claims(skip_github=args.skip_github_check)
+        print(json.dumps({"stale_claims": stale, "count": len(stale)}, indent=2))
+        return 0
     print(json.dumps({"claims": roadmap_claims.load_all_claims(active_only=True)}, indent=2))
     return 0
+
+
+def cmd_release_stale(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+
+    result = roadmap_claims.release_stale_claims(
+        dry_run=not getattr(args, "apply", False),
+        skip_github=args.skip_github_check,
+        clear_impl_gates=not getattr(args, "keep_impl_gates", False),
+    )
+    print(json.dumps(result, indent=2))
+    if getattr(args, "apply", False):
+        return 0 if result.get("released_count", 0) >= 0 else 1
+    return 0
+
+
+def cmd_agent_workspace(args: argparse.Namespace) -> int:
+    from scripts import roadmap_claims
+    from scripts.roadmap_git import setup_issue_worktree, worktree_dir
+
+    if not args.issue:
+        print("agent-workspace requires --issue", file=sys.stderr)
+        return 1
+    claim = roadmap_claims.load_claim(args.issue)
+    branch = None
+    if claim and isinstance(claim.get("branch"), str) and claim["branch"].strip():
+        branch = claim["branch"].strip()
+    try:
+        wt = setup_issue_worktree(args.issue, branch)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    wt_path = str(worktree_dir(args.issue))
+    payload = {
+        **wt,
+        "issue": args.issue,
+        "env_exports": [
+            f"export ORBIT_WARS_ISSUE_ID={args.issue}",
+            f"export ORBIT_WARS_AGENT_ID=cursor-issue-{args.issue}",
+        ],
+        "cursor_hint": (
+            f"Open {wt_path} as this agent's workspace root "
+            "(Cursor: move_agent_to_root MCP or File → Open Folder)."
+        ),
+        "git_landing": {
+            "commit_in_worktree": f"git commit on {wt.get('branch', 'issue/N-*')} inside the worktree",
+            "do_not": "git push origin issue/* (blocked by hook)",
+            "merge_to_main": f"uv run python scripts/roadmap.py land-issue --issue {args.issue}",
+            "push_when_user_asks": "git push origin main (from repo root only)",
+        },
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_land_issue(args: argparse.Namespace) -> int:
+    from scripts.roadmap_git import land_issue_branch
+
+    if not args.issue:
+        print("land-issue requires --issue", file=sys.stderr)
+        return 1
+    try:
+        payload = land_issue_branch(
+            args.issue,
+            base=args.base,
+            dry_run=args.dry_run,
+            ff_only=args.ff_only,
+        )
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_push_guard(args: argparse.Namespace) -> int:
+    from scripts.roadmap_git import git_push_guard
+
+    command = args.command_text or args.request or ""
+    if not command.strip() and not sys.stdin.isatty():
+        command = sys.stdin.read()
+    if not command.strip():
+        print("push-guard requires a shell command (--command-text or stdin)", file=sys.stderr)
+        return 1
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else REPO_ROOT
+    result = git_push_guard(command.strip(), repo_root=repo_root)
+    decision = "approve" if result.get("allow") else "deny"
+    out: dict = {"decision": decision, "guard": result}
+    if not result.get("allow"):
+        out["reason"] = result.get("reason", "issue branch push blocked")
+    print(json.dumps(out))
+    return 0 if result.get("allow") else 1
 
 
 def cmd_wrap_up(args: argparse.Namespace) -> int:
@@ -954,7 +1198,10 @@ def cmd_release(args: argparse.Namespace) -> int:
     owner = args.owner or roadmap_claims.default_agent_owner()
     try:
         result = roadmap_claims.release_issue(
-            issue=args.issue, owner=owner, force=args.force
+            issue=args.issue,
+            owner=owner,
+            force=args.force,
+            admin=getattr(args, "admin", False),
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -966,23 +1213,33 @@ def cmd_release(args: argparse.Namespace) -> int:
 def cmd_check_session(args: argparse.Namespace) -> int:
     from scripts import roadmap_claims
 
-    owner = args.owner or roadmap_claims.default_agent_owner()
     claims = roadmap_claims.load_all_claims(active_only=True)
-    open_for_owner = []
+    open_claims: list[dict] = []
     for claim in claims:
-        if claim.get("owner") != owner:
-            continue
         issue = int(claim["issue"])
         completion = roadmap_claims.load_completion(issue)
-        if not (completion and completion.get("wrapped_up")):
-            open_for_owner.append(claim)
+        if completion and completion.get("wrapped_up"):
+            continue
+        if getattr(args, "global_scope", False):
+            open_claims.append(claim)
+            continue
+        owner = args.owner or roadmap_claims.default_agent_owner()
+        if claim.get("owner") == owner:
+            open_claims.append(claim)
+
+    stale = roadmap_claims.find_stale_claims(skip_github=False) if getattr(args, "global_scope", False) else []
+    owner = args.owner or roadmap_claims.default_agent_owner()
     payload = {
-        "owner": owner,
-        "open_claims": open_for_owner,
-        "passed": len(open_for_owner) == 0,
+        "scope": "global" if getattr(args, "global_scope", False) else "owner",
+        "owner": owner if not getattr(args, "global_scope", False) else None,
+        "open_claims": open_claims,
+        "stale_claims": stale,
+        "passed": len(open_claims) == 0,
         "blockers": [
-            f"Issue #{c['issue']} claimed without wrap-up (run: roadmap.py wrap-up --issue {c['issue']} --evidence '…')"
-            for c in open_for_owner
+            f"Issue #{c['issue']} claimed by {c.get('owner')!r} without wrap-up "
+            f"(run: roadmap.py wrap-up --issue {c['issue']} --evidence '…' "
+            f"or release-stale --apply)"
+            for c in open_claims
         ],
     }
     print(json.dumps(payload, indent=2))
@@ -1013,11 +1270,15 @@ def main() -> int:
             "clear-impl",
             "claim",
             "claims",
+            "release-stale",
             "wrap-up",
             "check-wrap-up",
             "release",
             "check-session",
             "worktree",
+            "agent-workspace",
+            "land-issue",
+            "push-guard",
         ),
         default="validate",
     )
@@ -1083,6 +1344,55 @@ def main() -> int:
         help="force release without wrap-up (abandon claim) or overwrite approved impl-gate",
     )
     parser.add_argument(
+        "--global",
+        dest="global_scope",
+        action="store_true",
+        help="check-session: all open claims repo-wide (coordinator mode)",
+    )
+    parser.add_argument(
+        "--stale",
+        action="store_true",
+        help="claims: list stale open claims (Done/closed/completion/malformed path)",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="release-stale: actually release stale claims (default dry-run)",
+    )
+    parser.add_argument(
+        "--keep-impl-gates",
+        action="store_true",
+        help="release-stale --apply: do not clear per-issue impl gates",
+    )
+    parser.add_argument(
+        "--admin",
+        action="store_true",
+        help="release: allow any owner to force-release a claim",
+    )
+    parser.add_argument(
+        "--all-gates",
+        action="store_true",
+        help="clear-impl: remove all per-issue and legacy impl gates",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="land-issue: report merge plan without checking out/merging",
+    )
+    parser.add_argument(
+        "--ff-only",
+        action="store_true",
+        help="land-issue: use git merge --ff-only",
+    )
+    parser.add_argument(
+        "--command-text",
+        help="push-guard: shell command to analyze (default: stdin or positional request)",
+    )
+    parser.add_argument(
+        "--repo-root",
+        help="push-guard: git checkout root for branch detection (default repo root)",
+    )
+    parser.add_argument(
         "--batch-ok",
         action="store_true",
         help="allow begin request text with multiple #NNN issue references",
@@ -1106,11 +1416,21 @@ def main() -> int:
         return cmd_gate(args)
     if args.command == "approve-impl":
         return cmd_approve_impl(args)
+    if args.command == "clear-impl":
+        return cmd_clear_impl(args)
 
     if args.command == "claim":
         return cmd_claim(args)
     if args.command == "claims":
         return cmd_claims(args)
+    if args.command == "release-stale":
+        return cmd_release_stale(args)
+    if args.command == "agent-workspace":
+        return cmd_agent_workspace(args)
+    if args.command == "land-issue":
+        return cmd_land_issue(args)
+    if args.command == "push-guard":
+        return cmd_push_guard(args)
     if args.command == "wrap-up":
         return cmd_wrap_up(args)
     if args.command == "check-wrap-up":

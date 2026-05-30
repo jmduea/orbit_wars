@@ -225,6 +225,63 @@ def gh_issue_view(issue: int) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def stale_reasons(claim: dict, *, skip_github: bool = False) -> list[str]:
+    """Return reason codes when an active claim looks finished or invalid."""
+    issue = int(claim["issue"])
+    reasons: list[str] = []
+    section = roadmap_section_for_issue(issue)
+    if section == "done":
+        reasons.append("roadmap_done")
+    completion = load_completion(issue)
+    if completion and completion.get("wrapped_up"):
+        reasons.append("completion_record")
+    if not skip_github:
+        gh = gh_issue_view(issue)
+        if gh and str(gh.get("state", "")).upper() == "CLOSED":
+            reasons.append("github_closed")
+    for path_entry in claim.get("paths", []):
+        if "," in str(path_entry):
+            reasons.append("malformed_path")
+    return reasons
+
+
+def find_stale_claims(*, skip_github: bool = False) -> list[dict]:
+    """Active claims that appear finished or malformed."""
+    stale: list[dict] = []
+    for claim in load_all_claims(active_only=True):
+        reasons = stale_reasons(claim, skip_github=skip_github)
+        if reasons:
+            stale.append({**claim, "stale_reasons": reasons})
+    return stale
+
+
+def release_stale_claims(
+    *,
+    dry_run: bool = True,
+    skip_github: bool = False,
+    clear_impl_gates: bool = True,
+) -> dict:
+    """Release claims flagged by find_stale_claims."""
+    from scripts.roadmap import clear_impl_gate
+
+    stale = find_stale_claims(skip_github=skip_github)
+    released: list[int] = []
+    if not dry_run:
+        for entry in stale:
+            issue = int(entry["issue"])
+            delete_claim(issue)
+            if clear_impl_gates:
+                clear_impl_gate(issue=issue)
+            released.append(issue)
+    return {
+        "dry_run": dry_run,
+        "stale_claims": stale,
+        "released": released,
+        "released_count": len(released),
+        "hint": "Pass --apply to release stale claims" if dry_run else None,
+    }
+
+
 def roadmap_section_for_issue(issue: int) -> str | None:
     from scripts.roadmap import SECTION_ORDER, _extract_issue_ids, load_roadmap_text, parse_roadmap
 
@@ -332,7 +389,7 @@ def wrap_up_check(
         else:
             warnings.append(msg)
 
-    impl = load_impl_gate()
+    impl = load_impl_gate(issue=issue)
     impl_issue = impl.get("issue") if impl else None
     if impl_issue and impl_issue != f"#{issue}":
         warnings.append(f"impl-gate is for {impl_issue}, not #{issue}")
@@ -390,10 +447,10 @@ def finalize_wrap_up(
         save_claim(claim)
         delete_claim(issue)
 
-    impl = load_impl_gate()
+    impl = load_impl_gate(issue=issue)
     cleared_impl_gate = bool(impl and impl.get("issue") == f"#{issue}")
     if cleared_impl_gate:
-        clear_impl_gate()
+        clear_impl_gate(issue=issue)
 
     result["completion"] = completion
     result["released_claim"] = True
@@ -401,8 +458,14 @@ def finalize_wrap_up(
     return result
 
 
-def release_issue(issue: int, owner: str, force: bool = False) -> dict:
-    """Release an issue claim; requires wrap-up completion unless ``force``."""
+def release_issue(
+    issue: int,
+    owner: str,
+    force: bool = False,
+    *,
+    admin: bool = False,
+) -> dict:
+    """Release an issue claim; requires wrap-up completion unless ``force`` or ``admin``."""
     from scripts.roadmap import clear_impl_gate, load_impl_gate
 
     claim = load_claim(issue)
@@ -413,17 +476,18 @@ def release_issue(issue: int, owner: str, force: bool = False) -> dict:
             "blockers": [f"No active claim for issue #{issue}"],
         }
 
-    if claim.get("owner") != owner:
+    if not admin and claim.get("owner") != owner:
         return {
             "released": False,
             "issue": issue,
             "claim": claim,
             "blockers": [
-                f"Claim owner {claim.get('owner')!r} != {owner!r}; only claim holder can release"
+                f"Claim owner {claim.get('owner')!r} != {owner!r}; "
+                "only claim holder can release (or use --admin / release-stale --apply)"
             ],
         }
 
-    if not force:
+    if not force and not admin:
         completion = load_completion(issue)
         if not (completion and completion.get("wrapped_up")):
             return {
@@ -432,20 +496,21 @@ def release_issue(issue: int, owner: str, force: bool = False) -> dict:
                 "claim": claim,
                 "blockers": [
                     f"Issue #{issue} requires wrap-up before release; "
-                    "run finalize_wrap_up with evidence or use force=True to abandon claim"
+                    "run finalize_wrap_up with evidence, --force, --admin, or release-stale --apply"
                 ],
             }
 
     delete_claim(issue)
 
-    impl = load_impl_gate()
+    impl = load_impl_gate(issue=issue)
     cleared_impl_gate = bool(impl and impl.get("issue") == f"#{issue}")
     if cleared_impl_gate:
-        clear_impl_gate()
+        clear_impl_gate(issue=issue)
 
     return {
         "released": True,
         "issue": issue,
         "force": force,
+        "admin": admin,
         "cleared_impl_gate": cleared_impl_gate,
     }

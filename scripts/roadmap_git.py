@@ -11,6 +11,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKTREES_ROOT = REPO_ROOT / "worktrees"
 PROTECTED_BASE_BRANCHES = frozenset({"main", "master"})
+ISSUE_BRANCH_PREFIX = "issue/"
+
+
+def is_issue_branch(branch: str | None) -> bool:
+    """Return True when ``branch`` is an agent issue isolation branch."""
+    return bool(branch and branch.startswith(ISSUE_BRANCH_PREFIX))
 
 
 def issue_branch_name(issue: int, slug: str | None = None) -> str:
@@ -137,9 +143,198 @@ def setup_issue_worktree(
         "cd": f"cd {wt_path}",
         "hint": (
             f"Set ORBIT_WARS_ISSUE_ID={issue} and ORBIT_WARS_AGENT_ID to a unique id "
-            f"(e.g. cursor-issue-{issue}) in this worktree before editing src/conf/tests."
+            f"(e.g. cursor-issue-{issue}) in this worktree before editing src/conf/tests. "
+            f"Commit here; land on main with: roadmap.py land-issue --issue {issue} "
+            "(do not git push issue/* branches)."
         ),
     }
+
+
+def git_push_guard(command: str, *, repo_root: Path | None = None) -> dict:
+    """Block ``git push`` of ``issue/*`` branches unless explicitly allowed.
+
+    Agents should merge to ``main`` locally via :func:`land_issue_branch` and only
+    push ``main`` when the user requests it — not publish issue branches to origin.
+    """
+    if os.environ.get("ORBIT_WARS_ALLOW_ISSUE_BRANCH_PUSH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return {"allow": True, "skipped": "ORBIT_WARS_ALLOW_ISSUE_BRANCH_PUSH=1"}
+
+    stripped = command.strip()
+    if not re.search(r"\bgit\s+push\b", stripped):
+        return {"allow": True, "skipped": "not a git push"}
+
+    # Explicit push of integration branches is allowed (user may request main push).
+    if re.search(r"\borigin\s+(main|master)\b", stripped) or re.search(
+        r"\bpush\s+(main|master)\b", stripped
+    ):
+        return {"allow": True, "skipped": "push targets main/master"}
+
+    # Explicit issue/* ref in the push command.
+    for match in re.finditer(r"(?:origin\s+)?(issue/[a-zA-Z0-9_./-]+)", stripped):
+        branch = match.group(1)
+        reason = (
+            f"git push of issue branch {branch!r} blocked. "
+            f"Commit locally in the worktree, then from repo root run: "
+            f"uv run python scripts/roadmap.py land-issue --issue <N>. "
+            f"Push main only when the user asks. "
+            f"Override: ORBIT_WARS_ALLOW_ISSUE_BRANCH_PUSH=1"
+        )
+        return {
+            "allow": False,
+            "reason": reason,
+            "blockers": [reason],
+            "branch": branch,
+            "next_steps": [
+                "uv run python scripts/roadmap.py land-issue --issue N",
+                "git push origin main   # only when user requests push",
+            ],
+        }
+
+    # Bare `git push` / `git push -u origin HEAD` from an issue worktree.
+    if re.search(r"\bHEAD\b", stripped) or re.search(r"\bgit\s+push(\s|$)", stripped):
+        root = repo_root or REPO_ROOT
+        cwd_branch = current_branch(root)
+        if is_issue_branch(cwd_branch):
+            reason = (
+                f"git push from issue branch {cwd_branch!r} blocked. "
+                f"Use land-issue to merge into main first."
+            )
+            return {
+                "allow": False,
+                "reason": reason,
+                "blockers": [reason],
+                "branch": cwd_branch,
+                "next_steps": [
+                    "uv run python scripts/roadmap.py land-issue --issue N",
+                ],
+            }
+
+    return {"allow": True}
+
+
+def land_issue_branch(
+    issue: int,
+    *,
+    base: str = "main",
+    repo_root: Path | None = None,
+    dry_run: bool = False,
+    ff_only: bool = False,
+) -> dict:
+    """Merge an issue worktree branch into ``base`` at the repo root.
+
+    Args:
+        issue: GitHub issue number.
+        base: Target branch (default ``main``).
+        repo_root: Repository root checkout (not the worktree path).
+        dry_run: When true, report planned merge without mutating git state.
+        ff_only: Use ``git merge --ff-only`` instead of ``--no-ff``.
+
+    Returns:
+        Status payload with merge result and push guidance.
+
+    Raises:
+        RuntimeError: When merge prerequisites fail.
+    """
+    from scripts import roadmap_claims
+
+    root = repo_root or REPO_ROOT
+    claim = roadmap_claims.load_claim(issue)
+    branch = effective_claim_branch(claim) if claim else issue_branch_name(issue)
+    wt_path = worktree_dir(issue)
+    exists = branch_exists(branch, root)
+
+    payload: dict = {
+        "issue": issue,
+        "branch": branch,
+        "base": base,
+        "worktree_path": str(wt_path),
+        "dry_run": dry_run,
+        "branch_exists": exists,
+    }
+
+    if dry_run:
+        payload["status"] = "planned"
+        if not exists:
+            payload["warning"] = (
+                f"Branch {branch!r} not found yet; commit in {wt_path} before landing."
+            )
+        payload["hint"] = (
+            f"Would checkout {base} at repo root and merge {branch!r}. "
+            "Run without --dry-run to apply."
+        )
+        return payload
+
+    if not exists:
+        raise RuntimeError(
+            f"Branch {branch!r} not found. Commit in {wt_path} on the issue branch first."
+        )
+
+    try:
+        subprocess.run(
+            ["git", "checkout", base],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=root,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        raise RuntimeError(f"git checkout {base} failed: {detail}") from exc
+
+    merge_cmd = ["git", "merge", branch]
+    if ff_only:
+        merge_cmd.append("--ff-only")
+    else:
+        merge_cmd.extend(["--no-ff", "-m", f"Merge {branch} (closes #{issue})"])
+
+    try:
+        proc = subprocess.run(
+            merge_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=root,
+        )
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        raise RuntimeError(
+            f"git merge {branch} into {base} failed: {detail}. "
+            "Resolve conflicts at repo root, commit, then wrap-up."
+        ) from exc
+
+    merge_commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=root,
+    ).stdout.strip()
+
+    payload.update(
+        {
+            "status": "merged",
+            "merge_commit": merge_commit,
+            "current_branch": current_branch(root),
+            "merge_output": (proc.stdout or proc.stderr or "").strip(),
+            "next_steps": [
+                "make test-fast (or domain tests) on main at repo root",
+                "ROADMAP Done row + make roadmap-check",
+                "gh issue close "
+                f"{issue} --comment 'Evidence: …' then roadmap.py wrap-up --issue "
+                f"{issue}",
+                "git push origin main   # only when the user explicitly requests push",
+            ],
+            "hint": (
+                "Do not push the issue branch to origin. Main now contains the merge; "
+                "push main only on user request."
+            ),
+        }
+    )
+    return payload
 
 
 def branch_guard(

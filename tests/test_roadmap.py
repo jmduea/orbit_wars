@@ -263,7 +263,9 @@ def test_gate_blocks_without_approve_impl(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("ORBIT_WARS_IMPL_GATE", "1")
+    monkeypatch.delenv("ORBIT_WARS_ISSUE_ID", raising=False)
     monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", tmp_path / "no-gate.json")
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATES_DIR", tmp_path / "empty-gates")
     payload = implementation_gate(request="fix kaggle docker validation")
     assert payload["allowed"] is False
     assert payload["blockers"]
@@ -287,7 +289,9 @@ def test_hook_guard_blocks_src_without_impl_gate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.delenv("ORBIT_WARS_HOOK_DISABLE", raising=False)
+    monkeypatch.delenv("ORBIT_WARS_ISSUE_ID", raising=False)
     monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", tmp_path / "no-gate.json")
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATES_DIR", tmp_path / "empty-gates")
     result = hook_guard(paths=["src/jax/train.py"])
     assert result["allow"] is False
     assert (
@@ -368,20 +372,32 @@ def test_claim_rejects_comma_separated_path(
         )
 
 
-def test_approve_impl_blocks_overwrite_without_force(
+def test_approve_impl_blocks_overwrite_same_issue_without_force(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import argparse
 
-    from scripts.roadmap import cmd_approve_impl
+    from scripts.roadmap import IMPL_GATES_DIR, cmd_approve_impl
 
-    gate = tmp_path / "impl-gate.json"
-    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", gate)
-    save_impl_gate({"approved": True, "issue": "#1", "summary": "first"})
-    args = argparse.Namespace(issue=2, manifest_id=None, summary="second", force=False)
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATES_DIR", tmp_path / "impl-gates")
+    save_impl_gate({"approved": True, "issue": "#1", "summary": "first"}, issue=1)
+    args = argparse.Namespace(issue=1, manifest_id=None, summary="second", force=False)
     assert cmd_approve_impl(args) == 1
-    loaded = json.loads(gate.read_text(encoding="utf-8"))
-    assert loaded["issue"] == "#1"
+
+
+def test_approve_impl_allows_parallel_issues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+
+    from scripts.roadmap import cmd_approve_impl, load_impl_gate_for_issue
+
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATES_DIR", tmp_path / "impl-gates")
+    save_impl_gate({"approved": True, "issue": "#1", "summary": "first"}, issue=1)
+    args = argparse.Namespace(issue=2, manifest_id=None, summary="second", force=False)
+    assert cmd_approve_impl(args) == 0
+    assert load_impl_gate_for_issue(1) is not None
+    assert load_impl_gate_for_issue(2) is not None
 
 
 def test_begin_rejects_multiple_issue_refs(
@@ -512,3 +528,94 @@ def test_check_session_flags_open_claim(tmp_path: Path, monkeypatch: pytest.Monk
     assert proc.returncode == 1
     payload = json.loads(proc.stdout)
     assert payload["passed"] is False
+
+
+def test_find_stale_claims_detects_roadmap_done(
+    wrap_up_roadmap: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
+    roadmap_claims.claim_issue(
+        issue=_WRAP_UP_DONE_ISSUE,
+        owner="stale-agent",
+        paths=["docs/"],
+        branch=f"issue/{_WRAP_UP_DONE_ISSUE}",
+    )
+    stale = roadmap_claims.find_stale_claims(skip_github=True)
+    issues = [int(entry["issue"]) for entry in stale]
+    assert _WRAP_UP_DONE_ISSUE in issues
+    assert "roadmap_done" in stale[0]["stale_reasons"]
+
+
+def test_release_stale_claims_dry_run(
+    wrap_up_roadmap: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
+    roadmap_claims.claim_issue(
+        issue=_WRAP_UP_DONE_ISSUE,
+        owner="stale-agent",
+        paths=["docs/"],
+        branch=f"issue/{_WRAP_UP_DONE_ISSUE}",
+    )
+    result = roadmap_claims.release_stale_claims(dry_run=True, skip_github=True)
+    assert result["released_count"] == 0
+    assert roadmap_claims.load_claim(_WRAP_UP_DONE_ISSUE) is not None
+    applied = roadmap_claims.release_stale_claims(dry_run=False, skip_github=True)
+    assert applied["released_count"] == 1
+    assert roadmap_claims.load_claim(_WRAP_UP_DONE_ISSUE) is None
+
+
+def test_hook_guard_uses_per_issue_gate_with_issue_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "hook-agent")
+    monkeypatch.setenv("ORBIT_WARS_ISSUE_ID", "8802")
+    monkeypatch.setenv("ORBIT_WARS_HOOK_DISABLE", "")
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATES_DIR", state / "impl-gates")
+    save_impl_gate({"approved": True, "issue": "#8802", "summary": "test"}, issue=8802)
+    roadmap_claims.claim_issue(
+        issue=8802,
+        owner="hook-agent",
+        paths=["src/jax/"],
+        branch="issue/8802",
+        setup_worktree=False,
+    )
+    monkeypatch.setattr("scripts.roadmap_git.current_branch", lambda _root=None: "issue/8802")
+    result = hook_guard(paths=["src/jax/train.py"])
+    assert result["allow"] is True
+
+
+def test_check_session_global_flags_any_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import subprocess
+    import sys
+
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "coordinator")
+    roadmap_claims.claim_issue(issue=8, owner="other-agent", paths=["src/"])
+    env = os.environ.copy()
+    env["ORBIT_WARS_STATE_DIR"] = str(state)
+    env["ORBIT_WARS_AGENT_ID"] = "coordinator"
+    proc = subprocess.run(
+        [sys.executable, "scripts/roadmap.py", "check-session", "--global"],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    payload = json.loads(proc.stdout)
+    assert payload["scope"] == "global"
+    assert len(payload["open_claims"]) == 1
+    assert proc.returncode == 0

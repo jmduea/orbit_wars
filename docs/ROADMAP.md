@@ -31,11 +31,11 @@ _None — pick from **Next** after planning._
 
 | Item | Link |
 |------|------|
-| Remove `format` config group; derive rollout groups from `training.num_envs` + weights | [#126](https://github.com/jmduea/orbit_wars/issues/126) · `src/config/rollout_allocation.py` `make test-fast` |
+| Git landing: merge worktree to main, block issue/* push | [#135](https://github.com/jmduea/orbit_wars/issues/135) · `land-issue` `docs/MULTI_AGENT.md` |
+| Multi-agent coordination (per-issue impl-gates, stale claims, playbook) | [#134](https://github.com/jmduea/orbit_wars/issues/134) · `docs/MULTI_AGENT.md` `make test-fast` |
 | Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) · [#125](https://github.com/jmduea/orbit_wars/pull/125) · `docs/architecture/tournament-eval.md` `make test-domain-artifacts` |
 | VRAM telemetry + W&B-backed comfort profile | [#123](https://github.com/jmduea/orbit_wars/issues/123) · `docs/benchmarks/vram-profile-sps-experiment.md` |
 | Define `survival_time` metric and relation to performance (research) | [#101](https://github.com/jmduea/orbit_wars/issues/101) · `docs/benchmarks/issue-101-survival-time.md` |
-| Verify seed scheduler swaps during training | [#99](https://github.com/jmduea/orbit_wars/issues/99) · `test_seed_scheduler.py` `test_jax_seed_scheduler.py` |
 
 _Last triaged: 2026-05-30_
 
@@ -55,7 +55,7 @@ Free-form chat is fine — agents run the funnel without slash commands. No impl
 | **7 — ROADMAP Done** | Add **Done** row (≤5 cap), remove from **Now**/**Next**, run `make roadmap-check` |
 | **8 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` (fails if issue not in **Done**) |
 | **9 — Session end** | manifest `complete`, `roadmap.py check-session` clean |
-| **Multitask** | Parent spawns one executor per issue with claim + worktree + env exports; parent runs `check-session` after workers finish |
+| **Multitask** | Parent: `claims --stale`, `release-stale --apply`, spawn one executor per issue; `check-session --global` after workers |
 
 **Multi-agent:** `roadmap.py claims` before starting; `ORBIT_WARS_AGENT_ID` distinguishes owners. Session end must pass `check-session` (no open claims without wrap-up). See [OWNERSHIP.md](OWNERSHIP.md).
 
