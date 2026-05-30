@@ -1,7 +1,7 @@
 # Roadmap
 
-> Human index only. Details live in linked issues/specs or [brain_dump.md](brain_dump.md).
-> Caps: **≤3** in **Now**, **≤5** in **Done**. Inbox: brain_dump · Agent packages: `.omg/workflow-manifest.json`
+> Single priority index. Details in GitHub issues and `.omg/specs|plans/`.
+> Caps: **≤3** **Now**, **≤5** **Done**. Agent packages: `.omg/workflow-manifest.json`
 
 **Phase:** submit-valid
 
@@ -24,11 +24,12 @@
 
 | Item | Link |
 |------|------|
-| W&B tags from Hydra config groups | [brain_dump.md#ideas](brain_dump.md#ideas) |
-| Define `num_envs` via training weights instead of format YAML | [brain_dump.md#ideas](brain_dump.md#ideas) |
-| Local tournament / ranking eval for best agents | [brain_dump.md#ideas](brain_dump.md#ideas) |
-| VRAM profile from W&B run data | [brain_dump.md#ideas](brain_dump.md#ideas) |
-| Debug metric: average ships per fleet launch | [brain_dump.md#ideas](brain_dump.md#ideas) |
+| Unify outputs: promotion, W&B best artifacts, sweep naming | [output-storage plan](../.omg/plans/output-storage-roadmap.md) · [output-standardization spec](../.omg/specs/deep-interview-output-standardization.md) |
+| W&B tags from Hydra config groups | — |
+| Define `num_envs` via training weights instead of format YAML | — |
+| Local tournament / ranking eval for best agents | — |
+| VRAM profile from W&B run data | — |
+| Debug metric: average ships per fleet launch | — |
 
 ## Done (last 5)
 
@@ -40,9 +41,24 @@
 
 _Last triaged: 2026-05-30_
 
+## Agent workflow (mandatory funnel)
+
+No implementation in `src/`, `conf/`, or `tests/` until gates pass.
+
+| Phase | Action |
+|-------|--------|
+| **0 — Status** | `uv run python scripts/roadmap.py agent` · `uv run python scripts/omg_workflow_manifest.py active` |
+| **1 — Intake** | `uv run python scripts/roadmap.py intake "<request>"` — must map to ROADMAP/issue or capture to **Later** |
+| **2 — Planning** | `/deep-interview` → `/ralplan` (or `/omg-autopilot` through spec approval) for non-trivial work |
+| **3 — Execution plan** | Chunk order, manifest register, create/update GitHub issues with AC, promote ROADMAP rows |
+| **4 — Approve impl** | `uv run python scripts/roadmap.py approve-impl --issue N` (or `--manifest-id id`) |
+| **5 — Implement** | Code/tests; `roadmap.py gate` should pass if `ORBIT_WARS_IMPL_GATE=1` |
+| **6 — Done** | Close issue, ROADMAP **Done**, manifest `complete`, `roadmap.py clear-impl` |
+
+**New ideas:** add a **Later** row (no issue until phase 3). **Do not** use `docs/brain_dump.md`.
+
 ## Maintenance
 
-- **Update on transition only** — when starting, finishing, or abandoning work; skip if nothing moved.
-- **Weekly (≤5 min):** triage [brain_dump.md](brain_dump.md) → promote to **Next**/**Now** or delete stale **Later** rows; refresh _Last triaged_.
-- **GitHub issues:** create for **Now**/**Next** blockers with labels `type:*` + `area:*` (see [.github/labels.yml](../.github/labels.yml)); replace brain_dump links with `#NNN`.
-- **Agents:** run `uv run python scripts/roadmap.py agent` before planning; `validate` after editing this file. Human **Now** wins over manifest backlog for priority.
+- **Update on transition only** — start, finish, or abandon work.
+- **Promote to Next/Now:** only after planning (phase 2–3); open or link GitHub issue with `type:*` + `area:*`.
+- **Validate:** `uv run python scripts/roadmap.py validate` or `make roadmap-check`.

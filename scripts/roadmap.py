@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Validate and inspect docs/ROADMAP.md for humans and coding agents."""
+"""Validate and inspect docs/ROADMAP.md; intake and implementation gates for agents."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROADMAP_PATH = REPO_ROOT / "docs" / "ROADMAP.md"
 MANIFEST_PATH = REPO_ROOT / ".omg" / "workflow-manifest.json"
+IMPL_GATE_PATH = REPO_ROOT / ".omg" / "state" / "impl-gate.json"
+ARCHIVED_BRAIN_DUMP = "docs/archive/brain_dump.md"
 
 SECTION_ORDER = ("now", "next", "later", "done")
 SECTION_HEADERS = {
@@ -25,8 +28,17 @@ SECTION_HEADERS = {
 MAX_NOW = 3
 MAX_DONE = 5
 STALE_TRIAGED_DAYS = 21
+BANNED_INBOX_PATHS = ("brain_dump.md", "docs/brain_dump.md")
 
 ACTIVE_MANIFEST_STATUSES = {"draft", "approved", "planned", "executing"}
+
+TRIVIAL_REQUEST_PATTERNS = (
+    re.compile(r"\b(typo|spelling|comment only|whitespace|formatting)\b", re.I),
+    re.compile(r"\b(update (the )?readme|fix link)\b", re.I),
+)
+
+ISSUE_REF = re.compile(r"#(\d+)\b")
+MANIFEST_ID = re.compile(r"\b([a-z][a-z0-9-]{2,})\b")
 
 
 @dataclass(slots=True)
@@ -95,6 +107,15 @@ def parse_roadmap(text: str) -> RoadmapDocument:
     return RoadmapDocument(phase=phase, last_triaged=last_triaged, sections=sections)
 
 
+def _link_contains_brain_dump(link: str) -> bool:
+    lower = link.lower()
+    return "brain_dump" in lower
+
+
+def _extract_issue_ids(link: str) -> list[int]:
+    return [int(match) for match in ISSUE_REF.findall(link)]
+
+
 def validate_roadmap(
     doc: RoadmapDocument,
     *,
@@ -136,11 +157,19 @@ def validate_roadmap(
                     f"(also in {seen_items[row.item]})"
                 )
             seen_items.setdefault(row.item, section)
-            if section in {"now", "next"} and row.link.strip() in {"—", "-", "#TBD", ""}:
-                warnings.append(
-                    f"{section}: {row.item!r} has no issue/spec link "
-                    "(prefer GitHub issue #NNN when work starts)"
-                )
+
+            if section in {"now", "next"}:
+                if _link_contains_brain_dump(row.link):
+                    errors.append(
+                        f"{section}: {row.item!r} links to retired brain_dump; "
+                        "use GitHub issue #NNN or .omg spec/plan path"
+                    )
+                if row.link.strip() in {"—", "-", "#TBD", ""}:
+                    warnings.append(
+                        f"{section}: {row.item!r} has no issue/spec link "
+                        "(prefer GitHub issue #NNN when work starts)"
+                    )
+
             if strict_links and row.link.startswith("["):
                 path_match = re.match(r"\[.*?\]\((.*?)\)", row.link)
                 if path_match:
@@ -148,14 +177,7 @@ def validate_roadmap(
                     if rel and not rel.startswith("#") and not (REPO_ROOT / rel).exists():
                         errors.append(f"Broken link path: {rel} ({row.item!r})")
 
-    placeholder_done = [
-        row
-        for row in done_rows
-        if "none yet" in row.item.lower() or row.item.startswith("_(")
-    ]
-    if len(done_rows) > 0 and len(placeholder_done) == len(done_rows):
-        pass
-    elif len(done_rows) == 0:
+    if len(done_rows) == 0:
         warnings.append("Done section is empty")
 
     return errors + [f"WARNING: {message}" for message in warnings]
@@ -173,6 +195,209 @@ def load_manifest_active() -> list[dict]:
     ]
 
 
+def load_impl_gate() -> dict | None:
+    if not IMPL_GATE_PATH.exists():
+        return None
+    try:
+        data = json.loads(IMPL_GATE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_impl_gate(payload: dict) -> None:
+    IMPL_GATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    IMPL_GATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def clear_impl_gate() -> None:
+    if IMPL_GATE_PATH.exists():
+        IMPL_GATE_PATH.unlink()
+
+
+def _normalize_tokens(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9]+", text.lower()) if len(token) > 2}
+
+
+def _score_row_match(request_tokens: set[str], row: RoadmapRow) -> float:
+    item_tokens = _normalize_tokens(row.item)
+    link_tokens = _normalize_tokens(row.link)
+    overlap = len(request_tokens & (item_tokens | link_tokens))
+    if overlap == 0:
+        return 0.0
+    return overlap / max(len(request_tokens), 1)
+
+
+def _is_trivial_request(request: str) -> bool:
+    return any(pattern.search(request) for pattern in TRIVIAL_REQUEST_PATTERNS)
+
+
+def intake_request(request: str, doc: RoadmapDocument) -> dict:
+    request = request.strip()
+    request_tokens = _normalize_tokens(request)
+    issue_ids_in_request = [int(n) for n in ISSUE_REF.findall(request)]
+
+    best: tuple[float, str, RoadmapRow] | None = None
+    min_match_score = 0.34
+    for section in ("now", "next", "later"):
+        for row in doc.sections.get(section, []):
+            score = _score_row_match(request_tokens, row)
+            row_issues = _extract_issue_ids(row.link)
+            if issue_ids_in_request and any(i in row_issues for i in issue_ids_in_request):
+                score = max(score, 1.0)
+            if score >= min_match_score and (best is None or score > best[0]):
+                best = (score, section, row)
+
+    active = load_manifest_active()
+    manifest_match: dict | None = None
+    for entry in active:
+        entry_id = str(entry.get("id", ""))
+        title = str(entry.get("title", ""))
+        haystack = f"{entry_id} {title}".lower()
+        if entry_id and entry_id in request.lower():
+            manifest_match = entry
+            break
+        overlap = _normalize_tokens(haystack) & request_tokens
+        if len(overlap) >= 2 or (entry_id and entry_id in request.lower()):
+            manifest_match = entry
+            break
+
+    matched_section = best[1] if best else None
+    matched_row = asdict(best[2]) if best else None
+    matched_issues = _extract_issue_ids(best[2].link) if best else []
+
+    requires_planning = True
+    suggested_workflow = "ralplan"
+    if _is_trivial_request(request):
+        requires_planning = False
+        suggested_workflow = "quick"
+    elif matched_section == "now" and matched_issues:
+        requires_planning = False
+        suggested_workflow = "execute"
+    elif matched_section in {"now", "next"}:
+        suggested_workflow = "ralplan"
+    elif matched_section == "later":
+        suggested_workflow = "deep-interview"
+    elif manifest_match:
+        suggested_workflow = "ralplan"
+    else:
+        suggested_workflow = "deep-interview"
+
+    capture_to = None
+    if matched_section is None and manifest_match is None:
+        capture_to = "later"
+
+    return {
+        "request": request,
+        "matched": matched_section is not None or manifest_match is not None,
+        "roadmap_section": matched_section,
+        "roadmap_row": matched_row,
+        "issue_ids": matched_issues,
+        "manifest_match": (
+            {
+                "id": manifest_match.get("id"),
+                "status": manifest_match.get("status"),
+                "title": manifest_match.get("title"),
+            }
+            if manifest_match
+            else None
+        ),
+        "capture_to": capture_to,
+        "requires_planning": requires_planning,
+        "suggested_workflow": suggested_workflow,
+        "next_steps": _intake_next_steps(
+            matched_section=matched_section,
+            requires_planning=requires_planning,
+            suggested_workflow=suggested_workflow,
+            capture_to=capture_to,
+        ),
+    }
+
+
+def _intake_next_steps(
+    *,
+    matched_section: str | None,
+    requires_planning: bool,
+    suggested_workflow: str,
+    capture_to: str | None,
+) -> list[str]:
+    if capture_to == "later":
+        return [
+            "Add one line to docs/ROADMAP.md Later (no implementation)",
+            "Run: uv run python scripts/roadmap.py validate",
+            f"When ready: /{suggested_workflow} then promote to Next/Now with GitHub issue",
+        ]
+    if requires_planning:
+        return [
+            f"Run /{suggested_workflow} (or /omg-autopilot through spec approval)",
+            "Produce execution plan: chunks, manifest register, GitHub issues with AC",
+            "Run: uv run python scripts/roadmap.py approve-impl --issue N",
+        ]
+    return [
+        "Run: uv run python scripts/roadmap.py approve-impl --issue N",
+        "Implement; run tests; close issue and update ROADMAP Done on completion",
+    ]
+
+
+def implementation_gate(*, request: str | None = None) -> dict:
+    doc = parse_roadmap(load_roadmap_text())
+    intake = intake_request(request, doc) if request else None
+    impl = load_impl_gate()
+    strict = os.environ.get("ORBIT_WARS_IMPL_GATE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+    allowed = False
+    blockers: list[str] = []
+
+    if impl and impl.get("approved"):
+        allowed = True
+        if request and intake:
+            gate_issue = impl.get("issue")
+            gate_manifest = impl.get("manifest_id")
+            intake_issues = [f"#{i}" for i in intake.get("issue_ids", [])]
+            if gate_issue and intake_issues and gate_issue not in intake_issues:
+                blockers.append(
+                    f"impl-gate issue {gate_issue} does not match intake {intake_issues}"
+                )
+            if gate_manifest and intake.get("manifest_match"):
+                mid = intake["manifest_match"].get("id")
+                if mid and mid != gate_manifest:
+                    blockers.append(
+                        f"impl-gate manifest {gate_manifest!r} != intake {mid!r}"
+                    )
+    elif _is_trivial_request(request or ""):
+        allowed = True
+    else:
+        blockers.append(
+            "No approved implementation gate (.omg/state/impl-gate.json). "
+            "Complete planning phases then: roadmap.py approve-impl --issue N"
+        )
+
+    if intake and not intake["matched"] and not (impl and impl.get("approved")):
+        blockers.append(
+            "Request does not match ROADMAP Now/Next or active manifest; "
+            "capture to Later or run intake after updating ROADMAP"
+        )
+
+    if blockers:
+        allowed = False
+
+    if not strict and blockers and _is_trivial_request(request or ""):
+        allowed = True
+
+    return {
+        "allowed": allowed,
+        "strict_mode": strict,
+        "impl_gate": impl,
+        "intake": intake,
+        "blockers": blockers,
+        "next_steps": [] if allowed else (intake or {}).get("next_steps", []),
+    }
+
+
 def status_payload(doc: RoadmapDocument) -> dict:
     return {
         "path": str(ROADMAP_PATH.relative_to(REPO_ROOT)),
@@ -188,9 +413,11 @@ def status_payload(doc: RoadmapDocument) -> dict:
 
 def agent_payload(doc: RoadmapDocument) -> dict:
     active = load_manifest_active()
+    impl = load_impl_gate()
     return {
         "canonical_human_priority": "docs/ROADMAP.md Now section",
         "canonical_agent_packages": ".omg/workflow-manifest.json (active statuses only)",
+        "impl_gate_approved": bool(impl and impl.get("approved")),
         "roadmap": status_payload(doc),
         "manifest_active": {
             "total": len(active),
@@ -204,11 +431,21 @@ def agent_payload(doc: RoadmapDocument) -> dict:
                 for entry in active
             ],
         },
+        "workflow_phases": [
+            "0: roadmap.py agent + omg_workflow_manifest.py active",
+            "1: roadmap.py intake",
+            "2: /deep-interview or /ralplan (or /omg-autopilot through spec approval)",
+            "3: execution plan → issues + manifest + ROADMAP promote",
+            "4: roadmap.py approve-impl",
+            "5: implement (roadmap.py gate)",
+            "6: close issue, ROADMAP Done, manifest complete, clear-impl",
+        ],
         "agent_rules": [
+            "Do not use docs/brain_dump.md; retired inbox — ROADMAP + issues only.",
             "Prefer ROADMAP Now over manifest when choosing what to work on next.",
-            "Use manifest + linked specs/plans only for multi-step agent execution.",
-            "After changing ROADMAP, run: uv run python scripts/roadmap.py validate",
-            "On finish: close GitHub issue, move row to Done (keep ≤5), do not duplicate evidence in ROADMAP.",
+            "No src/conf/tests edits until approve-impl (set ORBIT_WARS_IMPL_GATE=1 to enforce gate).",
+            "Create GitHub issues after execution planning (phase 3), not before for new work.",
+            "After changing ROADMAP: uv run python scripts/roadmap.py validate",
         ],
     }
 
@@ -249,26 +486,91 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_intake(args: argparse.Namespace) -> int:
+    if not args.request.strip():
+        print("intake requires non-empty request text", file=sys.stderr)
+        return 1
+    doc = parse_roadmap(load_roadmap_text())
+    print(json.dumps(intake_request(args.request, doc), indent=2))
+    return 0
+
+
+def cmd_gate(args: argparse.Namespace) -> int:
+    payload = implementation_gate(request=args.request)
+    print(json.dumps(payload, indent=2))
+    if args.require_allowed and not payload["allowed"]:
+        return 1
+    return 0
+
+
+def cmd_approve_impl(args: argparse.Namespace) -> int:
+    if not args.issue and not args.manifest_id:
+        print("approve-impl requires --issue and/or --manifest-id", file=sys.stderr)
+        return 1
+    payload = {
+        "approved": True,
+        "issue": f"#{args.issue}" if args.issue else None,
+        "manifest_id": args.manifest_id,
+        "summary": args.summary or "",
+        "approved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    save_impl_gate(payload)
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_clear_impl(args: argparse.Namespace) -> int:
+    clear_impl_gate()
+    print("impl-gate cleared")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
         nargs="?",
-        choices=("validate", "status", "agent"),
+        choices=(
+            "validate",
+            "status",
+            "agent",
+            "intake",
+            "gate",
+            "approve-impl",
+            "clear-impl",
+        ),
         default="validate",
-        help="validate structure, print JSON status, or agent-oriented combined view",
     )
     parser.add_argument(
-        "--strict-links",
+        "request",
+        nargs="?",
+        default="",
+        help="request text for intake/gate",
+    )
+    parser.add_argument("--strict-links", action="store_true")
+    parser.add_argument("--issue", type=int, help="GitHub issue number for approve-impl")
+    parser.add_argument("--manifest-id", help="manifest entry id for approve-impl")
+    parser.add_argument("--summary", help="short description stored in impl-gate")
+    parser.add_argument(
+        "--require-allowed",
         action="store_true",
-        help="fail when markdown link targets are missing repo files",
+        help="exit 1 when gate denies implementation",
     )
     args = parser.parse_args()
+
     if args.command == "validate":
         return cmd_validate(args)
     if args.command == "status":
         return cmd_status(args)
-    return cmd_agent(args)
+    if args.command == "agent":
+        return cmd_agent(args)
+    if args.command == "intake":
+        return cmd_intake(args)
+    if args.command == "gate":
+        return cmd_gate(args)
+    if args.command == "approve-impl":
+        return cmd_approve_impl(args)
+    return cmd_clear_impl(args)
 
 
 if __name__ == "__main__":

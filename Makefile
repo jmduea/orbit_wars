@@ -5,6 +5,10 @@ roadmap-check:
 	uv run python scripts/roadmap.py validate
 	uv run --group dev pytest tests/test_roadmap.py -q
 
+roadmap-intake:
+	@test -n "$(REQUEST)" || (echo "Usage: make roadmap-intake REQUEST='your task'" && exit 1)
+	uv run python scripts/roadmap.py intake "$(REQUEST)"
+
 test:
 	uv run --group dev pytest
 

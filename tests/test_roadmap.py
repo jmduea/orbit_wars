@@ -13,6 +13,8 @@ from scripts.roadmap import (
     RoadmapDocument,
     RoadmapRow,
     agent_payload,
+    implementation_gate,
+    intake_request,
     parse_roadmap,
     validate_roadmap,
 )
@@ -42,7 +44,8 @@ def test_agent_payload_includes_manifest_and_rules() -> None:
     assert "roadmap" in payload
     assert "manifest_active" in payload
     assert payload["roadmap"]["counts"]["now"] >= 1
-    assert any("ROADMAP Now" in rule for rule in payload["agent_rules"])
+    assert any("brain_dump" in rule.lower() for rule in payload["agent_rules"])
+    assert "workflow_phases" in payload
 
 
 def test_parse_minimal_document() -> None:
@@ -99,3 +102,50 @@ def test_status_json_roundtrip_keys() -> None:
     serialized = json.dumps(payload)
     loaded = json.loads(serialized)
     assert set(loaded["sections"]) == {"now", "next", "later", "done"}
+
+
+@pytest.mark.config
+def test_repo_roadmap_has_no_brain_dump_in_now_next() -> None:
+    text = ROADMAP_PATH.read_text(encoding="utf-8").lower()
+    now_chunk = text.split("## now", 1)[1].split("## next", 1)[0]
+    next_chunk = text.split("## next", 1)[1].split("## later", 1)[0]
+    assert "brain_dump" not in now_chunk
+    assert "brain_dump" not in next_chunk
+
+
+def test_validate_rejects_brain_dump_link_in_now() -> None:
+    doc = RoadmapDocument(
+        phase="p",
+        last_triaged=date(2026, 5, 1),
+        sections={
+            "now": [RoadmapRow(item="Bad", link="[brain_dump](brain_dump.md)")],
+            "next": [],
+            "later": [],
+            "done": [],
+        },
+    )
+    errors = [m for m in validate_roadmap(doc) if not m.startswith("WARNING:")]
+    assert any("brain_dump" in e for e in errors)
+
+
+def test_intake_matches_kaggle_validation_now() -> None:
+    doc = parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
+    result = intake_request("fix kaggle docker validation submission", doc)
+    assert result["matched"] is True
+    assert result["roadmap_section"] == "now"
+    assert 96 in result["issue_ids"]
+
+
+def test_intake_unknown_request_captures_to_later() -> None:
+    doc = parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
+    result = intake_request("implement quantum blockchain for orbit wars", doc)
+    assert result["matched"] is False
+    assert result["capture_to"] == "later"
+    assert result["requires_planning"] is True
+
+
+def test_gate_blocks_without_approve_impl(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ORBIT_WARS_IMPL_GATE", "1")
+    payload = implementation_gate(request="fix kaggle docker validation")
+    assert payload["allowed"] is False
+    assert payload["blockers"]

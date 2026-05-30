@@ -98,6 +98,7 @@ Invoke via `/skill-name`. These are available as slash commands:
 
 ## Keyword Triggers
 These keywords automatically activate the corresponding skill:
+- "work intake", "before implementing", "start work", "pick up task" → `/work-intake`
 - "autopilot", "auto-pilot", "autonomous", "build me", "create me" → `/omg-autopilot`
 - "ralph", "prd loop", "story loop" → `/ralph`
 - "ulw", "parallel", "ultrawork" → `/ultrawork`

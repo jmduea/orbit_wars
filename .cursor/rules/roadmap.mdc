@@ -1,38 +1,50 @@
 ---
-description: Human ROADMAP index, GitHub issue labels, and agent priority rules
+description: ROADMAP-first intake funnel; brain_dump retired; implementation gates
 globs:
   - docs/ROADMAP.md
-  - docs/brain_dump.md
   - scripts/roadmap.py
+  - src/**
+  - conf/**
+  - tests/**
 ---
 
-# Roadmap tracking
+# ROADMAP funnel (mandatory)
 
 ## Sources of truth
 
 | Surface | Role |
 |---------|------|
-| `docs/ROADMAP.md` | Human **Now / Next / Later** (max 3 Now, 5 Done) |
-| `docs/brain_dump.md` | Inbox — triage weekly into ROADMAP |
-| `.omg/workflow-manifest.json` | Agent spec/plan lifecycle only |
-| GitHub issues | Blocker detail + portfolio history (`type:*`, `area:*`) |
+| `docs/ROADMAP.md` | **Now / Next / Later** (≤3 Now, ≤5 Done) |
+| GitHub issues | Detail, acceptance criteria, portfolio |
+| `.omg/workflow-manifest.json` | Active agent spec/plan packages only |
+| `docs/brain_dump.md` | **Retired** — redirect only; do not triage |
 
-## Agent commands
+## Before any implementation
 
 ```bash
-uv run python scripts/roadmap.py agent    # priority view (run before planning)
-uv run python scripts/roadmap.py validate # after editing ROADMAP.md
-make roadmap-check                        # validate + pytest
+uv run python scripts/roadmap.py agent
+uv run python scripts/roadmap.py intake "<request>"
 ```
 
-## Rules
+If intake says `capture_to: later` → update ROADMAP **Later** only; **no code**.
 
-1. **Prefer ROADMAP Now** over manifest when picking the next task.
-2. Use manifest + `.omg/specs|plans/` only for multi-step agent execution.
-3. **Do not** mirror issue bodies or evidence into ROADMAP — one-line rows + links only.
-4. On completion: close GitHub issue, move row to **Done** (trim to 5), update manifest if linked.
-5. CI fails if Now > 3, Done > 5, or required sections are missing.
+If `requires_planning` → `/work-intake` skill phases 2–3 (`/ralplan`, `/deep-interview`).
+
+```bash
+uv run python scripts/roadmap.py approve-impl --issue N
+uv run python scripts/roadmap.py gate --request "<request>"   # use --require-allowed if ORBIT_WARS_IMPL_GATE=1
+```
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `roadmap.py agent` | Status + workflow phases |
+| `roadmap.py intake` | Map request → ROADMAP / planning path |
+| `roadmap.py approve-impl` | Allow implementation (writes `.omg/state/impl-gate.json`) |
+| `roadmap.py clear-impl` | Clear gate after Done |
+| `roadmap.py validate` | CI structure checks (bans brain_dump in Now/Next) |
 
 ## Git
 
-Commit verified roadmap/issue updates locally; push only when the user asks.
+Commit verified work locally; push only when the user asks.
