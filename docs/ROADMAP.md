@@ -7,9 +7,7 @@
 
 ## Now
 
-| Item | Link |
-|------|------|
-| Remove `format` config group; derive rollout groups from `training.num_envs` + weights | [#126](https://github.com/jmduea/orbit_wars/issues/126) |
+_None — pick from **Next** after planning._
 
 ## Next
 
@@ -19,24 +17,17 @@ _None — pick from **Later** after planning._
 
 | Item | Link |
 |------|------|
-| Telemetry: remove redundant exported metrics | [#127](https://github.com/jmduea/orbit_wars/issues/127) |
-| Telemetry: remove stubbed game-state / action-target rollout metrics | [#128](https://github.com/jmduea/orbit_wars/issues/128) |
-| Telemetry: stop device_get of rollout scalars not in update record | [#129](https://github.com/jmduea/orbit_wars/issues/129) |
-| Telemetry: apply metric_groups filtering at runtime | [#130](https://github.com/jmduea/orbit_wars/issues/130) |
-| Telemetry: gate PPO debug_* behind debug metric group | [#131](https://github.com/jmduea/orbit_wars/issues/131) |
-| Telemetry: gate heavy/sparse per-update fields (default off) | [#132](https://github.com/jmduea/orbit_wars/issues/132) |
-| Telemetry phase 2: split logs, event snapshots, registry prune (after #127–#132) | [#133](https://github.com/jmduea/orbit_wars/issues/133) |
 | Debug metric: average ships per fleet launch | — |
 
 ## Done (last 5)
 
 | Item | Link |
 |------|------|
+| Remove `format` config group; derive rollout groups from `training.num_envs` + weights | [#126](https://github.com/jmduea/orbit_wars/issues/126) · `src/config/rollout_allocation.py` `make test-fast` |
 | Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) · [#125](https://github.com/jmduea/orbit_wars/pull/125) · `docs/architecture/tournament-eval.md` `make test-domain-artifacts` |
 | VRAM telemetry + W&B-backed comfort profile | [#123](https://github.com/jmduea/orbit_wars/issues/123) · `docs/benchmarks/vram-profile-sps-experiment.md` |
 | Define `survival_time` metric and relation to performance (research) | [#101](https://github.com/jmduea/orbit_wars/issues/101) · `docs/benchmarks/issue-101-survival-time.md` |
 | Verify seed scheduler swaps during training | [#99](https://github.com/jmduea/orbit_wars/issues/99) · `test_seed_scheduler.py` `test_jax_seed_scheduler.py` |
-| JAX compile time vs expected bounds (research) | [#100](https://github.com/jmduea/orbit_wars/issues/100) · `docs/benchmarks/issue-100-jax-compile-time.md` |
 
 _Last triaged: 2026-05-30_
 
