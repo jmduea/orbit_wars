@@ -28,6 +28,59 @@ from scripts.roadmap import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ROADMAP_PATH = REPO_ROOT / "docs" / "ROADMAP.md"
 
+# Synthetic ROADMAP for wrap-up tests — avoids coupling to live issue numbers.
+_WRAP_UP_ROADMAP_TEXT = """# Roadmap
+
+**Phase:** test
+
+## Now
+
+| Item | Link |
+|------|------|
+
+## Next
+
+| Item | Link |
+|------|------|
+| Open next item | [#9001](https://github.com/jmduea/orbit_wars/issues/9001) |
+
+## Later
+
+| Item | Link |
+|------|------|
+
+## Done (last 5)
+
+| Item | Link |
+|------|------|
+| Closed done item | [#9002](https://github.com/jmduea/orbit_wars/issues/9002) |
+
+_Last triaged: 2026-05-30_
+"""
+_WRAP_UP_NEXT_ISSUE = 9001
+_WRAP_UP_DONE_ISSUE = 9002
+
+
+def _repo_roadmap_doc() -> RoadmapDocument:
+    return parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
+
+
+def _issue_unique_to_section(doc: RoadmapDocument, section: str) -> int:
+    """Return one issue that appears only in ``section`` (not duplicated elsewhere)."""
+    candidates = [
+        issue_id
+        for issue_id, sections in issue_ids_by_section(doc).items()
+        if sections == [section]
+    ]
+    if not candidates:
+        pytest.skip(f"No issue unique to ROADMAP {section!r}")
+    return candidates[0]
+
+
+@pytest.fixture
+def wrap_up_roadmap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.roadmap.load_roadmap_text", lambda: _WRAP_UP_ROADMAP_TEXT)
+
 
 @pytest.mark.config
 def test_repo_roadmap_validates() -> None:
@@ -151,16 +204,17 @@ def test_validate_rejects_brain_dump_link_in_now() -> None:
     assert any("brain_dump" in e for e in errors)
 
 
-def test_intake_matches_kaggle_validation_done() -> None:
-    doc = parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
-    result = intake_request("fix kaggle docker validation submission #96", doc)
+def test_intake_matches_done_row_by_issue_ref() -> None:
+    doc = _repo_roadmap_doc()
+    done_issue = _issue_unique_to_section(doc, "done")
+    result = intake_request(f"work on issue #{done_issue}", doc)
     assert result["matched"] is True
     assert result["roadmap_section"] == "done"
-    assert 96 in result["issue_ids"]
+    assert done_issue in result["issue_ids"]
 
 
 def test_intake_unknown_request_captures_to_later() -> None:
-    doc = parse_roadmap(ROADMAP_PATH.read_text(encoding="utf-8"))
+    doc = _repo_roadmap_doc()
     result = intake_request("implement quantum blockchain for orbit wars", doc)
     assert result["matched"] is False
     assert result["capture_to"] == "later"
@@ -215,30 +269,31 @@ def test_hook_guard_allows_with_approved_gate(
     monkeypatch.setenv("ORBIT_WARS_HOOK_DISABLE", "")
     gate_path = tmp_path / "impl-gate.json"
     monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", gate_path)
-    save_impl_gate({"approved": True, "issue": "#96", "summary": "test"})
-    monkeypatch.setenv("ORBIT_WARS_ISSUE_ID", "96")
+    save_impl_gate({"approved": True, "issue": "#8801", "summary": "test"})
+    monkeypatch.setenv("ORBIT_WARS_ISSUE_ID", "8801")
     roadmap_claims.claim_issue(
-        issue=96,
+        issue=8801,
         owner="hook-agent",
         paths=["src/jax/"],
-        branch="issue/96",
+        branch="issue/8801",
         setup_worktree=False,
     )
-    monkeypatch.setattr("scripts.roadmap_git.current_branch", lambda _root=None: "issue/96")
+    monkeypatch.setattr("scripts.roadmap_git.current_branch", lambda _root=None: "issue/8801")
     result = hook_guard(paths=["src/jax/train.py"])
     assert result["allow"] is True
 
 
-def test_begin_work_matches_issue_96(
+def test_begin_work_matches_done_issue_ref(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
         "scripts.roadmap.WORK_SESSION_PATH", tmp_path / "work-session.json"
     )
-    payload = begin_work("work on issue #96 docker validation")
+    done_issue = _issue_unique_to_section(_repo_roadmap_doc(), "done")
+    payload = begin_work(f"work on issue #{done_issue}")
     assert payload["intake"]["matched"] is True
     assert payload["intake"]["roadmap_section"] == "done"
-    assert payload["primary_issue"] == 96
+    assert payload["primary_issue"] == done_issue
     assert "next_steps" in payload
 
 
@@ -324,21 +379,30 @@ def test_begin_issue_override_sets_primary_issue(
     assert 42 in payload["intake"]["issue_ids"]
 
 
-def test_wrap_up_requires_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wrap_up_requires_evidence(
+    wrap_up_roadmap: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from scripts import roadmap_claims
 
     monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
-    result = roadmap_claims.wrap_up_check(issue=99, evidence="short", skip_github=True)
+    result = roadmap_claims.wrap_up_check(
+        issue=_WRAP_UP_NEXT_ISSUE,
+        evidence="short",
+        skip_github=True,
+    )
     assert result["passed"] is False
     assert any("Evidence too short" in b for b in result["blockers"])
 
 
-def test_wrap_up_blocks_when_issue_not_in_done(tmp_path: Path) -> None:
+def test_wrap_up_blocks_when_issue_not_in_done(wrap_up_roadmap: None) -> None:
     from scripts import roadmap_claims
 
     result = roadmap_claims.wrap_up_check(
-        issue=99,
-        evidence="make test-fast passed; commit abc; updated ROADMAP Done row for #99",
+        issue=_WRAP_UP_NEXT_ISSUE,
+        evidence=(
+            "make test-fast passed; commit abc; updated ROADMAP Done row "
+            f"for #{_WRAP_UP_NEXT_ISSUE}"
+        ),
         skip_github=True,
     )
     assert result["passed"] is False
@@ -346,12 +410,14 @@ def test_wrap_up_blocks_when_issue_not_in_done(tmp_path: Path) -> None:
     assert any("ROADMAP Next" in b for b in result["blockers"])
 
 
-def test_wrap_up_passes_when_issue_in_done(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wrap_up_passes_when_issue_in_done(
+    wrap_up_roadmap: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from scripts import roadmap_claims
 
     monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(tmp_path / "state"))
     result = roadmap_claims.wrap_up_check(
-        issue=96,
+        issue=_WRAP_UP_DONE_ISSUE,
         evidence="make test-domain-artifacts passed; Kaggle episode 78216645; commit f6231fc",
         skip_github=True,
     )
@@ -360,7 +426,7 @@ def test_wrap_up_passes_when_issue_in_done(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_finalize_wrap_up_records_completion(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    wrap_up_roadmap: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from scripts import roadmap_claims
 
@@ -368,14 +434,19 @@ def test_finalize_wrap_up_records_completion(
     monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
     monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "agent-wrap")
     monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", state / "impl-gate.json")
-    roadmap_claims.claim_issue(issue=96, owner="agent-wrap", paths=["docs/"])
+    roadmap_claims.claim_issue(
+        issue=_WRAP_UP_DONE_ISSUE, owner="agent-wrap", paths=["docs/"]
+    )
     evidence = "make test-fast passed; commit deadbeef; updated ROADMAP Done row"
     result = roadmap_claims.finalize_wrap_up(
-        issue=96, evidence=evidence, owner="agent-wrap", skip_github=True
+        issue=_WRAP_UP_DONE_ISSUE,
+        evidence=evidence,
+        owner="agent-wrap",
+        skip_github=True,
     )
     assert result["passed"] is True
-    assert roadmap_claims.load_completion(96) is not None
-    assert roadmap_claims.load_claim(96) is None
+    assert roadmap_claims.load_completion(_WRAP_UP_DONE_ISSUE) is not None
+    assert roadmap_claims.load_claim(_WRAP_UP_DONE_ISSUE) is None
 
 
 def test_check_session_flags_open_claim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
