@@ -113,6 +113,7 @@ These keywords automatically activate the corresponding skill:
 - "ask", "multi-model ask", "ask models" → `/ask`
 - "deslop", "anti-slop", "cleanup slop" → `/ai-slop-cleaner`
 - "tdd", "test driven" → TDD mode via @test-engineer + `/tdd`
+- "work intake", "start work", "pick up task", "fix", "implement", "issue #" → `/work-intake` (auto-run `roadmap.py begin` on first implementation turn)
 - "security scan", "check secrets", "audit deps" → `/security-scan`
 - "stocktake", "skill audit" → `/skill-stocktake`
 - "coding standards", "style guide", "naming rules" → `/coding-standards`

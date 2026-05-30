@@ -9,6 +9,10 @@ roadmap-intake:
 	@test -n "$(REQUEST)" || (echo "Usage: make roadmap-intake REQUEST='your task'" && exit 1)
 	uv run python scripts/roadmap.py intake "$(REQUEST)"
 
+roadmap-begin:
+	@test -n "$(REQUEST)" || (echo "Usage: make roadmap-begin REQUEST='your task'" && exit 1)
+	uv run python scripts/roadmap.py begin "$(REQUEST)"
+
 test:
 	uv run --group dev pytest
 

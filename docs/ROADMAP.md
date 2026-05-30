@@ -43,17 +43,17 @@ _Last triaged: 2026-05-30_
 
 ## Agent workflow (mandatory funnel)
 
-No implementation in `src/`, `conf/`, or `tests/` until gates pass.
+Free-form chat is fine — agents run the funnel without slash commands. No implementation in `src/`, `conf/`, or `tests/` until gates pass (Cursor pre-tool hook + `approve-impl`).
 
 | Phase | Action |
 |-------|--------|
 | **0 — Status** | `uv run python scripts/roadmap.py agent` · `uv run python scripts/omg_workflow_manifest.py active` |
-| **1 — Intake** | `uv run python scripts/roadmap.py intake "<request>"` — must map to ROADMAP/issue or capture to **Later** |
+| **1 — Begin** | `uv run python scripts/roadmap.py begin "<user message>"` — intake + gate + `work-session.json` |
 | **2 — Planning** | `/deep-interview` → `/ralplan` (or `/omg-autopilot` through spec approval) for non-trivial work |
 | **3 — Execution plan** | Chunk order, manifest register, create/update GitHub issues with AC, promote ROADMAP rows |
 | **4 — Claim** | `roadmap.py claim --issue N --path src/...` (one claim per issue; no path overlap) |
 | **5 — Approve impl** | `roadmap.py approve-impl --issue N` · branch `issue/N-short-slug` |
-| **6 — Implement** | Code/tests; `roadmap.py gate` when `ORBIT_WARS_IMPL_GATE=1` |
+| **6 — Implement** | Code/tests; `roadmap.py gate --require-allowed` (`ORBIT_WARS_IMPL_GATE` on by default) |
 | **7 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` |
 | **8 — Done** | ROADMAP **Done**, manifest `complete`, `roadmap.py check-session` clean |
 

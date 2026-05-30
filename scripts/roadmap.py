@@ -40,6 +40,25 @@ TRIVIAL_REQUEST_PATTERNS = (
 ISSUE_REF = re.compile(r"#(\d+)\b")
 MANIFEST_ID = re.compile(r"\b([a-z][a-z0-9-]{2,})\b")
 
+WORK_SESSION_PATH = REPO_ROOT / ".omg" / "state" / "work-session.json"
+
+IMPL_PATH_PREFIXES = ("src/", "conf/", "tests/")
+HOOK_EXEMPT_PREFIXES = (
+    "scripts/roadmap.py",
+    "scripts/roadmap_claims.py",
+    "tests/test_roadmap.py",
+    ".github/hooks/",
+    ".cursor/hooks/",
+    "docs/ROADMAP.md",
+    "AGENTS.md",
+    ".cursor/rules/",
+)
+
+_IMPL_PATH_RE = re.compile(
+    r"(?:^|[\"'\s])(?P<path>(?:src|conf|tests)/[\w./_-]+)",
+    re.MULTILINE,
+)
+
 
 @dataclass(slots=True)
 class RoadmapRow:
@@ -232,6 +251,165 @@ def _is_trivial_request(request: str) -> bool:
     return any(pattern.search(request) for pattern in TRIVIAL_REQUEST_PATTERNS)
 
 
+def _impl_gate_strict_enabled() -> bool:
+    value = os.environ.get("ORBIT_WARS_IMPL_GATE", "1").strip().lower()
+    return value not in {"", "0", "false", "no", "off"}
+
+
+def normalize_repo_path(path: str) -> str:
+    """Return a repo-relative POSIX path when possible."""
+    cleaned = path.replace("\\", "/").strip()
+    if not cleaned:
+        return ""
+    candidate = Path(cleaned)
+    if candidate.is_absolute():
+        try:
+            return str(candidate.resolve().relative_to(REPO_ROOT.resolve())).replace(
+                "\\", "/"
+            )
+        except ValueError:
+            return cleaned.lstrip("/")
+    return cleaned.lstrip("./")
+
+
+def is_implementation_path(path: str) -> bool:
+    norm = normalize_repo_path(path)
+    if not norm:
+        return False
+    if any(norm.startswith(prefix) for prefix in HOOK_EXEMPT_PREFIXES):
+        return False
+    return any(norm.startswith(prefix) for prefix in IMPL_PATH_PREFIXES)
+
+
+def extract_paths_from_tool_input(tool_name: str, tool_input: object) -> list[str]:
+    """Collect file paths from Cursor/Copilot pre-tool JSON payloads."""
+    paths: list[str] = []
+    if tool_input is None:
+        return paths
+
+    parsed: object = tool_input
+    if isinstance(tool_input, str):
+        stripped = tool_input.strip()
+        if stripped.startswith("{"):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                parsed = tool_input
+        else:
+            parsed = tool_input
+
+    if isinstance(parsed, dict):
+        for key in (
+            "path",
+            "filePath",
+            "file_path",
+            "target_file",
+            "targetNotebook",
+            "target_notebook",
+        ):
+            value = parsed.get(key)
+            if value:
+                paths.append(str(value))
+        extra = parsed.get("paths")
+        if isinstance(extra, list):
+            paths.extend(str(item) for item in extra if item)
+        for key in ("old_string", "new_string", "contents"):
+            blob = parsed.get(key)
+            if isinstance(blob, str):
+                for match in _IMPL_PATH_RE.finditer(blob):
+                    paths.append(match.group("path"))
+    elif isinstance(parsed, str):
+        for match in _IMPL_PATH_RE.finditer(parsed):
+            paths.append(match.group("path"))
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        norm = normalize_repo_path(raw)
+        if norm and norm not in seen:
+            seen.add(norm)
+            normalized.append(norm)
+    return normalized
+
+
+def hook_guard(*, paths: list[str]) -> dict:
+    """Fail closed on src/conf/tests edits without an approved impl-gate (Cursor hook)."""
+    if os.environ.get("ORBIT_WARS_HOOK_DISABLE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return {"allow": True, "skipped": "ORBIT_WARS_HOOK_DISABLE", "touched": []}
+
+    touched = [path for path in paths if is_implementation_path(path)]
+    if not touched:
+        return {"allow": True, "touched": []}
+
+    gate = implementation_gate(request=None)
+    if gate["allowed"]:
+        return {
+            "allow": True,
+            "touched": touched,
+            "impl_gate": gate.get("impl_gate"),
+        }
+
+    blockers = gate.get("blockers") or []
+    summary = "; ".join(blockers[:2])
+    extra = f" (+{len(touched) - 3} more)" if len(touched) > 3 else ""
+    shown = ", ".join(touched[:3]) + extra
+    reason = (
+        f"ROADMAP funnel blocked edits to {shown}. {summary} "
+        'First: uv run python scripts/roadmap.py begin "<user request>" '
+        "then claim + approve-impl before src/conf/tests changes."
+    )
+    return {
+        "allow": False,
+        "reason": reason,
+        "blockers": blockers,
+        "touched": touched,
+        "next_steps": gate.get("next_steps") or [],
+    }
+
+
+def save_work_session(payload: dict) -> None:
+    WORK_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+    WORK_SESSION_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def begin_work(request: str) -> dict:
+    """Run agent + intake + gate for free-form user text; persist session for the hook."""
+    request = request.strip()
+    if not request:
+        raise ValueError("begin requires non-empty request text")
+
+    doc = parse_roadmap(load_roadmap_text())
+    intake = intake_request(request, doc)
+    gate = implementation_gate(request=request)
+    may_implement = bool(
+        gate["allowed"]
+        and intake.get("capture_to") is None
+        and not intake.get("requires_planning")
+    )
+    issue_ids = intake.get("issue_ids") or []
+    primary_issue = issue_ids[0] if issue_ids else None
+
+    payload = {
+        "request": request,
+        "intake": intake,
+        "gate": {
+            "allowed": gate["allowed"],
+            "strict_mode": gate["strict_mode"],
+            "blockers": gate["blockers"],
+        },
+        "may_implement": may_implement,
+        "primary_issue": primary_issue,
+        "next_steps": intake.get("next_steps") or gate.get("next_steps") or [],
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    save_work_session(payload)
+    return payload
+
+
 def intake_request(request: str, doc: RoadmapDocument) -> dict:
     request = request.strip()
     request_tokens = _normalize_tokens(request)
@@ -348,11 +526,7 @@ def implementation_gate(*, request: str | None = None) -> dict:
     doc = parse_roadmap(load_roadmap_text())
     intake = intake_request(request, doc) if request else None
     impl = load_impl_gate()
-    strict = os.environ.get("ORBIT_WARS_IMPL_GATE", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    strict = _impl_gate_strict_enabled()
 
     allowed = False
     blockers: list[str] = []
@@ -449,7 +623,7 @@ def agent_payload(doc: RoadmapDocument) -> dict:
         "active_claims": roadmap_claims.load_all_claims(active_only=True),
         "workflow_phases": [
             "0: roadmap.py agent + omg_workflow_manifest.py active + roadmap.py claims",
-            "1: roadmap.py intake",
+            '1: roadmap.py begin "<user message>" (intake + gate + work-session.json)',
             "2: /deep-interview or /ralplan (or /omg-autopilot through spec approval)",
             "3: execution plan → issues + manifest + ROADMAP promote",
             "4: roadmap.py claim --issue N --path …",
@@ -461,8 +635,9 @@ def agent_payload(doc: RoadmapDocument) -> dict:
             "One claim per issue; no overlapping paths across active claims.",
             "Do not use docs/brain_dump.md; retired inbox — ROADMAP + issues only.",
             "Prefer ROADMAP Now over manifest when choosing what to work on next.",
-            "No src/conf/tests edits until approve-impl (set ORBIT_WARS_IMPL_GATE=1 to enforce gate).",
-            "Session end: wrap-up required — closed GitHub issue + evidence (roadmap.py wrap-up).",
+            'Free-form chat: first command on implementation intent: roadmap.py begin "<user message>".',
+            "No src/conf/tests edits until approve-impl; Cursor pre-tool hook enforces impl-gate.",
+            "Session end: wrap-up + check-wrap-up + check-session --require-clean.",
             "Create GitHub issues after execution planning (phase 3), not before for new work.",
             "After changing ROADMAP: uv run python scripts/roadmap.py validate",
         ],
@@ -512,6 +687,50 @@ def cmd_intake(args: argparse.Namespace) -> int:
     doc = parse_roadmap(load_roadmap_text())
     print(json.dumps(intake_request(args.request, doc), indent=2))
     return 0
+
+
+def cmd_begin(args: argparse.Namespace) -> int:
+    if not args.request.strip():
+        print("begin requires non-empty request text", file=sys.stderr)
+        return 1
+    try:
+        payload = begin_work(args.request)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2))
+    if args.require_may_implement and not payload.get("may_implement"):
+        return 1
+    return 0
+
+
+def cmd_hook_check(args: argparse.Namespace) -> int:
+    paths: list[str] = list(args.paths or [])
+    tool_name = ""
+    if not paths:
+        raw = sys.stdin.read()
+        if raw.strip():
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                print("hook-check: invalid JSON on stdin", file=sys.stderr)
+                return 1
+            tool_name = str(
+                payload.get("toolName")
+                or payload.get("tool_name")
+                or payload.get("toolName")
+                or ""
+            )
+            tool_input = payload.get("toolInput") or payload.get("tool_input")
+            paths = extract_paths_from_tool_input(tool_name, tool_input)
+
+    result = hook_guard(paths=paths)
+    decision = "approve" if result.get("allow") else "deny"
+    out: dict = {"decision": decision, "hook": result}
+    if not result.get("allow"):
+        out["reason"] = result.get("reason", "ROADMAP funnel blocked")
+    print(json.dumps(out))
+    return 0 if result.get("allow") else 1
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
@@ -674,7 +893,9 @@ def main() -> int:
             "status",
             "agent",
             "intake",
+            "begin",
             "gate",
+            "hook-check",
             "approve-impl",
             "clear-impl",
             "claim",
@@ -690,7 +911,7 @@ def main() -> int:
         "request",
         nargs="?",
         default="",
-        help="request text for intake/gate",
+        help="request text for intake/gate/begin",
     )
     parser.add_argument("--strict-links", action="store_true")
     parser.add_argument("--issue", type=int, help="GitHub issue number for approve-impl")
@@ -727,6 +948,11 @@ def main() -> int:
         help="exit 1 when check-session finds open claims",
     )
     parser.add_argument(
+        "--require-may-implement",
+        action="store_true",
+        help="exit 1 when begin reports may_implement=false",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="force release without wrap-up (abandon claim)",
@@ -742,6 +968,10 @@ def main() -> int:
         return cmd_agent(args)
     if args.command == "intake":
         return cmd_intake(args)
+    if args.command == "begin":
+        return cmd_begin(args)
+    if args.command == "hook-check":
+        return cmd_hook_check(args)
     if args.command == "gate":
         return cmd_gate(args)
     if args.command == "approve-impl":

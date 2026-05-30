@@ -32,6 +32,32 @@ case "$TOOL_NAME" in
   delete) TOOL_NAME="deleteFile" ;;
 esac
 
+WORKSPACE="${WORKSPACE:-$(pwd)}"
+
+# Guard: ROADMAP funnel — block src/conf/tests edits without approve-impl
+if [ "$TOOL_NAME" = "editFiles" ] || [ "$TOOL_NAME" = "createFile" ]; then
+  ROADMAP_JSON=""
+  if [ -n "${STDIN_DATA:-}" ]; then
+    ROADMAP_JSON=$(printf '%s' "$STDIN_DATA" | python3 "$WORKSPACE/scripts/roadmap.py" hook-check 2>/dev/null || true)
+  elif [ -n "$TOOL_INPUT" ]; then
+    HOOK_ARGS=()
+    while IFS= read -r path; do
+      [ -n "$path" ] && HOOK_ARGS+=(--path "$path")
+    done < <(printf '%s' "$TOOL_INPUT" | grep -oE '(src|conf|tests)/[a-zA-Z0-9_./_-]+' | sort -u | head -8)
+    if [ "${#HOOK_ARGS[@]}" -gt 0 ]; then
+      ROADMAP_JSON=$(python3 "$WORKSPACE/scripts/roadmap.py" hook-check "${HOOK_ARGS[@]}" 2>/dev/null || true)
+    fi
+  fi
+  if [ -n "$ROADMAP_JSON" ]; then
+    ROADMAP_DECISION=$(printf '%s' "$ROADMAP_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('decision','approve'))" 2>/dev/null || echo "approve")
+    if [ "$ROADMAP_DECISION" = "deny" ]; then
+      ROADMAP_REASON=$(printf '%s' "$ROADMAP_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin).get('reason','ROADMAP funnel blocked'))" 2>/dev/null || echo "ROADMAP funnel blocked")
+      python3 -c 'import json,sys; print(json.dumps({"decision":"deny","reason":sys.argv[1]}))' "$ROADMAP_REASON"
+      exit 0
+    fi
+  fi
+fi
+
 # Guard: prevent modifications to node_modules
 if echo "$TOOL_INPUT" | grep -q "node_modules"; then
   if [ "$TOOL_NAME" = "editFiles" ] || [ "$TOOL_NAME" = "createFile" ]; then
@@ -73,7 +99,6 @@ if [ "$TOOL_NAME" = "runInTerminal" ]; then
 fi
 
 # Default: approve (with optional checkpoint advisory)
-WORKSPACE="${WORKSPACE:-$(pwd)}"
 CHECKPOINT_TRIGGER="$WORKSPACE/.omg/state/checkpoint-trigger.json"
 
 if [ -f "$CHECKPOINT_TRIGGER" ]; then

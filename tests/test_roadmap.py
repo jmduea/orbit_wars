@@ -13,9 +13,14 @@ from scripts.roadmap import (
     RoadmapDocument,
     RoadmapRow,
     agent_payload,
+    begin_work,
+    extract_paths_from_tool_input,
+    hook_guard,
     implementation_gate,
     intake_request,
+    is_implementation_path,
     parse_roadmap,
+    save_impl_gate,
     validate_roadmap,
 )
 
@@ -149,6 +154,67 @@ def test_gate_blocks_without_approve_impl(monkeypatch: pytest.MonkeyPatch) -> No
     payload = implementation_gate(request="fix kaggle docker validation")
     assert payload["allowed"] is False
     assert payload["blockers"]
+    assert payload["strict_mode"] is True
+
+
+def test_is_implementation_path_exempts_roadmap_script() -> None:
+    assert is_implementation_path("scripts/roadmap.py") is False
+    assert is_implementation_path("src/jax/train.py") is True
+
+
+def test_extract_paths_from_write_payload() -> None:
+    paths = extract_paths_from_tool_input(
+        "editFiles",
+        {"path": "src/orchestration/kaggle_runner.py"},
+    )
+    assert paths == ["src/orchestration/kaggle_runner.py"]
+
+
+def test_hook_guard_blocks_src_without_impl_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ORBIT_WARS_HOOK_DISABLE", raising=False)
+    result = hook_guard(paths=["src/jax/train.py"])
+    assert result["allow"] is False
+    assert (
+        "impl-gate" in result["reason"].lower()
+        or "approve-impl" in result["reason"].lower()
+    )
+
+
+def test_hook_guard_allows_with_approved_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import roadmap_claims
+
+    state = tmp_path / "state"
+    monkeypatch.setenv("ORBIT_WARS_STATE_DIR", str(state))
+    monkeypatch.setenv("ORBIT_WARS_AGENT_ID", "hook-agent")
+    monkeypatch.setenv("ORBIT_WARS_HOOK_DISABLE", "")
+    gate_path = tmp_path / "impl-gate.json"
+    monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", gate_path)
+    save_impl_gate({"approved": True, "issue": "#96", "summary": "test"})
+    roadmap_claims.claim_issue(issue=96, owner="hook-agent", paths=["src/jax/"])
+    result = hook_guard(paths=["src/jax/train.py"])
+    assert result["allow"] is True
+
+
+def test_begin_work_matches_issue_96(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "scripts.roadmap.WORK_SESSION_PATH", tmp_path / "work-session.json"
+    )
+    payload = begin_work("work on issue #96 docker validation")
+    assert payload["intake"]["matched"] is True
+    assert payload["primary_issue"] == 96
+    assert "next_steps" in payload
+
+
+def test_hook_guard_ignores_non_impl_paths() -> None:
+    result = hook_guard(paths=["docs/ROADMAP.md", "README.md"])
+    assert result["allow"] is True
+    assert result["touched"] == []
 
 
 def test_claim_path_overlap_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

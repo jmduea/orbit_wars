@@ -1,52 +1,44 @@
 ---
-description: ROADMAP-first intake funnel; brain_dump retired; implementation gates
-globs:
-  - docs/ROADMAP.md
-  - scripts/roadmap.py
-  - src/**
-  - conf/**
-  - tests/**
+description: ROADMAP-first funnel — always on for agents; free-form chat maps through begin/intake
+alwaysApply: true
 ---
 
-# ROADMAP funnel (mandatory)
+# ROADMAP funnel (mandatory for agents)
+
+## Free-form chat
+
+Users do **not** need slash commands. On **any** request that could change `src/`, `conf/`, or `tests/`:
+
+1. Run `uv run python scripts/roadmap.py begin "<user message>"` **first** (pass their words verbatim).
+2. Obey `may_implement` and `next_steps` in the JSON; stop if planning or Later capture is required.
+3. `claim` → `approve-impl` → then implement.
+4. End with `wrap-up`, `check-wrap-up`, `check-session --require-clean`.
+
+Optional: `source scripts/agent_env.sh` sets `ORBIT_WARS_IMPL_GATE=1` and `ORBIT_WARS_AGENT_ID`.
+
+## Enforcement
+
+- **Pre-tool hook** denies `src/` / `conf/` / `tests/` writes without approved `.omg/state/impl-gate.json`.
+- `roadmap.py gate --require-allowed` should pass before the first implementation edit.
 
 ## Sources of truth
 
 | Surface | Role |
 |---------|------|
 | `docs/ROADMAP.md` | **Now / Next / Later** (≤3 Now, ≤5 Done) |
-| GitHub issues | Detail, acceptance criteria; `milestone` for showcase-worthy closes |
-| `.omg/workflow-manifest.json` | Active agent spec/plan packages only |
-| `docs/brain_dump.md` | **Retired** — redirect only; do not triage |
-
-## Before any implementation
-
-```bash
-uv run python scripts/roadmap.py agent
-uv run python scripts/roadmap.py intake "<request>"
-```
-
-If intake says `capture_to: later` → update ROADMAP **Later** only; **no code**.
-
-If `requires_planning` → `/work-intake` skill phases 2–3 (`/ralplan`, `/deep-interview`).
-
-```bash
-uv run python scripts/roadmap.py approve-impl --issue N
-uv run python scripts/roadmap.py gate --request "<request>"   # use --require-allowed if ORBIT_WARS_IMPL_GATE=1
-```
+| GitHub issues | Detail, acceptance criteria |
+| `.omg/workflow-manifest.json` | Active agent packages only |
+| `docs/brain_dump.md` | **Retired** — redirect only |
 
 ## Commands
 
 | Command | Purpose |
-|---------|---------|
-| `roadmap.py agent` | Status + workflow phases |
-| `roadmap.py intake` | Map request → ROADMAP / planning path |
-| `roadmap.py approve-impl` | Allow implementation (writes `.omg/state/impl-gate.json`) |
-| `roadmap.py clear-impl` | Clear gate after Done |
-| `roadmap.py claim` / `claims` | Exclusive issue + path ownership |
-| `roadmap.py wrap-up` | Requires closed issue + evidence |
-| `roadmap.py check-session` | No open claims without wrap-up |
-
-## Git
+|---------|------|
+| `roadmap.py begin` | `agent` + `intake` + `gate` + `work-session.json` |
+| `roadmap.py intake` | Map request only |
+| `roadmap.py approve-impl` | Allow implementation |
+| `roadmap.py claim` / `claims` | Multi-agent path ownership |
+| `roadmap.py wrap-up` | Closed issue + evidence |
+| `roadmap.py check-session` | No dangling claims |
 
 Commit verified work locally; push only when the user asks.

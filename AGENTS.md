@@ -132,8 +132,8 @@ These run only via `make test` (no `-m` filter). Pytest prints a yellow warning 
 ## Human Roadmap (single funnel)
 
 - **`docs/ROADMAP.md`** is the only priority index (≤3 **Now**, ≤5 **Done**). **`docs/brain_dump.md` is retired** — do not capture or triage there.
-- **Before any implementation:** invoke `/work-intake` or run `roadmap.py agent` → `roadmap.py intake "<request>"` → planning (`/deep-interview`, `/ralplan`) → execution plan → **then** GitHub issues + ROADMAP promote → `roadmap.py approve-impl --issue N` → code.
-- **Strict gate (optional):** `ORBIT_WARS_IMPL_GATE=1` and `roadmap.py gate --request "…" --require-allowed` before editing `src/`, `conf/`, `tests/`.
+- **Free-form chat:** users need not invoke `/work-intake`. On any implementation request, run **`roadmap.py begin "<user message>"`** first, then obey `may_implement` / `next_steps` → planning if needed → `claim` → `approve-impl` → code → `wrap-up` + `check-session --require-clean`.
+- **Enforcement:** Cursor pre-tool hook blocks `src/`, `conf/`, `tests/` edits without `.omg/state/impl-gate.json`. `ORBIT_WARS_IMPL_GATE` defaults to **on** (`scripts/agent_env.sh`).
 - **After editing ROADMAP:** `make roadmap-check`. **Human Now wins** over manifest backlog.
 - **New work:** add **Later** row first; open GitHub issues after phase 3 (execution plan), not at idea time.
 
