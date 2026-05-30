@@ -44,6 +44,20 @@ def test_masked_mean_ignores_nan_when_mask_zero() -> None:
     assert float(masked_mean(values, mask)) == pytest.approx(2.0)
 
 
+def test_clipped_policy_objective_caps_negative_advantage_large_ratio() -> None:
+    from src.jax.ppo_update import _clipped_policy_objective
+
+    advantages = jnp.array([-2.5], dtype=jnp.float32)
+    ratio = jnp.array([2980.0], dtype=jnp.float32)
+    clipped_ratio = jnp.array([1.2], dtype=jnp.float32)
+    legacy_objective = jnp.minimum(advantages * ratio, advantages * clipped_ratio)
+    fixed_objective = _clipped_policy_objective(advantages, ratio, clipped_ratio)
+
+    assert float(-legacy_objective[0]) == pytest.approx(7450.0, rel=1e-4)
+    assert float(-fixed_objective[0]) == pytest.approx(3.0, rel=1e-4)
+    assert float(-fixed_objective[0]) < 100.0
+
+
 def test_aggregate_ppo_metrics_ignores_empty_minibatches() -> None:
     from src.jax.ppo_update import _aggregate_ppo_metrics
 

@@ -22,6 +22,31 @@ from src.jax.policy import edge_action_count, is_distributional_value_head
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
 
+# Cap importance-ratio magnitude before exp; exp(20) allows ~485M and explodes
+# the policy surrogate on negative-advantage samples when replay diverges.
+_LOG_RATIO_CLIP = 10.0
+
+
+def _clipped_policy_objective(
+    advantages: jax.Array,
+    ratio: jax.Array,
+    clipped_ratio: jax.Array,
+) -> jax.Array:
+    """PPO clipped surrogate with sign-aware branch selection.
+
+    ``jnp.minimum`` alone fails when ``advantages < 0`` and ``ratio > 1 + eps``:
+    the unclipped term is more negative and wins, so loss grows without bound
+    as replay/importance ratios drift from rollout log-probs.
+    """
+
+    unclipped = advantages * ratio
+    clipped = advantages * clipped_ratio
+    return jnp.where(
+        advantages >= 0.0,
+        jnp.minimum(unclipped, clipped),
+        jnp.maximum(unclipped, clipped),
+    )
+
 
 def concatenate_transition_batches(
     batches: tuple[JaxTransitionBatch, ...] | list[JaxTransitionBatch],
@@ -467,19 +492,22 @@ def _ppo_update_factorized_jax(
                 minibatch["old_log_prob"] - new_log_prob,
                 minibatch["mask"],
             )
-            ratio_for_kl = jnp.exp(jnp.clip(log_ratio_raw, -20.0, 20.0))
+            ratio_for_kl = jnp.exp(
+                jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
+            )
             approx_kl_v2 = masked_mean(
                 (ratio_for_kl - 1.0) - log_ratio_raw,
                 minibatch["mask"],
             )
-            log_ratio = jnp.clip(log_ratio_raw, -20.0, 20.0)
+            log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
             ratio = jnp.exp(log_ratio)
             clipped_ratio = jnp.clip(
                 ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
             )
-            policy_objective = jnp.minimum(
-                minibatch["advantages"] * ratio,
-                minibatch["advantages"] * clipped_ratio,
+            policy_objective = _clipped_policy_objective(
+                minibatch["advantages"],
+                ratio,
+                clipped_ratio,
             )
             value = replay.value
             value_logits = replay.value_logits
