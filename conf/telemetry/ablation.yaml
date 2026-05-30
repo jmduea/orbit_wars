@@ -13,6 +13,7 @@ metric_groups:
   game_state: false
   trajectory_shield_debug: false
   historical_pool: false
+  debug: false
   events: false
 
 wandb:

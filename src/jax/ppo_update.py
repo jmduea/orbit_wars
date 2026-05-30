@@ -284,7 +284,16 @@ def _ppo_update_factorized_jax(
     source_mask = ship_bucket_mask[..., 1:].any(axis=(-2, -1))
     launch_active = mask * (1.0 - stop_flag)
     per_step_bucket_counts = ship_bucket_mask.sum(axis=(-3, -2, -1))
-    debug_metrics = {
+    debug_group_enabled = bool(
+        getattr(
+            getattr(getattr(cfg, "telemetry", None), "metric_groups", None),
+            "debug",
+            False,
+        )
+    ) or bool(cfg.training.debug_replay_parity)
+    debug_metrics: dict[str, jax.Array] = {}
+    if debug_group_enabled:
+        debug_metrics = {
         "debug_step_mask_sum": mask.sum(),
         "debug_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
             jnp.float32

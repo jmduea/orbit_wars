@@ -27,6 +27,7 @@ class RunContext:
     campaign_manifest_path: Path
     logs_dir: Path
     log_path: Path
+    debug_log_path: Path
     checkpoints_dir: Path
     queue_dir: Path
     evaluations_dir: Path
@@ -156,6 +157,7 @@ def resolve_run_paths(cfg: TrainConfig) -> tuple[TrainConfig, RunContext]:
         campaign_manifest_path=campaign_dir / "campaign_manifest.json",
         logs_dir=logs_dir,
         log_path=logs_dir / f"{run_name}_jax.jsonl",
+        debug_log_path=logs_dir / f"{run_name}_debug.jsonl",
         checkpoints_dir=checkpoints_dir,
         queue_dir=queue_dir,
         evaluations_dir=evaluations_dir,
@@ -244,6 +246,7 @@ def write_run_manifests(
         "paths": {
             "logs_dir": str(context.logs_dir),
             "log_path": str(context.log_path),
+            "debug_log_path": str(context.debug_log_path),
             "checkpoints_dir": str(context.checkpoints_dir),
             "queue_dir": str(context.queue_dir),
             "evaluations_dir": str(context.evaluations_dir),

@@ -19,7 +19,6 @@ METRIC_KEYS = (
     "win_rate_2p",
     "first_place_rate_4p",
     "average_reward",
-    "average_episode_reward",
     "survival_time",
     "score_share",
     "approx_kl",

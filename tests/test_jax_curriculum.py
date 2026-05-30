@@ -140,7 +140,7 @@ def _assert_v2_curriculum_training_logs(tmp_path, cfg: TrainConfig) -> None:
 
     final_record = next(record for record in records if record.get("update") == cfg.training.total_updates)
     assert promoted
-    assert final_record["curriculum_phase_id"] == "self_play_pressure"
+    assert final_record["curriculum_stage_id"] == "self_play_pressure"
     for key in (
         "rollout_seconds_2p",
         "rollout_seconds_4p",

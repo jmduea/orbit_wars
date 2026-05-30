@@ -131,6 +131,7 @@ class MetricGroupsConfig:
     trajectory_shield_debug: bool = False
     historical_pool: bool = False
     events: bool = True
+    debug: bool = False
 
 
 @dataclass(slots=True)

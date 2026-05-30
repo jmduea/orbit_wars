@@ -9,6 +9,7 @@ metric_groups:
   trajectory_shield_debug: false
   historical_pool: false
   events: true
+  debug: false
 
 wandb:
   enabled: true

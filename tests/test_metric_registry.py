@@ -47,7 +47,6 @@ def test_hydra_config_supports_metric_group_overrides():
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("training.plateau_metric", "average_episode_reward"),
         ("training.plateau_metric", "opponent_composition"),
         ("training.plateau_metric", "curriculum_stage_id"),
         ("artifacts.checkpoint_retention.best_metric_name", "seed_scheduler_policy"),
@@ -105,8 +104,8 @@ def test_filter_metric_record_keeps_protected_metrics_when_groups_are_disabled()
         "episode_reward_mean": 0.75,
         "overall_win_rate": 0.6,
         "env_steps_per_sec": 1100.0,
-        "noop_percent": 25.0,
         "policy_loss": 0.1,
+        "stop_rate": 0.25,
     }
 
     filtered = filter_metric_record(
@@ -116,10 +115,33 @@ def test_filter_metric_record_keeps_protected_metrics_when_groups_are_disabled()
         extra_protected_names=protected_metric_names(),
     )
 
-    assert "noop_percent" not in filtered
+    assert "stop_rate" not in filtered
     assert filtered["env_steps_per_sec"] == 1100.0
     assert filtered["episode_reward_mean"] == 0.75
     assert filtered["policy_loss"] == 0.1
+
+
+def test_filter_update_record_omits_disabled_group_keys():
+    cfg = TrainConfig()
+    cfg.telemetry.metric_groups.action_decision = False
+
+    record = {
+        "update": 2,
+        "total_env_steps": 200,
+        "completed_episodes": 4,
+        "samples": 64,
+        "episode_reward_mean": 0.5,
+        "overall_win_rate": 0.5,
+        "env_steps_per_sec": 800.0,
+        "stop_rate": 0.1,
+        "mean_active_launches_per_turn": 1.2,
+    }
+
+    filtered = filter_update_record(record, cfg)
+
+    assert "stop_rate" not in filtered
+    assert "mean_active_launches_per_turn" not in filtered
+    assert filtered["overall_win_rate"] == 0.5
 
 
 def test_filter_metric_record_filters_event_fields_but_keeps_checkpoint_operational_fields():

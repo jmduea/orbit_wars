@@ -37,6 +37,18 @@ from src.config import TrainConfig
 from src.config.rollout_allocation import infer_static_format_weights, resolve_rollout_group_specs
 from src.telemetry import build_telemetry
 from src.telemetry.gpu_memory import GpuMemoryTracker
+from src.telemetry.metric_registry import (
+    filter_event_record,
+    filter_update_record,
+    required_ppo_metric_names,
+    required_rollout_scalar_names,
+)
+from src.telemetry.metric_registry import (
+    filter_event_record,
+    filter_update_record,
+    required_ppo_metric_names,
+    required_rollout_scalar_names,
+)
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
@@ -51,9 +63,7 @@ import jax  # noqa: E402
 
 # jax.config.update("jax_debug_nans", True)
 from src.jax.rollout.metrics import (  # noqa: E402
-    BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS,
-)
-from src.jax.rollout.metrics import (  # noqa: E402
+    FINALIZED_ROLLOUT_RATE_KEYS,
     trajectory_shield_legal_rate,
 )
 
@@ -259,6 +269,11 @@ def _finalize_cross_chunk_rate_metrics(
         metrics["score_share_sum"] / metrics["episode_done"],
         0.0,
     )
+    metrics["overall_win_rate"] = jnp.where(
+        metrics["episode_done"] > 0.0,
+        (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
+        0.0,
+    )
     return metrics
 
 
@@ -304,123 +319,9 @@ def _merge_metric_dicts(
         legal=metrics["trajectory_shield_legal_non_noop_count"],
         original=metrics["trajectory_shield_original_non_noop_count"],
     )
-    metrics["overall_win_rate"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
-        0.0,
-    )
-    metrics["noop_percent"] = jnp.where(
-        metrics["decision_count"] > 0.0,
-        (metrics["noop_count"] / metrics["decision_count"]) * 100.0,
-        0.0,
-    )
-    metrics["friendly_target_percent"] = jnp.where(
-        metrics["decision_count"] > 0.0,
-        (metrics["friendly_target_count"] / metrics["decision_count"]) * 100.0,
-        0.0,
-    )
-    metrics["enemy_target_percent"] = jnp.where(
-        metrics["decision_count"] > 0.0,
-        (metrics["enemy_target_count"] / metrics["decision_count"]) * 100.0,
-        0.0,
-    )
-    metrics["neutral_target_percent"] = jnp.where(
-        metrics["decision_count"] > 0.0,
-        (metrics["neutral_target_count"] / metrics["decision_count"]) * 100.0,
-        0.0,
-    )
-    metrics["won_non_noop_actions_per_step"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["non_noop_count"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_non_noop_actions_per_step"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["non_noop_count"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_fleet_launch_size"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["launched_ship_total"] / jnp.maximum(metrics["launched_ship_count"], 1.0),
-        0.0,
-    )
-    metrics["lost_avg_fleet_launch_size"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["launched_ship_total"] / jnp.maximum(metrics["launched_ship_count"], 1.0),
-        0.0,
-    )
-    metrics["won_avg_planets_owned"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_planets_owned_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_planets_owned"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_planets_owned_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_planets_lost"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_planets_lost_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_planets_lost"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_planets_lost_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_planets_taken"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_planets_taken_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_planets_taken"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_planets_taken_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_garrisoned_ships_per_planet"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_garrisoned_ships_per_planet_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_garrisoned_ships_per_planet"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_garrisoned_ships_per_planet_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_planet_diff"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_planet_diff_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_planet_diff"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_planet_diff_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_production_diff"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["won_production_diff_total"] / metrics["win_episode_rows"],
-        0.0,
-    )
-    metrics["lost_avg_production_diff"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["lost_production_diff_total"] / metrics["loss_episode_rows"],
-        0.0,
-    )
-    metrics["won_avg_launch_fleet_speed"] = jnp.where(
-        metrics["win_episode_rows"] > 0.0,
-        metrics["launched_ship_speed_total"]
-        / jnp.maximum(metrics["launched_ship_count"], 1.0),
-        0.0,
-    )
-    metrics["lost_avg_launch_fleet_speed"] = jnp.where(
-        metrics["loss_episode_rows"] > 0.0,
-        metrics["launched_ship_speed_total"]
-        / jnp.maximum(metrics["launched_ship_count"], 1.0),
-        0.0,
-    )
+    return metrics
+
+
     return metrics
 
 
@@ -947,6 +848,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     cfg, run_context = resolve_run_paths(cfg)
     run_dir = run_context.checkpoints_dir
     log_path = run_context.log_path
+    debug_log_path = run_context.debug_log_path
     write_run_manifests(
         cfg,
         run_context,
@@ -1034,8 +936,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "checkpoint_reason": result.reason,
                 "checkpoint_error": result.error,
             }
-            append_jsonl(log_path, event_record)
-            telemetry.log(event_record, step=result.update)
+            filtered_event = filter_event_record(event_record, cfg)
+            append_jsonl(log_path, filtered_event)
+            telemetry.log(filtered_event, step=result.update)
             if result.status == "failed":
                 checkpoint_failures.append(result)
                 continue
@@ -1239,23 +1142,28 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             else:
                 ppo_transitions = transitions
             rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
-            rollout_scalar_keys = (
-                *_BASE_ROLLOUT_SCALAR_KEYS,
-                cfg.training.plateau_metric,
+            rollout_scalar_keys = tuple(
+                dict.fromkeys(
+                    (
+                        *required_rollout_scalar_names(cfg),
+                        *FINALIZED_ROLLOUT_RATE_KEYS,
+                        cfg.training.plateau_metric,
+                    )
+                )
             )
             rollout_scalar_values = jnp.asarray(
                 [rollout_metrics.get(key, 0.0) for key in rollout_scalar_keys],
                 dtype=jnp.float32,
             )
-            # Intentional sync boundary: transfer only compact rollout scalars once so
-            # rollout timing reflects completed device work without materializing trees.
+            # Intentional sync boundary: pull only registry-selected rollout scalars
+            # (plus finalized cross-group rates and plateau metric) once per update.
             rollout_scalars_host = jax.device_get(rollout_scalar_values)
             rollout_scalars = dict(
                 zip(rollout_scalar_keys, rollout_scalars_host.tolist(), strict=True)
             )
             rollout_samples = float(rollout_scalars["samples"])
             rollout_seconds = time.perf_counter() - rollout_start
-    
+
             ppo_start = time.perf_counter()
             metrics_accum: dict[str, jax.Array] | None = None
             for _ in range(cfg.training.epochs):
@@ -1271,12 +1179,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             metrics = jax.tree.map(
                 lambda x: x / float(max(cfg.training.epochs, 1)), metrics_accum
             )
-            metric_names = tuple(metrics.keys())
-            metric_values = jnp.asarray([metrics[name] for name in metric_names])
-            # Intentional sync boundary: perform a single compact host transfer for
-            # PPO scalars and keep logging values identical.
+            ppo_metric_names = required_ppo_metric_names(cfg, tuple(metrics.keys()))
+            metric_values = jnp.asarray(
+                [metrics[name] for name in ppo_metric_names], dtype=jnp.float32
+            )
             metric_values_host = jax.device_get(metric_values)
-            metrics_host = dict(zip(metric_names, metric_values_host.tolist(), strict=True))
+            metrics_host = dict(
+                zip(ppo_metric_names, metric_values_host.tolist(), strict=True)
+            )
             ppo_seconds = time.perf_counter() - ppo_start
             update_seconds = time.perf_counter() - update_start
             per_format_timing_metrics = _build_per_format_timing_metrics(
@@ -1287,63 +1197,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             env_steps = int(rollout_scalars["env_steps"])
             episodes = int(rollout_scalars["episode_done"])
-            episodes_2p = float(rollout_scalars["episodes_2p"])
-            episodes_4p = float(rollout_scalars["episodes_4p"])
-            episode_count = float(rollout_scalars["episode_done"])
-            win_rate_2p = (
-                float(rollout_scalars["wins_2p"]) / episodes_2p
-                if episodes_2p
-                else 0.0
-            )
-            first_place_rate_4p = (
-                float(rollout_scalars["first_places_4p"]) / episodes_4p
-                if episodes_4p
-                else 0.0
-            )
-            average_placement_4p = (
-                float(rollout_scalars["placement_4p_sum"]) / episodes_4p
-                if episodes_4p
-                else 0.0
-            )
-            survival_time = (
-                float(rollout_scalars["survival_time_sum"]) / episode_count
-                if episode_count
-                else 0.0
-            )
-            score_share = (
-                float(rollout_scalars["score_share_sum"]) / episode_count
-                if episode_count
-                else 0.0
-            )
+            win_rate_2p = float(rollout_scalars["win_rate_2p"])
+            first_place_rate_4p = float(rollout_scalars["first_place_rate_4p"])
+            average_placement_4p = float(rollout_scalars["average_placement_4p"])
+            survival_time = float(rollout_scalars["survival_time"])
+            score_share = float(rollout_scalars["score_share"])
             average_reward = float(rollout_scalars["average_reward"])
-            average_episode_reward = float(rollout_scalars["episode_reward_mean"])
-            overall_win_rate = (
-                (float(rollout_scalars["wins_2p"]) + float(rollout_scalars["first_places_4p"]))
-                / episode_count
-                if episode_count
-                else 0.0
-            )
-            # decision_count = float(rollout_scalars["decision_count"])
-            # noop_percent = (
-            #     (float(rollout_scalars["noop_count"]) / decision_count) * 100.0
-            #     if decision_count
-            #     else 0.0
-            # )
-            # friendly_target_percent = (
-            #     (float(rollout_scalars["friendly_target_count"]) / decision_count) * 100.0
-            #     if decision_count
-            #     else 0.0
-            # )
-            # enemy_target_percent = (
-            #     (float(rollout_scalars["enemy_target_count"]) / decision_count) * 100.0
-            #     if decision_count
-            #     else 0.0
-            # )
-            # neutral_target_percent = (
-            #     (float(rollout_scalars["neutral_target_count"]) / decision_count) * 100.0
-            #     if decision_count
-            #     else 0.0
-            # )
+            episode_reward_mean = float(rollout_scalars["episode_reward_mean"])
+            overall_win_rate = float(rollout_scalars["overall_win_rate"])
             total_env_steps += env_steps
             completed_episodes += episodes
             seed_scheduler.update_metric(float(rollout_scalars[cfg.training.plateau_metric]))
@@ -1356,8 +1217,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     "win_rate_2p": win_rate_2p,
                     "first_place_rate_4p": first_place_rate_4p,
                     "average_reward": average_reward,
-                    "average_episode_reward": average_episode_reward,
-                    "episode_reward_mean": average_episode_reward,
+                    "episode_reward_mean": episode_reward_mean,
                     "survival_time": survival_time,
                     "score_share": score_share,
                     "approx_kl": float(metrics_host.get("approx_kl", 0.0)),
@@ -1369,17 +1229,13 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 historical_pool, snapshot_event = _add_historical_snapshot(
                     historical_pool, train_state.params, update=update
                 )
+                snapshot_event.update(
+                    _historical_pool_snapshot_telemetry(
+                        historical_pool, update=update
+                    )
+                )
                 update_events.append(snapshot_event)
             phase_events = []
-            historical_ids = jax.device_get(historical_pool.snapshot_ids).tolist()
-            historical_ages = jax.device_get(
-                jnp.where(
-                    historical_pool.valid_mask,
-                    jnp.asarray(update, dtype=jnp.int32)
-                    - historical_pool.snapshot_updates,
-                    0,
-                )
-            ).tolist()
             record: dict[str, object] = {
                 "update": update,
                 "total_env_steps": total_env_steps,
@@ -1390,11 +1246,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 "average_placement_4p": average_placement_4p,
                 "overall_win_rate": overall_win_rate,
                 "average_reward": average_reward,
-                "average_episode_reward": average_episode_reward,
-                # "noop_percent": noop_percent,
-                # "friendly_target_percent": friendly_target_percent,
-                # "enemy_target_percent": enemy_target_percent,
-                # "neutral_target_percent": neutral_target_percent,
+                "episode_reward_mean": episode_reward_mean,
                 "trajectory_shield_blocked_count": float(
                     rollout_scalars["trajectory_shield_blocked_count"]
                 ),
@@ -1466,76 +1318,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     jax.device_get(historical_pool.valid_mask).sum()
                 ),
                 "historical_pool_capacity": int(historical_pool.valid_mask.shape[0]),
-                "historical_snapshot_ids": historical_ids,
-                "historical_snapshot_ages_updates": historical_ages,
                 **{name: float(value) for name, value in metrics_host.items()},
-                # "won_non_noop_actions_per_step": float(
-                #     rollout_scalars["won_non_noop_actions_per_step"]
-                # ),
-                # "lost_non_noop_actions_per_step": float(
-                #     rollout_scalars["lost_non_noop_actions_per_step"]
-                # ),
-                # "won_avg_fleet_launch_size": float(
-                #     rollout_scalars["won_avg_fleet_launch_size"]
-                # ),
-                # "lost_avg_fleet_launch_size": float(
-                #     rollout_scalars["lost_avg_fleet_launch_size"]
-                # ),
-                # "won_avg_planets_owned": float(
-                #     rollout_scalars["won_avg_planets_owned"]
-                # ),
-                # "lost_avg_planets_owned": float(
-                #     rollout_scalars["lost_avg_planets_owned"]
-                # ),
-                # "won_avg_planets_lost": float(rollout_scalars["won_avg_planets_lost"]),
-                # "lost_avg_planets_lost": float(
-                #     rollout_scalars["lost_avg_planets_lost"]
-                # ),
-                # "won_avg_planets_taken": float(
-                #     rollout_scalars["won_avg_planets_taken"]
-                # ),
-                # "lost_avg_planets_taken": float(
-                #     rollout_scalars["lost_avg_planets_taken"]
-                # ),
-                # "won_avg_garrisoned_ships_per_planet": float(
-                #     rollout_scalars["won_avg_garrisoned_ships_per_planet"]
-                # ),
-                # "lost_avg_garrisoned_ships_per_planet": float(
-                #     rollout_scalars["lost_avg_garrisoned_ships_per_planet"]
-                # ),
-                # "won_avg_planet_diff": float(rollout_scalars["won_avg_planet_diff"]),
-                # "lost_avg_planet_diff": float(rollout_scalars["lost_avg_planet_diff"]),
-                # "won_avg_production_diff": float(
-                #     rollout_scalars["won_avg_production_diff"]
-                # ),
-                # "lost_avg_production_diff": float(
-                #     rollout_scalars["lost_avg_production_diff"]
-                # ),
-                # "won_avg_launch_fleet_speed": float(
-                #     rollout_scalars["won_avg_launch_fleet_speed"]
-                # ),
-                # "lost_avg_launch_fleet_speed": float(
-                #     rollout_scalars["lost_avg_launch_fleet_speed"]
-                # ),
-                "opponent_composition": {
-                    "latest": float(rollout_scalars["opponent_slots_latest"]),
-                    "historical": float(rollout_scalars["opponent_slots_historical"]),
-                    "random": float(rollout_scalars["opponent_slots_random"]),
-                    "noop": float(rollout_scalars["opponent_slots_noop"]),
-                    "nearest_sniper": float(
-                        rollout_scalars["opponent_slots_nearest_sniper"]
-                    ),
-                    "turtle": float(rollout_scalars["opponent_slots_turtle"]),
-                    "opportunistic": float(
-                        rollout_scalars["opponent_slots_opportunistic"]
-                    ),
-                },
-                "curriculum_phase_id": curriculum_telemetry["curriculum_stage_id"],
                 "curriculum_phase_events": list(update_events),
                 **gpu_tracker.sample_update_metrics(),
             }
-            append_jsonl(log_path, record)
-            telemetry.log(record, step=update)
+            _write_filtered_update_records(
+                log_path=log_path,
+                debug_log_path=debug_log_path,
+                record=record,
+                cfg=cfg,
+                telemetry=telemetry,
+                update=update,
+            )
             if update % cfg.training.log_every == 0:
                 entropy_line = f"entropy={float(record['entropy']):.4f}"
                 if "entropy_stop" in record and "entropy_move" in record:
@@ -1621,6 +1415,61 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             f"{first_failure.error or first_failure.reason or first_failure.status}"
         )
     return log_path
+
+
+
+def _historical_pool_snapshot_telemetry(
+    historical_pool: HistoricalSnapshotPool, *, update: int
+) -> dict[str, object]:
+    """Return valid historical snapshot ids and ages for event records."""
+
+    historical_ids = jax.device_get(historical_pool.snapshot_ids).tolist()
+    historical_ages = jax.device_get(
+        jnp.where(
+            historical_pool.valid_mask,
+            jnp.asarray(update, dtype=jnp.int32) - historical_pool.snapshot_updates,
+            0,
+        )
+    ).tolist()
+    return {
+        "historical_snapshot_ids": historical_ids,
+        "historical_snapshot_ages_updates": historical_ages,
+    }
+
+
+def _split_debug_update_record(
+    record: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Split debug/parity keys into a secondary JSONL payload."""
+
+    lean: dict[str, object] = {}
+    debug: dict[str, object] = {}
+    for name, value in record.items():
+        if name.startswith("debug_") or name.startswith("debug/"):
+            debug[name] = value
+        else:
+            lean[name] = value
+    return lean, debug
+
+
+def _write_filtered_update_records(
+    *,
+    log_path: Path,
+    debug_log_path: Path,
+    record: dict[str, object],
+    cfg: TrainConfig,
+    telemetry: object,
+    update: int,
+) -> None:
+    """Apply metric-group filtering and write lean/debug JSONL sinks."""
+
+    lean, debug = _split_debug_update_record(record)
+    filtered_lean = filter_update_record(lean, cfg)
+    append_jsonl(log_path, filtered_lean)
+    if debug:
+        append_jsonl(debug_log_path, {"update": update, **debug})
+    telemetry.log(filtered_lean, step=update)
+
 
 
 def append_jsonl(path: Path, record: dict[str, object]) -> None:

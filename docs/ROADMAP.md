@@ -13,19 +13,13 @@ _None — pick from **Next** after planning._
 
 | Item | Link |
 |------|------|
-| Telemetry: remove redundant exported metrics | [#127](https://github.com/jmduea/orbit_wars/issues/127) |
-| Telemetry: remove stubbed game-state / action-target rollout metrics | [#128](https://github.com/jmduea/orbit_wars/issues/128) |
-| Telemetry: stop device_get of rollout scalars not in update record | [#129](https://github.com/jmduea/orbit_wars/issues/129) |
-| Telemetry: apply metric_groups filtering at runtime | [#130](https://github.com/jmduea/orbit_wars/issues/130) |
-| Telemetry: gate PPO debug_* behind debug metric group | [#131](https://github.com/jmduea/orbit_wars/issues/131) |
-| Telemetry: gate heavy/sparse per-update fields (default off) | [#132](https://github.com/jmduea/orbit_wars/issues/132) |
-| Telemetry phase 2: split logs, event snapshots, registry prune (after #127–#132) | [#133](https://github.com/jmduea/orbit_wars/issues/133) |
+| Debug metric: average ships per fleet launch | — |
 
 ## Later
 
 | Item | Link |
 |------|------|
-| Debug metric: average ships per fleet launch | — |
+| _None_ | — |
 
 ## Done (last 5)
 
@@ -33,9 +27,9 @@ _None — pick from **Next** after planning._
 |------|------|
 | Git landing: merge worktree to main, block issue/* push | [#135](https://github.com/jmduea/orbit_wars/issues/135) · `land-issue` `docs/MULTI_AGENT.md` |
 | Multi-agent coordination (per-issue impl-gates, stale claims, playbook) | [#134](https://github.com/jmduea/orbit_wars/issues/134) · `docs/MULTI_AGENT.md` `make test-fast` |
-| Remove `format` config group; derive rollout groups from `training.num_envs` + weights | [#126](https://github.com/jmduea/orbit_wars/issues/126) · `src/config/rollout_allocation.py` `make test-fast` |
-| Local tournament / ranking eval for best agents | [#124](https://github.com/jmduea/orbit_wars/issues/124) · [#125](https://github.com/jmduea/orbit_wars/pull/125) · `docs/architecture/tournament-eval.md` `make test-domain-artifacts` |
-| VRAM telemetry + W&B-backed comfort profile | [#123](https://github.com/jmduea/orbit_wars/issues/123) · `docs/benchmarks/vram-profile-sps-experiment.md` |
+| Telemetry cleanup phase 2: split logs, registry prune (#133) | [#133](https://github.com/jmduea/orbit_wars/issues/133) · `src/jax/train.py` `make test-fast` |
+| Telemetry: gate heavy/sparse fields + PPO debug group (#131–#132) | [#131](https://github.com/jmduea/orbit_wars/issues/131) [#132](https://github.com/jmduea/orbit_wars/issues/132) · `metric_registry.py` |
+| Telemetry: metric_groups runtime filtering (#130) | [#130](https://github.com/jmduea/orbit_wars/issues/130) · `filter_update_record` `make test-fast` |
 
 _Last triaged: 2026-05-30_
 

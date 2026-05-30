@@ -98,6 +98,7 @@ def run_context_for_agent(
         campaign_manifest_path=campaign_dir / "campaign_manifest.json",
         logs_dir=run_dir / "logs",
         log_path=run_dir / "logs" / f"{run_id}_jax.jsonl",
+        debug_log_path=run_dir / "logs" / f"{run_id}_debug.jsonl",
         checkpoints_dir=run_dir / "checkpoints",
         queue_dir=run_dir / cfg.artifacts.artifact_pipeline.queue_dir,
         evaluations_dir=run_dir / cfg.artifacts.artifact_pipeline.result_dir,
