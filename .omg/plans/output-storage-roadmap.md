@@ -198,3 +198,18 @@ Related Later item already queued: [brain_dump — W&B tags from Hydra config gr
 | Architecture doc | [`docs/architecture/`](../../docs/architecture/) per project rules |
 
 **Test tier:** `make test-fast` + `make test-domain-artifacts` + `make test-domain-config`; telemetry tests for promotion upload path.
+
+---
+
+## Interview decisions (2026-05-30, issues #114–#117)
+
+Round 1 deep-interview answers recorded on GitHub issue comments. Summary:
+
+| Issue | Key decisions |
+|-------|---------------|
+| **#114** | First-class `ow train from_promoted=<campaign>`; campaign promotion metric **independent** of retention default; compare-and-swap on metric; standard manifest (pointer not copy); promote only when run's own best improves |
+| **#115** | Move `log_checkpoint` to promotion hook only (`log_artifacts=true`); full file upload; prefer best/promoted alias; new `log_promoted_checkpoint`; group from sweep YAML → `output.campaign` → filename stem |
+| **#116** | Suffix from Hydra override diff ∩ swept params; **no duplicate static fields**; compact encoding; auto when sweep/multirun + opt-out `rename_from_swept_params`; post-init via `build_sweep_run_suffix` |
+| **#117** | `group:value` tags; `tags_from_config_groups` default true; allowlist default model/format/opponents/curriculum/reward; merged sorted dedupe; group tags only (scalars in #116 naming) |
+
+**#114 promotion metric config (proposed):** new `artifacts.promotion` group — `metric_name`, `metric_mode`, `enabled`; sweep recipes inject via `wandb_sweep/fixed/` or generator from `metric:` block; `campaign_manifest.json` stores frozen metric + `current_best_value` for CAS. Retention (`checkpoint_retention.best_metric_*`) stays per-run only.
