@@ -365,11 +365,27 @@ def hook_guard(*, paths: list[str]) -> dict:
 
     gate = implementation_gate(request=None)
     if gate["allowed"]:
-        return {
+        from scripts import roadmap_claims
+        from scripts.roadmap_git import branch_guard
+
+        allowed_payload: dict = {
             "allow": True,
             "touched": touched,
             "impl_gate": gate.get("impl_gate"),
         }
+        bg = branch_guard(owner=roadmap_claims.default_agent_owner())
+        if not bg.get("allow"):
+            return {
+                "allow": False,
+                "reason": bg.get("reason", "branch guard blocked"),
+                "blockers": bg.get("blockers") or [bg.get("reason", "")],
+                "touched": touched,
+                "next_steps": bg.get("next_steps") or [],
+                "branch_guard": bg,
+            }
+        if bg.get("branch_warning"):
+            allowed_payload["branch_warning"] = bg["branch_warning"]
+        return allowed_payload
 
     blockers = gate.get("blockers") or []
     summary = "; ".join(blockers[:2])
@@ -537,9 +553,10 @@ def _intake_next_steps(
             "Run: uv run python scripts/roadmap.py approve-impl --issue N",
         ]
     return [
-        "Run: uv run python scripts/roadmap.py claim --issue N --path <dirs>",
+        "Run: uv run python scripts/roadmap.py claim --issue N --path <dirs> --setup-worktree",
+        "export ORBIT_WARS_ISSUE_ID=N ORBIT_WARS_AGENT_ID=cursor-issue-N; work in worktrees/issue-N/",
         "Run: uv run python scripts/roadmap.py approve-impl --issue N",
-        "Implement on branch issue/N-*; run tests",
+        "Implement on branch issue/N-* (never main with an open claim); run tests",
         "gh issue close N --comment '<evidence>'",
         "Run: uv run python scripts/roadmap.py wrap-up --issue N --evidence 'tests+commit'",
         "Move ROADMAP row to Done; manifest complete",
@@ -662,6 +679,7 @@ def agent_payload(doc: RoadmapDocument) -> dict:
             'Free-form chat: first command on implementation intent: roadmap.py begin "<user message>".',
             "No src/conf/tests edits until approve-impl; Cursor pre-tool hook enforces impl-gate.",
             "Session end: wrap-up + check-wrap-up + check-session --require-clean.",
+            "Parallel agents: one ORBIT_WARS_AGENT_ID + ORBIT_WARS_ISSUE_ID per issue; claim --setup-worktree.",
             "Create GitHub issues after execution planning (phase 3), not before for new work.",
             "After changing ROADMAP: uv run python scripts/roadmap.py validate",
             "Before push after closing an issue: add ROADMAP Done row, remove from Now/Next, then make roadmap-check.",
@@ -802,9 +820,30 @@ def cmd_claim(args: argparse.Namespace) -> int:
             owner=owner,
             paths=args.paths or [],
             branch=args.branch,
+            slug=args.slug,
             manifest_id=args.manifest_id,
+            setup_worktree=args.setup_worktree,
         )
     except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
+def cmd_worktree(args: argparse.Namespace) -> int:
+    from scripts.roadmap_git import issue_branch_name, setup_issue_worktree
+
+    if not args.issue:
+        print("worktree requires --issue", file=sys.stderr)
+        return 1
+    branch = args.branch or issue_branch_name(args.issue, args.slug)
+    try:
+        payload = setup_issue_worktree(args.issue, branch, base=args.base)
+    except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     print(json.dumps(payload, indent=2))
@@ -930,6 +969,7 @@ def main() -> int:
             "check-wrap-up",
             "release",
             "check-session",
+            "worktree",
         ),
         default="validate",
     )
@@ -954,7 +994,18 @@ def main() -> int:
         dest="paths",
         help="path prefix for claim (repeatable)",
     )
-    parser.add_argument("--branch", help="git branch for this issue claim")
+    parser.add_argument("--branch", help="git branch for this issue claim (default issue/NN[-slug])")
+    parser.add_argument("--slug", help="optional branch slug suffix for claim/worktree")
+    parser.add_argument(
+        "--setup-worktree",
+        action="store_true",
+        help="create or reuse worktrees/issue-NN for this claim",
+    )
+    parser.add_argument(
+        "--base",
+        default="main",
+        help="base branch when worktree creates a new branch (worktree command)",
+    )
     parser.add_argument("--owner", help="agent owner id (default ORBIT_WARS_AGENT_ID)")
     parser.add_argument("--evidence", help="wrap-up evidence text")
     parser.add_argument("--evidence-file", help="optional file merged into evidence")
@@ -1015,6 +1066,8 @@ def main() -> int:
         return cmd_release(args)
     if args.command == "check-session":
         return cmd_check_session(args)
+    if args.command == "worktree":
+        return cmd_worktree(args)
     return cmd_clear_impl(args)
 
 

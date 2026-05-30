@@ -15,7 +15,9 @@ Users do **not** need slash commands. On **any** request that could change `src/
 4. Before `wrap-up`: add ROADMAP **Done** row, remove from **Now**/**Next**, run `make roadmap-check`.
 5. End with `wrap-up`, `check-wrap-up`, `check-session --require-clean` (`wrap-up` fails if closed issue is not in **Done**).
 
-Optional: `source scripts/agent_env.sh` sets `ORBIT_WARS_IMPL_GATE=1` and `ORBIT_WARS_AGENT_ID`.
+Optional: `source scripts/agent_env.sh` sets `ORBIT_WARS_IMPL_GATE=1`, `ORBIT_WARS_AGENT_ID`, and `ORBIT_WARS_ISSUE_ID`.
+
+**Parallel workers:** `claim --setup-worktree` → work in `worktrees/issue-N/`; unique `ORBIT_WARS_AGENT_ID` + `ORBIT_WARS_ISSUE_ID` per subagent. Hooks block `src/conf/tests` on `main` once the claim records a branch (null branch claims are grandfathered).
 
 ## Enforcement
 

@@ -124,6 +124,7 @@ Create subtasks with dependencies. Pre-assign owners to avoid race conditions.
 ### Phase 5: Spawn Workers
 Spawn N subagents in parallel using the `agents` field references:
 - Each worker gets team preamble + assigned tasks
+- **ROADMAP isolation (required for `src/`/`conf/`/`tests/`):** per worker set `ORBIT_WARS_AGENT_ID=cursor-issue-N`, `ORBIT_WARS_ISSUE_ID=N`, run `roadmap.py claim --issue N --path … --setup-worktree`, and open `worktrees/issue-N/` as that worker's workspace — never parallelize on `main`
 - Workers execute independently and report back
 
 ### Phase 6: Monitor

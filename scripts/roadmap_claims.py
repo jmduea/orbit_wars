@@ -117,10 +117,24 @@ def claim_issue(
     owner: str,
     paths: list[str],
     branch: str | None = None,
+    slug: str | None = None,
     manifest_id: str | None = None,
+    setup_worktree: bool = False,
 ) -> dict:
+    from scripts.roadmap_git import issue_branch_name, setup_issue_worktree, slugify
+
     if not paths:
         raise ValueError("claim requires at least one --path")
+
+    resolved_branch = branch
+    if not resolved_branch:
+        title_slug: str | None = slug
+        if not title_slug:
+            gh = gh_issue_view(issue)
+            if gh and gh.get("title"):
+                title_slug = slugify(str(gh["title"]))
+        resolved_branch = issue_branch_name(issue, title_slug)
+
     for existing in load_all_claims(active_only=True):
         other_issue = int(existing.get("issue", -1))
         if other_issue == issue:
@@ -128,7 +142,18 @@ def claim_issue(
                 raise ValueError(
                     f"Issue #{issue} already claimed by {existing.get('owner')!r}"
                 )
-            continue
+            existing["branch"] = resolved_branch
+            existing["paths"] = paths
+            if manifest_id:
+                existing["manifest_id"] = manifest_id
+            save_claim(existing)
+            payload = existing
+            if setup_worktree:
+                payload = {
+                    **existing,
+                    "worktree": setup_issue_worktree(issue, resolved_branch),
+                }
+            return payload
         if paths_overlap(paths, list(existing.get("paths", []))):
             raise ValueError(
                 f"Path overlap with claim on #{other_issue} "
@@ -139,13 +164,15 @@ def claim_issue(
         "issue": issue,
         "owner": owner,
         "paths": paths,
-        "branch": branch,
+        "branch": resolved_branch,
         "manifest_id": manifest_id,
         "claimed_at": now.isoformat(),
         "expires_at": (now + timedelta(hours=CLAIM_TTL_HOURS)).isoformat(),
         "wrapped_up": False,
     }
     save_claim(payload)
+    if setup_worktree:
+        return {**payload, "worktree": setup_issue_worktree(issue, resolved_branch)}
     return payload
 
 

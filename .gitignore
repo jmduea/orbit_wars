@@ -248,3 +248,6 @@ mcp-server/.omg/
 mcp-server/.omc/
 # Understand-Anything generated scan output
 .understand-anything/
+
+# Per-issue agent worktrees (roadmap.py worktree / claim --setup-worktree)
+/worktrees/

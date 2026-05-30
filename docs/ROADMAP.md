@@ -60,8 +60,8 @@ Free-form chat is fine — agents run the funnel without slash commands. No impl
 | **1 — Begin** | `uv run python scripts/roadmap.py begin "<user message>"` — intake + gate + `work-session.json` |
 | **2 — Planning** | `/deep-interview` → `/ralplan` (or `/omg-autopilot` through spec approval) for non-trivial work |
 | **3 — Execution plan** | Chunk order, manifest register, create/update GitHub issues with AC, promote ROADMAP rows |
-| **4 — Claim** | `roadmap.py claim --issue N --path src/...` (one claim per issue; no path overlap) |
-| **5 — Approve impl** | `roadmap.py approve-impl --issue N` · branch `issue/N-short-slug` |
+| **4 — Claim** | `claim --issue N --path … --setup-worktree` · set `ORBIT_WARS_ISSUE_ID=N` and unique `ORBIT_WARS_AGENT_ID` per parallel worker |
+| **5 — Approve impl** | `approve-impl --issue N` · implement in `worktrees/issue-N/` on branch `issue/N-slug` (not `main`) |
 | **6 — Implement** | Code/tests; `roadmap.py gate --require-allowed` (`ORBIT_WARS_IMPL_GATE` on by default) |
 | **7 — ROADMAP Done** | Add **Done** row (≤5 cap), remove from **Now**/**Next**, run `make roadmap-check` |
 | **8 — Wrap-up** | `gh issue close N --comment "…"` then `roadmap.py wrap-up --issue N --evidence "tests, commit, …"` (fails if issue not in **Done**) |

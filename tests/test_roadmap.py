@@ -216,7 +216,15 @@ def test_hook_guard_allows_with_approved_gate(
     gate_path = tmp_path / "impl-gate.json"
     monkeypatch.setattr("scripts.roadmap.IMPL_GATE_PATH", gate_path)
     save_impl_gate({"approved": True, "issue": "#96", "summary": "test"})
-    roadmap_claims.claim_issue(issue=96, owner="hook-agent", paths=["src/jax/"])
+    monkeypatch.setenv("ORBIT_WARS_ISSUE_ID", "96")
+    roadmap_claims.claim_issue(
+        issue=96,
+        owner="hook-agent",
+        paths=["src/jax/"],
+        branch="issue/96",
+        setup_worktree=False,
+    )
+    monkeypatch.setattr("scripts.roadmap_git.current_branch", lambda _root=None: "issue/96")
     result = hook_guard(paths=["src/jax/train.py"])
     assert result["allow"] is True
 

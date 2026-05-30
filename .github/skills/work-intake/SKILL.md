@@ -17,6 +17,8 @@ On the **first** turn where the user wants code changes (any wording):
 
 ```bash
 export ORBIT_WARS_AGENT_ID="${ORBIT_WARS_AGENT_ID:-cursor-$(hostname)-$$}"
+# One issue per parallel agent/subagent:
+# export ORBIT_WARS_ISSUE_ID=102
 uv run python scripts/roadmap.py begin "<verbatim user request>"
 uv run python scripts/omg_workflow_manifest.py active
 ```
@@ -44,14 +46,19 @@ Read JSON output:
 
 ```bash
 uv run python scripts/roadmap.py claims
-uv run python scripts/roadmap.py claim --issue N --path <dirs from docs/OWNERSHIP.md>
+export ORBIT_WARS_ISSUE_ID=N
+export ORBIT_WARS_AGENT_ID="cursor-issue-N"   # unique per parallel worker
+uv run python scripts/roadmap.py claim --issue N --path <dirs> --setup-worktree
+# Open the printed worktrees/issue-N/ path as this agent's workspace (or cd there).
 uv run python scripts/roadmap.py approve-impl --issue N --summary "<short scope>"
 uv run python scripts/roadmap.py gate --request "<user request>" --require-allowed
 ```
 
+**Parallel subagents:** never share `main` for `src/`/`conf/`/`tests/` edits. Each worker gets its own `ORBIT_WARS_AGENT_ID`, `ORBIT_WARS_ISSUE_ID`, branch `issue/N-…`, and `worktrees/issue-N/`.
+
 ## Phase 6 — Implement
 
-- Branch `issue/N-short-slug`
+- Work only on the issue branch inside the issue worktree (hook blocks protected `main` once the claim records a branch).
 - Tests per `AGENTS.md` tiers
 
 ## Phase 7–9 — ROADMAP Done, wrap-up, session end
