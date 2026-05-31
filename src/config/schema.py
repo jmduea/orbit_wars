@@ -19,7 +19,6 @@ class TaskConfig:
     candidate_count: int = 8
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
-    trajectory_shield_enabled: bool = True
     trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
     # off: no trajectory filtering beyond ordinary action legality
     # cheap: feature-derived source/target/bucket mask, no horizon scan
