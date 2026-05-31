@@ -1,18 +1,6 @@
 setup:
 	uv sync --group dev
 
-roadmap-check:
-	uv run python scripts/roadmap.py validate
-	uv run --group dev pytest tests/test_roadmap.py -q
-
-roadmap-intake:
-	@test -n "$(REQUEST)" || (echo "Usage: make roadmap-intake REQUEST='your task'" && exit 1)
-	uv run python scripts/roadmap.py intake "$(REQUEST)"
-
-roadmap-begin:
-	@test -n "$(REQUEST)" || (echo "Usage: make roadmap-begin REQUEST='your task'" && exit 1)
-	uv run python scripts/roadmap.py begin "$(REQUEST)"
-
 test:
 	uv run --group dev pytest
 
@@ -40,6 +28,3 @@ test-domain-artifacts:
 
 test-domain-curriculum:
 	uv run --group dev pytest tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"
-
-roadmap-session-check:
-	uv run python scripts/roadmap.py check-session --require-clean

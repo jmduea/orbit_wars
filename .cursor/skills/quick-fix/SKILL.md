@@ -1,1 +1,0 @@
-/home/jmduea/projects/orbit_wars/.github/prompts/quick-fix.prompt.md
