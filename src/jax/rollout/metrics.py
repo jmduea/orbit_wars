@@ -4,60 +4,27 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.opponents.jax_actions.sampling import OPPONENT_SLOT_COUNT_KEYS
+from src.jax.rollout.metric_contract import (
+    BASE_ROLLOUT_SCALAR_KEYS,
+    FINALIZED_ROLLOUT_RATE_KEYS,
+    OPPONENT_SLOT_METRIC_KEYS,
+    TRAJECTORY_SHIELD_COUNT_KEYS,
+)
 
 ZERO_F32 = jnp.array(0.0, dtype=jnp.float32)
 
-TRAJECTORY_SHIELD_COUNT_KEYS: tuple[str, ...] = (
-    "trajectory_shield_blocked_count",
-    "trajectory_shield_blocked_sun_count",
-    "trajectory_shield_blocked_bounds_count",
-    "trajectory_shield_blocked_unintended_hit_count",
-    "trajectory_shield_blocked_horizon_count",
-    "trajectory_shield_fallback_noop_count",
-)
-
-OPPONENT_SLOT_METRIC_KEYS: tuple[str, ...] = (
-    *OPPONENT_SLOT_COUNT_KEYS,
-    "opponent_historical_fallback_latest_slots",
-)
-
-# Sum/count keys materialized once per rollout chunk before cross-chunk finalize.
-BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
-    "samples",
-    "env_steps",
-    "episode_done",
-    "average_reward",
-    "episode_reward_mean",
-    "episodes_2p",
-    "episodes_4p",
-    "wins_2p",
-    "first_places_4p",
-    "placement_4p_sum",
-    "survival_time_sum",
-    "score_share_sum",
-    "ship_differential_sum",
-    *TRAJECTORY_SHIELD_COUNT_KEYS,
-    "trajectory_shield_legal_non_noop_count",
-    "trajectory_shield_original_non_noop_count",
-    "trajectory_shield_legal_non_noop_rate",
-    *OPPONENT_SLOT_METRIC_KEYS,
-    "stop_rate",
-    "mean_active_launches_per_turn",
-)
-
-# Rates derived only after cross-chunk or cross-group aggregation.
-FINALIZED_ROLLOUT_RATE_KEYS: tuple[str, ...] = (
-    "win_rate_2p",
-    "first_place_rate_4p",
-    "average_placement_4p",
-    "survival_time",
-    "score_share",
-    "overall_win_rate",
-)
-
 # Backward-compatible alias for train/tests imports.
 _BASE_ROLLOUT_SCALAR_KEYS = BASE_ROLLOUT_SCALAR_KEYS
+
+__all__ = (
+    "BASE_ROLLOUT_SCALAR_KEYS",
+    "FINALIZED_ROLLOUT_RATE_KEYS",
+    "OPPONENT_SLOT_METRIC_KEYS",
+    "TRAJECTORY_SHIELD_COUNT_KEYS",
+    "_BASE_ROLLOUT_SCALAR_KEYS",
+    "rollout_metrics",
+    "trajectory_shield_legal_rate",
+)
 
 
 def _safe_rate(num: jax.Array, denom: jax.Array) -> jax.Array:

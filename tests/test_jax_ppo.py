@@ -530,7 +530,10 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
 
 
 def test_collect_rollout_jax_emits_training_scalar_metric_contract():
-    from src.jax.rollout.metrics import BASE_ROLLOUT_SCALAR_KEYS as _BASE_ROLLOUT_SCALAR_KEYS
+    from src.jax.rollout.metric_contract import (
+        BASE_ROLLOUT_SCALAR_KEYS,
+        ROLLOUT_ALLOWED_SCALAR_KEYS,
+    )
 
     cfg = TrainConfig()
     cfg.model.hidden_size = 16
@@ -552,11 +555,15 @@ def test_collect_rollout_jax_emits_training_scalar_metric_contract():
     )
 
     missing_keys = [
-        key for key in _BASE_ROLLOUT_SCALAR_KEYS if key not in rollout_metrics
+        key for key in BASE_ROLLOUT_SCALAR_KEYS if key not in rollout_metrics
     ]
     assert missing_keys == []
-    assert "avg_reward" not in _BASE_ROLLOUT_SCALAR_KEYS
-    assert "episode_reward_sum" not in _BASE_ROLLOUT_SCALAR_KEYS
+    unexpected_keys = sorted(
+        key for key in rollout_metrics if key not in ROLLOUT_ALLOWED_SCALAR_KEYS
+    )
+    assert unexpected_keys == []
+    assert "avg_reward" not in BASE_ROLLOUT_SCALAR_KEYS
+    assert "episode_reward_sum" not in BASE_ROLLOUT_SCALAR_KEYS
 
 
 def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks():

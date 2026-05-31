@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
+from src.jax.rollout.metric_contract import LOGGED_ROLLOUT_SCALAR_KEYS
+
 METRIC_GROUPS: tuple[str, ...] = (
     "core_progress",
     "losses",
@@ -622,45 +624,7 @@ METRIC_DEFINITIONS_BY_NAME: dict[str, MetricDefinition] = {
     definition.name: definition for definition in METRIC_DEFINITIONS
 }
 
-ROLLOUT_SCALAR_ORDER: tuple[str, ...] = (
-    "samples",
-    "env_steps",
-    "episode_done",
-    "average_reward",
-    "episode_reward_mean",
-    "episodes_2p",
-    "episodes_4p",
-    "wins_2p",
-    "first_places_4p",
-    "placement_4p_sum",
-    "survival_time_sum",
-    "score_share_sum",
-    "ship_differential_sum",
-    "win_rate_2p",
-    "first_place_rate_4p",
-    "average_placement_4p",
-    "overall_win_rate",
-    "survival_time",
-    "score_share",
-    "trajectory_shield_blocked_count",
-    "trajectory_shield_blocked_sun_count",
-    "trajectory_shield_blocked_bounds_count",
-    "trajectory_shield_blocked_unintended_hit_count",
-    "trajectory_shield_blocked_horizon_count",
-    "trajectory_shield_fallback_noop_count",
-    "trajectory_shield_legal_non_noop_rate",
-    "opponent_slots_total",
-    "opponent_slots_latest",
-    "opponent_slots_historical",
-    "opponent_slots_random",
-    "opponent_slots_noop",
-    "opponent_slots_nearest_sniper",
-    "opponent_slots_turtle",
-    "opponent_slots_opportunistic",
-    "opponent_historical_fallback_latest_slots",
-    "stop_rate",
-    "mean_active_launches_per_turn",
-)
+ROLLOUT_SCALAR_ORDER: tuple[str, ...] = LOGGED_ROLLOUT_SCALAR_KEYS
 
 ROLLOUT_OUTPUT_METRIC_NAMES: frozenset[str] = frozenset(
     name for name in ROLLOUT_SCALAR_ORDER if name in METRIC_DEFINITIONS_BY_NAME

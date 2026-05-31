@@ -1,7 +1,5 @@
-from .types import JaxTransitionBatch, JaxTrainState, ShieldedSequenceSample
+"""JAX rollout collection, metrics, and transition types."""
 
-__all__ = [
-    "JaxTransitionBatch",
-    "JaxTrainState",
-    "ShieldedSequenceSample",
-]
+from __future__ import annotations
+
+__all__: list[str] = []

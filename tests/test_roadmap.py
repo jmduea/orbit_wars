@@ -83,6 +83,45 @@ def wrap_up_roadmap(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.config
+def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:
+    from src.jax.rollout.metric_contract import (
+        BASE_ROLLOUT_SCALAR_KEYS,
+        FINALIZED_ROLLOUT_RATE_KEYS,
+        LOGGED_ROLLOUT_SCALAR_KEYS,
+        ROLLOUT_ALLOWED_SCALAR_KEYS,
+        ROLLOUT_INTERNAL_SCALAR_KEYS,
+    )
+    from src.telemetry.metric_registry import (
+        METRIC_DEFINITIONS_BY_NAME,
+        ROLLOUT_OUTPUT_METRIC_NAMES,
+        ROLLOUT_SCALAR_ORDER,
+    )
+
+    assert ROLLOUT_SCALAR_ORDER == LOGGED_ROLLOUT_SCALAR_KEYS
+
+    registered_logged_keys = frozenset(
+        name
+        for name in LOGGED_ROLLOUT_SCALAR_KEYS
+        if name in METRIC_DEFINITIONS_BY_NAME
+    )
+    assert ROLLOUT_OUTPUT_METRIC_NAMES == registered_logged_keys
+    assert ROLLOUT_OUTPUT_METRIC_NAMES <= frozenset(LOGGED_ROLLOUT_SCALAR_KEYS)
+
+    assert all(key in BASE_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
+    assert not any(key in LOGGED_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
+    assert all(
+        key in LOGGED_ROLLOUT_SCALAR_KEYS for key in FINALIZED_ROLLOUT_RATE_KEYS
+    )
+
+    logged_and_internal = set(LOGGED_ROLLOUT_SCALAR_KEYS) | set(ROLLOUT_INTERNAL_SCALAR_KEYS)
+    unexpected_base_keys = sorted(
+        key for key in BASE_ROLLOUT_SCALAR_KEYS if key not in logged_and_internal
+    )
+    assert unexpected_base_keys == []
+    assert ROLLOUT_ALLOWED_SCALAR_KEYS >= logged_and_internal
+
+
+@pytest.mark.config
 def test_repo_roadmap_validates() -> None:
     text = ROADMAP_PATH.read_text(encoding="utf-8")
     doc = parse_roadmap(text)
