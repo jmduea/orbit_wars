@@ -9,11 +9,21 @@ from omegaconf import OmegaConf
 
 from src.config.schema import TrainConfig
 from src.config import compose_hydra_train_config, train_config_from_omegaconf
+from src.jax.rollout.metric_contract import (
+    BASE_ROLLOUT_SCALAR_KEYS,
+    FINALIZED_ROLLOUT_RATE_KEYS,
+    LOGGED_ROLLOUT_SCALAR_KEYS,
+    ROLLOUT_ALLOWED_SCALAR_KEYS,
+    ROLLOUT_INTERNAL_SCALAR_KEYS,
+)
 from src.telemetry.metric_registry import (
     DEFAULT_ENABLED_GROUPS,
     KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES,
     METRIC_DEFINITIONS,
+    METRIC_DEFINITIONS_BY_NAME,
     METRIC_GROUPS,
+    ROLLOUT_OUTPUT_METRIC_NAMES,
+    ROLLOUT_SCALAR_ORDER,
     enabled_metric_names,
     filter_metric_record,
     filter_update_record,
@@ -229,6 +239,31 @@ def test_per_format_timing_metrics_are_registered_as_timing():
     for name in expected_names:
         assert metric_definition(name).group == "timing"
         assert name in names
+
+
+def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:
+    assert ROLLOUT_SCALAR_ORDER == LOGGED_ROLLOUT_SCALAR_KEYS
+
+    registered_logged_keys = frozenset(
+        name
+        for name in LOGGED_ROLLOUT_SCALAR_KEYS
+        if name in METRIC_DEFINITIONS_BY_NAME
+    )
+    assert ROLLOUT_OUTPUT_METRIC_NAMES == registered_logged_keys
+    assert ROLLOUT_OUTPUT_METRIC_NAMES <= frozenset(LOGGED_ROLLOUT_SCALAR_KEYS)
+
+    assert all(key in BASE_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
+    assert not any(key in LOGGED_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
+    assert all(
+        key in LOGGED_ROLLOUT_SCALAR_KEYS for key in FINALIZED_ROLLOUT_RATE_KEYS
+    )
+
+    logged_and_internal = set(LOGGED_ROLLOUT_SCALAR_KEYS) | set(ROLLOUT_INTERNAL_SCALAR_KEYS)
+    unexpected_base_keys = sorted(
+        key for key in BASE_ROLLOUT_SCALAR_KEYS if key not in logged_and_internal
+    )
+    assert unexpected_base_keys == []
+    assert ROLLOUT_ALLOWED_SCALAR_KEYS >= logged_and_internal
 
 
 def test_repo_sweep_metrics_are_registered_and_enabled_by_default():
