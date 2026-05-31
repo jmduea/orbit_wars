@@ -188,7 +188,6 @@ class OpponentSelfPlayConfig:
 @dataclass(slots=True)
 class OpponentModeConfig:
     opponent: str = "random"
-    multi_opponent_mode: str = "mixed"
     alternate_player_sides: bool = True
 
 
@@ -261,7 +260,6 @@ class ArtifactPipelineConfig:
     final_flush_timeout_seconds: float = 900.0
     interrupt_flush_timeout_seconds: float = 60.0
     exception_flush_timeout_seconds: float = 60.0
-    latest_lag_warning_updates: int = 1
     coalesce_intermediate_checkpoints: bool = True
     replay_async: bool = True
     replay_backend: str = "docker"
@@ -276,7 +274,6 @@ class ArtifactPipelineConfig:
     queue_dir: str = "queue/optional_jobs"
     result_dir: str = "evaluations"
     fail_training_on_checkpoint_error: bool = True
-    fail_training_on_optional_job_error: bool = False
 
 
 @dataclass(slots=True)

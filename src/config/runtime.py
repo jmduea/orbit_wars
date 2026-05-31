@@ -320,9 +320,9 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     if artifact_pipeline.replay_backend not in {"docker", "local"}:
         raise ValueError("artifacts.artifact_pipeline.replay_backend must be 'docker' or 'local'.")
     if artifact_pipeline.docker_player_count not in {"2", "4", "both"}:
-        raise ValueError("artifacts.artifact_pipeline.docker_player_count must be '2', '4', or 'both'.")
-    if int(artifact_pipeline.latest_lag_warning_updates) < 0:
-        raise ValueError("artifacts.artifact_pipeline.latest_lag_warning_updates must be non-negative.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.docker_player_count must be '2', '4', or 'both'."
+        )
     if not str(artifact_pipeline.queue_dir).strip():
         raise ValueError("artifacts.artifact_pipeline.queue_dir must be a non-empty relative path.")
     if Path(artifact_pipeline.queue_dir).is_absolute():
