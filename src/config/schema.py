@@ -249,6 +249,8 @@ class TournamentConfig:
     )
     output_subdir: str = "tournament"
     write_replays: bool = False
+    per_step_seconds: float = 1.0
+    overage_budget_seconds: float = 60.0
 
 
 @dataclass(slots=True)

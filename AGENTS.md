@@ -47,11 +47,16 @@ uv run ow train kaggle
 - Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
 - Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
 - Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
+- After major training-loop or checkpoint refactors, verify with short train smoke then a ~100-update benchmark; unit tests alone may miss regressions.
+- `.audit/` and `.cursor/hooks/state/` are gitignored; keep audit trails and hook state local, not in commits.
 
 ## Learned Workspace Facts
 
 - Canonical feature path: Kaggle/JAX obs → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
-- JAX concerns are split: rollout collection in `src/jax/rollout/collect.py`, PPO update in `src/jax/ppo_update.py`, opponent builders in `src/opponents/jax_actions/`.
+- JAX concerns are split: rollout in `src/jax/rollout/collect.py`, PPO in `src/jax/ppo_update.py`, learner shielded sampling in `src/jax/action_sampling.py`, shield in `src/jax/shield/*`, training loop in `src/jax/train/` (loop, rollout_groups, metrics, snapshots, checkpoint, telemetry, queue, state), opponent builders in `src/opponents/jax_actions/`.
+- Trajectory shield: JAX paths in `src/jax/shield/*`; Python reference helpers in `src/game/shield.py` and `shield_config.py`.
+- `OPPONENT_FAMILY_*` constants live in `src/opponents/constants.py`; import `src.opponents.pool` only for pool logic (`OPPONENT_FAMILY_IDS`, sampling helpers).
+- Per-format timing metrics (`*_2p`/`*_4p`) emit only when telemetry `metric_groups.debug` is enabled; `average_placement_4p` stays on the default path.
 - `model.normalize_observations` appears in model YAMLs but is not wired into JAX training; treat as dead config until implemented or removed.
 - Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run ow train print_resolved_config=true`.
 - Understand-Anything scans honor `.understandignore` for excluding non-project adjacent paths.

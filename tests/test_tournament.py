@@ -253,7 +253,7 @@ def test_run_match_smoke_with_mock_env() -> None:
     env.step.return_value = [state, state]
 
     with patch("kaggle_environments.make", return_value=env):
-        outcome, returned_env = run_match(
+        outcome, returned_env, _timing = run_match(
             match_id="mock",
             format_name="2p_vs_baseline",
             seed=7,
@@ -268,7 +268,7 @@ def test_run_match_smoke_with_mock_env() -> None:
 
 def test_queue_tournament_job_accepts_tournament_only_reason(tmp_path: Path) -> None:
     from src.config import TrainConfig
-    from src.jax.train_queue import queue_tournament_job_if_eligible
+    from src.jax.train.queue import queue_tournament_job_if_eligible
 
     cfg = TrainConfig()
     cfg.artifacts.promotion.strategy = "tournament"

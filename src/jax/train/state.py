@@ -12,8 +12,7 @@ from src.features.registry import (
     planet_feature_dim,
 )
 from src.jax.policy import make_synthetic_turn_batch
-
-from .rollout.types import JaxTrainState
+from src.jax.rollout.types import JaxTrainState
 
 
 def _find_encoder_input_dim(params_root: dict, encoder_prefix: str) -> int | None:

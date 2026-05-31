@@ -11,7 +11,7 @@ from src.jax.action_sampling import _sample_factored_step_from_logits
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.train_state import init_train_state
+from src.jax.train import init_train_state
 
 
 def test_continuous_ship_logit_mask_does_not_broadcast_to_discrete_path() -> None:

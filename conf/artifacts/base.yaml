@@ -59,3 +59,5 @@ tournament:
   formats: [2p_vs_baseline, 2p_head_to_head]
   output_subdir: tournament
   write_replays: false
+  per_step_seconds: 1.0
+  overage_budget_seconds: 60.0

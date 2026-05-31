@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import jax.numpy as jnp
 
-from src.jax.train_checkpoint import HistoricalSnapshotPool
-from src.jax.train_telemetry import (
+from src.jax.train.checkpoint import HistoricalSnapshotPool
+from src.jax.train.telemetry import (
     build_update_record,
     split_debug_update_record,
     write_filtered_update_records,

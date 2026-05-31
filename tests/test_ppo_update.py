@@ -16,7 +16,7 @@ from src.jax.ppo_update import (
     ppo_update_jax,
 )
 from src.jax.rollout.types import JaxTransitionBatch
-from src.jax.train_state import init_train_state
+from src.jax.train import init_train_state
 
 
 def test_discounted_returns_resets_at_terminal_steps() -> None:

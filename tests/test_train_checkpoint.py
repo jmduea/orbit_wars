@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import jax
-from src.jax.train_checkpoint import (
+from src.jax.train.checkpoint import (
     CheckpointHandler,
     checkpoint_payload_builder,
     restore_historical_snapshot_pool,
@@ -67,7 +67,7 @@ def test_checkpoint_handler_records_failed_results(tmp_path: Path) -> None:
 def test_restore_historical_snapshot_pool_returns_fallback_on_bad_payload() -> None:
     import jax.numpy as jnp
 
-    from src.jax.train_checkpoint import HistoricalSnapshotPool
+    from src.jax.train.checkpoint import HistoricalSnapshotPool
 
     fallback = HistoricalSnapshotPool(
         params={"w": jnp.zeros((2, 2))},
@@ -84,7 +84,7 @@ def test_restore_historical_snapshot_pool_returns_fallback_on_bad_payload() -> N
 def test_checkpoint_payload_builder_includes_curriculum_state() -> None:
     from src.config import TrainConfig
     from src.jax.policy import build_jax_policy
-    from src.jax.train_state import init_train_state
+    from src.jax.train import init_train_state
     from src.training.curriculum import CurriculumController
 
     cfg = TrainConfig()

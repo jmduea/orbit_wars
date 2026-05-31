@@ -30,7 +30,7 @@ from src.artifacts.promotion import promote_if_better
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay
 from src.artifacts.run_paths import RunContext
 from src.config import TrainConfig
-from src.jax.train_queue import (
+from src.jax.train.queue import (
     queue_optional_jobs_if_due,
     queue_tournament_job_if_eligible,
     start_artifact_worker_if_needed,
@@ -397,7 +397,7 @@ class CheckpointHandler:
                         "job_path": str(tournament_job),
                     },
                 )
-                self.start_artifact_worker_if_needed(
+                start_artifact_worker_if_needed(
                     self.cfg,
                     queue_dir=self.artifact_queue_dir,
                     result_root=self.run_context.evaluations_dir,

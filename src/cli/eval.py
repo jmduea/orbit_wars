@@ -88,6 +88,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write HTML replay artifacts for each match.",
     )
+    tournament.add_argument(
+        "--per-step-seconds",
+        type=float,
+        default=1.0,
+        help="Per-agent action latency budget (Kaggle submission parity).",
+    )
+    tournament.add_argument(
+        "--overage-budget-seconds",
+        type=float,
+        default=60.0,
+        help="Cumulative overage allowed above per-step budget before aborting.",
+    )
     return parser
 
 
@@ -159,6 +171,8 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         baselines=["sniper"],
         formats=_parse_csv_strings(args.formats),
         write_replays=bool(args.write_replays),
+        per_step_seconds=float(args.per_step_seconds),
+        overage_budget_seconds=float(args.overage_budget_seconds),
     )
 
     incumbent = None
@@ -186,7 +200,11 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         incumbent=incumbent,
         promotion_gates=cfg.artifacts.promotion.tournament,
     )
-    print(json.dumps(json.loads((output_dir / "leaderboard.json").read_text()), indent=2))
+    print(
+        json.dumps(
+            json.loads((output_dir / "leaderboard.json").read_text())["rows"], indent=2
+        )
+    )
 
     if args.promote:
         passing = top_passing_row(result)

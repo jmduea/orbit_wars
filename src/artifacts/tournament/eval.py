@@ -8,6 +8,7 @@ from typing import Sequence
 from uuid import uuid4
 
 from src.artifacts.run_paths import atomic_write_json
+from src.artifacts.tournament.timing import TournamentTimingError
 from src.config.schema import PromotionTournamentConfig, TournamentConfig
 
 from .ranking import aggregate_pairwise_win_rates, build_leaderboard, evaluate_gates
@@ -71,6 +72,34 @@ def _schedule_matches(
     return schedules
 
 
+def _write_match_record(
+    output_dir: Path,
+    *,
+    match_id: str,
+    format_name: str,
+    baseline_name: str,
+    seed: int,
+    outcome: MatchOutcome,
+    timing_summary: dict[str, object],
+) -> None:
+    match_json = output_dir / "matches" / f"{match_id}.json"
+    match_json.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(
+        match_json,
+        {
+            "match_id": match_id,
+            "format_name": format_name,
+            "baseline_name": baseline_name,
+            "seed": seed,
+            "agent_ids": list(outcome.agent_ids),
+            "results": outcome.results,
+            "rewards": outcome.rewards,
+            "placements": outcome.placements,
+            "timing": timing_summary,
+        },
+    )
+
+
 def run_tournament(
     candidates: Sequence[AgentEntry],
     *,
@@ -93,6 +122,21 @@ def run_tournament(
     seeds = _match_seeds(cfg)
     games_per_pair = max(int(cfg.games_per_pair), 1)
     schedules = _schedule_matches(candidates, incumbent=incumbent, cfg=cfg)
+    total_matches = len(schedules) * len(seeds) * games_per_pair
+    atomic_write_json(
+        output_dir / "progress.json",
+        {
+            "tournament_id": tournament_id,
+            "status": "running",
+            "match_count_total": total_matches,
+            "match_count_completed": 0,
+        },
+    )
+    print(
+        f"tournament {tournament_id}: {total_matches} matches scheduled "
+        f"({len(candidates)} candidates, formats={list(cfg.formats)})",
+        flush=True,
+    )
 
     outcomes: list[MatchOutcome] = []
     match_index = 0
@@ -100,33 +144,68 @@ def run_tournament(
         for seed in seeds:
             for _ in range(games_per_pair):
                 match_id = f"{format_name}_{match_index:04d}"
-                outcome, env = run_match(
-                    match_id=match_id,
-                    format_name=format_name,
-                    seed=seed + match_index,
-                    agent_ids=agent_ids,
-                    agents=agents,
-                    max_steps=int(cfg.max_steps),
+                match_seed = seed + match_index
+                print(
+                    f"tournament match {match_index + 1}/{total_matches}: "
+                    f"{format_name} {' vs '.join(agent_ids)} seed={match_seed}",
+                    flush=True,
                 )
-                outcomes.append(outcome)
-                if cfg.write_replays:
-                    replay_path = output_dir / "matches" / f"{match_id}.html"
-                    replay_path.parent.mkdir(parents=True, exist_ok=True)
-                    replay_path.write_text(env.render(mode="html"), encoding="utf-8")
-                    match_json = output_dir / "matches" / f"{match_id}.json"
+                try:
+                    outcome, env, timing_summary = run_match(
+                        match_id=match_id,
+                        format_name=format_name,
+                        seed=match_seed,
+                        agent_ids=agent_ids,
+                        agents=agents,
+                        max_steps=int(cfg.max_steps),
+                        per_step_seconds=float(cfg.per_step_seconds),
+                        overage_budget_seconds=float(cfg.overage_budget_seconds),
+                    )
+                except TournamentTimingError as exc:
                     atomic_write_json(
-                        match_json,
+                        output_dir / "progress.json",
                         {
-                            "match_id": match_id,
-                            "format_name": format_name,
-                            "baseline_name": baseline_name,
-                            "seed": seed + match_index,
-                            "agent_ids": list(agent_ids),
-                            "results": outcome.results,
-                            "rewards": outcome.rewards,
-                            "placements": outcome.placements,
+                            "tournament_id": tournament_id,
+                            "status": "failed",
+                            "failed_match_id": match_id,
+                            "error": str(exc),
+                            "match_count_total": total_matches,
+                            "match_count_completed": match_index,
                         },
                     )
+                    raise
+                outcomes.append(outcome)
+                _write_match_record(
+                    output_dir,
+                    match_id=match_id,
+                    format_name=format_name,
+                    baseline_name=baseline_name,
+                    seed=match_seed,
+                    outcome=outcome,
+                    timing_summary=timing_summary,
+                )
+                if cfg.write_replays:
+                    replay_path = output_dir / "matches" / f"{match_id}.html"
+                    replay_path.write_text(env.render(mode="html"), encoding="utf-8")
+                primary = agent_ids[0]
+                print(
+                    f"tournament match {match_index + 1}/{total_matches} done: "
+                    f"{primary} -> {outcome.results.get(primary, '?')} "
+                    f"({float(timing_summary['match_seconds']):.1f}s, "
+                    f"steps={timing_summary['env_steps']}, "
+                    f"max_action={float(timing_summary['max_action_seconds']):.3f}s)",
+                    flush=True,
+                )
+                atomic_write_json(
+                    output_dir / "progress.json",
+                    {
+                        "tournament_id": tournament_id,
+                        "status": "running",
+                        "match_count_total": total_matches,
+                        "match_count_completed": match_index + 1,
+                        "last_match_id": match_id,
+                    },
+                )
                 match_index += 1
 
     outcome_tuple = tuple(outcomes)
@@ -174,7 +253,7 @@ def run_tournament(
         }
         for row in leaderboard
     ]
-    atomic_write_json(output_dir / "leaderboard.json", leaderboard_payload)
+    atomic_write_json(output_dir / "leaderboard.json", {"rows": leaderboard_payload})
     atomic_write_json(
         output_dir / "manifest.json",
         {
@@ -185,10 +264,22 @@ def run_tournament(
             "formats": list(cfg.formats),
             "seeds": seeds,
             "games_per_pair": games_per_pair,
+            "per_step_seconds": float(cfg.per_step_seconds),
+            "overage_budget_seconds": float(cfg.overage_budget_seconds),
         },
     )
     if pairwise:
         atomic_write_json(output_dir / "pairwise.json", pairwise)
+    atomic_write_json(
+        output_dir / "progress.json",
+        {
+            "tournament_id": tournament_id,
+            "status": "completed",
+            "match_count_total": total_matches,
+            "match_count_completed": total_matches,
+        },
+    )
+    print(f"tournament {tournament_id}: completed {total_matches} matches", flush=True)
 
     return TournamentResult(
         tournament_id=tournament_id,

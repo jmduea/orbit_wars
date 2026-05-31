@@ -12,8 +12,9 @@ Ownership:
 import pickle
 from types import SimpleNamespace
 
-import jax
 import pytest
+
+import jax
 
 
 def _configure_rollout_groups(cfg, groups):
@@ -34,20 +35,19 @@ def _configure_rollout_groups(cfg, groups):
         for group in active
     }
 
+
 from src.config import TrainConfig
 from src.game.constants import MAX_PLANETS, MAX_STEPS
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.train_state import init_train_state
-from src.jax.train import (
-    _finalize_cross_chunk_rate_metrics,
-    _merge_metric_dicts,
-    _sum_metric_dicts,
-    init_rollout_groups,
+from src.jax.train import init_rollout_groups, init_train_state
+from src.jax.train.metrics import (
+    finalize_cross_chunk_rate_metrics,
+    merge_metric_dicts,
+    sum_metric_dicts,
 )
-
 
 
 def test_end_to_end_jax_rollout_and_update_smoke():
@@ -145,7 +145,7 @@ def test_rollout_metric_aggregation_recomputes_rate_metrics():
         placement_4p_sum=6.0,
     )
 
-    metrics = _sum_metric_dicts([first_chunk, second_chunk])
+    metrics = sum_metric_dicts([first_chunk, second_chunk])
 
     assert float(metrics["win_rate_2p"]) == pytest.approx(0.75)
     assert float(metrics["first_place_rate_4p"]) == pytest.approx(0.5)
@@ -162,7 +162,7 @@ def test_merge_metric_dicts_skips_removed_action_target_metrics() -> None:
         "trajectory_shield_original_non_noop_count": jax.numpy.asarray(0.0),
     }
 
-    merged = _merge_metric_dicts([lean_chunk, lean_chunk])
+    merged = merge_metric_dicts([lean_chunk, lean_chunk])
 
     assert "valid_non_noop_targets_per_row" not in merged
     assert "only_noop_fraction" not in merged
@@ -185,7 +185,7 @@ def test_merge_metric_dicts_defers_finalize_only_rates():
         placement_4p_sum=6.0,
     )
 
-    merged = _merge_metric_dicts([first_chunk, second_chunk])
+    merged = merge_metric_dicts([first_chunk, second_chunk])
     for key in (
         "win_rate_2p",
         "first_place_rate_4p",
@@ -195,7 +195,7 @@ def test_merge_metric_dicts_defers_finalize_only_rates():
     ):
         assert key not in merged
 
-    finalized = _finalize_cross_chunk_rate_metrics(dict(merged))
+    finalized = finalize_cross_chunk_rate_metrics(dict(merged))
     assert float(finalized["win_rate_2p"]) == pytest.approx(0.75)
 
 

@@ -8,7 +8,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.jax.train_checkpoint import HistoricalSnapshotPool, append_jsonl
+from src.jax.train.checkpoint import HistoricalSnapshotPool, append_jsonl
 from src.telemetry.metric_registry import (
     ROLLOUT_OUTPUT_METRIC_NAMES,
     filter_update_record,

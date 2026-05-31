@@ -7,16 +7,16 @@ Ownership:
 - This module keeps multi-update rollout health and format-adjacent rollout checks.
 """
 
-import jax
 import pytest
 
+import jax
 from src.config import TrainConfig
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.rollout.types import JaxTransitionBatch
-from src.jax.train_state import init_train_state
+from src.jax.train import init_train_state
 
 
 def _v2_smoke_cfg(*, rollout_steps: int) -> TrainConfig:

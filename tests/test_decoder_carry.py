@@ -14,7 +14,7 @@ from src.jax.policy import (
     make_synthetic_turn_batch,
 )
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.train_state import init_train_state
+from src.jax.train import init_train_state
 
 
 def _task_cfg(**kwargs) -> TaskConfig:

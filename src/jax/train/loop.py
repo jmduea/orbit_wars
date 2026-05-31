@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from copy import deepcopy
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
+import jax.numpy as jnp
+
+import jax
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
@@ -14,550 +14,59 @@ from src.artifacts.pipeline import (
 )
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
-from src.config.rollout_allocation import (
-    infer_static_format_weights,
-    resolve_rollout_group_specs,
+from src.config.rollout_allocation import infer_static_format_weights
+from src.jax.device import (
+    configure_jax_runtime_for_host,
+    ensure_jax_accelerator_backend,
+)
+from src.jax.normalization import (
+    init_observation_norm_state,
+    normalize_transition_batch,
+    update_norm_state_from_transitions,
+)
+from src.jax.policy import build_jax_policy
+from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
+from src.jax.rollout.metrics import FINALIZED_ROLLOUT_RATE_KEYS
+from src.jax.rollout.types import JaxTransitionBatch
+from src.jax.train.checkpoint import (
+    CheckpointHandler,
+    load_jax_checkpoint,
+    restore_curriculum_artifacts,
+    save_jax_checkpoint,
+)
+from src.jax.train.metrics import prune_merged_rollout_metrics, sum_metric_dicts
+from src.jax.train.rollout_groups import (
+    JaxRolloutGroup,
+    active_group_indices,
+    empty_per_format_rollout_stats,
+    init_rollout_groups,
+    replace_rollout_group_state,
+)
+from src.jax.train.snapshots import (
+    add_historical_snapshot,
+    init_historical_snapshot_pool,
+    snapshot_due,
+)
+from src.jax.train.state import init_train_state, validate_policy_param_shapes
+from src.jax.train.telemetry import (
+    build_per_format_timing_metrics,
+    build_update_record,
+    historical_pool_snapshot_telemetry,
+    write_filtered_update_records,
 )
 from src.telemetry import build_telemetry
 from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.telemetry.metric_registry import (
     enabled_metric_groups,
     metric_groups_cfg_from_config,
-    prune_scalar_metrics,
     required_ppo_metric_names,
     required_rollout_scalar_names,
-    rollout_merge_scalar_keys,
 )
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
-from .device import configure_jax_runtime_for_host, ensure_jax_accelerator_backend
-
 configure_jax_runtime_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
-
-import jax.numpy as jnp  # noqa: E402
-
-import jax  # noqa: E402
-
-# jax.config.update("jax_debug_nans", True)
-from src.jax.rollout.metrics import (  # noqa: E402
-    FINALIZED_ROLLOUT_RATE_KEYS,
-    trajectory_shield_legal_rate,
-)
-
-from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
-from .features import TurnBatch  # noqa: E402
-from .normalization import (
-    init_observation_norm_state,
-    normalize_transition_batch,
-    update_norm_state_from_transitions,
-)  # noqa: E402
-from .policy import build_jax_policy  # noqa: E402
-from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
-from .rollout.collect import collect_rollout_jax  # noqa: E402
-from .rollout.types import JaxTransitionBatch  # noqa: E402
-from .train_checkpoint import (  # noqa: E402
-    CheckpointHandler,
-    HistoricalSnapshotPool,
-    load_jax_checkpoint,
-    save_jax_checkpoint,
-)
-from .train_checkpoint import (
-    restore_curriculum_artifacts as _restore_curriculum_artifacts,
-)
-from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
-from .train_telemetry import (  # noqa: E402
-    build_per_format_timing_metrics as _build_per_format_timing_metrics,
-)
-from .train_telemetry import (
-    build_update_record,
-    write_filtered_update_records,
-)
-from .train_telemetry import (
-    historical_pool_snapshot_telemetry as _historical_pool_snapshot_telemetry,
-)
-
-
-@dataclass(slots=True)
-class JaxRolloutGroup:
-    """State for one statically compiled JAX rollout format."""
-
-    name: str
-    cfg: TrainConfig
-    env_state: JaxEnvState
-    turn_batch: TurnBatch
-    collect_fn: Callable
-
-
-def _copy_config_for_rollout_group(
-    cfg: TrainConfig, *, player_count: int, num_envs: int
-) -> TrainConfig:
-    """Return a rollout-specific config with static player/env counts."""
-
-    group_cfg = deepcopy(cfg)
-    group_cfg.task.player_count = int(player_count)
-    group_cfg.training.num_envs = int(num_envs)
-    return group_cfg
-
-
-def _configured_rollout_groups(cfg: TrainConfig) -> list[dict[str, int | str]]:
-    """Resolve rollout group declarations for mixed-format training."""
-
-    return [
-        {
-            "name": spec.name,
-            "player_count": spec.player_count,
-            "num_envs": spec.num_envs,
-        }
-        for spec in resolve_rollout_group_specs(cfg)
-    ]
-
-
-def _init_rollout_group(
-    key: jax.Array,
-    cfg: TrainConfig,
-    policy: object,
-    *,
-    name: str,
-    player_count: int,
-    num_envs: int,
-) -> JaxRolloutGroup:
-    """Initialize env state and a dedicated compiled collector for one format."""
-
-    group_cfg = _copy_config_for_rollout_group(
-        cfg, player_count=player_count, num_envs=num_envs
-    )
-    microbatch_envs = _resolve_rollout_microbatch_envs(group_cfg)
-    reset_keys = jax.random.split(key, group_cfg.training.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
-    env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
-    episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)
-    env_state, turn_batch = assign_learner_players(
-        env_state,
-        env_indices,
-        episode_counts,
-        group_cfg.task,
-        group_cfg.opponents.mode.alternate_player_sides,
-    )
-
-    def collect_fn(
-        rollout_key,
-        state,
-        batch,
-        ts,
-        stage_view=None,
-        historical_params_pool=None,
-        update_idx=jnp.asarray(0, dtype=jnp.int32),
-        norm_state=None,
-    ):
-        if microbatch_envs >= group_cfg.training.num_envs:
-            return collect_rollout_jax(
-                rollout_key,
-                state,
-                batch,
-                ts,
-                policy,
-                group_cfg,
-                stage_view=stage_view,
-                historical_params_pool=historical_params_pool,
-                update=update_idx,
-                norm_state=norm_state,
-            )
-        return _collect_rollout_microbatched(
-            rollout_key,
-            state,
-            batch,
-            ts,
-            policy,
-            group_cfg,
-            microbatch_envs=microbatch_envs,
-            stage_view=stage_view,
-            historical_params_pool=historical_params_pool,
-            update=update_idx,
-            norm_state=norm_state,
-        )
-
-    collect_fn = jax.jit(collect_fn)
-    return JaxRolloutGroup(
-        name=name,
-        cfg=group_cfg,
-        env_state=env_state,
-        turn_batch=turn_batch,
-        collect_fn=collect_fn,
-    )
-
-
-def _resolve_rollout_microbatch_envs(cfg: TrainConfig) -> int:
-    env_count = int(cfg.training.num_envs)
-    microbatch_envs = cfg.training.rollout_microbatch_envs
-    if microbatch_envs is None:
-        return env_count
-    microbatch_envs = int(microbatch_envs)
-    if microbatch_envs > env_count:
-        raise ValueError(
-            "training.rollout_microbatch_envs must be <= each rollout group's num_envs."
-        )
-    if env_count % microbatch_envs != 0:
-        raise ValueError(
-            "training.rollout_microbatch_envs must evenly divide each rollout group's num_envs."
-        )
-    return microbatch_envs
-
-
-def _slice_env_axis(
-    tree: object, *, start: int | jax.Array, size: int, env_count: int
-) -> object:
-    """Slice the leading env axis; ``start`` may be traced under ``lax.map``."""
-
-    start_index = jnp.asarray(start, dtype=jnp.int32)
-
-    def slice_leaf(value):
-        if (
-            isinstance(value, jax.Array)
-            and value.ndim > 0
-            and value.shape[0] == env_count
-        ):
-            return jax.lax.dynamic_slice_in_dim(value, start_index, size, axis=0)
-        return value
-
-    return jax.tree.map(slice_leaf, tree)
-
-
-def _concat_env_axis(trees: list[object]) -> object:
-    if len(trees) == 1:
-        return trees[0]
-    return jax.tree.map(lambda *xs: jnp.concatenate(xs, axis=0), *trees)
-
-
-def _finalize_cross_chunk_rate_metrics(
-    metrics: dict[str, jax.Array],
-) -> dict[str, jax.Array]:
-    """Derived rates that exist only after cross-chunk or cross-group aggregation."""
-
-    metrics["win_rate_2p"] = jnp.where(
-        metrics["episodes_2p"] > 0.0,
-        metrics["wins_2p"] / metrics["episodes_2p"],
-        0.0,
-    )
-    metrics["first_place_rate_4p"] = jnp.where(
-        metrics["episodes_4p"] > 0.0,
-        metrics["first_places_4p"] / metrics["episodes_4p"],
-        0.0,
-    )
-    metrics["average_placement_4p"] = jnp.where(
-        metrics["episodes_4p"] > 0.0,
-        metrics["placement_4p_sum"] / metrics["episodes_4p"],
-        0.0,
-    )
-    metrics["survival_time"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        metrics["survival_time_sum"] / metrics["episode_done"],
-        0.0,
-    )
-    metrics["score_share"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        metrics["score_share_sum"] / metrics["episode_done"],
-        0.0,
-    )
-    metrics["overall_win_rate"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
-        0.0,
-    )
-    return metrics
-
-
-def _merge_metric_dicts(
-    metrics_by_chunk: list[dict[str, jax.Array]],
-) -> dict[str, jax.Array]:
-    """Sum per-chunk rollout metrics while preserving the per-chunk key set."""
-
-    if len(metrics_by_chunk) == 1:
-        return metrics_by_chunk[0]
-    metrics = jax.tree.map(lambda *xs: jnp.stack(xs).sum(axis=0), *metrics_by_chunk)
-    reward_weight = jnp.maximum(metrics["env_steps"], 1.0)
-    metrics["average_reward"] = (
-        jnp.stack(
-            [chunk["average_reward"] * chunk["env_steps"] for chunk in metrics_by_chunk]
-        ).sum()
-        / reward_weight
-    )
-    metrics["episode_reward_mean"] = jnp.where(
-        metrics["episode_done"] > 0.0,
-        jnp.stack(
-            [
-                chunk["episode_reward_mean"] * chunk["episode_done"]
-                for chunk in metrics_by_chunk
-            ]
-        ).sum()
-        / metrics["episode_done"],
-        0.0,
-    )
-    if "valid_non_noop_target_rows" in metrics:
-        metrics["valid_non_noop_targets_per_row"] = jnp.where(
-            metrics["valid_non_noop_target_rows"] > 0.0,
-            metrics["valid_non_noop_targets_sum"]
-            / metrics["valid_non_noop_target_rows"],
-            0.0,
-        )
-        metrics["only_noop_fraction"] = jnp.where(
-            metrics["valid_non_noop_target_rows"] > 0.0,
-            metrics["only_noop_rows"] / metrics["valid_non_noop_target_rows"],
-            0.0,
-        )
-    if (
-        "trajectory_shield_legal_non_noop_count" in metrics
-        and "trajectory_shield_original_non_noop_count" in metrics
-    ):
-        metrics["trajectory_shield_legal_non_noop_rate"] = trajectory_shield_legal_rate(
-            legal=metrics["trajectory_shield_legal_non_noop_count"],
-            original=metrics["trajectory_shield_original_non_noop_count"],
-        )
-    return metrics
-
-
-def _sum_metric_dicts(
-    metrics_by_chunk: list[dict[str, jax.Array]],
-) -> dict[str, jax.Array]:
-    if len(metrics_by_chunk) == 1:
-        return metrics_by_chunk[0]
-    return _finalize_cross_chunk_rate_metrics(_merge_metric_dicts(metrics_by_chunk))
-
-
-def _empty_per_format_rollout_stats() -> dict[int, dict[str, float]]:
-    return {
-        2: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
-        4: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
-    }
-
-
-def _collect_rollout_microbatched(
-    rollout_key: jax.Array,
-    state: JaxEnvState,
-    batch: TurnBatch,
-    train_state: object,
-    policy: object,
-    cfg: TrainConfig,
-    *,
-    microbatch_envs: int,
-    stage_view=None,
-    historical_params_pool=None,
-    update=jnp.asarray(0, dtype=jnp.int32),
-    norm_state=None,
-) -> tuple[jax.Array, JaxEnvState, TurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
-    env_count = int(cfg.training.num_envs)
-    micro = int(microbatch_envs)
-    chunk_count = env_count // micro
-
-    def collect_chunk(chunk_index: jax.Array):
-        chunk_key = jax.random.fold_in(rollout_key, chunk_index * 9973 + 17)
-        start = chunk_index * micro
-        chunk_state = _slice_env_axis(
-            state, start=start, size=micro, env_count=env_count
-        )
-        chunk_batch = _slice_env_axis(
-            batch, start=start, size=micro, env_count=env_count
-        )
-        (
-            _next_chunk_key,
-            next_state,
-            next_batch,
-            chunk_transitions,
-            chunk_metrics,
-        ) = collect_rollout_jax(
-            chunk_key,
-            chunk_state,
-            chunk_batch,
-            train_state,
-            policy,
-            cfg,
-            stage_view=stage_view,
-            historical_params_pool=historical_params_pool,
-            update=update,
-            env_index_offset=start,
-            norm_state=norm_state,
-        )
-        return next_state, next_batch, chunk_transitions, chunk_metrics
-
-    chunk_indices = jnp.arange(chunk_count, dtype=jnp.int32)
-    chunk_states, chunk_batches, chunk_transitions, chunk_metrics = jax.lax.map(
-        collect_chunk, chunk_indices
-    )
-
-    def reshape_env_leading_chunk_axis(leaf):
-        if isinstance(leaf, jax.Array) and leaf.ndim > 0:
-            return leaf.reshape((env_count,) + leaf.shape[2:])
-        return leaf
-
-    def merge_transition_chunk_axis(leaf):
-        if (
-            isinstance(leaf, jax.Array)
-            and leaf.ndim >= 3
-            and leaf.shape[0] == chunk_count
-            and leaf.shape[2] == micro
-        ):
-            rollout_steps_dim = int(leaf.shape[1])
-            rest_shape = leaf.shape[3:]
-            return leaf.transpose(1, 0, 2, *range(3, leaf.ndim)).reshape(
-                (rollout_steps_dim, env_count, *rest_shape)
-            )
-        return reshape_env_leading_chunk_axis(leaf)
-
-    merged_states = jax.tree.map(reshape_env_leading_chunk_axis, chunk_states)
-    merged_batches = jax.tree.map(reshape_env_leading_chunk_axis, chunk_batches)
-    merged_transitions = jax.tree.map(merge_transition_chunk_axis, chunk_transitions)
-
-    def merge_metrics_scan(acc, chunk_index):
-        chunk_metric = jax.tree.map(
-            lambda x: jax.lax.dynamic_index_in_dim(
-                x, chunk_index, axis=0, keepdims=False
-            ),
-            chunk_metrics,
-        )
-        return _merge_metric_dicts([acc, chunk_metric]), None
-
-    merged_metrics = jax.tree.map(
-        lambda x: jax.lax.dynamic_index_in_dim(x, 0, axis=0, keepdims=False),
-        chunk_metrics,
-    )
-    if chunk_count > 1:
-        merged_metrics, _ = jax.lax.scan(
-            merge_metrics_scan,
-            merged_metrics,
-            jnp.arange(1, chunk_count, dtype=jnp.int32),
-        )
-    merged_metrics = prune_scalar_metrics(
-        _finalize_cross_chunk_rate_metrics(merged_metrics),
-        rollout_merge_scalar_keys(cfg),
-    )
-    return (
-        rollout_key,
-        merged_states,
-        merged_batches,
-        merged_transitions,
-        merged_metrics,
-    )
-
-
-def init_rollout_groups(
-    key: jax.Array, cfg: TrainConfig, policy: object
-) -> tuple[jax.Array, list[JaxRolloutGroup]]:
-    """Create separate JAX rollout groups for all configured static formats."""
-
-    specs = _configured_rollout_groups(cfg)
-    key, *group_keys = jax.random.split(key, len(specs) + 1)
-    groups = [
-        _init_rollout_group(
-            group_key,
-            cfg,
-            policy,
-            name=str(spec["name"]),
-            player_count=int(spec["player_count"]),
-            num_envs=int(spec["num_envs"]),
-        )
-        for group_key, spec in zip(group_keys, specs, strict=True)
-    ]
-    return key, groups
-
-
-def _replace_rollout_group_state(
-    group: JaxRolloutGroup, env_state: JaxEnvState, turn_batch: TurnBatch
-) -> JaxRolloutGroup:
-    return JaxRolloutGroup(
-        name=group.name,
-        cfg=group.cfg,
-        env_state=env_state,
-        turn_batch=turn_batch,
-        collect_fn=group.collect_fn,
-    )
-
-
-def _active_group_indices(
-    groups: list[JaxRolloutGroup],
-    format_weights: dict[int, float],
-    *,
-    update: int = 1,
-    rotate_format_rollouts: bool = False,
-) -> list[int]:
-    """Return rollout group indices to collect on this update.
-
-    When ``rotate_format_rollouts`` is enabled and multiple formats have positive
-    curriculum weight, only one group is selected per update using a fixed-period
-    weighted schedule so long-run sample mix tracks ``format_weights``.
-    """
-
-    weighted_indices: list[tuple[int, float]] = []
-    for idx, group in enumerate(groups):
-        player_count = int(group.cfg.task.player_count)
-        weight = float(format_weights.get(player_count, 0.0))
-        if weight > 0.0:
-            weighted_indices.append((idx, weight))
-    if not weighted_indices:
-        return list(range(len(groups)))
-    if not rotate_format_rollouts or len(weighted_indices) == 1:
-        return [idx for idx, _ in weighted_indices]
-
-    total_weight = sum(weight for _, weight in weighted_indices)
-    slot = float((int(update) - 1) % 100) / 100.0
-    cumulative = 0.0
-    for idx, weight in weighted_indices:
-        cumulative += weight / total_weight
-        if slot < cumulative:
-            return [idx]
-    return [weighted_indices[-1][0]]
-
-
-def _init_historical_snapshot_pool(
-    params: dict, pool_size: int
-) -> HistoricalSnapshotPool:
-    capacity = max(int(pool_size), 1)
-    stacked_params = jax.tree.map(
-        lambda value: jnp.broadcast_to(
-            jnp.asarray(value)[None, ...], (capacity,) + jnp.asarray(value).shape
-        ),
-        params,
-    )
-    return HistoricalSnapshotPool(
-        params=stacked_params,
-        snapshot_ids=jnp.zeros((capacity,), dtype=jnp.int32),
-        snapshot_updates=jnp.zeros((capacity,), dtype=jnp.int32),
-        valid_mask=jnp.zeros((capacity,), dtype=bool),
-    )
-
-
-def _add_historical_snapshot(
-    pool: HistoricalSnapshotPool, params: dict, *, update: int
-) -> tuple[HistoricalSnapshotPool, dict[str, object]]:
-    slot = int(pool.next_slot)
-    snapshot_id = int(pool.next_id)
-    new_params = jax.tree.map(
-        lambda bank, value: bank.at[slot].set(value), pool.params, params
-    )
-    was_valid = bool(jax.device_get(pool.valid_mask[slot]))
-    next_pool = HistoricalSnapshotPool(
-        params=new_params,
-        snapshot_ids=pool.snapshot_ids.at[slot].set(snapshot_id),
-        snapshot_updates=pool.snapshot_updates.at[slot].set(int(update)),
-        valid_mask=pool.valid_mask.at[slot].set(True),
-        next_slot=(slot + 1) % int(pool.valid_mask.shape[0]),
-        next_id=snapshot_id + 1,
-    )
-    event = {
-        "event": "historical_snapshot_added",
-        "update": int(update),
-        "snapshot_id": snapshot_id,
-        "snapshot_slot": slot,
-        "historical_snapshot_evicted": was_valid,
-    }
-    return next_pool, event
-
-
-def _snapshot_due(cfg: TrainConfig, update: int) -> bool:
-    if not cfg.curriculum.enabled:
-        return False
-    interval = int(cfg.opponents.snapshot.interval_updates)
-    return interval > 0 and update % interval == 0
 
 
 def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> Path:
@@ -574,7 +83,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
 
     ensure_jax_accelerator_backend()
 
-    gpu_tracker = GpuMemoryTracker()
+    metric_group_cfg = metric_groups_cfg_from_config(cfg)
+    active_metric_groups = enabled_metric_groups(metric_group_cfg)
+    track_gpu_memory = "timing" in active_metric_groups
+    gpu_tracker = GpuMemoryTracker() if track_gpu_memory else None
     key = jax.random.PRNGKey(cfg.seed)
     _, rollout_init_key, policy_key = jax.random.split(key, 3)
     policy = build_jax_policy(cfg=cfg)
@@ -612,13 +124,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "wandb_dir": str(run_context.wandb_dir),
             "wandb_artifact_dir": str(run_context.wandb_artifact_dir),
             "wandb_data_dir": str(run_context.wandb_data_dir),
-            **gpu_tracker.run_metadata(),
+            **(gpu_tracker.run_metadata() if gpu_tracker is not None else {}),
         },
     )
     telemetry = build_telemetry(
         cfg,
         {
-            "backend": "jax",
             "seed": cfg.seed,
             "job_type": "train",
             "campaign": run_context.campaign_slug,
@@ -646,11 +157,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         cfg.opponents.snapshot,
         static_format_weights=infer_static_format_weights(cfg),
     )
-    historical_pool = _init_historical_snapshot_pool(
+    historical_pool = init_historical_snapshot_pool(
         train_state.params, cfg.opponents.snapshot.pool_size
     )
     if resume_checkpoint is not None:
-        historical_pool = _restore_curriculum_artifacts(
+        historical_pool = restore_curriculum_artifacts(
             resume_checkpoint, curriculum, historical_pool
         )
     phase_events: list[dict[str, object]] = []
@@ -689,7 +200,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             rollout_start = time.perf_counter()
             transitions_by_group: list[JaxTransitionBatch] = []
             rollout_metrics_by_group: list[dict[str, jax.Array]] = []
-            format_rollout_stats = _empty_per_format_rollout_stats()
+            format_rollout_stats = empty_per_format_rollout_stats()
             next_groups: list[JaxRolloutGroup] = []
             should_reseed, reseed_reason = seed_scheduler.should_reseed(update)
             if should_reseed:
@@ -710,7 +221,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 snapshot_valid_mask=historical_pool.valid_mask,
                 snapshot_updates=historical_pool.snapshot_updates,
             )
-            active_indices = _active_group_indices(
+            active_indices = active_group_indices(
                 rollout_groups,
                 curriculum.current_format_weights(),
                 update=update,
@@ -750,7 +261,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 stats["env_steps"] += float(group_env_steps)
                 stats["samples"] += float(group_samples)
                 next_groups.append(
-                    _replace_rollout_group_state(group, env_state, turn_batch)
+                    replace_rollout_group_state(group, env_state, turn_batch)
                 )
                 transitions_by_group.append(transitions)
                 rollout_metrics_by_group.append(rollout_metrics)
@@ -767,9 +278,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
             else:
                 ppo_transitions = transitions
-            rollout_metrics = prune_scalar_metrics(
-                _sum_metric_dicts(rollout_metrics_by_group),
-                rollout_merge_scalar_keys(cfg),
+            rollout_metrics = prune_merged_rollout_metrics(
+                sum_metric_dicts(rollout_metrics_by_group),
+                cfg,
             )
             rollout_scalar_keys = tuple(
                 dict.fromkeys(
@@ -818,7 +329,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             ppo_seconds = time.perf_counter() - ppo_start
             update_seconds = time.perf_counter() - update_start
-            per_format_timing_metrics = _build_per_format_timing_metrics(
+            per_format_timing_metrics = build_per_format_timing_metrics(
                 format_rollout_stats,
                 update_seconds=update_seconds,
                 rollout_seconds=rollout_seconds,
@@ -858,12 +369,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             )
             if transition is not None:
                 update_events.append(transition)
-            if _snapshot_due(cfg, update):
-                historical_pool, snapshot_event = _add_historical_snapshot(
+            if snapshot_due(cfg, update):
+                historical_pool, snapshot_event = add_historical_snapshot(
                     historical_pool, train_state.params, update=update
                 )
                 snapshot_event.update(
-                    _historical_pool_snapshot_telemetry(historical_pool, update=update)
+                    historical_pool_snapshot_telemetry(historical_pool, update=update)
                 )
                 update_events.append(snapshot_event)
             phase_events = []
@@ -883,7 +394,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 reseed_events=reseed_events,
                 update_events=update_events,
                 historical_pool=historical_pool,
-                gpu_update_metrics=gpu_tracker.sample_update_metrics(),
+                gpu_update_metrics=(
+                    gpu_tracker.sample_update_metrics()
+                    if gpu_tracker is not None
+                    else {}
+                ),
                 seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
                 plateau_metric=cfg.training.plateau_metric,
                 cfg=cfg,

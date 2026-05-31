@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.jax.train_queue import (
+from src.jax.train.queue import (
     checkpoint_replay_due,
     queue_tournament_job_if_eligible,
 )

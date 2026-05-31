@@ -112,7 +112,7 @@ def start_artifact_worker_if_needed(
     queue_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = queue_dir / "worker.stdout.log"
     stderr_path = queue_dir / "worker.stderr.log"
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     command = [
         sys.executable,
         str(repo_root / "scripts" / "run_artifact_worker.py"),

@@ -370,7 +370,7 @@ def test_prune_scalar_metrics_drops_disabled_keys():
 def test_merge_metric_dicts_omits_disabled_group_keys():
     import jax.numpy as jnp
 
-    from src.jax.train import _merge_metric_dicts
+    from src.jax.train.metrics import merge_metric_dicts
 
     lean_chunk = {
         "env_steps": jnp.asarray(8.0),
@@ -380,7 +380,7 @@ def test_merge_metric_dicts_omits_disabled_group_keys():
         "samples": jnp.asarray(16.0),
     }
 
-    merged = _merge_metric_dicts([lean_chunk, lean_chunk])
+    merged = merge_metric_dicts([lean_chunk, lean_chunk])
 
     assert "stop_rate" not in merged
     assert "opponent_slots_total" not in merged
