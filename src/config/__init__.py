@@ -1,4 +1,5 @@
 from .runtime import (
+    audit_responsibility_base_yaml_keys,
     compose_hydra_train_config,
     config_from_plain,
     register_runtime_resolvers,
@@ -47,6 +48,7 @@ __all__ = [
     "TrainConfig",
     "TrainingConfig",
     "WandBConfig",
+    "audit_responsibility_base_yaml_keys",
     "compose_hydra_train_config",
     "config_from_plain",
     "register_runtime_resolvers",

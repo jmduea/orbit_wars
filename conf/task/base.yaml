@@ -1,6 +1,7 @@
 candidate_count: 6
 ship_bucket_count: 8
 max_fleets: 256
+max_ships: 400.0
 player_count: 4
 
 ship_feature_scale: 1000.0
@@ -10,6 +11,7 @@ trajectory_shield_enabled: true
 trajectory_shield_mode: cheap # off | cheap | exact | tiered
 trajectory_shield_final_validate_selected: false
 trajectory_shield_hit_mode: selected_target # non_friendly
+trajectory_shield_train_horizon: 80
 trajectory_shield_horizon: 30
 trajectory_shield_epsilon: 1.0e-06
 

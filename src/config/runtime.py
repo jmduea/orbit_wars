@@ -18,12 +18,27 @@ from .rollout_allocation import (
 )
 from .schema import (
     ArtifactsConfig,
+    CurriculumConfig,
+    ModelConfig,
+    OpponentsConfig,
     RewardConfig,
     TaskConfig,
+    TelemetryConfig,
     TrainConfig,
     TrainingConfig,
     register_config_schemas,
 )
+
+_RESPONSIBILITY_GROUP_SCHEMAS: dict[str, type] = {
+    "model": ModelConfig,
+    "task": TaskConfig,
+    "reward": RewardConfig,
+    "training": TrainingConfig,
+    "curriculum": CurriculumConfig,
+    "opponents": OpponentsConfig,
+    "telemetry": TelemetryConfig,
+    "artifacts": ArtifactsConfig,
+}
 
 _CURRICULUM_FAMILIES = {
     "latest",
@@ -105,11 +120,73 @@ __all__ = [
     "TaskConfig",
     "TrainingConfig",
     "TrainConfig",
+    "audit_responsibility_base_yaml_keys",
     "compose_hydra_train_config",
     "register_runtime_resolvers",
     "train_config_from_omegaconf",
     "validate_hydra_overrides",
 ]
+
+
+def _schema_leaf_paths(cfg_cls: type, *, prefix: str = "") -> set[str]:
+    """Collect dotted leaf paths declared on a structured config dataclass."""
+
+    import dataclasses
+
+    keys: set[str] = set()
+    for field in dataclasses.fields(cfg_cls):
+        path = f"{prefix}.{field.name}" if prefix else field.name
+        field_type = field.type
+        if dataclasses.is_dataclass(field_type):
+            keys.update(_schema_leaf_paths(field_type, prefix=path))
+        else:
+            keys.add(path)
+    return keys
+
+
+def _flatten_yaml_mapping(data: dict[str, object], *, prefix: str = "") -> set[str]:
+    keys: set[str] = set()
+    for key, value in data.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            keys.add(path)
+            keys.update(_flatten_yaml_mapping(value, prefix=path))
+        else:
+            keys.add(path)
+    return keys
+
+
+def _yaml_declares_path(yaml_keys: set[str], path: str) -> bool:
+    if path in yaml_keys:
+        return True
+    prefix = f"{path}."
+    return any(yaml_key.startswith(prefix) for yaml_key in yaml_keys)
+
+
+def audit_responsibility_base_yaml_keys(*, conf_root: Path | None = None) -> list[str]:
+    """Return missing schema leaf paths for each ``conf/<group>/base.yaml`` file.
+
+    Args:
+        conf_root: Hydra config directory. Defaults to the repository ``conf/`` tree.
+
+    Returns:
+        Sorted ``"<group>/base.yaml: missing <path>"`` messages for undeclared keys.
+    """
+
+    import yaml
+
+    root = conf_root or Path(__file__).resolve().parents[2] / "conf"
+    missing: list[str] = []
+    for group, schema_cls in sorted(_RESPONSIBILITY_GROUP_SCHEMAS.items()):
+        base_path = root / group / "base.yaml"
+        raw = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError(f"{group}/base.yaml must be a mapping.")
+        yaml_keys = _flatten_yaml_mapping(raw)
+        for path in sorted(_schema_leaf_paths(schema_cls)):
+            if not _yaml_declares_path(yaml_keys, path):
+                missing.append(f"{group}/base.yaml: missing {path}")
+    return missing
 
 
 def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfig:

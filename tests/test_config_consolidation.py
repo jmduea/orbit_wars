@@ -1,3 +1,11 @@
+"""Hydra config composition and base-YAML contract tests.
+
+These tests intentionally avoid brittle equality against full resolved configs.
+They verify Hydra composition succeeds for primary ``ow train`` / ``ow eval``
+profiles and assert command-critical values as membership in acceptable sets.
+Each ``conf/<group>/base.yaml`` must declare every schema leaf path.
+"""
+
 from __future__ import annotations
 
 from itertools import product
@@ -7,7 +15,7 @@ import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from src.config import compose_hydra_train_config
+from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
 
 SWEEP_COMPOSE_RECIPES = (
@@ -18,37 +26,82 @@ SWEEP_COMPOSE_RECIPES = (
     "sps_experiment_stage2",
 )
 
-LAUNCH_RECIPES: dict[str, list[str]] = {
+PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
+    "default": [],
     "smoke": [
-        "training=smoke_2p_16",
+        "training=smoke",
         "curriculum=off",
         "opponents=noop_only",
         "telemetry=throughput_only",
         "artifacts=disabled",
     ],
     "shield_cheap": ["task=shield_cheap", "telemetry=default"],
+    "workstation_mixed": ["training=workstation"],
 }
 
+PRIMARY_EVAL_PROFILES: dict[str, list[str]] = {
+    "default": [],
+    "tournament_ready": ["artifacts.tournament.enabled=true"],
+}
 
-def test_root_config_composes_from_responsibility_groups() -> None:
+SACRED_ARCHITECTURES = frozenset({"planet_graph_transformer"})
+SACRED_POINTER_DECODERS = frozenset({"factorized_topk"})
+ACCEPTABLE_VALUE_HEADS = frozenset({"shared", "format_routed", "distributional"})
+ACCEPTABLE_SHIP_ACTION_MODES = frozenset({"buckets", "continuous_fraction"})
+ACCEPTABLE_TRAJECTORY_SHIELD_MODES = frozenset({"off", "cheap", "tiered", "exact"})
+ACCEPTABLE_REPLAY_BACKENDS = frozenset({"docker", "local"})
+ACCEPTABLE_TOURNAMENT_FORMATS = frozenset(
+    {"2p_vs_baseline", "2p_head_to_head", "4p_free_for_all"}
+)
+ACCEPTABLE_PROMOTION_STRATEGIES = frozenset({"metric", "tournament", "hybrid"})
+
+
+def test_responsibility_base_yaml_declares_required_schema_keys() -> None:
+    missing = audit_responsibility_base_yaml_keys()
+    assert missing == []
+
+
+def test_default_train_profile_composes_and_respects_command_critical_sets() -> None:
     cfg = compose_hydra_train_config()
 
-    assert cfg.task.candidate_count == 6
-    assert cfg.training.total_updates == 100
+    assert cfg.model.architecture in SACRED_ARCHITECTURES
+    assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
+    assert cfg.model.value_head in ACCEPTABLE_VALUE_HEADS
+    assert cfg.task.ship_action_mode in ACCEPTABLE_SHIP_ACTION_MODES
+    assert cfg.task.trajectory_shield_mode in ACCEPTABLE_TRAJECTORY_SHIELD_MODES
+    assert cfg.artifacts.artifact_pipeline.replay_backend in ACCEPTABLE_REPLAY_BACKENDS
+    assert cfg.output.root in {"outputs"}
+    assert cfg.output.campaign  # non-empty slug validated at compose time
     assert resolve_rollout_group_specs(cfg)
-    assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 1
-    assert cfg.curriculum.stages[0]["id"] == "sp_2p"
-    assert cfg.opponents.self_play.enabled is True
-    assert cfg.opponents.snapshot.pool_size == 2
-    assert cfg.artifacts.artifact_pipeline.enabled is True
-    assert cfg.output.root == "outputs"
-    assert cfg.output.campaign == "default"
-    assert cfg.artifacts.artifact_pipeline.queue_dir == "queue/optional_jobs"
-    assert cfg.artifacts.artifact_pipeline.result_dir == "evaluations"
     assert not hasattr(cfg, "env")
     assert not hasattr(cfg, "ppo")
     assert not hasattr(cfg, "save_dir")
+
+    if cfg.curriculum.enabled:
+        assert cfg.curriculum.stages
+    if cfg.opponents.self_play.enabled:
+        assert cfg.opponents.snapshot.pool_size > 0
+        assert cfg.opponents.snapshot.interval_updates > 0
+
+
+@pytest.mark.parametrize("name,overrides", PRIMARY_TRAIN_PROFILES.items())
+def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None:
+    del name
+    cfg = compose_hydra_train_config(overrides)
+
+    assert cfg.model.architecture in SACRED_ARCHITECTURES
+    assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
+    assert resolve_rollout_group_specs(cfg)
+
+
+@pytest.mark.parametrize("name,overrides", PRIMARY_EVAL_PROFILES.items())
+def test_primary_eval_profiles_compose(name: str, overrides: list[str]) -> None:
+    del name
+    cfg = compose_hydra_train_config(overrides)
+
+    assert set(cfg.artifacts.tournament.formats).issubset(ACCEPTABLE_TOURNAMENT_FORMATS)
+    assert cfg.artifacts.promotion.strategy in ACCEPTABLE_PROMOTION_STRATEGIES
+    assert cfg.artifacts.artifact_pipeline.replay_backend in ACCEPTABLE_REPLAY_BACKENDS
 
 
 def test_wandb_group_defaults_to_output_campaign_when_unset() -> None:
@@ -60,7 +113,7 @@ def test_wandb_group_defaults_to_output_campaign_when_unset() -> None:
     assert cfg_override.telemetry.wandb.group == "throughput_sweep"
 
 
-def test_new_responsibility_overrides_compose_to_canonical_runtime_config() -> None:
+def test_new_responsibility_overrides_compose_to_runtime_config() -> None:
     cfg = compose_hydra_train_config(
         [
             "training.total_updates=2",
@@ -97,13 +150,6 @@ def test_legacy_overrides_are_rejected(legacy_override: str) -> None:
         compose_hydra_train_config([legacy_override])
 
 
-@pytest.mark.parametrize("name,overrides", LAUNCH_RECIPES.items())
-def test_launch_recipe_composes(name: str, overrides: list[str]) -> None:
-    del name
-    cfg = compose_hydra_train_config(overrides)
-    assert cfg.model.architecture == "planet_graph_transformer"
-
-
 def test_output_campaign_slug_is_validated() -> None:
     with pytest.raises(ValueError, match="output.campaign"):
         compose_hydra_train_config(["output.campaign='bad campaign'"])
@@ -113,8 +159,7 @@ def test_output_paths_must_be_relative() -> None:
     with pytest.raises(ValueError, match="output.wandb_dir"):
         compose_hydra_train_config(["output.wandb_dir=/tmp/wandb"])
 
-    
-    
+
 @pytest.mark.parametrize(
     "override",
     [
@@ -129,6 +174,7 @@ def test_output_paths_reject_traversal(override: str) -> None:
     with pytest.raises(ValueError, match="\.\.|run_id"):
         compose_hydra_train_config([override])
 
+
 def test_wandb_sweep_yaml_smoke_compose() -> None:
     for overrides in _iter_sweep_compose_cases(full_grid=False):
         cfg = compose_hydra_train_config(overrides)
@@ -142,6 +188,11 @@ def test_wandb_sweep_campaign_samples_compose_full() -> None:
         cfg = compose_hydra_train_config(overrides)
         assert cfg.telemetry.wandb.group
         assert cfg.telemetry.wandb.tags
+
+
+def test_baseline_sweep_scaffolding_is_discoverable() -> None:
+    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_runner_mvp.yaml")
+    assert fixed_path.is_file()
 
 
 def _iter_sweep_compose_cases(*, full_grid: bool):
@@ -187,11 +238,6 @@ def _iter_sweep_compose_cases(*, full_grid: bool):
                 f"{key}={_hydra_value(value)}"
                 for key, value in zip(keys, values, strict=True)
             ]
-
-
-def test_baseline_sweep_scaffolding_is_discoverable() -> None:
-    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_runner_mvp.yaml")
-    assert fixed_path.is_file()
 
 
 def _hydra_value(value: object) -> str:

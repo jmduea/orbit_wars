@@ -1,5 +1,7 @@
 # **Orbit Wars Configuration Guide**
 
+Config tests verify Hydra composition and set membership for command-critical values—not brittle equality against full resolved configs.
+
 This folder contains the Hydra configuration system for Orbit Wars training, evaluation, W&B sweeps, artifacts, telemetry, and experiment overrides.
 
 The intended workflow is:
