@@ -17,6 +17,7 @@ from src.artifacts.tournament.ranking import (
     build_leaderboard,
     evaluate_gates,
 )
+from src.artifacts.run_paths import resolve_run_paths
 from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
@@ -186,6 +187,38 @@ def test_run_context_for_agent_uses_checkpoint_run_dir(tmp_path: Path) -> None:
 
     assert context.run_id == "run_a"
     assert context.run_dir == run_dir
+
+
+def test_run_context_for_agent_wandb_cache_paths_match_resolve_run_paths(
+    tmp_path: Path,
+) -> None:
+    cfg = TrainConfig()
+    output_root = tmp_path / "outputs"
+    cfg.output.root = str(output_root)
+    cfg.output.campaign = "demo"
+    cfg.output.run_id = "run_a"
+    run_dir = output_root / "campaigns" / "demo" / "runs" / "run_a"
+    checkpoint = run_dir / "checkpoints" / "jax_ckpt_000010.pkl"
+    checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    with checkpoint.open("wb") as file:
+        pickle.dump({"params": {}, "config": cfg}, file)
+    agent = AgentEntry(
+        agent_id="run_a",
+        checkpoint_path=checkpoint,
+        cfg=cfg,
+        act_fn=lambda _obs: [],
+    )
+
+    _, resolved_context = resolve_run_paths(cfg)
+    agent_context = run_context_for_agent(
+        agent, campaign="demo", output_root=str(output_root)
+    )
+
+    assert agent_context.wandb_dir == resolved_context.wandb_dir
+    assert agent_context.wandb_artifact_dir == resolved_context.wandb_artifact_dir
+    assert agent_context.wandb_data_dir == resolved_context.wandb_data_dir
+    assert agent_context.wandb_artifact_dir == output_root / "cache" / "wandb-artifacts"
+    assert agent_context.wandb_data_dir == output_root / "cache" / "wandb-data"
 
 
 def test_validate_agents_feature_compatible_rejects_mismatch() -> None:

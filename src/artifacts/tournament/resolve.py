@@ -15,7 +15,7 @@ from src.artifacts.checkpoint_compat import (
     validate_checkpoint_config_compatibility,
 )
 from src.artifacts.promotion import promoted_manifest_path, resolve_from_promoted
-from src.artifacts.run_paths import RunContext
+from src.artifacts.run_paths import RunContext, _cache_path
 from src.artifacts.tournament.runner import build_checkpoint_agent
 from src.config import TrainConfig
 
@@ -103,8 +103,12 @@ def run_context_for_agent(
         queue_dir=run_dir / cfg.artifacts.artifact_pipeline.queue_dir,
         evaluations_dir=run_dir / cfg.artifacts.artifact_pipeline.result_dir,
         wandb_dir=run_dir / cfg.output.wandb_dir,
-        wandb_artifact_dir=root / cfg.output.cache_dir / cfg.output.wandb_artifact_dir,
-        wandb_data_dir=root / cfg.output.cache_dir / cfg.output.wandb_data_dir,
+        wandb_artifact_dir=_cache_path(
+            root, Path(cfg.output.cache_dir), cfg.output.wandb_artifact_dir
+        ),
+        wandb_data_dir=_cache_path(
+            root, Path(cfg.output.cache_dir), cfg.output.wandb_data_dir
+        ),
         indexes_dir=root / cfg.output.indexes_dir,
         retention_class=str(cfg.output.retention_class),
         model_compatibility_family=str(cfg.model.architecture),
