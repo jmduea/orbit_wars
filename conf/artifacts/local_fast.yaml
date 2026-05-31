@@ -9,7 +9,6 @@ artifact_pipeline:
   replay_async: true
   docker_validation_async: true
   worker_autostart: true
-  fail_training_on_optional_job_error: false
 
 replay:
   enabled: false

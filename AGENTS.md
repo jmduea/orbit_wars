@@ -32,7 +32,7 @@ uv run ow train kaggle
 
 ## Key invariants
 
-- Feature path: obs → `FeatureExtractor` → `encode_turn` (`TurnBatch`); golden tests in `tests/test_feature_encoding_golden.py`.
+- Feature path: obs → `encode_turn` (`TurnBatch`); golden tests in `tests/test_feature_encoding_golden.py`.
 - Rollout metrics: merge with `_merge_metric_dicts` inside `jax.lax.scan`; finalize rates after the scan.
 - Priorities: human `docs/ROADMAP.md` (no automated validation).
 
@@ -47,7 +47,7 @@ uv run ow train kaggle
 
 ## Learned Workspace Facts
 
-- Canonical feature path: Kaggle/JAX obs → `FeatureExtractor` → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
+- Canonical feature path: Kaggle/JAX obs → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
 - JAX concerns are split: rollout collection in `src/jax/rollout/collect.py`, PPO update in `src/jax/ppo_update.py`, opponent builders in `src/opponents/jax_actions/`.
 - `model.normalize_observations` appears in model YAMLs but is not wired into JAX training; treat as dead config until implemented or removed.
 - Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run python -m src.train print_resolved_config=true`.

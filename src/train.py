@@ -56,10 +56,5 @@ def main() -> None:
     _entry()
 
 
-# Backward-compatible name if src.cli imports _hydra_entry.
-def _hydra_entry() -> None:
-    main()
-
-
 if __name__ == "__main__":
     main()

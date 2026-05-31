@@ -31,7 +31,6 @@ RUNTIME_FILES = (
     "features/catalog/edge.py",
     "features/catalog/global_.py",
     "features/catalog/planet.py",
-    "features/extractor.py",
     "features/registry.py",
     "game/__init__.py",
     "game/constants.py",

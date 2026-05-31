@@ -8,7 +8,6 @@ artifact_pipeline:
   final_flush_timeout_seconds: 900.0
   interrupt_flush_timeout_seconds: 60.0
   exception_flush_timeout_seconds: 60.0
-  latest_lag_warning_updates: 1
   coalesce_intermediate_checkpoints: true
   replay_async: true
   replay_backend: docker
@@ -23,7 +22,6 @@ artifact_pipeline:
   queue_dir: queue/optional_jobs
   result_dir: evaluations
   fail_training_on_checkpoint_error: true
-  fail_training_on_optional_job_error: false
 
 replay:
   enabled: true

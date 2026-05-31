@@ -9,7 +9,6 @@ self_play:
 
 mode:
   opponent: self
-  multi_opponent_mode: mixed
   alternate_player_sides: true
 
 mix:

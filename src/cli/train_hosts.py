@@ -33,29 +33,6 @@ KAGGLE_SUBCOMMANDS = frozenset(
     }
 )
 
-KAGGLE_FLAGS = frozenset(
-    {
-        "--host",
-        "--run-type",
-        "--accelerator",
-        "--kernel-id",
-        "--dry-run",
-        "--work-dir",
-        "--title",
-        "--sweep-yaml",
-        "--timeout-seconds",
-        "--ledger",
-        "--force",
-        "--no-accelerator-flag-fallback",
-        "--calibration-max-variants",
-        "--calibration-warmup",
-        "--calibration-updates",
-        "--calibration-timeout-seconds",
-    }
-)
-
-KAGGLE_FLAG_VALUES = 1  # most flags take one value; --host, --run-type, etc.
-
 
 def is_cli_help_token(arg: str) -> bool:
     """Return True when ``arg`` is a CLI help flag rather than a Hydra override."""
@@ -149,7 +126,7 @@ def print_train_help() -> None:
         "ow train — JAX training (local Hydra or Kaggle remote)\n\n"
         "Usage:\n"
         "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
-        "  uv run ow train kaggle [SUBCMD] [KAGGLE_FLAGS] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train kaggle [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
         "  uv run ow train --host local|kaggle ...\n\n"
         "Local (default):\n"
         "  Runs the Hydra + JAX training loop on this machine.\n"

@@ -1,7 +1,6 @@
 # Kaggle Runner
 
-Preferred operator entry: **`uv run ow train kaggle`**. The legacy script name
-`scripts/kaggle_wandb_population.py` is deprecated (forwards to `kaggle_runner`).
+Preferred operator entry: **`uv run ow train kaggle`**. Use `scripts/kaggle_runner.py` for direct script invocation.
 
 ## Shape
 
