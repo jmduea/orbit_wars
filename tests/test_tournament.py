@@ -350,3 +350,77 @@ def test_promote_from_tournament_rejects_weaker_incumbent(tmp_path: Path) -> Non
 
     assert attempt.promoted is False
     assert attempt.reason == "incumbent_win_rate_vs_sniper_unchanged"
+
+
+def test_eval_submit_dry_run_with_package(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    package = tmp_path / "submission.tar.gz"
+    package.write_bytes(b"fake")
+
+    with patch(
+        "src.cli.eval.submit_competition_package",
+        return_value=MagicMock(returncode=0),
+    ) as submit_mock:
+        exit_code = eval_cli.main(
+            [
+                "submit",
+                "--package",
+                str(package),
+                "--dry-run",
+                "-m",
+                "smoke",
+            ]
+        )
+
+    assert exit_code == 0
+    submit_mock.assert_called_once()
+    call_kwargs = submit_mock.call_args.kwargs
+    assert call_kwargs["dry_run"] is True
+    assert call_kwargs["competition"] == "orbit-wars"
+
+
+def test_eval_worker_requires_run_or_queue(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="Provide --run or --queue-dir"):
+        eval_cli.main(["worker"])
+
+
+def test_eval_worker_once(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run_a"
+    queue_dir = run_dir / "queue" / "optional_jobs"
+    queue_dir.mkdir(parents=True)
+
+    with patch("src.cli.eval.run_optional_job_worker", return_value=0) as worker_mock:
+        exit_code = eval_cli.main(["worker", "--run", str(run_dir)])
+
+    assert exit_code == 0
+    worker_mock.assert_called_once()
+    assert worker_mock.call_args.kwargs["once"] is True
+    assert worker_mock.call_args.args[0] == queue_dir
+
+
+def test_eval_package_skips_docker_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt.pkl"
+    checkpoint.write_bytes(b"unused")
+    output_dir = tmp_path / "out"
+
+    with patch(
+        "src.cli.eval.package_checkpoint_submission",
+        return_value=output_dir / "submission.tar.gz",
+    ) as package_mock:
+        exit_code = eval_cli.main(
+            [
+                "package",
+                "--checkpoint",
+                str(checkpoint),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    assert exit_code == 0
+    package_mock.assert_called_once()
+    assert package_mock.call_args.kwargs["validate_docker"] is False
+    assert "docker_validation=skipped" in capsys.readouterr().err

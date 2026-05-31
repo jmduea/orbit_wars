@@ -87,7 +87,7 @@ def maybe_write_jax_checkpoint_replay(
     for index, scenario in enumerate(scenarios):
         env_seed = seed + index
         agents = [learner_act, *scenario["opponents"]]
-        outcome, env = run_match(
+        outcome, env, _timing = run_match(
             match_id=f"replay_u{update:06d}_{scenario['name']}",
             format_name=str(scenario["name"]),
             seed=env_seed,

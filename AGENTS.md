@@ -10,6 +10,11 @@ make test-fast                                    # default verification
 uv run ow train training.total_updates=1000
 uv run ow train print_resolved_config=true
 uv run ow train kaggle
+uv run ow eval tournament --checkpoint ... --campaign my_campaign
+uv run ow eval package --checkpoint ... --validate-docker
+uv run ow eval worker --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow eval submit --checkpoint outputs/.../jax_ckpt_last.pkl
+uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + tournament async
 ```
 
 ## Layout
@@ -62,4 +67,5 @@ uv run ow train kaggle
 - Understand-Anything scans honor `.understandignore` for excluding non-project adjacent paths.
 - OMG agent orchestration retired; use Cursor plugins per `docs/CURSOR.md`; legacy OMG/MULTI_AGENT material is under `docs/archive/omg/`.
 - `docs/ROADMAP.md` is human-only — no `scripts/roadmap.py` funnel or `tests/test_roadmap.py` enforcement.
+- **Hybrid promotion:** `artifacts=hybrid_promotion` sets `promotion.strategy=hybrid`, `tournament.enabled=true`, `checkpoint_eval_async=true`. Scalar metric improvements queue a composite `checkpoint_eval` worker job (Docker validation → tournament → promote). Training never writes promoted manifests on metrics alone under hybrid. Artifacts: `evaluations/checkpoint_eval_u<update>_<id>/{docker_validation,tournament}/`. Profile requires Docker on the worker host.
 - Planned encoding: parametric edge catalog with default `intercept_anchors` `[1.0, 3.0, 6.0]` (src audit phase 4; schema still `(1.0, 6.0)` until implemented).

@@ -128,7 +128,7 @@ def parse_args() -> argparse.Namespace:
         default=500,
         help="Maximum episode steps for Docker self-play validation.",
     )
-    parser.add_argument("--skip-docker", action="store_true")
+    parser.add_argument("--skip-docker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--keep-staging", action="store_true")
     return parser.parse_args()
 

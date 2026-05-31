@@ -25,12 +25,10 @@ from src.artifacts.checkpoint_eval import run_checkpoint_eval_job  # noqa: E402
 from src.artifacts.docker_validation import (
     run_docker_validation_subprocess,  # noqa: E402
 )
-from src.artifacts.pipeline import (  # noqa: E402
-    load_optional_jobs,
-)
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay  # noqa: E402
 from src.artifacts.run_paths import atomic_write_json  # noqa: E402
 from src.artifacts.tournament.worker import run_tournament_promotion_job  # noqa: E402
+from src.artifacts.worker_runner import run_optional_job_worker  # noqa: E402
 
 
 def _load_checkpoint_config(checkpoint_path: Path) -> Any:
@@ -274,6 +272,9 @@ def _job_manifest_path(job: dict[str, object], result_dir: Path) -> Path:
 
 
 def _trusted_result_root(job: dict[str, object], job_file: Path) -> Path:
+    job_root = job.get("_trusted_result_root")
+    if job_root is not None:
+        return Path(str(job_root))
     explicit = getattr(_trusted_result_root, "explicit", None)
     if explicit is not None:
         return Path(str(explicit))
@@ -281,6 +282,20 @@ def _trusted_result_root(job: dict[str, object], job_file: Path) -> Path:
     if queue_dir.name == "optional_jobs" and queue_dir.parent.name == "queue":
         return queue_dir.parent.parent / "evaluations"
     return queue_dir.parent / "evaluations"
+
+
+def _process_job(job: dict[str, object]) -> None:
+    kind = job.get("kind")
+    if kind == "replay":
+        _run_replay_job(job)
+    elif kind == "docker_validation":
+        _run_docker_validation_job(job)
+    elif kind == "tournament":
+        _run_tournament_job(job)
+    elif kind == "checkpoint_eval":
+        _run_checkpoint_eval_job(job)
+    else:
+        raise ValueError(f"unsupported job kind: {kind!r}")
 
 
 def main() -> int:
@@ -308,46 +323,17 @@ def main() -> int:
         help="Also process failed jobs, for explicit one-off retry workflows.",
     )
     args = parser.parse_args()
-    if args.result_root is not None:
-        setattr(_trusted_result_root, "explicit", args.result_root)
-
-    last_work_time = time.monotonic()
-    while True:
-        statuses = {"queued"}
-        if args.recover_running:
-            statuses.add("running")
-        if args.retry_failed:
-            statuses.add("failed")
-        jobs = load_optional_jobs(args.queue_dir, statuses=statuses)
-        if jobs:
-            last_work_time = time.monotonic()
-        for job in jobs:
-            job_file = Path(str(job["job_file"]))
-            if args.result_root is not None:
-                job["_trusted_result_root"] = str(args.result_root)
-            try:
-                _write_status(job_file, "running")
-                if job.get("kind") == "replay":
-                    _run_replay_job(job)
-                elif job.get("kind") == "docker_validation":
-                    _run_docker_validation_job(job)
-                elif job.get("kind") == "tournament":
-                    _run_tournament_job(job)
-                elif job.get("kind") == "checkpoint_eval":
-                    _run_checkpoint_eval_job(job)
-                else:
-                    raise ValueError(f"unsupported job kind: {job.get('kind')!r}")
-            except Exception as exc:
-                _write_status(job_file, "failed", error=str(exc))
-                return 1
-        if args.once:
-            return 0
-        if (
-            args.idle_exit_seconds is not None
-            and time.monotonic() - last_work_time >= max(float(args.idle_exit_seconds), 0.0)
-        ):
-            return 0
-        time.sleep(max(float(args.poll_seconds), 0.1))
+    return run_optional_job_worker(
+        args.queue_dir,
+        _process_job,
+        _write_status,
+        result_root=args.result_root,
+        once=args.once,
+        poll_seconds=float(args.poll_seconds),
+        idle_exit_seconds=args.idle_exit_seconds,
+        recover_running=args.recover_running,
+        retry_failed=args.retry_failed,
+    )
 
 
 if __name__ == "__main__":
