@@ -31,6 +31,10 @@ from src.config import (
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.rollout.metric_contract import (
+    OPPONENT_SLOT_METRIC_KEYS,
+    TRAJECTORY_SHIELD_COUNT_KEYS,
+)
 from src.jax.train_state import init_train_state
 from src.training.curriculum import CurriculumController
 
@@ -449,5 +453,5 @@ def test_lean_rollout_metrics_skips_expensive_scan_payloads():
     assert float(metrics["env_steps"]) == float(
         cfg.training.rollout_steps * cfg.training.num_envs
     )
-    assert float(metrics["trajectory_shield_blocked_count"]) == 0.0
-    assert float(metrics["opponent_slots_total"]) == 0.0
+    for key in (*TRAJECTORY_SHIELD_COUNT_KEYS, *OPPONENT_SLOT_METRIC_KEYS):
+        assert key not in metrics
