@@ -44,11 +44,17 @@ uv run ow train kaggle
 - Never use `pytest-xdist` or parallel pytest workers on WSL2/CUDA hosts.
 - Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
 - Do not start test runs when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
+- Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
+- Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
+- Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
 
 ## Learned Workspace Facts
 
 - Canonical feature path: Kaggle/JAX obs → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
 - JAX concerns are split: rollout collection in `src/jax/rollout/collect.py`, PPO update in `src/jax/ppo_update.py`, opponent builders in `src/opponents/jax_actions/`.
 - `model.normalize_observations` appears in model YAMLs but is not wired into JAX training; treat as dead config until implemented or removed.
-- Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run python -m src.train print_resolved_config=true`.
+- Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run ow train print_resolved_config=true`.
 - Understand-Anything scans honor `.understandignore` for excluding non-project adjacent paths.
+- OMG agent orchestration retired; use Cursor plugins per `docs/CURSOR.md`; legacy OMG/MULTI_AGENT material is under `docs/archive/omg/`.
+- `docs/ROADMAP.md` is human-only — no `scripts/roadmap.py` funnel or `tests/test_roadmap.py` enforcement.
+- Planned encoding: parametric edge catalog with default `intercept_anchors` `[1.0, 3.0, 6.0]` (src audit phase 4; schema still `(1.0, 6.0)` until implemented).
