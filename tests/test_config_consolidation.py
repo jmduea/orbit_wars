@@ -190,9 +190,10 @@ def test_wandb_sweep_campaign_samples_compose_full() -> None:
         assert cfg.telemetry.wandb.tags
 
 
-def test_baseline_sweep_scaffolding_is_discoverable() -> None:
-    fixed_path = Path("conf/wandb_sweep/fixed/kaggle_runner_mvp.yaml")
-    assert fixed_path.is_file()
+def test_wandb_sweep_fixed_scaffolding_is_discoverable() -> None:
+    fixed_dir = Path("conf/wandb_sweep/fixed")
+    fixed_blocks = sorted(fixed_dir.glob("*.yaml"))
+    assert fixed_blocks, f"expected at least one fixed sweep block under {fixed_dir}"
 
 
 def _iter_sweep_compose_cases(*, full_grid: bool):

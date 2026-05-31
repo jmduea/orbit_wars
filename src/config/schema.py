@@ -27,7 +27,6 @@ class TaskConfig:
     # tiered: cheap sampling + exact selected-launch validation
     trajectory_shield_final_validate_selected: bool = False
     trajectory_shield_hit_mode: str = "selected_target"
-    trajectory_shield_train_horizon: int = 80
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, float] = (1.0, 6.0)
