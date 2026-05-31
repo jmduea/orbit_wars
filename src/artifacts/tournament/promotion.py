@@ -6,8 +6,14 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.artifacts.promotion import PromotionAttempt, promoted_manifest_path
-from src.artifacts.run_paths import RunContext, _git_identity, append_jsonl_atomic, atomic_write_json
+from src.artifacts.promotion import PromotionAttempt
+from src.artifacts.promotion_manifest import (
+    append_promotion_index,
+    merge_campaign_manifest,
+    promoted_manifest_path,
+    write_promoted_manifest,
+)
+from src.artifacts.run_paths import RunContext, _git_identity
 from src.artifacts.tournament.resolve import load_train_config_from_checkpoint
 from src.artifacts.tournament.types import LeaderboardRow, TournamentResult
 from src.config import TrainConfig
@@ -128,16 +134,11 @@ def promote_from_tournament(
         "tournament_gates_passed": True,
     }
 
-    manifest_out = promoted_manifest_path(context.campaign_dir)
-    atomic_write_json(manifest_out, promoted_payload)
-
     campaign_manifest_path = context.campaign_manifest_path
-    campaign_payload: dict[str, object] = {}
-    if campaign_manifest_path.exists():
-        raw = json.loads(campaign_manifest_path.read_text(encoding="utf-8"))
-        if isinstance(raw, dict):
-            campaign_payload = raw
-    campaign_payload.update(
+    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
+
+    merge_campaign_manifest(
+        campaign_manifest_path,
         {
             "campaign": context.campaign_slug,
             "campaign_dir": str(context.campaign_dir),
@@ -147,12 +148,11 @@ def promote_from_tournament(
             "current_best_value": metric_value,
             "current_best_run_id": context.run_id,
             "updated_at": now,
-        }
+        },
     )
-    atomic_write_json(campaign_manifest_path, campaign_payload)
 
-    append_jsonl_atomic(
-        context.indexes_dir / "promoted.jsonl",
+    append_promotion_index(
+        context.indexes_dir,
         {
             "campaign": context.campaign_slug,
             "run_id": context.run_id,

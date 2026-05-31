@@ -6,9 +6,15 @@ import jax
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.features.registry import edge_k
-from src.game.trajectory_shield import ship_count_for_fraction_jax, validate_continuous_ship_launch_jax
 from src.jax.env import reset
-from src.jax.policy import build_planet_graph_transformer_policy, make_synthetic_turn_batch
+from src.jax.policy import (
+    build_planet_graph_transformer_policy,
+    make_synthetic_turn_batch,
+)
+from src.jax.shield import (
+    ship_count_for_fraction_jax,
+    validate_continuous_ship_launch_jax,
+)
 from src.jax.ship_action import fraction_from_logit, ship_action_logit_width
 from src.opponents.jax_actions.builders import build_action_from_factored_batch
 

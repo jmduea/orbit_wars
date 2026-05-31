@@ -8,9 +8,9 @@ import jax.numpy as jnp
 
 from src.artifacts.tournament.runner import build_checkpoint_agent
 from src.config import TrainConfig
+from src.game.constants import MAX_PLANETS
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.game.constants import MAX_PLANETS
 
 
 class _FakePolicy:
@@ -22,7 +22,7 @@ def test_jax_replay_actor_uses_submission_runtime_path(monkeypatch, tmp_path: Pa
     cfg.task.candidate_count = 4
     cfg.task.ship_bucket_count = 2
     cfg.task.max_fleets = 8
-    cfg.task.trajectory_shield_enabled = False
+    cfg.task.trajectory_shield_mode = "off"
 
     checkpoint_path = tmp_path / "jax_ckpt_000100.pkl"
     with checkpoint_path.open("wb") as file:

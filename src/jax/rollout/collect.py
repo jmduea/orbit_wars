@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import TrainConfig
+from src.jax.action_sampling import _sample_shielded_sequence_with_params
 from src.jax.decoder_carry import (
     decoder_carry_enabled,
     empty_decoder_hidden,
     reset_decoder_hidden_on_done,
 )
-from src.jax.ship_action import is_continuous_ship_mode
-from src.jax.features import encode_turn
 from src.jax.env import (
     JaxEnvState,
     assign_learner_players,
@@ -18,32 +17,29 @@ from src.jax.env import (
     batched_step,
     batched_step_multi_player,
 )
-from src.jax.features import TurnBatch
+from src.jax.features import TurnBatch, encode_turn
+from src.jax.normalization import ObservationNormState, normalize_turn_batch
 from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.jax_actions.builders import (
-    _sample_shielded_sequence_with_params,
     build_action_from_factored_batch,
     owned_planet_ships,
 )
 from src.opponents.jax_actions.sampling import (
+    _four_player_step_action,
     _maybe_effective_single_family_id,
     _opponent_count_metrics,
-    _single_stage_family_id,
-)
-from src.opponents.jax_actions.sampling import (
-    _four_player_step_action,
     _sample_opponent_2p_action,
+    _single_stage_family_id,
 )
 from src.opponents.pool import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
     sample_opponent_type_ids_jax,
 )
-from src.training.curriculum import StageView, default_stage_view
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
-
-from src.jax.normalization import ObservationNormState, normalize_turn_batch
+from src.training.curriculum import StageView, default_stage_view
 
 from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
 

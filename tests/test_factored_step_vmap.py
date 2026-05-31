@@ -7,7 +7,7 @@ import jax
 from src.config import TaskConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
-from src.opponents.jax_actions.builders import _sample_factored_step_from_logits
+from src.jax.action_sampling import _sample_factored_step_from_logits
 
 
 def _task_cfg() -> TaskConfig:

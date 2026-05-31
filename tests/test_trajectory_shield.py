@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import math
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
 from src.config import TaskConfig
 from src.game.constants import MAX_PLANETS
-from src.game.trajectory_shield import (
-    apply_trajectory_shield_to_turn_batch_v2,
-    mask_policy_output_for_shield_v2,
-    trajectory_shield_reason_for_launch,
-    trajectory_shield_reason_for_launch_jax,
-    trajectory_shield_reason_name,
-)
+from src.game.shield import trajectory_shield_reason_for_launch
 from src.game.types import GameState, PlanetState
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import encode_turn
 from src.jax.policy import JaxPolicyOutput
+from src.jax.shield import (
+    apply_trajectory_shield_to_turn_batch_v2,
+    mask_policy_output_for_shield_v2,
+    trajectory_shield_reason_for_launch_jax,
+    trajectory_shield_reason_name,
+)
 
 
 def _cfg(**overrides) -> TaskConfig:

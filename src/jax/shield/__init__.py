@@ -1,0 +1,43 @@
+from src.game.shield_config import (
+    trajectory_shield_final_validate_selected,
+    trajectory_shield_mode,
+)
+from src.jax.shield.trajectory import (
+    ShieldDiagnostics,
+    ShieldedBatchResult,
+    apply_cheap_trajectory_shield_factorized_topk,
+    apply_configured_trajectory_shield_factorized_topk,
+    apply_trajectory_shield_factorized_topk,
+    apply_trajectory_shield_to_turn_batch_v2,
+    default_edge_action_bucket_mask,
+    evaluate_edge_pair,
+    factorized_source_mask_from_shield,
+    mask_policy_output_for_shield_v2,
+    selected_factored_launch_is_exact_safe_jax,
+    ship_count_for_bucket_jax,
+    ship_count_for_fraction_jax,
+    trajectory_shield_reason_for_launch_jax,
+    trajectory_shield_reason_name,
+    validate_continuous_ship_launch_jax,
+)
+
+__all__ = [
+    "ShieldDiagnostics",
+    "ShieldedBatchResult",
+    "apply_cheap_trajectory_shield_factorized_topk",
+    "apply_configured_trajectory_shield_factorized_topk",
+    "apply_trajectory_shield_factorized_topk",
+    "apply_trajectory_shield_to_turn_batch_v2",
+    "default_edge_action_bucket_mask",
+    "evaluate_edge_pair",
+    "factorized_source_mask_from_shield",
+    "mask_policy_output_for_shield_v2",
+    "selected_factored_launch_is_exact_safe_jax",
+    "ship_count_for_bucket_jax",
+    "ship_count_for_fraction_jax",
+    "trajectory_shield_final_validate_selected",
+    "trajectory_shield_mode",
+    "trajectory_shield_reason_for_launch_jax",
+    "trajectory_shield_reason_name",
+    "validate_continuous_ship_launch_jax",
+]

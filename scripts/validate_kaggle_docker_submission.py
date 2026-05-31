@@ -34,11 +34,13 @@ RUNTIME_FILES = (
     "features/registry.py",
     "game/__init__.py",
     "game/constants.py",
+    "game/shield_config.py",
+    "game/shield.py",
     "jax/rewards.py",
-    "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
     "jax/action_codec.py",
+    "jax/action_sampling.py",
     "jax/decoder_carry.py",
     "jax/decoders/__init__.py",
     "jax/decoders/factorized_topk_pointer.py",
@@ -51,6 +53,8 @@ RUNTIME_FILES = (
     "jax/factored_sequence_scan.py",
     "jax/feature_primitives.py",
     "jax/features.py",
+    "jax/shield/__init__.py",
+    "jax/shield/trajectory.py",
     "jax/policy.py",
     "jax/submission_runtime.py",
     "jax/env.py",
@@ -507,7 +511,7 @@ class TaskConfig:
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1
-    trajectory_shield_enabled: bool = True
+    trajectory_shield_mode: str = "cheap"
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6

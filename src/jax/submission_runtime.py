@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
-from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.decoder_carry import empty_decoder_hidden
+from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import TurnBatch
 
 
@@ -203,7 +203,7 @@ def select_runtime_shielded_policy_actions_with_carry(
 ) -> tuple[JaxAction, jax.Array | None]:
     """Sample shielded actions and return updated decoder carry when enabled."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     return _sample_policy_action_with_params(
         key,
@@ -233,7 +233,7 @@ def compile_shielded_policy_act_with_carry(
             "compile_shielded_policy_act_with_carry requires model.decoder_carry=true"
         )
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     def _compiled_act(
         game: JaxGameState,
@@ -269,7 +269,7 @@ def select_runtime_shielded_policy_actions(
 ) -> JaxAction:
     """Sample a shielded v2 policy action sequence and decode it to ``JaxAction``."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     action, _decoder_hidden = _sample_policy_action_with_params(
         key,
@@ -295,7 +295,7 @@ def compile_shielded_policy_act(
 ):
     """Return a JIT-compiled shielded policy act fn for submission inference."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     def _compiled_act(
         game: JaxGameState,

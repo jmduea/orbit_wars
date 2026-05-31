@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import jax
-
 from src.artifacts.checkpoint_compat import (
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
@@ -22,7 +21,7 @@ from src.jax.submission_runtime import (
     moves_from_jax_action,
     select_runtime_shielded_policy_actions,
 )
-from src.opponents import build_opponent
+from src.opponents.runtime import build_opponent
 
 from .types import AgentActFn, MatchOutcome
 

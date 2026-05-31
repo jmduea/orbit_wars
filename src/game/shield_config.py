@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from typing import Any
+
+from src.config import TaskConfig
+from src.game.constants import MAX_STEPS
+
+SAFE_REASON = "safe"
+SUN_REASON = "sun"
+BOUNDS_REASON = "bounds"
+UNINTENDED_HIT_REASON = "unintended_hit"
+HORIZON_REASON = "horizon"
+
+
+def trajectory_shield_mode(env_cfg: TaskConfig | Any) -> str:
+    mode = str(getattr(env_cfg, "trajectory_shield_mode", "exact")).strip().lower()
+    if mode in {"none", "disabled", "false"}:
+        return "off"
+    if mode not in {"off", "cheap", "exact", "tiered"}:
+        raise ValueError(
+            f"Unsupported trajectory_shield_mode={mode!r}."
+            "Expected one of: off, cheap, exact, tiered."
+        )
+    return mode
+
+
+def trajectory_shield_final_validate_selected(env_cfg: Any) -> bool:
+    return bool(getattr(env_cfg, "trajectory_shield_final_validate_selected", False))
+
+
+def trajectory_shield_horizon(state_step: int, env_cfg: Any) -> int:
+    configured = max(int(getattr(env_cfg, "trajectory_shield_horizon", MAX_STEPS)), 1)
+    remaining = max(MAX_STEPS - int(state_step), 0)
+    return min(configured, remaining)
+
+
+def trajectory_shield_epsilon(env_cfg: Any) -> float:
+    return max(float(getattr(env_cfg, "trajectory_shield_epsilon", 0.0)), 0.0)
+
+
+def trajectory_shield_hit_mode(env_cfg: Any) -> str:
+    return (
+        str(getattr(env_cfg, "trajectory_shield_hit_mode", "selected_target"))
+        .strip()
+        .lower()
+    )

@@ -5,11 +5,11 @@ from collections import namedtuple
 from typing import Any, Protocol
 
 from src.config import TrainConfig
-from src.game.types import parse_observation
-from src.game.trajectory_shield import (
+from src.game.shield import (
     filter_moves_with_trajectory_shield,
     is_trajectory_safe_for_launch,
 )
+from src.game.types import parse_observation
 
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]

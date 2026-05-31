@@ -8,12 +8,16 @@ from typing import Literal
 
 from src.artifacts.checkpoint_compat import feature_metadata
 from src.artifacts.checkpoint_retention import _collect_metric_by_update
-from src.artifacts.run_paths import RunContext, _git_identity, atomic_write_json, append_jsonl_atomic
+from src.artifacts.promotion_manifest import (
+    append_promotion_index,
+    merge_campaign_manifest,
+    promoted_manifest_path,
+    write_promoted_manifest,
+)
+from src.artifacts.run_paths import RunContext, _git_identity
 from src.config import TrainConfig
 
 MetricMode = Literal["max", "min"]
-
-PROMOTED_MANIFEST_NAME = "manifest.json"
 
 
 @dataclass(slots=True)
@@ -26,14 +30,6 @@ class PromotionAttempt:
     metric_value: float | None = None
     metric_mode: str = "max"
     promoted_manifest_path: Path | None = None
-
-
-def promoted_dir(campaign_dir: Path) -> Path:
-    return campaign_dir / "promoted" / "current_best"
-
-
-def promoted_manifest_path(campaign_dir: Path) -> Path:
-    return promoted_dir(campaign_dir) / PROMOTED_MANIFEST_NAME
 
 
 def resolve_from_promoted(campaign_slug: str, output_root: str) -> dict[str, str]:
@@ -212,10 +208,10 @@ def promote_if_better(
         "updated_at": now,
     }
 
-    manifest_out = promoted_manifest_path(context.campaign_dir)
-    atomic_write_json(manifest_out, promoted_payload)
+    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
 
-    campaign_payload.update(
+    merge_campaign_manifest(
+        campaign_manifest_path,
         {
             "campaign": context.campaign_slug,
             "campaign_dir": str(context.campaign_dir),
@@ -224,13 +220,11 @@ def promote_if_better(
             "current_best_value": metric_value,
             "current_best_run_id": context.run_id,
             "updated_at": now,
-        }
+        },
     )
-    atomic_write_json(campaign_manifest_path, campaign_payload)
 
-    indexes_dir = context.indexes_dir
-    append_jsonl_atomic(
-        indexes_dir / "promoted.jsonl",
+    append_promotion_index(
+        context.indexes_dir,
         {
             "campaign": context.campaign_slug,
             "run_id": context.run_id,

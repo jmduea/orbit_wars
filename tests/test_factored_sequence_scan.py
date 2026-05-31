@@ -7,10 +7,10 @@ import pytest
 import jax
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
+from src.jax.action_sampling import _sample_shielded_factored_sequence_with_params
 from src.jax.env import batched_reset
 from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
 from src.jax.policy import build_planet_graph_transformer_policy
-from src.opponents.jax_actions.builders import _sample_shielded_factored_sequence_with_params
 
 
 def _task_cfg(**kwargs) -> TaskConfig:
@@ -35,7 +35,7 @@ def _train_cfg(**kwargs) -> TrainConfig:
 
 @pytest.mark.jax
 def test_rollout_replay_logprob_parity_with_stepwise_scan() -> None:
-    cfg = _train_cfg(task={"trajectory_shield_enabled": False})
+    cfg = _train_cfg(task={"trajectory_shield_mode": "off"})
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(0), 1), cfg.task)
     policy = build_planet_graph_transformer_policy(cfg)
     params = policy.init(jax.random.PRNGKey(1), batch)
@@ -123,7 +123,7 @@ def test_rollout_replay_logprob_parity_continuous_fraction() -> None:
 
 @pytest.mark.jax
 def test_rollout_replay_logprob_parity_with_decoder_carry() -> None:
-    cfg = _train_cfg(task={"trajectory_shield_enabled": False})
+    cfg = _train_cfg(task={"trajectory_shield_mode": "off"})
     cfg.model.decoder_carry = True
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(3), 1), cfg.task)
     policy = build_planet_graph_transformer_policy(cfg)

@@ -36,7 +36,7 @@ def _fake_config() -> SimpleNamespace:
             player_count=2,
             max_ships=400.0,
             feature_history_steps=1,
-            trajectory_shield_enabled=True,
+            trajectory_shield_mode="cheap",
             trajectory_shield_hit_mode="selected_target",
             trajectory_shield_horizon=500,
             trajectory_shield_epsilon=1e-6,
@@ -137,7 +137,7 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
     assert "manifest.json" in names
     assert "src/__init__.py" in names
     assert "src/jax/policy.py" in names
-    assert "src/game/trajectory_shield.py" in names
+    assert "src/jax/shield/trajectory.py" in names
     assert len(names) == len(set(names))
     assert str(checkpoint.parent) not in manifest_text
     assert "source_checkpoint_sha256" in manifest_text

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from src.opponents.jax_actions.builders import (
+from src.jax.action_sampling import (
     _pick_eval_deterministic_bucket,
     _sample_step_from_logits,
 )
