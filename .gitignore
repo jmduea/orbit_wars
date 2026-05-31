@@ -1,5 +1,6 @@
 docs/production-ready-data-science.pdf
 
+.audit/
 /wandb/
 outputs/
 /artifacts/

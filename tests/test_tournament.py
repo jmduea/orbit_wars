@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.artifacts.run_paths import resolve_run_paths
 from src.artifacts.tournament.promotion import (
     promote_from_tournament,
     tournament_improves_incumbent,
@@ -17,13 +18,17 @@ from src.artifacts.tournament.ranking import (
     build_leaderboard,
     evaluate_gates,
 )
-from src.artifacts.run_paths import resolve_run_paths
 from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
 )
 from src.artifacts.tournament.runner import run_match
-from src.artifacts.tournament.types import AgentEntry, LeaderboardRow, MatchOutcome, TournamentResult
+from src.artifacts.tournament.types import (
+    AgentEntry,
+    LeaderboardRow,
+    MatchOutcome,
+    TournamentResult,
+)
 from src.cli import eval as eval_cli
 from src.config import TrainConfig
 from src.config.schema import PromotionTournamentConfig
