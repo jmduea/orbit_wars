@@ -7,11 +7,13 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-
-def _is_hydra_override(arg: str) -> bool:
-    return (
-        "=" in arg or arg.startswith("+") or arg.startswith("~") or arg.startswith("-")
-    )
+from src.cli.train_hosts import (
+    contains_cli_help,
+    is_cli_help_token,
+    is_hydra_override,
+    print_ow_help,
+    print_train_help,
+)
 
 
 def _run_hydra_entry(entry: Callable[[], None], argv: list[str]) -> None:
@@ -52,7 +54,11 @@ def _run_make(args: list[str]) -> None:
 def main() -> None:
     args = sys.argv[1:]
 
-    if not args or _is_hydra_override(args[0]):
+    if args and is_cli_help_token(args[0]):
+        print_ow_help()
+        return
+
+    if not args or is_hydra_override(args[0]):
         command = "train"
         command_args = args
     else:
@@ -61,6 +67,9 @@ def main() -> None:
 
     match command:
         case "train":
+            if contains_cli_help(command_args):
+                print_train_help()
+                return
             _run_train(command_args)
 
         case "make":
@@ -71,20 +80,8 @@ def main() -> None:
 
             raise SystemExit(eval_cli.main(command_args))
 
-        case "help" | "--help" | "-h":
-            print(
-                "Usage:\n"
-                "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
-                "  uv run ow train kaggle [SUBCMD] [KAGGLE_OPTS] [HYDRA_OVERRIDES...]\n"
-                "  uv run ow eval tournament [OPTIONS]\n"
-                "  uv run ow make [MAKE_SCRIPT_OVERRIDES...]\n"
-                "  uv run ow [HYDRA_OVERRIDES...]\n\n"
-                "Examples:\n"
-                "  uv run ow train print_resolved_config=true\n"
-                "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_000100.pkl --vs-promoted\n"
-                "  uv run ow train kaggle status owner/kernel-slug\n"
-                "  uv run ow make wandb_sweep=shield_cheap_history\n"
-            )
+        case "help":
+            print_ow_help()
         case _:
             raise SystemExit(
                 f"Unknown ow command: {command!r}. Valid commands: train, eval, make"

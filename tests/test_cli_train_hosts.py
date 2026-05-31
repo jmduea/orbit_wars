@@ -3,7 +3,51 @@ from __future__ import annotations
 import pytest
 from hydra.errors import MissingConfigException
 
+from src.cli import main as ow_main
 from src.cli import train_hosts
+
+
+def test_is_hydra_override_excludes_help_tokens() -> None:
+    assert not train_hosts.is_hydra_override("--help")
+    assert not train_hosts.is_hydra_override("-h")
+    assert train_hosts.is_hydra_override("training=2p4p_32_split")
+    assert train_hosts.is_hydra_override("+foo=bar")
+    assert train_hosts.is_hydra_override("~model")
+
+
+def test_contains_cli_help() -> None:
+    assert train_hosts.contains_cli_help(["--help"])
+    assert train_hosts.contains_cli_help(["local", "-h"])
+    assert not train_hosts.contains_cli_help(["local", "training=smoke"])
+
+
+def test_ow_help_does_not_invoke_hydra(capsys, monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["ow", "--help"])
+    ow_main()
+    captured = capsys.readouterr().out
+    assert "Orbit Wars CLI (ow)" in captured
+    assert "ow train" in captured
+    assert "ow eval" in captured
+    assert "Hydra overrides" in captured
+    assert "Powered by Hydra" not in captured
+
+
+def test_ow_h_shortcut_does_not_invoke_hydra(capsys, monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["ow", "-h"])
+    ow_main()
+    captured = capsys.readouterr().out
+    assert "Orbit Wars CLI (ow)" in captured
+    assert "Powered by Hydra" not in captured
+
+
+def test_ow_train_help_does_not_invoke_hydra(capsys, monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["ow", "train", "--help"])
+    ow_main()
+    captured = capsys.readouterr().out
+    assert "ow train" in captured
+    assert "Kaggle" in captured
+    assert "Hydra overrides" in captured
+    assert "Powered by Hydra" not in captured
 
 
 def test_parse_train_default_local() -> None:

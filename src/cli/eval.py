@@ -21,7 +21,12 @@ from src.config.schema import TournamentConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run local tournament evaluation.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Local tournament evaluation for Orbit Wars checkpoints "
+            "(entrypoint: ow eval tournament)."
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     tournament = subparsers.add_parser(

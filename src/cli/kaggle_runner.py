@@ -15,7 +15,10 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the Kaggle runner argument parser."""
 
     parser = argparse.ArgumentParser(
-        description="Launch and inspect standalone or W&B Kaggle training workers."
+        description=(
+            "Launch and inspect Kaggle training workers. Prefer `ow train kaggle` "
+            "for the primary entrypoint; this module is also used standalone."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 

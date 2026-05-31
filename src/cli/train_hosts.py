@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from src.cli import kaggle_runner as kaggle_cli
 from src.orchestration.accelerators import DEFAULT_KAGGLE_ACCELERATOR
 
 HOSTS = frozenset({"local", "kaggle"})
+CLI_HELP_TOKENS = frozenset({"help", "--help", "-h", "--hydra-help"})
+PRIMARY_CONFIG_GROUPS = (
+    "model",
+    "task",
+    "reward",
+    "training",
+    "curriculum",
+    "opponents",
+    "telemetry",
+    "artifacts",
+)
+
 KAGGLE_SUBCOMMANDS = frozenset(
     {
         "preflight",
@@ -45,9 +57,122 @@ KAGGLE_FLAGS = frozenset(
 KAGGLE_FLAG_VALUES = 1  # most flags take one value; --host, --run-type, etc.
 
 
-def _is_hydra_override(arg: str) -> bool:
+def is_cli_help_token(arg: str) -> bool:
+    """Return True when ``arg`` is a CLI help flag rather than a Hydra override."""
+
+    return arg in CLI_HELP_TOKENS
+
+
+def contains_cli_help(args: list[str]) -> bool:
+    """Return True when argv requests CLI help."""
+
+    return any(is_cli_help_token(arg) for arg in args)
+
+
+def is_hydra_override(arg: str) -> bool:
+    """Return True when ``arg`` looks like a Hydra override rather than a CLI flag."""
+
+    if is_cli_help_token(arg):
+        return False
     return (
         "=" in arg or arg.startswith("+") or arg.startswith("~") or arg.startswith("-")
+    )
+
+
+def _conf_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "conf"
+
+
+def _primary_config_group_lines() -> list[str]:
+    """List primary Hydra config groups without composing a full config."""
+
+    lines: list[str] = []
+    conf_dir = _conf_dir()
+    for group in PRIMARY_CONFIG_GROUPS:
+        subdir = conf_dir / group
+        if not subdir.is_dir():
+            continue
+        options = sorted(path.stem for path in subdir.glob("*.yaml"))
+        if not options:
+            continue
+        lines.append(f"  {group}: {', '.join(options)}")
+    return lines
+
+
+def _hydra_override_section() -> str:
+    group_lines = _primary_config_group_lines()
+    groups_block = "\n".join(group_lines) if group_lines else "  (conf/ unavailable)"
+    return (
+        "Hydra overrides (for ow train / bare ow):\n"
+        "  Select config groups: model=..., training=..., task=...\n"
+        "  Set values: training.total_updates=1000, print_resolved_config=true\n"
+        "  Add keys: +key=value    Remove groups/keys: ~group or -group\n\n"
+        "Primary config groups (group=option):\n"
+        f"{groups_block}\n"
+    )
+
+
+def print_ow_help() -> None:
+    """Print top-level ``ow`` help without invoking Hydra."""
+
+    print(
+        "Orbit Wars CLI (ow)\n\n"
+        "Commands:\n"
+        "  train   Local or Kaggle JAX training via Hydra configuration\n"
+        "  eval    Local tournament evaluation, shortlist resolution, promotion\n"
+        "  make    Generate W&B sweep YAML (scripts/make_wandb_sweep.py)\n\n"
+        "Bare `ow` or `ow KEY=VALUE` defaults to `ow train`.\n\n"
+        "Usage:\n"
+        "  uv run ow [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train [local|kaggle] [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow eval tournament [OPTIONS]\n"
+        "  uv run ow make [MAKE_SCRIPT_OVERRIDES...]\n\n"
+        "Examples:\n"
+        "  uv run ow train print_resolved_config=true\n"
+        "  uv run ow train training=smoke training.total_updates=10\n"
+        "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_000100.pkl --vs-promoted\n"
+        "  uv run ow train kaggle status owner/kernel-slug\n"
+        "  uv run ow train kaggle training=2p4p_32_split\n"
+        "  uv run ow make wandb_sweep=shield_cheap_history\n\n"
+        f"{_hydra_override_section()}"
+        "More help:\n"
+        "  ow train --help\n"
+        "  ow eval tournament --help\n"
+        "  uv run python -m src.cli.kaggle_runner --help\n"
+    )
+
+
+def print_train_help() -> None:
+    """Print ``ow train`` help without invoking Hydra."""
+
+    print(
+        "ow train — JAX training (local Hydra or Kaggle remote)\n\n"
+        "Usage:\n"
+        "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train kaggle [SUBCMD] [KAGGLE_FLAGS] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train --host local|kaggle ...\n\n"
+        "Local (default):\n"
+        "  Runs the Hydra + JAX training loop on this machine.\n"
+        "  Any bare Hydra override implies local host (e.g. ow train training=smoke).\n\n"
+        "Kaggle (ow train kaggle ...):\n"
+        "  Packages and pushes a Kaggle kernel worker (default accelerator: P100).\n"
+        "  Subcommands:\n"
+        "    (default) launch         Push a standalone training kernel\n"
+        "    preflight                Validate W&B + Kaggle credentials\n"
+        "    prepare                  Build the worker bundle only\n"
+        "    status KERNEL            Poll kernel status\n"
+        "    sync|sync-output KERNEL  Download kernel outputs\n"
+        "    shortlist                Export W&B sweep shortlist JSON\n"
+        "    latest-checkpoint        Resolve latest checkpoint from a sweep\n\n"
+        "Examples:\n"
+        "  uv run ow train training=smoke training.total_updates=10\n"
+        "  uv run ow train local print_resolved_config=true\n"
+        "  uv run ow train kaggle preflight\n"
+        "  uv run ow train kaggle status owner/kernel-slug\n"
+        "  uv run ow train kaggle --run-type smoke training=2p4p_32_split\n\n"
+        f"{_hydra_override_section()}"
+        "Kaggle flag reference:\n"
+        "  uv run python -m src.cli.kaggle_runner --help\n"
     )
 
 
@@ -67,6 +192,10 @@ def parse_train_argv(args: list[str]) -> TrainRoute:
     if not args:
         return TrainRoute()
 
+    if contains_cli_help(args):
+        print_train_help()
+        raise SystemExit(0)
+
     index = 0
     host = "local"
 
@@ -78,7 +207,7 @@ def parse_train_argv(args: list[str]) -> TrainRoute:
     elif args[0] in HOSTS:
         host = args[0]
         index = 1
-    elif _is_hydra_override(args[0]):
+    elif is_hydra_override(args[0]):
         return TrainRoute(hydra_overrides=list(args))
 
     if host not in HOSTS:
@@ -122,7 +251,7 @@ def _split_kaggle_remaining(
     index = 0
     while index < len(remaining):
         token = remaining[index]
-        if _is_hydra_override(token) and not token.startswith("--"):
+        if is_hydra_override(token) and not token.startswith("--"):
             hydra_overrides.extend(remaining[index:])
             break
         if token == "--override":
@@ -161,7 +290,7 @@ def _split_kaggle_remaining(
             kaggle_argv.append(token)
             index += 1
             continue
-        if _is_hydra_override(token):
+        if is_hydra_override(token):
             hydra_overrides.append(token)
             index += 1
             continue
