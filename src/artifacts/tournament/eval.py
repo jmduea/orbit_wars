@@ -8,12 +8,19 @@ from typing import Sequence
 from uuid import uuid4
 
 from src.artifacts.run_paths import atomic_write_json
-from src.artifacts.tournament.timing import TournamentTimingError
+from src.artifacts.timing import TournamentTimingError
 from src.config.schema import PromotionTournamentConfig, TournamentConfig
 
 from .ranking import aggregate_pairwise_win_rates, build_leaderboard, evaluate_gates
 from .runner import build_baseline_agent, run_match
 from .types import AgentEntry, MatchOutcome, TournamentResult
+
+
+def _tournament_timing(cfg: TournamentConfig) -> tuple[float, float]:
+    return (
+        float(getattr(cfg, "per_step_seconds", 1.0)),
+        float(getattr(cfg, "overage_budget_seconds", 60.0)),
+    )
 
 
 def _match_seeds(cfg: TournamentConfig) -> list[int]:
@@ -119,6 +126,7 @@ def run_tournament(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     tournament_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + f"_{uuid4().hex[:8]}"
+    per_step_seconds, overage_budget_seconds = _tournament_timing(cfg)
     seeds = _match_seeds(cfg)
     games_per_pair = max(int(cfg.games_per_pair), 1)
     schedules = _schedule_matches(candidates, incumbent=incumbent, cfg=cfg)
@@ -158,8 +166,8 @@ def run_tournament(
                         agent_ids=agent_ids,
                         agents=agents,
                         max_steps=int(cfg.max_steps),
-                        per_step_seconds=float(cfg.per_step_seconds),
-                        overage_budget_seconds=float(cfg.overage_budget_seconds),
+                        per_step_seconds=per_step_seconds,
+                        overage_budget_seconds=overage_budget_seconds,
                     )
                 except TournamentTimingError as exc:
                     atomic_write_json(
@@ -264,8 +272,8 @@ def run_tournament(
             "formats": list(cfg.formats),
             "seeds": seeds,
             "games_per_pair": games_per_pair,
-            "per_step_seconds": float(cfg.per_step_seconds),
-            "overage_budget_seconds": float(cfg.overage_budget_seconds),
+            "per_step_seconds": per_step_seconds,
+            "overage_budget_seconds": overage_budget_seconds,
         },
     )
     if pairwise:

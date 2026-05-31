@@ -22,9 +22,18 @@ def test_queue_tournament_job_skips_non_tournament_reasons(tmp_path: Path) -> No
     cfg = SimpleNamespace(
         artifacts=SimpleNamespace(
             promotion=SimpleNamespace(strategy="metric"),
-            tournament=SimpleNamespace(enabled=True),
+            tournament=SimpleNamespace(
+                enabled=True, per_step_seconds=1.0, overage_budget_seconds=60.0
+            ),
+            replay=SimpleNamespace(max_steps=500),
+            artifact_pipeline=SimpleNamespace(
+                checkpoint_eval_async=False,
+                docker_image="gcr.io/kaggle-images/python-simulations",
+                docker_player_count="both",
+            ),
         ),
         output=SimpleNamespace(campaign="c", run_id="r"),
+        seed=42,
     )
     job = queue_tournament_job_if_eligible(
         cfg,
@@ -41,9 +50,18 @@ def test_queue_tournament_job_writes_job_for_tournament_only(tmp_path: Path) -> 
     cfg = SimpleNamespace(
         artifacts=SimpleNamespace(
             promotion=SimpleNamespace(strategy="tournament"),
-            tournament=SimpleNamespace(enabled=True),
+            tournament=SimpleNamespace(
+                enabled=True, per_step_seconds=1.0, overage_budget_seconds=60.0
+            ),
+            replay=SimpleNamespace(max_steps=500),
+            artifact_pipeline=SimpleNamespace(
+                checkpoint_eval_async=False,
+                docker_image="gcr.io/kaggle-images/python-simulations",
+                docker_player_count="both",
+            ),
         ),
         output=SimpleNamespace(campaign="c", run_id="r"),
+        seed=42,
     )
     queue_dir = tmp_path / "queue"
     job = queue_tournament_job_if_eligible(

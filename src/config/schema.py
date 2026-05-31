@@ -265,6 +265,7 @@ class ArtifactPipelineConfig:
     replay_async: bool = True
     replay_backend: str = "docker"
     docker_validation_async: bool = False
+    checkpoint_eval_async: bool = False
     docker_image: str = "gcr.io/kaggle-images/python-simulations"
     docker_player_count: str = "both"
     docker_timeout_seconds: float = 1.0

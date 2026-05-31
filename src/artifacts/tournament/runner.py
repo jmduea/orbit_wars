@@ -12,7 +12,7 @@ from src.artifacts.checkpoint_compat import (
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
-from src.artifacts.tournament.timing import StepTimingBudget
+from src.artifacts.timing import StepTimingBudget
 from src.config import TrainConfig
 from src.jax.policy import build_jax_policy
 from src.jax.submission_runtime import (

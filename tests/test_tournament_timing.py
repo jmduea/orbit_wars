@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.artifacts.tournament.timing import StepTimingBudget, TournamentTimingError
+from src.artifacts.timing import StepTimingBudget, TournamentTimingError
 
 
 def test_step_timing_budget_allows_cumulative_overage_up_to_cap() -> None:

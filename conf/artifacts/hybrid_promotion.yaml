@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+
+promotion:
+  strategy: hybrid
+
+tournament:
+  enabled: true
+
+artifact_pipeline:
+  checkpoint_eval_async: true
+  docker_validation_async: false
+  replay_async: false
+
+replay:
+  enabled: false

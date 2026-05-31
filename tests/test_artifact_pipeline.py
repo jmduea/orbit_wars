@@ -307,9 +307,12 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
 
 def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
     from scripts import run_artifact_worker
+    from src.config import TrainConfig
 
+    cfg = TrainConfig()
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
-    checkpoint_path.write_bytes(b"checkpoint")
+    with checkpoint_path.open("wb") as file:
+        pickle.dump({"params": {}, "config": cfg}, file)
     job_path = write_optional_job(
         tmp_path / "jobs",
         kind="replay",
@@ -323,13 +326,14 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
     def fake_run(command, **kwargs):
         output_dir = Path(command[command.index("--output-dir") + 1])
         assert command[command.index("--per-step-seconds") + 1] == "1.0"
+        assert command[command.index("--overage-budget-seconds") + 1] == "60.0"
         assert "--timeout-seconds" not in command
         replay_dir = output_dir / "replays"
         replay_dir.mkdir(parents=True, exist_ok=True)
         (replay_dir / "replay_u000001_2p.html").write_text("<html></html>", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="ok", stderr="")
 
-    monkeypatch.setattr(run_artifact_worker.subprocess, "run", fake_run)
+    monkeypatch.setattr("src.artifacts.docker_validation.subprocess.run", fake_run)
 
     run_artifact_worker._run_docker_validation_job(job)
 

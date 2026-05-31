@@ -26,7 +26,7 @@ flowchart LR
 | Agent resolution | `src/artifacts/tournament/resolve.py` |
 | CLI orchestration | `src/artifacts/tournament/eval.py`, `src/cli/eval.py` |
 | Promotion writes | `src/artifacts/tournament/promotion.py`, `src/artifacts/promotion.py` |
-| Async worker jobs | `src/artifacts/tournament/worker.py`, `scripts/run_artifact_worker.py` |
+| Async worker jobs | `src/artifacts/tournament/worker.py`, `src/artifacts/checkpoint_eval.py`, `scripts/run_artifact_worker.py` |
 | Config | `conf/artifacts/base.yaml`, `src/config/schema.py` |
 
 ## CLI
@@ -39,8 +39,12 @@ uv run ow eval tournament \
   --promote
 ```
 
-Hybrid training promotion enqueues `tournament` optional jobs when scalar metrics
-improve and `artifacts.promotion.strategy` is `hybrid` or `tournament`.
+Hybrid training promotion enqueues `checkpoint_eval` optional jobs (Docker validation
+then tournament) when `artifact_pipeline.checkpoint_eval_async=true` and scalar metrics
+improve with `artifacts.promotion.strategy` in `hybrid` or `tournament`. Standalone
+`tournament` jobs remain when `checkpoint_eval_async=false`.
+
+Use `artifacts=hybrid_promotion` for the composite eval profile.
 
 `4p_free_for_all` runs only when at least four unique candidates are present.
 

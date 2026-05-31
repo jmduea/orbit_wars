@@ -84,14 +84,22 @@ def queue_tournament_job_if_eligible(
         cfg.artifacts.tournament.enabled = True
     if not cfg.artifacts.tournament.enabled:
         return None
+    artifact_cfg = cfg.artifacts.artifact_pipeline
+    kind = "checkpoint_eval" if artifact_cfg.checkpoint_eval_async else "tournament"
     return write_optional_job(
         queue_dir,
-        kind="tournament",
+        kind=kind,
         update=update,
         checkpoint_path=checkpoint_path,
         payload={
             "campaign": cfg.output.campaign,
             "run_id": cfg.output.run_id,
+            "docker_image": artifact_cfg.docker_image,
+            "player_count": artifact_cfg.docker_player_count,
+            "per_step_seconds": cfg.artifacts.tournament.per_step_seconds,
+            "overage_budget_seconds": cfg.artifacts.tournament.overage_budget_seconds,
+            "episode_steps": cfg.artifacts.replay.max_steps,
+            "seed": cfg.seed + update,
         },
         result_root=result_root,
     )

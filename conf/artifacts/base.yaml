@@ -12,6 +12,7 @@ artifact_pipeline:
   replay_async: true
   replay_backend: docker
   docker_validation_async: false
+  checkpoint_eval_async: false
   docker_image: gcr.io/kaggle-images/python-simulations
   docker_player_count: both
   docker_timeout_seconds: 1.0
