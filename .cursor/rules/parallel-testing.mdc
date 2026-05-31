@@ -1,0 +1,36 @@
+---
+description: Serial test execution for parallel agents — executors use targeted tests; coordinator runs make test-fast
+alwaysApply: true
+---
+
+# Parallel work: serial test execution
+
+At most **one** pytest or Makefile test process repo-wide at any time. Concurrent `make test-fast` from multiple Multitask workers can lock WSL2 workstations.
+
+## Roles
+
+| Role | Tests |
+|------|-------|
+| **Executor (worker)** | **Targeted only** — smallest pytest/Makefile command covering touched paths |
+| **Coordinator (parent)** | **`make test-fast`** after each `land-issue` on repo root `main` |
+
+## Executor (hard prohibitions)
+
+- Do **not** run `make test-fast`, `make test`, `make test-jax`, or bare `uv run --group dev pytest` (full suite).
+- Check the **terminals folder** before pytest; if another test is running, defer and report `tests deferred to coordinator`.
+- Run multiple targeted commands **serially** in one worker, never parallel pytest.
+- Hand off: targeted command + pass/fail (or deferred); do **not** claim full-suite coverage.
+
+## Coordinator
+
+1. Workers commit in worktrees; coordinator runs `land-issue`.
+2. Confirm no executor pytest is running.
+3. Run **`make test-fast`** once per landed issue (serial).
+4. Do not start the next batch or next land until `make test-fast` finishes.
+5. Optional `uv run ow train …` smoke — serial only, after pytest, when train/CLI/submission touched.
+
+## Targeted test map
+
+Full per-issue commands for src audit **#136–#155**: `docs/MULTI_AGENT.md` § *Parallel work: serial test execution*.
+
+General domain targets: `AGENTS.md` **Test Selection For Coding Agents** (`make test-domain-config`, `test-domain-features`, etc.).
