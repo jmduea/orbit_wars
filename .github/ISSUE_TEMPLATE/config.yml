@@ -3,6 +3,6 @@ contact_links:
   - name: Roadmap (human index)
     url: https://github.com/jmduea/orbit_wars/blob/main/docs/ROADMAP.md
     about: Now / Next / Later status before opening an issue
-  - name: Work intake (agents)
-    url: https://github.com/jmduea/orbit_wars/blob/main/docs/ROADMAP.md#agent-workflow-mandatory-funnel
-    about: Planning funnel before implementation — use /work-intake or roadmap.py intake
+  - name: Cursor agent setup
+    url: https://github.com/jmduea/orbit_wars/blob/main/docs/CURSOR.md
+    about: Required Cursor plugins and repo agent config

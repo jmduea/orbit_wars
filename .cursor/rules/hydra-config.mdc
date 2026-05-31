@@ -1,0 +1,14 @@
+---
+description: Hydra config layout and experiment overrides
+globs: conf/**/*.yaml,conf/**/*.yml,src/config/**
+alwaysApply: false
+---
+
+# Hydra configuration
+
+- Source of truth: `conf/` responsibility groups (`model/`, `task/`, `reward/`, `training/`, `opponents/`, `curriculum/`, `telemetry/`, `artifacts/`).
+- Schema defaults: `src/config/schema.py`; composition/validation: `src/config/runtime.py`.
+- Treat resolved Hydra output as runtime truth (dataclass defaults may differ from YAML).
+- Prefer editing existing keys: `training.total_updates=2000`; use `+key=value` only for absent dynamic keys.
+- Opponents: select via `opponents=<profile>`; avoid sweeping profile-owned fields ad hoc.
+- Do not reintroduce the old `configs/` layout or removed runtime compatibility aliases.

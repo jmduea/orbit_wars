@@ -1,6 +1,7 @@
 ---
 description: Python OOP, uv, Google docstrings, and architecture diagram conventions
-alwaysApply: true
+globs: src/**/*.py,tests/**/*.py,scripts/**/*.py
+alwaysApply: false
 ---
 
 # Python & Project Standards

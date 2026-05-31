@@ -1,0 +1,38 @@
+---
+description: Orbit Wars commands, test policy, and architecture pointers
+alwaysApply: true
+---
+
+# Orbit Wars
+
+Python 3.12 RL project (Hydra + JAX PPO). Dependencies: **uv** only (`uv sync --group dev`).
+
+## Commands
+
+- Train: `uv run ow train model=attention training.total_updates=1000`
+- Resolved config: `uv run ow train print_resolved_config=true`
+- Kaggle: `uv run ow train kaggle`
+- Default tests: **`make test-fast`** (CPU-only, serial)
+- Full suite: `make test` — only when user asks (~15 min on WSL2)
+
+## Test policy
+
+- **Never** use `pytest-xdist` or `-n auto` (`tests/conftest.py` blocks it).
+- Do **not** run slow/JAX-compile smokes during iteration (`test_jax_rollout`, training-loop smokes, etc.).
+- Domain targets: `make test-domain-config`, `test-domain-features`, `test-domain-policy`, `test-domain-artifacts`, `test-domain-curriculum`.
+- Check the terminals folder before starting tests if another session may be running pytest.
+
+## Architecture (read before large changes)
+
+- Entry: `src/train.py` → `src/jax/train.py`
+- Config: `src/config/schema.py` + `conf/` responsibility groups
+- Features: `src/jax/features.py` `encode_turn`; registry in `src/features/`
+- Rollout/PPO: `src/jax/rollout/`, `src/jax/ppo_update.py`
+- Human priorities: `docs/ROADMAP.md`
+- Onboarding: `docs/ONBOARDING.md`, `docs/architecture/`
+
+## Agent workflow
+
+- Use Cursor plugins for planning/review/exploration — see `docs/CURSOR.md`.
+- Prefer surgical diffs; run `make targeted tests after edits.
+- Do not push unless the user asks.

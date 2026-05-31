@@ -219,8 +219,7 @@ These fields land in the run JSONL (`campaigns/*/runs/*/logs/*_jax.jsonl`) and i
 | `scripts/compare_attention_candidates.py` | Compare attention configs from logs |
 | `scripts/run_artifact_worker.py` | Artifact worker process |
 | `scripts/validate_kaggle_docker_submission.py` | Kaggle Docker submission validation |
-| `scripts/sync_omg_cursor.py` | Sync OMG catalog to Cursor (tooling; outside graph scope) |
-| `Makefile` | `setup` and `test` convenience targets |
+| `Makefile` | `setup`, `test-fast`, and domain test targets |
 
 ### Documentation
 
@@ -253,7 +252,7 @@ Files marked **complex** in the graph — read tests alongside code before chang
 
 ### Scripts
 
-- `scripts/run_artifact_worker.py`, `validate_kaggle_docker_submission.py`, `sync_omg_cursor.py`
+- `scripts/run_artifact_worker.py`, `validate_kaggle_docker_submission.py`
 
 **Safer starting points:** `src/train.py`, `src/game/constants.py`, `src/game/types.py`, `tests/conftest.py` (simple complexity in the graph).
 

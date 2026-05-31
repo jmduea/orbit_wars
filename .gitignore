@@ -223,7 +223,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Understand-Anything (machine-local symlinks from scripts/install_understand_anything_cursor.sh)
+# Understand-Anything plugin may add local symlinks under .cursor/
 .cursor/skills/understand*
 .cursor/agents/architecture-analyzer.md
 .cursor/agents/article-analyzer.md
@@ -235,19 +235,16 @@ __marimo__/
 .cursor/agents/project-scanner.md
 .cursor/agents/tour-builder.md
 
-# OMG ephemeral session state (updated by hooks during agent sessions)
+# Legacy OMG ephemeral state (optional local dirs)
 .omg/state/
 .omg/autopilot/
 # Personal scratch docs (keep locally)
 /docs/brain_dump.md
 /docs/Issues.md
-# Cursor hook session state
+# Cursor plugin hook state (e.g. continual-learning)
 .cursor/hooks/state/
-# MCP session state
-mcp-server/.omg/
-mcp-server/.omc/
 # Understand-Anything generated scan output
 .understand-anything/
 
-# Per-issue agent worktrees (roadmap.py worktree / claim --setup-worktree)
+# Per-issue agent worktrees (optional local dirs)
 /worktrees/
