@@ -48,6 +48,7 @@ def _curriculum_config(stages):
     cfg.curriculum.stages = stages
     cfg.opponents.mode.opponent = "self"
     cfg.opponents.self_play.enabled = True
+    cfg.telemetry.metric_groups.opponent_composition = True
     return cfg
 
 
@@ -385,7 +386,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     ])
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
-    cfg.training.num_envs = 1
+    assert cfg.training.num_envs >= 2
     cfg.training.rollout_steps = 1
     cfg.training.total_updates = 1
     cfg.training.epochs = 1

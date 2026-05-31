@@ -22,9 +22,14 @@ uv sync --group dev
 Run tests:
 
 ```bash
-make test-fast    # CPU-only daily loop (safe on WSL2)
-make test-jax     # serial JAX subset when editing JAX code
-make test         # full suite incl. slow tests; serial only — never use pytest -n
+make test              # CPU fast tier (~70s)
+make test-daily        # test-fast ∥ test-jax (~75s wall)
+make test-jax          # JAX light tier; includes Kaggle env parity
+make test-kaggle-parity # JAX env mechanics (parity file)
+make test-premerge     # test-daily + test-slow (no full sweep grid)
+make test-sweep        # full W&B sweep grid (weekly / pre-release)
+make test-fast-parallel # CPU xdist on fast tier only
+make test-full         # all tests; serial — never bare pytest -n
 ```
 
 For config work, start with:

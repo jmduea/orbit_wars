@@ -75,11 +75,13 @@ def test_aggregate_ppo_metrics_ignores_empty_minibatches() -> None:
         "value_loss_2p": jnp.array([0.25, jnp.nan], dtype=jnp.float32),
         "entropy_2p": jnp.array([2.0, jnp.nan], dtype=jnp.float32),
         "approx_kl_2p": jnp.array([0.01, jnp.nan], dtype=jnp.float32),
+        "approx_kl_v2_2p": jnp.array([0.02, jnp.nan], dtype=jnp.float32),
         "total_loss_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
         "policy_loss_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
         "value_loss_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
         "entropy_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
         "approx_kl_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
+        "approx_kl_v2_4p": jnp.array([jnp.nan, jnp.nan], dtype=jnp.float32),
     }
     metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count=2)
 
@@ -256,9 +258,15 @@ def _factorized_transition_batch(
     num_envs = int(turn_batch.planet_features.shape[0])
     sequence_k = int(target_index.shape[1])
     done = jnp.zeros((rollout_steps, num_envs), dtype=jnp.float32)
+    rewards = reward[None, :] if reward.ndim == 1 else reward
+    values = value[None, :] if value.ndim == 1 else value
+    if values.shape[0] < rollout_steps:
+        values = jnp.broadcast_to(values, (rollout_steps, num_envs))
+    if rewards.shape[0] < rollout_steps:
+        rewards = jnp.broadcast_to(rewards, (rollout_steps, num_envs))
     returns_step, advantages_step = gae_returns_and_advantages(
-        reward,
-        value[None, :],
+        rewards,
+        values,
         done,
         gamma=cfg.training.gamma,
         gae_lambda=cfg.training.gae_lambda,
@@ -487,12 +495,9 @@ def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
         train_state,
         policy,
         turn_batch,
-        rollout_steps=2,
+        rollout_steps=1,
         reward=jnp.array(
-            [
-                [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0],
-                [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
-            ],
+            [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0],
             dtype=jnp.float32,
         ),
     )

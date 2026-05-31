@@ -16,7 +16,7 @@
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": [
         "-m",
-        "not slow and not jax"
+        "not slow and not jax and not sweep"
     ],
     "chat.mcp.serverSampling": {
         "orbit_wars/.vscode/mcp.json: omg-workflow": {

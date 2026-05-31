@@ -6,11 +6,42 @@ import os
 import sys
 from pathlib import Path
 
+# Pin JAX to CPU before any test module imports src.jax (loop.py sets cuda,cpu on NVIDIA).
+if os.environ.get("ORBIT_WARS_PYTEST_USE_GPU") != "1":
+    os.environ["JAX_PLATFORMS"] = "cpu"
+    os.environ["ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA"] = "1"
+
+if os.environ.get("ORBIT_WARS_PYTEST_JAX_CACHE", "1") == "1":
+    cache_dir = os.environ.get("JAX_COMPILATION_CACHE_DIR")
+    if not cache_dir:
+        cache_dir = str(Path.home() / ".cache" / "orbit-wars-jax-compile")
+        os.environ["JAX_COMPILATION_CACHE_DIR"] = cache_dir
+    Path(cache_dir).mkdir(parents=True, exist_ok=True)
+
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+TESTS_DIR = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
+
+from jax_warmup import warmup_rollout_compile
+
+# Modules that always import/execute JAX (excluded from make test-fast).
+FULL_JAX_FILES = frozenset(
+    {
+        "test_jax_env.py",
+        "test_jax_env_dispatch.py",
+        "test_jax_env_parity.py",
+        "test_jax_ppo.py",
+        "test_jax_rollout.py",
+        "test_jax_scripted_opponents.py",
+        "test_decoder_carry.py",
+        "test_factorized_launch_metrics.py",
+    }
+)
 
 DOMAIN_BY_FILE: dict[str, str] = {
     "test_config_consolidation.py": "config",
@@ -33,23 +64,14 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_jax_scripted_opponents.py": "policy",
     "test_jax_curriculum.py": "curriculum",
     "test_trajectory_shield.py": "policy",
+    "test_decoder_carry.py": "policy",
+    "test_factorized_launch_metrics.py": "policy",
     "test_artifact_pipeline.py": "artifacts",
     "test_replay.py": "artifacts",
     "test_kaggle_submission_packager.py": "artifacts",
     "test_curriculum.py": "curriculum",
     "test_jax_train_timing.py": "curriculum",
 }
-
-FULL_JAX_FILES = frozenset(
-    {
-        "test_jax_env.py",
-        "test_jax_env_dispatch.py",
-        "test_jax_env_parity.py",
-        "test_jax_ppo.py",
-        "test_jax_rollout.py",
-        "test_jax_scripted_opponents.py",
-    }
-)
 
 # Mixed modules: mark jax per test, not per file.
 JAX_TEST_NAMES = frozenset(
@@ -59,21 +81,44 @@ JAX_TEST_NAMES = frozenset(
     }
 )
 
+# Kaggle/reference env parity stays in the jax (not slow) tier — see test-kaggle-parity.
 SLOW_FILES = frozenset(
     {
-        "test_jax_env_parity.py",
         # JAX compile / rollout / training-loop smokes — pre-merge only.
         "test_jax_rollout.py",
         "test_jax_curriculum.py",
         "test_jax_scripted_opponents.py",
-        "test_jax_env.py",
-        "test_jax_env_dispatch.py",
+    }
+)
+
+SWEEP_TESTS = frozenset(
+    {
+        "test_wandb_sweep_campaign_samples_compose_full",
+    }
+)
+
+BOUNDED_SWEEP_TESTS = frozenset(
+    {
+        "test_wandb_sweep_campaign_samples_compose_bounded",
+    }
+)
+
+# One XLA warmup collect per module before rollout/PPO integration tests run.
+JAX_WARMUP_MODULES = frozenset(
+    {
+        "test_jax_ppo.py",
+        "test_jax_rollout.py",
+        "test_jax_curriculum.py",
+        "test_jax_scripted_opponents.py",
+        "test_jax_seed_scheduler.py",
+        "test_curriculum.py",
+        "test_ppo_update.py",
+        "test_factorized_launch_metrics.py",
     }
 )
 
 SLOW_TESTS = frozenset(
     {
-        "test_wandb_sweep_campaign_samples_compose_full",
         "test_checkpoint_payload_roundtrips_curriculum_and_historical_pool",
         "test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs",
         "test_two_player_rollout_reports_sampled_random_family_slots",
@@ -100,6 +145,8 @@ SLOW_TESTS = frozenset(
         "test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs",
         "test_ppo_update_jax_accepts_four_player_rollout_transitions",
         "test_rollout_microbatching_preserves_full_environment_axis",
+        "test_rollout_initializes_env_state_decoder_hidden_for_scan_structure",
+        "test_factorized_rollout_emits_launches_with_shield_disabled",
     }
 )
 
@@ -136,23 +183,31 @@ SLOW_TRAJECTORY_SHIELD_TESTS = frozenset(
 def pytest_configure(config: pytest.Config) -> None:
     numprocesses = getattr(config.option, "numprocesses", None)
     if numprocesses not in (None, "0", 0):
-        raise pytest.UsageError(
-            "pytest-xdist is disabled for Orbit Wars: parallel workers that import "
-            "JAX/CUDA can exhaust GPU memory and crash WSL2. Use serial targets "
-            "such as `make test-fast`, `make test-jax`, or `make test`."
-        )
+        if os.environ.get("ORBIT_WARS_PYTEST_XDIST") != "1":
+            raise pytest.UsageError(
+                "pytest-xdist is opt-in only: use `make test-fast-parallel` or "
+                "`make test-jax-parallel` (CPU workers). Bare pytest -n is blocked "
+                "after parallel CUDA workers crashed WSL2."
+            )
+        if os.environ.get("ORBIT_WARS_PYTEST_USE_GPU") == "1":
+            raise pytest.UsageError(
+                "pytest-xdist requires CPU pytest (do not set ORBIT_WARS_PYTEST_USE_GPU=1)."
+            )
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
     markexpr = session.config.option.markexpr or ""
     if markexpr or os.environ.get("ORBIT_WARS_ALLOW_SLOW_TESTS") == "1":
         return
+    if session.testscollected <= 0:
+        return
     terminal = session.config.pluginmanager.get_plugin("terminalreporter")
     if terminal is not None:
         terminal.write_line("")
         terminal.write_line(
-            "WARNING: full suite selected (156 tests incl. 49 slow/JAX-heavy). "
-            "Daily loop: make test-fast (CPU) or make test-jax (serial JAX). "
+            f"WARNING: unfiltered pytest ({session.testscollected} tests). "
+            "Daily loop: make test / make test-daily. Pre-merge: make test-premerge "
+            "(+ make test-sweep before release). GPU pytest: ORBIT_WARS_PYTEST_USE_GPU=1. "
             "Set ORBIT_WARS_ALLOW_SLOW_TESTS=1 to silence.",
             yellow=True,
         )
@@ -165,6 +220,10 @@ def _is_jax(item: pytest.Item) -> bool:
     if filename in FULL_JAX_FILES:
         return True
     return test_name in JAX_TEST_NAMES
+
+
+def _is_sweep(item: pytest.Item) -> bool:
+    return item.name.split("[", 1)[0] in SWEEP_TESTS
 
 
 def _is_slow(item: pytest.Item) -> bool:
@@ -190,7 +249,22 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         domain = DOMAIN_BY_FILE.get(filename)
         if domain is not None:
             item.add_marker(getattr(pytest.mark, domain))
+        if filename == "test_jax_env_parity.py":
+            item.add_marker(pytest.mark.kaggle_parity)
         if _is_jax(item):
             item.add_marker(pytest.mark.jax)
         if _is_slow(item):
             item.add_marker(pytest.mark.slow)
+        test_name = item.name.split("[", 1)[0]
+        if test_name in SWEEP_TESTS:
+            item.add_marker(pytest.mark.sweep)
+        if test_name in BOUNDED_SWEEP_TESTS:
+            item.add_marker(pytest.mark.slow)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _jax_rollout_module_warmup(request: pytest.FixtureRequest) -> None:
+    module_path = Path(getattr(request.module, "__file__", ""))
+    if module_path.name not in JAX_WARMUP_MODULES:
+        return
+    warmup_rollout_compile()

@@ -266,13 +266,14 @@ Canonical **agent** test-selection rules live in `AGENTS.md` § *Test Selection 
 |-------------|---------------|---------------|
 | Config / schema | `make test-domain-config` | `test_config_consolidation.py`, `test_telemetry.py`, `test_metric_registry.py`, `test_run_paths.py` |
 | Env / features | `make test-domain-features` | Python feature tests; add `make test-domain-jax-env` when JAX env mirrors change |
-| JAX env | `make test-domain-jax-env` | serial `-m "jax and not slow"`; parity stays in slow tier |
+| JAX env / Kaggle parity | `make test-kaggle-parity` or `make test-domain-jax-env` | `-m "jax and not slow"`; `test_jax_env_parity.py` is no longer slow-tier |
 | Policy / PPO | `make test-domain-policy` | serial `-m "jax and not slow"` |
 | Curriculum | `make test-domain-curriculum` | CPU subset of `test_curriculum.py`, `test_jax_train_timing.py` |
 | Artifacts | `make test-domain-artifacts` | `test_artifact_pipeline.py`, `test_replay.py`, `test_kaggle_submission_packager.py` |
-| Default agent iteration | `make test-fast` | CPU-only, serial, `-m "not slow and not jax"` |
-| JAX follow-up | `make test-jax` | after edits under `src/jax/` |
-| Pre-merge only | `make test` | all tests including slow; serial; ask user on WSL2 |
+| Default agent iteration | `make test` or `make test-daily` | fast tier, or fast∥jax for ~75s wall |
+| JAX / env parity | `make test-jax` or `make test-kaggle-parity` | after `src/jax/` or env changes |
+| Pre-merge | `make test-premerge` | daily + slow (bounded sweep); add `make test-sweep` before release |
+| Parallel CPU | `make test-fast-parallel` | xdist on fast tier only |
 
 IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.vscode/settings.json` so the test explorer defaults to the CPU-safe tier.
 

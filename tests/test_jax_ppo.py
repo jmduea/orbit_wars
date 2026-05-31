@@ -566,6 +566,9 @@ def test_collect_rollout_jax_emits_training_scalar_metric_contract():
 
 
 def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_masks():
+    from src.features.registry import edge_k
+    from src.game.constants import MAX_PLANETS
+
     cfg = TrainConfig()
     cfg.model.architecture = "planet_graph_transformer"
     cfg.model.max_moves_k = 3
@@ -576,6 +579,7 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
     cfg.opponents.mode.opponent = "random"
+    cfg.telemetry.metric_groups.trajectory_shield_debug = True
 
     reset_keys = jax.random.split(jax.random.PRNGKey(90), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
@@ -587,12 +591,10 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
     )
 
     assert transitions.target_index.shape[-1] == cfg.model.max_moves_k
-    from src.jax.policy import edge_action_count
-
-    edge_count = edge_action_count(cfg.task)
+    k = edge_k(cfg.task)
     assert transitions.ship_bucket_mask.shape[-3:] == (
-        cfg.model.max_moves_k,
-        edge_count,
+        MAX_PLANETS,
+        k,
         cfg.task.ship_bucket_count,
     )
     assert "trajectory_shield_blocked_count" in rollout_metrics

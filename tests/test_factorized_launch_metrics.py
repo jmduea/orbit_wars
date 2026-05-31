@@ -53,6 +53,9 @@ def test_factorized_rollout_emits_launches_with_shield_disabled() -> None:
             "model=transformer_factorized",
             "training.rollout_steps=4",
             "training.num_envs=2",
+            "training.rollout_microbatch_envs=2",
+            "training.lean_rollout_metrics=false",
+            "telemetry.metric_groups.action_decision=true",
             "task.trajectory_shield_mode=off",
         ]
     )

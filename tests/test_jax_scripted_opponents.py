@@ -37,6 +37,7 @@ def _v2_cfg(*, player_count: int = 2) -> TrainConfig:
     cfg.opponents.mode.opponent = "self"
     cfg.opponents.self_play.enabled = True
     cfg.curriculum.enabled = True
+    cfg.telemetry.metric_groups.opponent_composition = True
     return cfg
 
 

@@ -231,10 +231,20 @@ def _aggregate_ppo_metrics(
             "total_loss",
         ):
             name = f"{metric_name}_{suffix}"
+            if name not in metrics_by_minibatch:
+                metrics[name] = jnp.array(0.0, dtype=jnp.float32)
+                continue
             metrics[name] = (
                 jnp.where(sample_counts > 0, metrics_by_minibatch[name], 0.0)
                 * sample_counts
             ).sum() / sample_denominator
+    sample_count = metrics_by_minibatch["sample_count"]
+    minibatch_axis = jnp.arange(sample_count.shape[0], dtype=jnp.int32)
+    active = sample_count > 0
+    last_active = jnp.maximum(
+        jnp.max(jnp.where(active, minibatch_axis, jnp.int32(-1))),
+        jnp.int32(0),
+    )
     for name in (
         "approx_kl",
         "approx_kl_v2",
@@ -245,11 +255,11 @@ def _aggregate_ppo_metrics(
         if name in metrics_by_minibatch:
             values = metrics_by_minibatch[name]
             metrics[f"{name}_first_minibatch"] = values[0]
-            metrics[f"{name}_last_minibatch"] = values[-1]
+            metrics[f"{name}_last_minibatch"] = values[last_active]
     if "log_ratio_abs_max" in metrics_by_minibatch:
         metrics["log_ratio_abs_max_last_minibatch"] = metrics_by_minibatch[
             "log_ratio_abs_max"
-        ][-1]
+        ][last_active]
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
     return metrics
 

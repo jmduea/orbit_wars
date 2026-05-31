@@ -36,7 +36,9 @@ addopts = [
 ]
 markers = [
     "slow: integration or expensive tests excluded from the fast dev loop",
+    "sweep: full W&B sweep Cartesian compose grid (weekly/explicit only)",
     "jax: tests that import or execute JAX code",
+    "kaggle_parity: JAX env mechanics aligned with Kaggle/reference game logic",
     "config: Hydra config, telemetry, and schema tests",
     "features: Python/JAX feature encoding and registry tests",
     "jax_env: JAX environment and parity tests",
@@ -74,6 +76,7 @@ unnecessary-type-conversion = false
 dev = [
     "ruff>=0.15.13",
     "pytest>=8.3.0",
+    "pytest-xdist>=3.6.0",
 ]
 
 [build-system]

@@ -12,8 +12,9 @@ Python 3.12 RL project (Hydra + JAX PPO). Dependencies: **uv** only (`uv sync --
 - Train: `uv run ow train model=attention training.total_updates=1000`
 - Resolved config: `uv run ow train print_resolved_config=true`
 - Kaggle: `uv run ow train kaggle`
-- Default tests: **`make test-fast`** (CPU-only, serial)
-- Full suite: `make test` — only when user asks (~15 min on WSL2)
+- Default tests: **`make test`** or **`make test-daily`** (fast ∥ jax, CPU)
+- Pre-merge: `make test-premerge` (excludes full sweep); `make test-sweep` before release
+- Parallel CPU: `make test-fast-parallel` / `make test-jax-parallel` only — not slow/sweep
 
 ## Test policy
 
