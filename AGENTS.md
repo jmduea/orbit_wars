@@ -6,7 +6,8 @@ Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architectu
 
 ```bash
 uv sync --group dev
-make test-fast                                    # default verification
+make test                                         # default verification (= test-fast)
+make test-fast                                    # alias for daily CPU loop
 uv run ow train training.total_updates=1000
 uv run ow train print_resolved_config=true
 uv run ow train kaggle
@@ -30,10 +31,12 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 
 ## Test tiers
 
-- **Default:** `make test-fast` — serial, CPU-only (`-m "not slow and not jax"`).
-- **Optional JAX:** `make test-jax` — only when user requests.
-- **Pre-merge:** `make test` — full suite; ask before running on WSL2.
-- **Never:** `pytest-xdist`, bare full `pytest` during iteration.
+- **Default:** `make test` / `make test-fast` — serial CPU (`-m "not slow and not jax and not sweep"`).
+- **Daily (parallel wall clock):** `make test-daily` — `test-fast` ∥ `test-jax`; or `make test-daily-parallel` with xdist.
+- **Kaggle env parity:** `make test-kaggle-parity` — `test_jax_env_parity.py` in the jax tier (not slow).
+- **Pre-merge:** `make test-premerge` = `test-daily` + `test-slow` (`slow and not sweep`). Before release: `make test-sweep`.
+- **Parallel CPU tiers:** `make test-fast-parallel` / `make test-jax-parallel` only (sets `ORBIT_WARS_PYTEST_XDIST=1`; never on slow/sweep/GPU).
+- **Never:** bare `pytest -n` without the Makefile targets; never xdist on slow/sweep; `make test-full` only when user asks (~15 min WSL2).
 
 ## Key invariants
 
@@ -44,15 +47,16 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 ## Learned User Preferences
 
 - Prefer unified v2-only feature encoding; remove legacy v1 paths rather than parallel encoders.
-- Favor full rework over incremental shims when simplifying encoding, rollout, or training modules.
+- Favor full rework over incremental shims when simplifying encoding, rollout, training modules, or any refactor — no backward-compat re-export modules, `_underscore` aliases, or parallel APIs for module moves/renames in a solo project; update call sites instead.
 - Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested.
-- Never use `pytest-xdist` or parallel pytest workers on WSL2/CUDA hosts.
+- Use `make test-fast-parallel` / `make test-jax-parallel` for CPU xdist only; never xdist on slow/sweep or with GPU pytest.
 - Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
 - Do not start test runs when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
 - Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
 - Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
 - Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
 - After major training-loop or checkpoint refactors, verify with short train smoke then a ~100-update benchmark; unit tests alone may miss regressions.
+- When the user attaches PR diff context or cites a PR number, fetch with `gh pr view` / `gh pr diff` — do not rely on inline diff blobs alone.
 - `.audit/` and `.cursor/hooks/state/` are gitignored; keep audit trails and hook state local, not in commits.
 
 ## Learned Workspace Facts
@@ -68,4 +72,6 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - OMG agent orchestration retired; use Cursor plugins per `docs/CURSOR.md`; legacy OMG/MULTI_AGENT material is under `docs/archive/omg/`.
 - `docs/ROADMAP.md` is human-only — no `scripts/roadmap.py` funnel or `tests/test_roadmap.py` enforcement.
 - **Hybrid promotion:** `artifacts=hybrid_promotion` sets `promotion.strategy=hybrid`, `tournament.enabled=true`, `checkpoint_eval_async=true`. Scalar metric improvements queue a composite `checkpoint_eval` worker job (Docker validation → tournament → promote). Training never writes promoted manifests on metrics alone under hybrid. Artifacts: `evaluations/checkpoint_eval_u<update>_<id>/{docker_validation,tournament}/`. Profile requires Docker on the worker host.
-- Planned encoding: parametric edge catalog with default `intercept_anchors` `[1.0, 3.0, 6.0]` (src audit phase 4; schema still `(1.0, 6.0)` until implemented).
+- **Train run layout:** `ow train` with `output.campaign=<name>` writes under `outputs/campaigns/<campaign>/runs/<run_id>/` — update metrics in `logs/*_jax.jsonl` (not `metrics.jsonl` at run root), checkpoints in `checkpoints/jax_ckpt_*.pkl`, artifact jobs in `queue/optional_jobs/`, evaluation outputs in `evaluations/`.
+- **Curriculum pre-flight:** `curriculum.enabled=true` requires `opponents.snapshot.pool_size > 0` and `opponents.snapshot.interval_updates > 0`; use `curriculum=off` for isolated train smokes that don't exercise historical opponents.
+- **Parametric edge catalog:** default `intercept_anchors` `[1.0, 3.0, 6.0]`; edge dim `6×N+7` (25 for default). Implemented in `src/features/catalog/edge.py` and `conf/task/base.yaml`; `docs/feature-encoding-v2.md` may still describe the older two-anchor layout.
