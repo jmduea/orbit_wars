@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from dataclasses import dataclass
+from functools import partial
+from typing import Any, Callable, Mapping
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
-from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.decoder_carry import empty_decoder_hidden
+from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import TurnBatch
+
+AgentActFn = Callable[[object], list[list[float | int]]]
 
 
 def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -> JaxGameState:
@@ -203,7 +207,7 @@ def select_runtime_shielded_policy_actions_with_carry(
 ) -> tuple[JaxAction, jax.Array | None]:
     """Sample shielded actions and return updated decoder carry when enabled."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     return _sample_policy_action_with_params(
         key,
@@ -233,7 +237,7 @@ def compile_shielded_policy_act_with_carry(
             "compile_shielded_policy_act_with_carry requires model.decoder_carry=true"
         )
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     def _compiled_act(
         game: JaxGameState,
@@ -269,7 +273,7 @@ def select_runtime_shielded_policy_actions(
 ) -> JaxAction:
     """Sample a shielded v2 policy action sequence and decode it to ``JaxAction``."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     action, _decoder_hidden = _sample_policy_action_with_params(
         key,
@@ -295,7 +299,7 @@ def compile_shielded_policy_act(
 ):
     """Return a JIT-compiled shielded policy act fn for submission inference."""
 
-    from src.opponents.jax_actions.builders import _sample_policy_action_with_params
+    from src.jax.action_sampling import _sample_policy_action_with_params
 
     def _compiled_act(
         game: JaxGameState,
@@ -469,6 +473,82 @@ def compile_feature_history_append(task_cfg: TaskConfig):
         return append_feature_history(history, game, task_cfg)
 
     return jax.jit(_append)
+
+
+@dataclass(slots=True)
+class SubmissionReadyAgent:
+    """JIT-warmed Kaggle agent matching submission inference semantics."""
+
+    act_fn: AgentActFn
+    reset_episode: Callable[[], None]
+    warmup: Callable[[], None]
+
+
+def build_submission_ready_agent(
+    cfg: TrainConfig,
+    policy: object,
+    variables: dict[str, object],
+    *,
+    act_seed: int = 0,
+    deterministic: bool = True,
+    deterministic_eval: bool = True,
+) -> SubmissionReadyAgent:
+    """Build a submission-style agent with compiled encode/act/history paths."""
+
+    from src.jax.features import FeatureHistory, empty_feature_history
+
+    max_fleets = int(cfg.task.max_fleets)
+    parse_game = partial(jax_game_from_observation_fast, max_fleet_slots=max_fleets)
+    jitted_encode = compile_batched_feature_encode(cfg.task)
+    jitted_append = compile_feature_history_append(cfg.task)
+    jitted_act = compile_shielded_policy_act(
+        policy,
+        variables,
+        cfg,
+        deterministic=deterministic,
+        deterministic_eval=deterministic_eval,
+    )
+    state: dict[str, object] = {
+        "history": empty_feature_history(cfg.task),
+        "step": int(act_seed),
+        "ready": False,
+    }
+
+    def reset_episode() -> None:
+        state["history"] = empty_feature_history(cfg.task)
+        state["step"] = int(act_seed)
+
+    def act(observation: object) -> list[list[float | int]]:
+        game = parse_game(observation)
+        history = state["history"]
+        assert isinstance(history, FeatureHistory)
+        game_batched, batch_batched = jitted_encode(game, history)
+        key = jax.random.PRNGKey(int(state["step"]))
+        state["step"] = int(state["step"]) + 1
+        action = jitted_act(game_batched, batch_batched, key)
+        jax.block_until_ready(action.valid)
+        state["history"] = jitted_append(history, game)
+        return moves_from_jax_action(action, env_index=0)
+
+    def warmup() -> None:
+        if bool(state["ready"]):
+            return
+        from kaggle_environments import make
+
+        env = make(
+            "orbit_wars",
+            configuration={"seed": 0, "episodeSteps": 500},
+            debug=False,
+        )
+        player_count = max(2, int(cfg.task.player_count))
+        env.run([lambda _obs: [] for _ in range(player_count)])
+        obs = env.steps[0][0].observation
+        act(obs)
+        reset_episode()
+        state["ready"] = True
+
+    return SubmissionReadyAgent(act_fn=act, reset_episode=reset_episode, warmup=warmup)
+
 
 def moves_from_jax_action(action: JaxAction, *, env_index: int = 0) -> list[list[float | int]]:
     """Convert a ``JaxAction`` buffer into Kaggle move lists."""

@@ -28,9 +28,9 @@ class ProductionBenchmarkResult:
 def rollout_group_summary(cfg: TrainConfig) -> tuple[Mapping[str, int | str], ...]:
     """Return resolved rollout group declarations for benchmark metadata."""
 
-    from src.jax.train import _configured_rollout_groups
+    from src.jax.train.rollout_groups import configured_rollout_groups
 
-    return tuple(_configured_rollout_groups(cfg))
+    return tuple(configured_rollout_groups(cfg))
 
 
 def run_production_benchmark(
@@ -41,20 +41,19 @@ def run_production_benchmark(
 ) -> ProductionBenchmarkResult:
     """Benchmark one training update using the production rollout-group path."""
 
-    import jax
     import jax.numpy as jnp
 
+    import jax
     from src.jax.device import ensure_jax_accelerator_backend
     from src.jax.policy import build_jax_policy
     from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
-    from src.jax.train import (
-        _active_group_indices,
-        _init_historical_snapshot_pool,
-        _replace_rollout_group_state,
-        _sum_metric_dicts,
-        init_rollout_groups,
+    from src.jax.train import init_rollout_groups, init_train_state
+    from src.jax.train.metrics import sum_metric_dicts
+    from src.jax.train.rollout_groups import (
+        active_group_indices,
+        replace_rollout_group_state,
     )
-    from src.jax.train_state import init_train_state
+    from src.jax.train.snapshots import init_historical_snapshot_pool
     from src.training.curriculum import CurriculumController
 
     ensure_jax_accelerator_backend()
@@ -67,7 +66,7 @@ def run_production_benchmark(
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(policy_key, policy, cfg)
     key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
-    historical_pool = _init_historical_snapshot_pool(
+    historical_pool = init_historical_snapshot_pool(
         train_state.params, cfg.opponents.snapshot.pool_size
     )
     curriculum = CurriculumController(
@@ -89,7 +88,7 @@ def run_production_benchmark(
             snapshot_valid_mask=historical_pool.valid_mask,
             snapshot_updates=historical_pool.snapshot_updates,
         )
-        active_indices = _active_group_indices(
+        active_indices = active_group_indices(
             rollout_groups,
             curriculum.current_format_weights(),
             update=update,
@@ -110,7 +109,9 @@ def run_production_benchmark(
                 historical_pool.params,
                 jnp.asarray(update, dtype=jnp.int32),
             )
-            next_groups.append(_replace_rollout_group_state(group, env_state, turn_batch))
+            next_groups.append(
+                replace_rollout_group_state(group, env_state, turn_batch)
+            )
             transitions_by_group.append(transitions)
             rollout_metrics_by_group.append(rollout_metrics)
 
@@ -120,7 +121,7 @@ def run_production_benchmark(
         rollout_groups = merged_groups
 
         transitions = concatenate_transition_batches(transitions_by_group)
-        rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
+        rollout_metrics = sum_metric_dicts(rollout_metrics_by_group)
         metrics_accum = None
         for _ in range(cfg.training.epochs):
             train_state, update_metrics = update_fn(train_state, transitions)

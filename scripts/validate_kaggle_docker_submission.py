@@ -32,13 +32,16 @@ RUNTIME_FILES = (
     "features/catalog/global_.py",
     "features/catalog/planet.py",
     "features/registry.py",
+    "features/schema_api.py",
     "game/__init__.py",
     "game/constants.py",
+    "game/shield_config.py",
+    "game/shield.py",
     "jax/rewards.py",
-    "game/trajectory_shield.py",
     "game/types.py",
     "jax/__init__.py",
     "jax/action_codec.py",
+    "jax/action_sampling.py",
     "jax/decoder_carry.py",
     "jax/decoders/__init__.py",
     "jax/decoders/factorized_topk_pointer.py",
@@ -51,6 +54,8 @@ RUNTIME_FILES = (
     "jax/factored_sequence_scan.py",
     "jax/feature_primitives.py",
     "jax/features.py",
+    "jax/shield/__init__.py",
+    "jax/shield/trajectory.py",
     "jax/policy.py",
     "jax/submission_runtime.py",
     "jax/env.py",
@@ -61,6 +66,7 @@ RUNTIME_FILES = (
     "opponents/jax_actions/__init__.py",
     "opponents/jax_actions/builders.py",
     "artifacts/checkpoint_compat.py",
+    "artifacts/timing.py",
 )
 TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax.train")
 
@@ -122,7 +128,7 @@ def parse_args() -> argparse.Namespace:
         default=500,
         help="Maximum episode steps for Docker self-play validation.",
     )
-    parser.add_argument("--skip-docker", action="store_true")
+    parser.add_argument("--skip-docker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--keep-staging", action="store_true")
     return parser.parse_args()
 
@@ -507,11 +513,11 @@ class TaskConfig:
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1
-    trajectory_shield_enabled: bool = True
+    trajectory_shield_mode: str = "cheap"
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
-    intercept_anchors: tuple[float, float] = (1.0, 6.0)
+    intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"
 
 
@@ -753,6 +759,7 @@ def main() -> int:
                 args.per_step_seconds,
                 args.overage_budget_seconds,
                 args.episode_steps,
+                extract_dir,
             )
             results = []
             player_counts = [2, 4] if args.player_count == "both" else [int(args.player_count)]
@@ -767,6 +774,7 @@ def main() -> int:
                     args.episode_steps,
                     args.replay_output_dir,
                     args.checkpoint_update,
+                    extract_dir,
                 ))
             print(json.dumps({
                 "ok": True,
@@ -894,36 +902,20 @@ def import_submission(extract_dir: Path, module_name="submission_main"):
     return module, time.perf_counter() - started
 
 
-class StepTimingBudget:
-    def __init__(self, per_step_seconds: float, overage_budget_seconds: float):
-        self.per_step_seconds = per_step_seconds
-        self.overage_budget_seconds = overage_budget_seconds
-        self.total_overage_seconds = 0.0
-        self.latencies = []
+def load_timing_module(extract_dir: Path):
+    src_root = extract_dir / "src"
+    if str(src_root) not in sys.path:
+        sys.path.insert(0, str(src_root))
+    from artifacts.timing import StepTimingBudget, TournamentTimingError
 
-    def record(self, elapsed: float) -> None:
-        self.latencies.append(elapsed)
-        self.total_overage_seconds += max(0.0, elapsed - self.per_step_seconds)
-        if self.total_overage_seconds > self.overage_budget_seconds:
-            raise PhaseError(
-                "overage_budget_failed",
-                "cumulative step overage "
-                f"{self.total_overage_seconds:.3f}s exceeded budget "
-                f"{self.overage_budget_seconds:.3f}s "
-                f"(last step {elapsed:.3f}s, per-step limit {self.per_step_seconds:.3f}s)",
-            )
+    return StepTimingBudget, TournamentTimingError
 
-    def summary(self) -> dict[str, float | int]:
-        latencies = list(self.latencies)
-        mean_action = sum(latencies) / len(latencies) if latencies else 0.0
-        return {
-            "agent_calls": len(latencies),
-            "max_action_seconds": max(latencies) if latencies else 0.0,
-            "mean_action_seconds": mean_action,
-            "total_overage_seconds": self.total_overage_seconds,
-            "per_step_seconds": self.per_step_seconds,
-            "overage_budget_seconds": self.overage_budget_seconds,
-        }
+
+def record_timing(timing, elapsed: float, *, timing_error_type) -> None:
+    try:
+        timing.record(elapsed)
+    except timing_error_type as exc:
+        raise PhaseError("overage_budget_failed", str(exc)) from exc
 
 
 def setup_probe(module) -> float:
@@ -942,9 +934,11 @@ def first_action_probe(
     per_step_seconds: float,
     overage_budget_seconds: float,
     episode_steps: int,
+    extract_dir: Path,
 ) -> dict[str, float | int]:
     from kaggle_environments import make
 
+    StepTimingBudget, TournamentTimingError = load_timing_module(extract_dir)
     env = make("orbit_wars", configuration={"seed": 123, "episodeSteps": episode_steps}, debug=True)
     env.run([lambda obs: [] for _ in range(2)])
     obs = env.steps[0][0].observation
@@ -955,7 +949,7 @@ def first_action_probe(
     except Exception as exc:
         raise PhaseError("first_action_failed", str(exc)) from exc
     elapsed = time.perf_counter() - started
-    timing.record(elapsed)
+    record_timing(timing, elapsed, timing_error_type=TournamentTimingError)
     validate_action(action)
     return {"action_seconds": elapsed, **timing.summary()}
 
@@ -969,9 +963,11 @@ def run_episode(
     episode_steps: int,
     replay_output_dir,
     checkpoint_update: int,
+    extract_dir: Path,
 ):
     from kaggle_environments import make
 
+    StepTimingBudget, TournamentTimingError = load_timing_module(extract_dir)
     timing = StepTimingBudget(per_step_seconds, overage_budget_seconds)
 
     def make_timed_agent(module):
@@ -979,7 +975,7 @@ def run_episode(
             started = time.perf_counter()
             action = module.agent(obs)
             elapsed = time.perf_counter() - started
-            timing.record(elapsed)
+            record_timing(timing, elapsed, timing_error_type=TournamentTimingError)
             validate_action(action)
             return action
 

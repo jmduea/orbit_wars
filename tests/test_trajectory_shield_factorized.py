@@ -3,25 +3,29 @@ from __future__ import annotations
 import importlib
 import math
 
-import pytest
-import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
+import jax
 from src.config import TaskConfig, TrainConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
-from src.game.trajectory_shield import (
+from src.jax.action_codec import FactoredPolicyOutput
+from src.jax.env import reset
+from src.jax.features import encode_turn
+from src.jax.shield import (
     apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_factorized_topk,
     factorized_source_mask_from_shield,
     trajectory_shield_mode,
 )
-from src.jax.action_codec import FactoredPolicyOutput
-from src.jax.env import reset
-from src.jax.features import encode_turn
-from src.jax.submission_runtime import batch_game, batch_turn, select_runtime_shielded_policy_actions
+from src.jax.submission_runtime import (
+    batch_game,
+    batch_turn,
+    select_runtime_shielded_policy_actions,
+)
 
 _jax_env = importlib.import_module("src.jax." + "env")
 JaxFleetState = _jax_env.JaxFleetState
@@ -34,7 +38,6 @@ def _task_cfg(**kwargs) -> TaskConfig:
         candidate_count=4,
         ship_bucket_count=4,
         max_fleets=8,
-        trajectory_shield_enabled=True,
         trajectory_shield_mode="cheap",
     )
     base.update(kwargs)
@@ -49,7 +52,6 @@ def _modes_cfg(**kwargs) -> TaskConfig:
         player_count=2,
         feature_history_steps=1,
         ship_feature_scale=1000.0,
-        trajectory_shield_enabled=True,
         trajectory_shield_mode="cheap",
         trajectory_shield_horizon=30,
     )
@@ -221,7 +223,7 @@ def test_factorized_shield_bucket_mask_shape() -> None:
 
 
 def test_factorized_shield_disabled_returns_all_legal() -> None:
-    cfg = _task_cfg(trajectory_shield_enabled=False)
+    cfg = _task_cfg(trajectory_shield_mode="off")
     k = edge_k(cfg)
     state, batch = reset(jax.random.PRNGKey(1), cfg)
     shielded = apply_trajectory_shield_factorized_topk(state.game, batch, cfg)
@@ -232,7 +234,7 @@ def test_factorized_shield_disabled_returns_all_legal() -> None:
 
 
 def test_factorized_source_mask_requires_ships_and_buckets() -> None:
-    cfg = _task_cfg(trajectory_shield_enabled=False)
+    cfg = _task_cfg(trajectory_shield_mode="off")
     state, batch = reset(jax.random.PRNGKey(2), cfg)
     shielded = apply_trajectory_shield_factorized_topk(state.game, batch, cfg)
     planet_ships = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
@@ -252,7 +254,7 @@ def test_factorized_source_mask_requires_ships_and_buckets() -> None:
 
 
 def test_trajectory_shield_mode_normalizes_disabled() -> None:
-    cfg = _modes_cfg(trajectory_shield_enabled=False)
+    cfg = _modes_cfg(trajectory_shield_mode="off")
     assert trajectory_shield_mode(cfg) == "off"
 
 

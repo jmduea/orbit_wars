@@ -6,13 +6,12 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-import jax
-from src.opponents.pool import (
+from src.opponents.constants import (
     OPPONENT_FAMILY_COUNT,
-    OPPONENT_FAMILY_IDS,
     OPPONENT_FAMILY_NAMES,
     OPPONENT_LATEST,
 )
+from src.opponents.pool import OPPONENT_FAMILY_IDS
 
 METRIC_KEYS = (
     "overall_win_rate",

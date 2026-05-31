@@ -6,18 +6,20 @@
 
 ## Now
 
-*None — pick from **Next** after planning.*
+*None — Phase 3 complete; Phase 4 (#151–#155) next.*
 
 ## Next
 
 | Item | Link |
 | ---- | ---- |
+| src audit phase 4: checkpoint hooks (#151) | [#151](https://github.com/jmduea/orbit_wars/issues/151) |
 | Debug metric: average ships per fleet launch | — |
 
 ## Later
 
 | Item | Link |
 | ---- | ---- |
+| src audit phase 4: telemetry + CatalogView + tournament queue (#152–#155) | [#152](https://github.com/jmduea/orbit_wars/issues/152) … [#155](https://github.com/jmduea/orbit_wars/issues/155) |
 | ALL _2p and _4p specific telemetry should default off and be toggled with debug flag | — |
 | update time fraction telemetry default off and be toggled with debug flag | — |
 
@@ -25,7 +27,7 @@
 
 | Item | Link |
 | ---- | ---- |
-| Tier 2: Cursor plugins + minimal agent config (#158) | [#158](https://github.com/jmduea/orbit_wars/issues/158) · archived OMG, `docs/CURSOR.md`, slim `AGENTS.md` |
+| src audit phase 3: shield relocation + action_sampling + constants + promotion writer (#147–#150) | [#147](https://github.com/jmduea/orbit_wars/issues/147) … [#150](https://github.com/jmduea/orbit_wars/issues/150) · `jax/shield/` `jax/action_sampling.py` `make test-fast` |
 | PPO health metrics: approx_kl_v2, first/last minibatch KL, parity (#157) | [#157](https://github.com/jmduea/orbit_wars/issues/157) · `ppo_update.py` `metric_registry.py` `make test-fast` |
 | src audit phase 1: config required-key audit (#141) | [#141](https://github.com/jmduea/orbit_wars/issues/141) · `conf/` `test_config_consolidation.py` `make test-fast` |
 | src audit phase 1: rollout metric contract + telemetry gating (#139–#140) | [#139](https://github.com/jmduea/orbit_wars/issues/139) [#140](https://github.com/jmduea/orbit_wars/issues/140) · `rollout/metrics.py` `metric_registry.py` |

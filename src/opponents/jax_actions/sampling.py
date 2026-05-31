@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import TrainConfig
-from src.game.trajectory_shield import apply_trajectory_shield_to_turn_batch_v2
+from src.jax.action_sampling import (
+    _sample_policy_action,
+    _sample_policy_action_with_params,
+)
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
 from src.jax.policy import edge_action_count
 from src.jax.rollout.types import JaxTrainState
-from src.opponents.jax_actions.builders import (
-    _sample_policy_action,
-    _sample_policy_action_with_params,
-    build_noop_action_from_edge_batch,
-    build_opportunistic_action_from_edge_batch,
-    build_random_action_from_edge_batch,
-    build_sniper_action_from_edge_batch,
-    build_turtle_action_from_edge_batch,
-)
-from src.opponents.pool import (
+from src.jax.shield import apply_trajectory_shield_to_turn_batch_v2
+from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
     OPPONENT_NEAREST_SNIPER,
@@ -27,7 +22,15 @@ from src.opponents.pool import (
     OPPONENT_RANDOM,
     OPPONENT_TURTLE,
 )
+from src.opponents.jax_actions.builders import (
+    build_noop_action_from_edge_batch,
+    build_opportunistic_action_from_edge_batch,
+    build_random_action_from_edge_batch,
+    build_sniper_action_from_edge_batch,
+    build_turtle_action_from_edge_batch,
+)
 from src.training.curriculum import StageView
+
 
 def _select_env_action(
     condition: jax.Array,

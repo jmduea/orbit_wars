@@ -36,7 +36,7 @@ def _fake_config() -> SimpleNamespace:
             player_count=2,
             max_ships=400.0,
             feature_history_steps=1,
-            trajectory_shield_enabled=True,
+            trajectory_shield_mode="cheap",
             trajectory_shield_hit_mode="selected_target",
             trajectory_shield_horizon=500,
             trajectory_shield_epsilon=1e-6,
@@ -137,7 +137,7 @@ def test_build_submission_package_has_kaggle_root_layout(tmp_path: Path) -> None
     assert "manifest.json" in names
     assert "src/__init__.py" in names
     assert "src/jax/policy.py" in names
-    assert "src/game/trajectory_shield.py" in names
+    assert "src/jax/shield/trajectory.py" in names
     assert len(names) == len(set(names))
     assert str(checkpoint.parent) not in manifest_text
     assert "source_checkpoint_sha256" in manifest_text
@@ -219,13 +219,13 @@ def test_export_runtime_artifact_accepts_planet_graph_transformer(tmp_path: Path
         "feature_metadata": {
             "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 19,
+            "edge_feature_dim": 25,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
             "edge_layout": "top_k_per_source",
             "edge_k": 3,
-            "intercept_anchors": (1.0, 6.0),
+            "intercept_anchors": (1.0, 3.0, 6.0),
         },
     }
     with checkpoint.open("wb") as file:
@@ -253,13 +253,13 @@ def test_export_runtime_artifact_includes_factorized_pointer_decoder(
         "feature_metadata": {
             "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 19,
+            "edge_feature_dim": 25,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
             "edge_layout": "top_k_per_source",
             "edge_k": 3,
-            "intercept_anchors": (1.0, 6.0),
+            "intercept_anchors": (1.0, 3.0, 6.0),
             "pointer_decoder": "factorized_topk",
             "action_layout_version": 2,
         },

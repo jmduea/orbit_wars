@@ -1,4 +1,4 @@
-"""``ow eval`` CLI for local tournament evaluation."""
+"""``ow eval`` CLI for tournament evaluation, artifact worker, and Kaggle submit."""
 
 from __future__ import annotations
 
@@ -7,6 +7,11 @@ import json
 import sys
 from pathlib import Path
 
+from src.artifacts.kaggle_submission import (
+    DEFAULT_COMPETITION,
+    package_checkpoint_submission,
+    submit_competition_package,
+)
 from src.artifacts.tournament.eval import run_tournament
 from src.artifacts.tournament.promotion import promote_from_tournament, top_passing_row
 from src.artifacts.tournament.resolve import (
@@ -17,15 +22,13 @@ from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
 )
+from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_job_worker
 from src.config.schema import TournamentConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description=(
-            "Local tournament evaluation for Orbit Wars checkpoints "
-            "(entrypoint: ow eval tournament)."
-        ),
+        description="Evaluation, artifact jobs, and Kaggle submission (ow eval).",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -33,6 +36,118 @@ def build_parser() -> argparse.ArgumentParser:
         "tournament",
         help="Evaluate checkpoints head-to-head in Kaggle env.",
     )
+    _add_tournament_arguments(tournament)
+
+    worker = subparsers.add_parser(
+        "worker",
+        help="Process queued optional artifact jobs for a run.",
+    )
+    worker.add_argument(
+        "--run",
+        type=Path,
+        default=None,
+        help="Campaign run directory (uses run/queue/optional_jobs and run/evaluations).",
+    )
+    worker.add_argument(
+        "--queue-dir",
+        type=Path,
+        default=None,
+        help="Optional job queue directory (overrides --run queue path).",
+    )
+    worker.add_argument(
+        "--result-root",
+        type=Path,
+        default=None,
+        help="Evaluations output root (defaults to run/evaluations when --run is set).",
+    )
+    worker.add_argument(
+        "--watch",
+        action="store_true",
+        help="Poll the queue until idle-exit-seconds (default: process once and exit).",
+    )
+    worker.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Include failed jobs (explicit retry workflow).",
+    )
+    worker.add_argument(
+        "--recover-running",
+        action="store_true",
+        help="Also pick up jobs left in running status by a dead worker.",
+    )
+    worker.add_argument("--poll-seconds", type=float, default=5.0)
+    worker.add_argument("--idle-exit-seconds", type=float, default=None)
+
+    submit = subparsers.add_parser(
+        "submit",
+        help="Package a checkpoint and submit submission.tar.gz to Kaggle.",
+    )
+    submit.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=None,
+        help="Checkpoint to package (required unless --package is set).",
+    )
+    submit.add_argument(
+        "--package",
+        type=Path,
+        default=None,
+        help="Existing submission.tar.gz to upload (skip packaging).",
+    )
+    submit.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/kaggle_submission"),
+        help="Directory for packaging output when building from --checkpoint.",
+    )
+    submit.add_argument(
+        "--message",
+        "-m",
+        default=None,
+        help="Kaggle submission message (default: derived from checkpoint name).",
+    )
+    submit.add_argument(
+        "--competition",
+        default=DEFAULT_COMPETITION,
+        help=f"Kaggle competition slug (default: {DEFAULT_COMPETITION}).",
+    )
+    submit.add_argument(
+        "--validate-docker",
+        action="store_true",
+        help="Run local Kaggle Docker validation before submitting.",
+    )
+    submit.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the kaggle competitions submit command without uploading.",
+    )
+    submit.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Pass -q to kaggle competitions submit.",
+    )
+
+    package = subparsers.add_parser(
+        "package",
+        help="Build submission.tar.gz from a checkpoint (optional Docker validation).",
+    )
+    package.add_argument("--checkpoint", required=True, type=Path)
+    package.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/kaggle_submission"),
+        help="Directory for submission.tar.gz and staging artifacts.",
+    )
+    package.add_argument(
+        "--validate-docker",
+        action="store_true",
+        help="Run Kaggle Docker validation after packaging (requires Docker).",
+    )
+
+    return parser
+
+
+def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
     tournament.add_argument("--campaign", default="scratch", help="Campaign slug for outputs.")
     tournament.add_argument(
         "--output-root",
@@ -88,7 +203,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write HTML replay artifacts for each match.",
     )
-    return parser
+    tournament.add_argument(
+        "--per-step-seconds",
+        type=float,
+        default=1.0,
+        help="Per-agent action latency budget (Kaggle submission parity).",
+    )
+    tournament.add_argument(
+        "--overage-budget-seconds",
+        type=float,
+        default=60.0,
+        help="Cumulative overage allowed above per-step budget before aborting.",
+    )
 
 
 def _parse_csv_ints(raw: str) -> list[int]:
@@ -159,6 +285,8 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         baselines=["sniper"],
         formats=_parse_csv_strings(args.formats),
         write_replays=bool(args.write_replays),
+        per_step_seconds=float(args.per_step_seconds),
+        overage_budget_seconds=float(args.overage_budget_seconds),
     )
 
     incumbent = None
@@ -186,7 +314,11 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         incumbent=incumbent,
         promotion_gates=cfg.artifacts.promotion.tournament,
     )
-    print(json.dumps(json.loads((output_dir / "leaderboard.json").read_text()), indent=2))
+    print(
+        json.dumps(
+            json.loads((output_dir / "leaderboard.json").read_text())["rows"], indent=2
+        )
+    )
 
     if args.promote:
         passing = top_passing_row(result)
@@ -216,9 +348,95 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_worker_dirs(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    if args.queue_dir is not None:
+        queue_dir = args.queue_dir.resolve()
+        result_root = (
+            args.result_root.resolve() if args.result_root is not None else None
+        )
+        return queue_dir, result_root
+    if args.run is None:
+        raise SystemExit("Provide --run or --queue-dir.")
+    queue_dir, evaluations_dir = resolve_run_worker_dirs(args.run)
+    if args.result_root is not None:
+        evaluations_dir = args.result_root.resolve()
+    return queue_dir, evaluations_dir
+
+
+def run_worker_cli(args: argparse.Namespace) -> int:
+    from scripts import run_artifact_worker
+
+    queue_dir, result_root = _resolve_worker_dirs(args)
+    if not queue_dir.is_dir():
+        raise SystemExit(f"Queue directory does not exist: {queue_dir}")
+    return run_optional_job_worker(
+        queue_dir,
+        run_artifact_worker._process_job,
+        run_artifact_worker._write_status,
+        result_root=result_root,
+        once=not bool(args.watch),
+        poll_seconds=float(args.poll_seconds),
+        idle_exit_seconds=args.idle_exit_seconds,
+        recover_running=bool(args.recover_running),
+        retry_failed=bool(args.retry_failed),
+    )
+
+
+def run_package_cli(args: argparse.Namespace) -> int:
+    package_path = package_checkpoint_submission(
+        args.checkpoint.resolve(),
+        args.output_dir.resolve(),
+        validate_docker=bool(args.validate_docker),
+    )
+    print(f"package_path={package_path}")
+    if not args.validate_docker:
+        print(
+            "docker_validation=skipped (packaging only; does not prove competition compatibility)",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def run_submit_cli(args: argparse.Namespace) -> int:
+    if args.package is not None:
+        package_path = args.package.resolve()
+        default_message = package_path.name
+    elif args.checkpoint is not None:
+        checkpoint_path = args.checkpoint.resolve()
+        default_message = checkpoint_path.name
+        package_path = package_checkpoint_submission(
+            checkpoint_path,
+            args.output_dir.resolve(),
+            validate_docker=bool(args.validate_docker),
+        )
+        print(f"package_path={package_path}")
+    else:
+        raise SystemExit(
+            "Provide --checkpoint to package or --package to upload an existing tarball."
+        )
+
+    message = args.message or f"ow eval submit {default_message}"
+    submit_competition_package(
+        package_path,
+        message,
+        competition=str(args.competition),
+        quiet=bool(args.quiet),
+        dry_run=bool(args.dry_run),
+    )
+    if not args.dry_run:
+        print(f"submitted={package_path} competition={args.competition}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "tournament":
         return run_tournament_cli(args)
+    if args.command == "worker":
+        return run_worker_cli(args)
+    if args.command == "package":
+        return run_package_cli(args)
+    if args.command == "submit":
+        return run_submit_cli(args)
     raise SystemExit(f"Unknown eval command: {args.command!r}")

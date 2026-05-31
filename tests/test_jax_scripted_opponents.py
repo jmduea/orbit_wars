@@ -5,15 +5,15 @@ Ownership:
 - Random/latest/historical family slot patterns live in ``tests/test_curriculum.py``.
 """
 
-import jax
 import pytest
 
+import jax
 from src.config import TrainConfig
-from src.game.trajectory_shield import apply_trajectory_shield_to_turn_batch_v2
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.train_state import init_train_state
+from src.jax.shield import apply_trajectory_shield_to_turn_batch_v2
+from src.jax.train import init_train_state
 from src.opponents.jax_actions.builders import (
     build_opportunistic_action_from_edge_batch,
     build_sniper_action_from_edge_batch,

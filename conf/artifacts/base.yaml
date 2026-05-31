@@ -12,6 +12,7 @@ artifact_pipeline:
   replay_async: true
   replay_backend: docker
   docker_validation_async: false
+  checkpoint_eval_async: false
   docker_image: gcr.io/kaggle-images/python-simulations
   docker_player_count: both
   docker_timeout_seconds: 1.0
@@ -59,3 +60,5 @@ tournament:
   formats: [2p_vs_baseline, 2p_head_to_head]
   output_subdir: tournament
   write_replays: false
+  per_step_seconds: 1.0
+  overage_budget_seconds: 60.0

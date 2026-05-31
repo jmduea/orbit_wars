@@ -7,7 +7,7 @@ import flax.struct
 import optax
 
 import jax
-from src.game.trajectory_shield import ShieldDiagnostics
+from src.jax.shield import ShieldDiagnostics
 
 
 class JaxTransitionBatch(NamedTuple):

@@ -5,6 +5,7 @@ from omegaconf import OmegaConf
 
 import jax
 
+
 def _configure_rollout_groups(cfg, groups):
     if not groups:
         cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
@@ -35,7 +36,7 @@ from src.jax.rollout.metric_contract import (
     OPPONENT_SLOT_METRIC_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
-from src.jax.train_state import init_train_state
+from src.jax.train import init_train_state
 from src.training.curriculum import CurriculumController
 
 
@@ -134,11 +135,13 @@ def test_stage_view_historical_probs_finite_when_no_valid_snapshots():
 
 
 def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
-    from src.jax.train import (
-        _add_historical_snapshot,
-        _checkpoint_payload_builder,
-        _init_historical_snapshot_pool,
-        _restore_historical_snapshot_pool,
+    from src.jax.train.checkpoint import (
+        checkpoint_payload_builder,
+        restore_historical_snapshot_pool,
+    )
+    from src.jax.train.snapshots import (
+        add_historical_snapshot,
+        init_historical_snapshot_pool,
     )
 
     cfg = _curriculum_config([{"id": "latest", "opponent_families": {"latest": 1.0}}])
@@ -149,10 +152,10 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
     train_state = init_train_state(jax.random.PRNGKey(120), policy, cfg)
     controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     controller.stage_index = 0
-    pool = _init_historical_snapshot_pool(train_state.params, 2)
-    pool, _event = _add_historical_snapshot(pool, train_state.params, update=3)
+    pool = init_historical_snapshot_pool(train_state.params, 2)
+    pool, _event = add_historical_snapshot(pool, train_state.params, update=3)
 
-    payload = _checkpoint_payload_builder(
+    payload = checkpoint_payload_builder(
         train_state,
         cfg,
         key=jax.random.PRNGKey(121),
@@ -162,9 +165,9 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
         curriculum=controller,
         historical_pool=pool,
     )()
-    restored = _restore_historical_snapshot_pool(
+    restored = restore_historical_snapshot_pool(
         payload["historical_snapshot_pool"],
-        _init_historical_snapshot_pool(train_state.params, 2),
+        init_historical_snapshot_pool(train_state.params, 2),
     )
 
     assert "curriculum_state" in payload
@@ -173,7 +176,7 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
 
 
 def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():
-    from src.jax.train import _checkpoint_payload_builder
+    from src.jax.train.checkpoint import checkpoint_payload_builder
 
     cfg = _curriculum_config(
         [
@@ -187,7 +190,7 @@ def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(130), policy, cfg)
     controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
-    builder = _checkpoint_payload_builder(
+    builder = checkpoint_payload_builder(
         train_state,
         cfg,
         key=jax.random.PRNGKey(131),
@@ -373,6 +376,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.artifacts.artifact_pipeline.enabled = False
     cfg.artifacts.replay.enabled = False
     cfg.telemetry.wandb.enabled = False
+    cfg.telemetry.metric_groups.debug = True
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
     _configure_rollout_groups(cfg, [

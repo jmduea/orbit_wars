@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.artifacts.run_paths import resolve_run_paths
 from src.artifacts.tournament.promotion import (
     promote_from_tournament,
     tournament_improves_incumbent,
@@ -17,13 +18,17 @@ from src.artifacts.tournament.ranking import (
     build_leaderboard,
     evaluate_gates,
 )
-from src.artifacts.run_paths import resolve_run_paths
 from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
 )
 from src.artifacts.tournament.runner import run_match
-from src.artifacts.tournament.types import AgentEntry, LeaderboardRow, MatchOutcome, TournamentResult
+from src.artifacts.tournament.types import (
+    AgentEntry,
+    LeaderboardRow,
+    MatchOutcome,
+    TournamentResult,
+)
 from src.cli import eval as eval_cli
 from src.config import TrainConfig
 from src.config.schema import PromotionTournamentConfig
@@ -248,7 +253,7 @@ def test_run_match_smoke_with_mock_env() -> None:
     env.step.return_value = [state, state]
 
     with patch("kaggle_environments.make", return_value=env):
-        outcome, returned_env = run_match(
+        outcome, returned_env, _timing = run_match(
             match_id="mock",
             format_name="2p_vs_baseline",
             seed=7,
@@ -263,14 +268,14 @@ def test_run_match_smoke_with_mock_env() -> None:
 
 def test_queue_tournament_job_accepts_tournament_only_reason(tmp_path: Path) -> None:
     from src.config import TrainConfig
-    from src.jax.train import _queue_tournament_job_if_eligible
+    from src.jax.train.queue import queue_tournament_job_if_eligible
 
     cfg = TrainConfig()
     cfg.artifacts.promotion.strategy = "tournament"
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
-    job_path = _queue_tournament_job_if_eligible(
+    job_path = queue_tournament_job_if_eligible(
         cfg,
         update=1,
         checkpoint_path=checkpoint_path,
@@ -345,3 +350,77 @@ def test_promote_from_tournament_rejects_weaker_incumbent(tmp_path: Path) -> Non
 
     assert attempt.promoted is False
     assert attempt.reason == "incumbent_win_rate_vs_sniper_unchanged"
+
+
+def test_eval_submit_dry_run_with_package(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    package = tmp_path / "submission.tar.gz"
+    package.write_bytes(b"fake")
+
+    with patch(
+        "src.cli.eval.submit_competition_package",
+        return_value=MagicMock(returncode=0),
+    ) as submit_mock:
+        exit_code = eval_cli.main(
+            [
+                "submit",
+                "--package",
+                str(package),
+                "--dry-run",
+                "-m",
+                "smoke",
+            ]
+        )
+
+    assert exit_code == 0
+    submit_mock.assert_called_once()
+    call_kwargs = submit_mock.call_args.kwargs
+    assert call_kwargs["dry_run"] is True
+    assert call_kwargs["competition"] == "orbit-wars"
+
+
+def test_eval_worker_requires_run_or_queue(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="Provide --run or --queue-dir"):
+        eval_cli.main(["worker"])
+
+
+def test_eval_worker_once(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run_a"
+    queue_dir = run_dir / "queue" / "optional_jobs"
+    queue_dir.mkdir(parents=True)
+
+    with patch("src.cli.eval.run_optional_job_worker", return_value=0) as worker_mock:
+        exit_code = eval_cli.main(["worker", "--run", str(run_dir)])
+
+    assert exit_code == 0
+    worker_mock.assert_called_once()
+    assert worker_mock.call_args.kwargs["once"] is True
+    assert worker_mock.call_args.args[0] == queue_dir
+
+
+def test_eval_package_skips_docker_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt.pkl"
+    checkpoint.write_bytes(b"unused")
+    output_dir = tmp_path / "out"
+
+    with patch(
+        "src.cli.eval.package_checkpoint_submission",
+        return_value=output_dir / "submission.tar.gz",
+    ) as package_mock:
+        exit_code = eval_cli.main(
+            [
+                "package",
+                "--checkpoint",
+                str(checkpoint),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    assert exit_code == 0
+    package_mock.assert_called_once()
+    assert package_mock.call_args.kwargs["validate_docker"] is False
+    assert "docker_validation=skipped" in capsys.readouterr().err

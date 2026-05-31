@@ -7,13 +7,12 @@ player_count: 4
 ship_feature_scale: 1000.0
 feature_history_steps: 1 # temporal feature control
 
-trajectory_shield_enabled: true
 trajectory_shield_mode: cheap # off | cheap | exact | tiered
 trajectory_shield_final_validate_selected: false
 trajectory_shield_hit_mode: selected_target # non_friendly
 trajectory_shield_horizon: 30
 trajectory_shield_epsilon: 1.0e-06
 
-intercept_anchors: [1.0, 6.0]
+intercept_anchors: [1.0, 3.0, 6.0]
 edge_rank_mode: snapshot
 ship_action_mode: continuous_fraction # continuous_fraction or buckets

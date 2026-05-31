@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import math
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -33,22 +33,21 @@ if nvidia_gpu_present() or os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().l
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import compose_hydra_train_config
 from src.jax.benchmark import rollout_group_summary
 from src.jax.device import ensure_jax_accelerator_backend
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
-from src.jax.train import (
-    _active_group_indices,
-    _init_historical_snapshot_pool,
-    _replace_rollout_group_state,
-    _sum_metric_dicts,
-    init_rollout_groups,
+from src.jax.train import init_rollout_groups, init_train_state
+from src.jax.train.metrics import sum_metric_dicts
+from src.jax.train.rollout_groups import (
+    active_group_indices,
+    replace_rollout_group_state,
 )
-from src.jax.train_state import init_train_state
+from src.jax.train.snapshots import init_historical_snapshot_pool
 from src.training.curriculum import CurriculumController
 
 METRIC_KEYS = ("policy_loss", "value_loss", "approx_kl", "entropy", "total_loss")
@@ -57,8 +56,14 @@ ROLLOUT_KEYS = ("mean_active_launches_per_turn", "overall_win_rate")
 # Workstation validation profile: no curriculum, pure self-play (stability gate).
 WORKSTATION_VALIDATION_OVERRIDES = [
     "model=transformer_factorized",
-    "format=2p_4p_16env",
-    "training=workstation",
+    "training=2p4p_32_split",
+    "training.rollout_steps=128",
+    "training.epochs=2",
+    "training.minibatch_size=512",
+    "training.update_chunk_rows_min=2048",
+    "training.update_chunk_rows_max=8192",
+    "training.enable_gradient_checkpointing=true",
+    "training.lean_rollout_metrics=true",
     "opponents=self_play_only",
     "curriculum=off",
     "telemetry.wandb.enabled=false",
@@ -169,6 +174,8 @@ def _format_profile_name(overrides: list[str]) -> str | None:
     for override in overrides:
         if override.startswith("format="):
             return override.split("=", 1)[1]
+        if override.startswith("training="):
+            return override.split("=", 1)[1]
     return None
 
 
@@ -194,7 +201,7 @@ def main() -> None:
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(policy_key, policy, cfg)
     key, rollout_groups = init_rollout_groups(rollout_init_key, cfg, policy)
-    historical_pool = _init_historical_snapshot_pool(
+    historical_pool = init_historical_snapshot_pool(
         train_state.params, cfg.opponents.snapshot.pool_size
     )
     curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
@@ -218,7 +225,7 @@ def main() -> None:
             snapshot_valid_mask=historical_pool.valid_mask,
             snapshot_updates=historical_pool.snapshot_updates,
         )
-        active_indices = _active_group_indices(
+        active_indices = active_group_indices(
             rollout_groups,
             curriculum.current_format_weights(),
             update=update,
@@ -239,7 +246,9 @@ def main() -> None:
                 historical_pool.params,
                 jnp.asarray(update, dtype=jnp.int32),
             )
-            next_groups.append(_replace_rollout_group_state(group, env_state, turn_batch))
+            next_groups.append(
+                replace_rollout_group_state(group, env_state, turn_batch)
+            )
             transitions_by_group.append(transitions)
             rollout_metrics_by_group.append(rollout_metrics)
         merged_groups = list(rollout_groups)
@@ -247,7 +256,7 @@ def main() -> None:
             merged_groups[group_idx] = updated_group
         rollout_groups = merged_groups
         transitions = concatenate_transition_batches(transitions_by_group)
-        rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
+        rollout_metrics = sum_metric_dicts(rollout_metrics_by_group)
         rollout_elapsed = time.perf_counter() - t_rollout
         t_update = time.perf_counter()
         metrics_accum = None

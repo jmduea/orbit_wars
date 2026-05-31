@@ -2,7 +2,6 @@ defaults:
   - base
   - _self_
 
-trajectory_shield_enabled: true
 trajectory_shield_mode: cheap
 trajectory_shield_final_validate_selected: false
 trajectory_shield_horizon: 50

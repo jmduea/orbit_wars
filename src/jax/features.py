@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import jax
 from src.config.schema import TaskConfig
 from src.features.catalog._types import EdgeRowAssemblyContext
-from src.features.catalog.edge import EDGE_FEATURE_CATALOG, assemble_edge_rows
+from src.features.catalog.edge import assemble_edge_rows, edge_feature_catalog_for
 from src.features.catalog.global_ import (
     GLOBAL_FEATURE_CATALOG,
     assemble_global_frame,
@@ -213,7 +213,7 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
     player = game.player
     p = MAX_PLANETS
     k = max(0, int(env_cfg.candidate_count) - 1)
-    edge_dim = EDGE_FEATURE_CATALOG.base_dim
+    edge_dim = edge_feature_catalog_for(env_cfg).base_dim
     if k == 0:
         return (
             jnp.zeros((p, 0, edge_dim), dtype=jnp.float32),
@@ -381,7 +381,9 @@ def _edge_features(game, env_cfg: TaskConfig, scale, theta_ref_value):
         tgt_active=tgt_active,
         scale=scale,
     )
-    edge_rows = assemble_edge_rows(edge_context)
+    edge_rows = assemble_edge_rows(
+        edge_context, catalog=edge_feature_catalog_for(env_cfg)
+    )
 
     owned_source = planets.active & (planets.owner == player)
     edge_mask = ordered_valid & (~crosses_now) & owned_source[:, None]

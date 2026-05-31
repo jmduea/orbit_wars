@@ -6,12 +6,15 @@ import numpy as np
 import jax
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
+from src.jax.action_sampling import _sample_shielded_sequence_with_params
 from src.jax.decoder_carry import empty_decoder_hidden, reset_decoder_hidden_on_done
 from src.jax.env import batched_reset
-from src.jax.policy import build_planet_graph_transformer_policy, make_synthetic_turn_batch
+from src.jax.policy import (
+    build_planet_graph_transformer_policy,
+    make_synthetic_turn_batch,
+)
 from src.jax.rollout.collect import collect_rollout_jax
-from src.jax.train_state import init_train_state
-from src.opponents.jax_actions.builders import _sample_shielded_sequence_with_params
+from src.jax.train import init_train_state
 
 
 def _task_cfg(**kwargs) -> TaskConfig:
@@ -39,7 +42,7 @@ def _sampler_cfg(*, pointer_decoder: str) -> TrainConfig:
     cfg.model.hidden_size = 32
     cfg.model.max_moves_k = 2
     cfg.task = _task_cfg(ship_bucket_count=4, max_fleets=8)
-    cfg.task.trajectory_shield_enabled = False
+    cfg.task.trajectory_shield_mode = "off"
     return cfg
 
 

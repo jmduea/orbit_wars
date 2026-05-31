@@ -2,27 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import jax
-
 from src.artifacts.checkpoint_compat import (
+    checkpoint_feature_metadata,
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
+from src.artifacts.timing import StepTimingBudget
 from src.config import TrainConfig
-from src.jax.features import encode_turn
 from src.jax.policy import build_jax_policy
 from src.jax.submission_runtime import (
-    batch_game,
-    batch_turn,
-    jax_game_from_observation,
-    moves_from_jax_action,
-    select_runtime_shielded_policy_actions,
+    SubmissionReadyAgent,
+    apply_feature_metadata_to_model_config,
+    build_submission_ready_agent,
 )
-from src.opponents import build_opponent
+from src.opponents.runtime import build_opponent
 
 from .types import AgentActFn, MatchOutcome
 
@@ -49,8 +47,8 @@ def build_checkpoint_agent(
     checkpoint_path: Path,
     *,
     act_seed: int = 0,
-) -> AgentActFn:
-    """Build a deterministic checkpoint policy callable for Kaggle env."""
+) -> SubmissionReadyAgent:
+    """Build a JIT-warmed submission-ready agent from a JAX checkpoint."""
 
     checkpoint = load_checkpoint_payload(checkpoint_path)
     if not isinstance(checkpoint, dict) or "params" not in checkpoint:
@@ -64,25 +62,20 @@ def build_checkpoint_agent(
     params = checkpoint["params"]
     if isinstance(params, dict) and "params" in params and len(params) == 1:
         params = params["params"]
+    cfg = apply_feature_metadata_to_model_config(
+        cfg, checkpoint_feature_metadata(checkpoint)
+    )
     policy = build_jax_policy(cfg=cfg)
-
-    def act(observation: object) -> list[list[float | int]]:
-        game = jax_game_from_observation(
-            observation, max_fleet_slots=int(cfg.task.max_fleets)
-        )
-        batch = encode_turn(game, cfg.task)
-        action = select_runtime_shielded_policy_actions(
-            jax.random.PRNGKey(int(act_seed)),
-            policy,
-            {"params": params},
-            batch_game(game),
-            batch_turn(batch),
-            cfg,
-            deterministic=True,
-        )
-        return moves_from_jax_action(action)
-
-    return act
+    agent = build_submission_ready_agent(
+        cfg,
+        policy,
+        {"params": params},
+        act_seed=act_seed,
+        deterministic=True,
+        deterministic_eval=True,
+    )
+    agent.warmup()
+    return agent
 
 
 def build_baseline_agent(name: str) -> AgentActFn:
@@ -94,7 +87,20 @@ def build_baseline_agent(name: str) -> AgentActFn:
     return act
 
 
-def _agent_action(agent: AgentActFn | Any, observation: object) -> list[list[float | int]]:
+def _episode_reset(agent: AgentActFn | SubmissionReadyAgent | Any) -> None:
+    if isinstance(agent, SubmissionReadyAgent):
+        agent.reset_episode()
+        return
+    reset = getattr(agent, "reset_episode", None)
+    if callable(reset):
+        reset()
+
+
+def _agent_action(
+    agent: AgentActFn | SubmissionReadyAgent | Any, observation: object
+) -> list[list[float | int]]:
+    if isinstance(agent, SubmissionReadyAgent):
+        return agent.act_fn(observation)
     if callable(agent):
         return agent(observation)
     return agent.act(observation)
@@ -114,21 +120,32 @@ def run_match(
     format_name: str,
     seed: int,
     agent_ids: Sequence[str],
-    agents: Sequence[AgentActFn | Any],
+    agents: Sequence[AgentActFn | SubmissionReadyAgent | Any],
     max_steps: int,
-) -> tuple[MatchOutcome, Any]:
-    """Run one Kaggle-env episode and return outcome plus env handle."""
+    per_step_seconds: float = 1.0,
+    overage_budget_seconds: float = 60.0,
+) -> tuple[MatchOutcome, Any, dict[str, object]]:
+    """Run one Kaggle-env episode and return outcome, env handle, and timing summary."""
 
     from kaggle_environments import make
 
     if len(agent_ids) != len(agents):
         raise ValueError("agent_ids and agents must have the same length.")
     num_agents = len(agent_ids)
+    timing = StepTimingBudget(per_step_seconds, overage_budget_seconds)
+    match_started = time.perf_counter()
+
     env = make(
         "orbit_wars",
-        configuration={"seed": seed, "randomSeed": seed},
+        configuration={
+            "seed": seed,
+            "randomSeed": seed,
+            "episodeSteps": int(max_steps),
+        },
         debug=False,
     )
+    for agent in agents:
+        _episode_reset(agent)
     env.reset(num_agents=num_agents)
     states = env.step([[] for _ in range(num_agents)])
     step_count = 0
@@ -136,7 +153,9 @@ def run_match(
         joint_actions: list[list[list[float | int]]] = []
         for index in range(num_agents):
             observation = states[index].observation if states[index] is not None else {}
+            action_started = time.perf_counter()
             joint_actions.append(_agent_action(agents[index], observation))
+            timing.record(time.perf_counter() - action_started)
         states = env.step(joint_actions)
         step_count += 1
         status = states[0].status if states and states[0] is not None else "DONE"
@@ -151,6 +170,11 @@ def run_match(
         rewards[agent_id] = reward
         results[agent_id] = reward_to_result(reward)
 
+    timing_summary: dict[str, object] = {
+        **timing.summary(),
+        "match_seconds": time.perf_counter() - match_started,
+        "env_steps": step_count,
+    }
     outcome = MatchOutcome(
         match_id=match_id,
         format_name=format_name,
@@ -160,4 +184,4 @@ def run_match(
         results=results,
         placements=_placements_from_rewards(agent_ids, rewards),
     )
-    return outcome, env
+    return outcome, env, timing_summary

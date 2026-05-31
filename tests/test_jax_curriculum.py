@@ -120,6 +120,7 @@ def _v2_curriculum_training_cfg(*, player_count: int, four_player_num_envs: int)
     cfg.artifacts.artifact_pipeline.enabled = False
     cfg.artifacts.replay.enabled = False
     cfg.telemetry.wandb.enabled = False
+    cfg.telemetry.metric_groups.debug = True
     return cfg
 
 

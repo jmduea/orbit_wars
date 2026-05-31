@@ -1,0 +1,23 @@
+ts	phase	decision	why	evidence	result
+2026-05-31T16:00:00Z	frame	Next phase is src audit Phase 4 (#151-#155); Phase 3 code landed locally	gh #147-#150 still OPEN; ROADMAP + #156 graph	docs/ROADMAP.md gh #156	VERIFIED
+2026-05-31T16:00:00Z	frame	Phase gate predicate: #147-#150 closed + all five Phase 4 issues closed + make test-fast green + ow train smoke + domain-features for #154/#155	prove-it-works bar from gh #156 global directives	gh #156 body	open
+2026-05-31T16:00:00Z	frame	Scope ~5 issues; train.py 1549 LOC; #155 changes E dim 18→23 (one-way door)	line counts + intercept_anchors [1,6] today	.audit/phase4-baseline.sh	open
+2026-05-31T16:00:00Z	frame	Rigor high: train.py central; checkpoint compat + golden tests on #155; serial spine before parallel lanes	one-way doors + blast radius from #156	gh #156 P4 table	open
+2026-05-31T16:05:00Z	design	Serial spine #151 then parallel #152+#154 then #153 then #155	last #156 worker guidance; P4-2 depends P1-E+P4-1; P4-5 depends P4-4+P3-A	gh #156 execution order	open
+2026-05-31T16:05:00Z	design	Pre-close Phase 3 issues (#147-#150) before P4-1 claim	Phase 4 blocked by Phase 3 gate per #156; code already merged locally	gh issue list	open
+2026-05-31T16:05:00Z	design	Baseline harness .audit/phase4-baseline.sh captures gate + LOC + domain tests before extractions	foundational-thinking: measure before refactor	.audit/phase4-baseline.sh	open
+2026-05-31T16:05:00Z	design	P4-1 module boundary: jax/train_checkpoint.py owns save/load/restore + handle_checkpoint_results shell	outcome-oriented: thin orchestrator in train.py; test without full loop	gh #151 acceptance	open
+2026-05-31T16:05:00Z	design	P4-2 module: telemetry/update_record.py owns record dict + filter write; train loop calls one function	builds on P1 metric contract + gating	gh #152 acceptance	open
+2026-05-31T16:05:00Z	design	P4-3 module: artifacts/train_queue.py owns promotion + tournament enqueue + worker autostart	uses Phase 3 promotion_manifest writer	gh #153 acceptance	open
+2026-05-31T16:05:00Z	design	P4-4 CatalogView replaces FeatureGroupRegistry; delete mirror slice API	migrate-callers-then-delete; blocks #155 parametric edges	gh #154 acceptance	open
+2026-05-31T16:05:00Z	design	P4-5 intercept_anchors default [1,3,6] E=23; shield bucket mapping + goldens	last serial step; depends shield in jax/shield	gh #155 acceptance	open
+2026-05-31T16:05:00Z	design	Skip architect arena for P4-1..3 mechanical extractions; run arena only if checkpoint vs artifacts ownership contested	laziness-protocol: shape already concrete in issue bodies	gh #151-153	open
+2026-05-31T16:31:00Z	gate	P3-C incomplete: curriculum imports OPPONENT_FAMILY_* from pool; constants live in opponents/constants.py only	migrate-callers-then-delete; prior p3c VERIFIED row did not re-run imports	.audit/phase4-baseline.txt 4 failed	NOT VERIFIED
+2026-05-31T16:31:00Z	gate	Phase 4 blocked until P3 tail: migrate curriculum.py + jax_actions/sampling.py to constants; make test-domain-artifacts green	fix-root-causes before train.py extractions	src/training/curriculum.py src/opponents/pool.py	open
+2026-05-31T17:00:00Z	p3-tail	migrated curriculum sampling collect imports to opponents/constants.py	migrate-callers-then-delete; pool keeps only JAX sampler IDs	make test-domain-artifacts 65 passed	VERIFIED
+2026-05-31T17:15:00Z	p4-1	extracted train_checkpoint.py + CheckpointHandler; train.py re-exports compat names	gh #151 acceptance: unit tests without full loop	tests/test_train_checkpoint.py make test-fast	VERIFIED
+2026-05-31T18:45:00Z	gate	closed gh #147-#151; ow train u=2 smoke passed	prove-it-works bar from gh #156	uv run ow train training.total_updates=2	VERIFIED
+2026-05-31T19:00:00Z	p4-2	extracted train_telemetry.py record assembly + filtered write	gh #152 acceptance; filter_update_record at log boundary	tests/test_train_telemetry.py make test-fast	VERIFIED
+2026-05-31T19:30:00Z	p4-4	CatalogView replaces FeatureGroupRegistry; deleted FeatureItem mirror	schema_api.py wraps FeatureCatalog; drift tests in test_feature_registry.py	make test-domain-features make test-fast	VERIFIED
+2026-05-31T20:00:00Z	p4-3	extracted train_queue.py; CheckpointHandler calls queue module directly	gh #153 acceptance tests/test_train_queue.py make test-fast	VERIFIED
+2026-05-31T20:30:00Z	p4-5	parametric edge catalog intercept_anchors [1,3,6] E=25; shield bucket mapping + sniper min distance	build_edge_feature_catalog + conf/task/base.yaml make test-domain-features	VERIFIED

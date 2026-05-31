@@ -311,52 +311,52 @@ _METRICS: tuple[MetricDefinition, ...] = (
     ),
     _metric(
         "rollout_seconds_2p",
-        "timing",
+        "debug",
         "Wall-clock seconds spent collecting 2-player rollout groups.",
     ),
     _metric(
         "rollout_seconds_4p",
-        "timing",
+        "debug",
         "Wall-clock seconds spent collecting 4-player rollout groups.",
     ),
     _metric(
         "env_steps_per_sec_2p",
-        "timing",
+        "debug",
         "2-player environment steps processed per second over the full update.",
     ),
     _metric(
         "env_steps_per_sec_4p",
-        "timing",
+        "debug",
         "4-player environment steps processed per second over the full update.",
     ),
     _metric(
         "rollout_env_steps_per_sec_2p",
-        "timing",
+        "debug",
         "2-player environment steps processed per second during 2-player rollout collection.",
     ),
     _metric(
         "rollout_env_steps_per_sec_4p",
-        "timing",
+        "debug",
         "4-player environment steps processed per second during 4-player rollout collection.",
     ),
     _metric(
         "samples_per_sec_2p",
-        "timing",
+        "debug",
         "2-player learner decision samples processed per second over the full update.",
     ),
     _metric(
         "samples_per_sec_4p",
-        "timing",
+        "debug",
         "4-player learner decision samples processed per second over the full update.",
     ),
     _metric(
         "rollout_samples_per_sec_2p",
-        "timing",
+        "debug",
         "2-player learner decision samples processed per second during 2-player rollout collection.",
     ),
     _metric(
         "rollout_samples_per_sec_4p",
-        "timing",
+        "debug",
         "4-player learner decision samples processed per second during 4-player rollout collection.",
     ),
     _metric(

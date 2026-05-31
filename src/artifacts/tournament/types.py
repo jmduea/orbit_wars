@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Callable
 
 from src.config import TrainConfig
+from src.jax.submission_runtime import SubmissionReadyAgent
 
 AgentActFn = Callable[[object], list[list[float | int]]]
+AgentHandle = AgentActFn | SubmissionReadyAgent
 
 
 @dataclass(slots=True)
@@ -18,7 +20,7 @@ class AgentEntry:
     agent_id: str
     checkpoint_path: Path
     cfg: TrainConfig
-    act_fn: AgentActFn | None = None
+    act_fn: AgentHandle | None = None
 
 
 @dataclass(slots=True)

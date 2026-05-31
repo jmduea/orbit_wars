@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.game.trajectory_shield import ship_count_for_fraction_jax
+from src.jax.shield import ship_count_for_fraction_jax
 
 
 def is_continuous_ship_mode(cfg: TrainConfig) -> bool:
@@ -73,7 +73,7 @@ def ship_count_for_action(
         if ship_fraction is None:
             raise ValueError("Continuous ship mode requires ship_fraction.")
         return ship_count_for_fraction_jax(available_ships, ship_fraction)
-    from src.game.trajectory_shield import ship_count_for_bucket_jax
+    from src.jax.shield import ship_count_for_bucket_jax
 
     return ship_count_for_bucket_jax(
         available_ships, ship_bucket, cfg.task.ship_bucket_count

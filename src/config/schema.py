@@ -19,7 +19,6 @@ class TaskConfig:
     candidate_count: int = 8
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
-    trajectory_shield_enabled: bool = True
     trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
     # off: no trajectory filtering beyond ordinary action legality
     # cheap: feature-derived source/target/bucket mask, no horizon scan
@@ -29,7 +28,7 @@ class TaskConfig:
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
-    intercept_anchors: tuple[float, float] = (1.0, 6.0)
+    intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
 
 
@@ -250,6 +249,8 @@ class TournamentConfig:
     )
     output_subdir: str = "tournament"
     write_replays: bool = False
+    per_step_seconds: float = 1.0
+    overage_budget_seconds: float = 60.0
 
 
 @dataclass(slots=True)
@@ -264,6 +265,7 @@ class ArtifactPipelineConfig:
     replay_async: bool = True
     replay_backend: str = "docker"
     docker_validation_async: bool = False
+    checkpoint_eval_async: bool = False
     docker_image: str = "gcr.io/kaggle-images/python-simulations"
     docker_player_count: str = "both"
     docker_timeout_seconds: float = 1.0

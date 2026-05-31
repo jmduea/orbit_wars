@@ -7,6 +7,7 @@ from typing import Any
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from src.opponents.constants import CURRICULUM_OPPONENT_FAMILIES
 from src.telemetry.metric_registry import (
     CURRICULUM_PROMOTION_METRIC_NAMES,
     validate_scalar_update_metric_name,
@@ -40,15 +41,7 @@ _RESPONSIBILITY_GROUP_SCHEMAS: dict[str, type] = {
     "artifacts": ArtifactsConfig,
 }
 
-_CURRICULUM_FAMILIES = {
-    "latest",
-    "historical",
-    "random",
-    "noop",
-    "nearest_sniper",
-    "turtle",
-    "opportunistic",
-}
+_CURRICULUM_FAMILIES = CURRICULUM_OPPONENT_FAMILIES
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _SAFE_RELATIVE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/]*$")

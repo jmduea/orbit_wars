@@ -14,7 +14,7 @@ from src.artifacts.checkpoint_compat import (
     load_checkpoint_payload,
     validate_checkpoint_config_compatibility,
 )
-from src.artifacts.promotion import promoted_manifest_path, resolve_from_promoted
+from src.artifacts.promotion import resolve_from_promoted
 from src.artifacts.run_paths import RunContext, _cache_path
 from src.artifacts.tournament.runner import build_checkpoint_agent
 from src.config import TrainConfig
@@ -53,13 +53,15 @@ def agent_from_checkpoint(
     *,
     agent_id: str | None = None,
 ) -> AgentEntry:
+    agent_id = agent_id or checkpoint_path.stem
     resolved = checkpoint_path.resolve()
     cfg = load_train_config_from_checkpoint(resolved)
+    submission_agent = build_checkpoint_agent(cfg, resolved)
     return AgentEntry(
-        agent_id=agent_id or resolved.stem,
+        agent_id=agent_id,
         checkpoint_path=resolved,
         cfg=cfg,
-        act_fn=build_checkpoint_agent(cfg, resolved),
+        act_fn=submission_agent,
     )
 
 
