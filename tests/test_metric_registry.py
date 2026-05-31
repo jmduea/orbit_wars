@@ -7,8 +7,8 @@ import pytest
 import yaml
 from omegaconf import OmegaConf
 
-from src.config.schema import TrainConfig
 from src.config import compose_hydra_train_config, train_config_from_omegaconf
+from src.config.schema import TrainConfig
 from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
@@ -213,8 +213,34 @@ def test_per_format_loss_metrics_are_registered_as_losses():
         assert f"value_loss_{suffix}" in names
         assert f"entropy_{suffix}" in names
         assert f"approx_kl_{suffix}" in names
+        assert f"approx_kl_v2_{suffix}" in names
         assert f"total_loss_{suffix}" in names
         assert f"loss_sample_count_{suffix}" in names
+
+
+def test_ppo_health_metrics_are_registered_as_losses():
+    names = enabled_metric_names(
+        _metric_groups(losses=True),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+    for name in (
+        "approx_kl_v2",
+        "approx_kl_first_minibatch",
+        "approx_kl_last_minibatch",
+        "approx_kl_v2_first_minibatch",
+        "approx_kl_v2_last_minibatch",
+        "log_ratio_abs_mean",
+        "log_ratio_abs_max_last_minibatch",
+        "importance_ratio_mean",
+        "clip_fraction",
+        "parity_logprob_delta_abs_mean",
+        "parity_logprob_delta_abs_max",
+        "parity_old_log_prob_finite",
+        "parity_new_log_prob_finite",
+    ):
+        assert name in names
+        assert metric_definition(name).group == "losses"
 
 
 def test_per_format_timing_metrics_are_registered_as_timing():
@@ -330,7 +356,6 @@ def test_prune_scalar_metrics_drops_disabled_keys():
 
 
 def test_merge_metric_dicts_omits_disabled_group_keys():
-    import jax
     import jax.numpy as jnp
 
     from src.jax.train import _merge_metric_dicts

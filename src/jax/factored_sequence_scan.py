@@ -256,6 +256,59 @@ def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
     return (x * mask).sum() / denom
 
 
+def rollout_replay_parity_summary(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    player_count: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    step_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    old_log_prob: jax.Array,
+    ship_fraction: jax.Array | None = None,
+    decoder_hidden: jax.Array | None = None,
+    initial_remaining_ships: jax.Array | None = None,
+) -> dict[str, jax.Array]:
+    """Lightweight rollout↔replay parity check at fixed policy params."""
+
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_index=source_index,
+        target_slot=target_slot,
+        ship_bucket=ship_bucket,
+        stop_flag=stop_flag,
+        step_mask=step_mask,
+        ship_bucket_mask=ship_bucket_mask,
+        ship_fraction=ship_fraction,
+        decoder_hidden=decoder_hidden,
+        initial_remaining_ships=initial_remaining_ships,
+    )
+    new_log_prob = replay.log_prob
+    delta = new_log_prob - old_log_prob
+    mask = step_mask.astype(jnp.float32)
+    return {
+        "parity_logprob_delta_abs_mean": masked_mean(jnp.abs(delta), mask),
+        "parity_logprob_delta_abs_max": jnp.max(
+            jnp.where(mask > 0.0, jnp.abs(delta), 0.0)
+        ),
+        "parity_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
+            jnp.float32
+        ),
+        "parity_new_log_prob_finite": jnp.all(jnp.isfinite(new_log_prob)).astype(
+            jnp.float32
+        ),
+    }
+
+
 def factored_logprob_parity_metrics(
     params: dict,
     policy: object,

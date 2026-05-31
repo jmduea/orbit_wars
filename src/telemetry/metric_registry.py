@@ -181,13 +181,89 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Mean source/target/ship entropy for factorized pointer decoders.",
     ),
     _metric(
-        "approx_kl", "losses", "Approximate KL divergence between old and new policy."
+        "approx_kl",
+        "losses",
+        "Unweighted mean over PPO minibatches of mean(old_log_prob - new_log_prob); "
+        "can diverge with epochs>1 and many inner steps.",
+    ),
+    _metric(
+        "approx_kl_v2",
+        "losses",
+        "Schulman-style approximate KL using clipped importance ratios.",
+    ),
+    _metric(
+        "approx_kl_first_minibatch",
+        "losses",
+        "approx_kl on the first minibatch before any optimizer step (parity sentinel).",
+        protected=True,
+    ),
+    _metric(
+        "approx_kl_last_minibatch",
+        "losses",
+        "approx_kl on the final minibatch after all inner optimizer steps.",
+    ),
+    _metric(
+        "approx_kl_v2_first_minibatch",
+        "losses",
+        "approx_kl_v2 on the first minibatch before any optimizer step.",
+    ),
+    _metric(
+        "approx_kl_v2_last_minibatch",
+        "losses",
+        "approx_kl_v2 on the final minibatch after all inner optimizer steps.",
+    ),
+    _metric(
+        "log_ratio_abs_mean",
+        "losses",
+        "Mean absolute log-probability delta between rollout and replay.",
+    ),
+    _metric(
+        "log_ratio_abs_max_last_minibatch",
+        "losses",
+        "Max absolute log-probability delta on the final PPO minibatch.",
+    ),
+    _metric(
+        "importance_ratio_mean",
+        "losses",
+        "Mean clipped importance ratio exp(clip(new_log_prob - old_log_prob)).",
+    ),
+    _metric(
+        "clip_fraction",
+        "losses",
+        "Fraction of masked steps where the importance ratio exceeds clip_coef.",
+    ),
+    _metric(
+        "parity_logprob_delta_abs_mean",
+        "losses",
+        "Pre-update mean |replay_log_prob - stored_old_log_prob| on the first minibatch.",
+        protected=True,
+    ),
+    _metric(
+        "parity_logprob_delta_abs_max",
+        "losses",
+        "Pre-update max |replay_log_prob - stored_old_log_prob| on the first minibatch.",
+        protected=True,
+    ),
+    _metric(
+        "parity_old_log_prob_finite",
+        "losses",
+        "Whether stored old log-probs are finite on the first minibatch parity slice.",
+    ),
+    _metric(
+        "parity_new_log_prob_finite",
+        "losses",
+        "Whether replay log-probs are finite on the first minibatch parity slice.",
     ),
     _metric("total_loss", "losses", "Final weighted PPO loss used for optimization."),
     _metric("policy_loss_2p", "losses", "PPO policy loss for 2-player samples."),
     _metric("value_loss_2p", "losses", "PPO value loss for 2-player samples."),
     _metric("entropy_2p", "losses", "Action entropy for 2-player samples."),
     _metric("approx_kl_2p", "losses", "Approximate KL for 2-player samples."),
+    _metric(
+        "approx_kl_v2_2p",
+        "losses",
+        "Schulman-style approximate KL for 2-player samples.",
+    ),
     _metric("total_loss_2p", "losses", "Weighted PPO loss for 2-player samples."),
     _metric(
         "loss_sample_count_2p",
@@ -198,6 +274,11 @@ _METRICS: tuple[MetricDefinition, ...] = (
     _metric("value_loss_4p", "losses", "PPO value loss for 4-player samples."),
     _metric("entropy_4p", "losses", "Action entropy for 4-player samples."),
     _metric("approx_kl_4p", "losses", "Approximate KL for 4-player samples."),
+    _metric(
+        "approx_kl_v2_4p",
+        "losses",
+        "Schulman-style approximate KL for 4-player samples.",
+    ),
     _metric("total_loss_4p", "losses", "Weighted PPO loss for 4-player samples."),
     _metric(
         "loss_sample_count_4p",
@@ -442,7 +523,6 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "debug",
         "Count of active launch rows with an all-false ship bucket.",
     ),
-
     _metric(
         "trajectory_shield_blocked_count",
         "trajectory_shield_debug",
@@ -655,17 +735,32 @@ PPO_METRIC_ORDER: tuple[str, ...] = (
     "value_loss",
     "entropy",
     "approx_kl",
+    "approx_kl_v2",
+    "approx_kl_first_minibatch",
+    "approx_kl_last_minibatch",
+    "approx_kl_v2_first_minibatch",
+    "approx_kl_v2_last_minibatch",
+    "log_ratio_abs_mean",
+    "log_ratio_abs_max_last_minibatch",
+    "importance_ratio_mean",
+    "clip_fraction",
+    "parity_logprob_delta_abs_mean",
+    "parity_logprob_delta_abs_max",
+    "parity_old_log_prob_finite",
+    "parity_new_log_prob_finite",
     "total_loss",
     "policy_loss_2p",
     "value_loss_2p",
     "entropy_2p",
     "approx_kl_2p",
+    "approx_kl_v2_2p",
     "total_loss_2p",
     "loss_sample_count_2p",
     "policy_loss_4p",
     "value_loss_4p",
     "entropy_4p",
     "approx_kl_4p",
+    "approx_kl_v2_4p",
     "total_loss_4p",
     "loss_sample_count_4p",
     "minibatches",
@@ -679,7 +774,9 @@ PPO_METRIC_ORDER: tuple[str, ...] = (
     "debug_active_launch_all_false_bucket",
 )
 
-PPO_INTERNAL_REQUIRED_METRIC_NAMES: frozenset[str] = frozenset({"approx_kl"})
+PPO_INTERNAL_REQUIRED_METRIC_NAMES: frozenset[str] = frozenset(
+    {"approx_kl", "approx_kl_first_minibatch", "parity_logprob_delta_abs_mean"}
+)
 
 NON_SCALAR_UPDATE_METRIC_NAMES: frozenset[str] = frozenset(
     {

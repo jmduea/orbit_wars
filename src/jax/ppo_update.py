@@ -5,20 +5,17 @@ import optax
 
 import jax
 from src.config import TrainConfig
-from src.game.trajectory_shield import (
-    mask_policy_output_for_shield_v2,
-)
-from src.jax.action_codec import action_log_prob_and_entropy
-from src.jax.factored_sequence_scan import (
-    factored_logprob_parity_metrics,
-    replay_factored_sequence_logprob,
-)
 from src.jax.distributional_value import (
     sparse_categorical_value_cross_entropy,
     value_support,
 )
+from src.jax.factored_sequence_scan import (
+    factored_logprob_parity_metrics,
+    replay_factored_sequence_logprob,
+    rollout_replay_parity_summary,
+)
 from src.jax.features import TurnBatch
-from src.jax.policy import edge_action_count, is_distributional_value_head
+from src.jax.policy import is_distributional_value_head
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
 from src.telemetry.metric_registry import (
@@ -198,18 +195,27 @@ def _aggregate_ppo_metrics(
             "value_loss",
             "entropy",
             "approx_kl",
+            "approx_kl_v2",
             "total_loss",
         )
     )
     format_sample_names = frozenset(
         f"loss_sample_count_{suffix}" for suffix in ("2p", "4p")
     )
+    excluded_from_mean = frozenset(
+        {
+            "sample_count",
+            "log_ratio_abs_max",
+            *format_metric_names,
+            *format_sample_names,
+        }
+    )
     metric_weights = jnp.where(metrics_by_minibatch["sample_count"] > 0.0, 1.0, 0.0)
     metric_denominator = jnp.maximum(metric_weights.sum(), 1.0)
     metrics = {
         name: jnp.where(metric_weights > 0, values, 0.0).sum() / metric_denominator
         for name, values in metrics_by_minibatch.items()
-        if name not in {"sample_count", *format_metric_names, *format_sample_names}
+        if name not in excluded_from_mean
     }
     for suffix in ("2p", "4p"):
         sample_name = f"loss_sample_count_{suffix}"
@@ -221,6 +227,7 @@ def _aggregate_ppo_metrics(
             "value_loss",
             "entropy",
             "approx_kl",
+            "approx_kl_v2",
             "total_loss",
         ):
             name = f"{metric_name}_{suffix}"
@@ -228,6 +235,21 @@ def _aggregate_ppo_metrics(
                 jnp.where(sample_counts > 0, metrics_by_minibatch[name], 0.0)
                 * sample_counts
             ).sum() / sample_denominator
+    for name in (
+        "approx_kl",
+        "approx_kl_v2",
+        "log_ratio_abs_mean",
+        "importance_ratio_mean",
+        "clip_fraction",
+    ):
+        if name in metrics_by_minibatch:
+            values = metrics_by_minibatch[name]
+            metrics[f"{name}_first_minibatch"] = values[0]
+            metrics[f"{name}_last_minibatch"] = values[-1]
+    if "log_ratio_abs_max" in metrics_by_minibatch:
+        metrics["log_ratio_abs_max_last_minibatch"] = metrics_by_minibatch[
+            "log_ratio_abs_max"
+        ][-1]
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
     return metrics
 
@@ -442,6 +464,43 @@ def _ppo_update_factorized_jax(
             initial_planet_ships, minibatch_count, minibatch_size, 0.0
         )
 
+    first_mb_end = min(minibatch_size, total_rows)
+    parity_batch = TurnBatch(
+        planet_features=turn_batch.planet_features[:first_mb_end],
+        planet_mask=turn_batch.planet_mask[:first_mb_end],
+        edge_features=turn_batch.edge_features[:first_mb_end],
+        edge_mask=turn_batch.edge_mask[:first_mb_end],
+        edge_src_ids=turn_batch.edge_src_ids[:first_mb_end],
+        edge_tgt_ids=turn_batch.edge_tgt_ids[:first_mb_end],
+        global_features=turn_batch.global_features[:first_mb_end],
+        theta_ref=turn_batch.theta_ref[:first_mb_end],
+    )
+    parity_metrics = rollout_replay_parity_summary(
+        train_state.params,
+        policy,
+        parity_batch,
+        cfg,
+        player_count=player_count[:first_mb_end],
+        source_index=source[:first_mb_end],
+        target_slot=target_slot[:first_mb_end],
+        ship_bucket=bucket[:first_mb_end],
+        stop_flag=stop_flag[:first_mb_end],
+        step_mask=mask[:first_mb_end],
+        ship_bucket_mask=ship_bucket_mask[:first_mb_end],
+        old_log_prob=old_log_prob[:first_mb_end],
+        ship_fraction=(
+            ship_fraction[:first_mb_end] if ship_fraction is not None else None
+        ),
+        decoder_hidden=(
+            decoder_hidden[:first_mb_end] if decoder_hidden is not None else None
+        ),
+        initial_remaining_ships=(
+            initial_planet_ships[:first_mb_end]
+            if initial_planet_ships is not None
+            else None
+        ),
+    )
+
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
         mb_batch = TurnBatch(
@@ -508,6 +567,15 @@ def _ppo_update_factorized_jax(
             clipped_ratio = jnp.clip(
                 ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
             )
+            log_ratio_abs_mean = masked_mean(jnp.abs(log_ratio_raw), minibatch["mask"])
+            log_ratio_abs_max = jnp.max(
+                jnp.where(minibatch["mask"] > 0.0, jnp.abs(log_ratio_raw), 0.0)
+            )
+            importance_ratio_mean = masked_mean(ratio, minibatch["mask"])
+            clip_fraction = masked_mean(
+                (jnp.abs(ratio - 1.0) > cfg.training.clip_coef).astype(jnp.float32),
+                minibatch["mask"],
+            )
             policy_objective = _clipped_policy_objective(
                 minibatch["advantages"],
                 ratio,
@@ -541,6 +609,10 @@ def _ppo_update_factorized_jax(
                 "entropy_move": entropy_move_loss,
                 "approx_kl": approx_kl,
                 "approx_kl_v2": approx_kl_v2,
+                "log_ratio_abs_mean": log_ratio_abs_mean,
+                "log_ratio_abs_max": log_ratio_abs_max,
+                "importance_ratio_mean": importance_ratio_mean,
+                "clip_fraction": clip_fraction,
                 "loss": loss,
                 "sample_count": minibatch["mask"].sum(),
             }
@@ -559,6 +631,10 @@ def _ppo_update_factorized_jax(
                     minibatch["old_log_prob"] - new_log_prob,
                     format_mask,
                 )
+                format_approx_kl_v2 = masked_mean(
+                    (ratio_for_kl - 1.0) - log_ratio_raw,
+                    format_mask,
+                )
                 format_total_loss = (
                     format_policy_loss
                     + cfg.training.vf_coef * format_value_loss
@@ -568,6 +644,7 @@ def _ppo_update_factorized_jax(
                 metrics[f"value_loss_{suffix}"] = format_value_loss
                 metrics[f"entropy_{suffix}"] = format_entropy
                 metrics[f"approx_kl_{suffix}"] = format_approx_kl
+                metrics[f"approx_kl_v2_{suffix}"] = format_approx_kl_v2
                 metrics[f"total_loss_{suffix}"] = format_total_loss
                 metrics[f"loss_sample_count_{suffix}"] = format_mask.sum()
             return loss, metrics
@@ -583,6 +660,7 @@ def _ppo_update_factorized_jax(
         update_minibatch, (train_state.params, train_state.opt_state), minibatches
     )
     metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
+    metrics.update(parity_metrics)
     metrics.update(debug_metrics)
     allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
     metrics = prune_scalar_metrics(metrics, allowed)

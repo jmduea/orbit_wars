@@ -431,6 +431,10 @@ def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
+    assert float(metrics["approx_kl_first_minibatch"]) == pytest.approx(0.0, abs=1e-5)
+    assert float(metrics["parity_logprob_delta_abs_mean"]) == pytest.approx(
+        0.0, abs=1e-5
+    )
     assert float(metrics["loss_sample_count_2p"]) > 0.0
 
 
@@ -460,9 +464,51 @@ def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
     _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
     assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
+    assert float(metrics["approx_kl_first_minibatch"]) == pytest.approx(0.0, abs=1e-5)
     assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
 
 
+@pytest.mark.jax
+def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
+    cfg = _small_factorized_cfg()
+    cfg.training.lr = 0.05
+    cfg.training.minibatch_size = 4
+    cfg.training.update_chunk_rows_min = 1
+    cfg.training.update_chunk_rows_max = 4
+    num_envs = 8
+    key = jax.random.PRNGKey(22)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
+    turn_batch = make_synthetic_turn_batch(
+        num_envs, cfg.task, key=jax.random.fold_in(key, 2)
+    )
+    transitions, _output = _build_factorized_on_policy_transitions(
+        cfg,
+        train_state,
+        policy,
+        turn_batch,
+        rollout_steps=2,
+        reward=jnp.array(
+            [
+                [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0],
+                [-1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
+            ],
+            dtype=jnp.float32,
+        ),
+    )
+    _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert float(metrics["approx_kl_first_minibatch"]) == pytest.approx(0.0, abs=1e-4)
+    assert float(metrics["parity_logprob_delta_abs_max"]) == pytest.approx(
+        0.0, abs=1e-4
+    )
+    assert float(metrics["minibatches"]) > 1.0
+    assert abs(float(metrics["approx_kl_last_minibatch"])) > abs(
+        float(metrics["approx_kl_first_minibatch"])
+    )
+    assert float(metrics["approx_kl_v2"]) >= float(
+        metrics["approx_kl_v2_first_minibatch"]
+    )
 
 
 @pytest.mark.jax
