@@ -29,6 +29,8 @@ from src.telemetry.metric_registry import (
     filter_update_record,
     metric_definition,
     protected_metric_names,
+    prune_scalar_metrics,
+    rollout_compute_scalar_keys,
 )
 
 
@@ -281,3 +283,92 @@ def test_repo_sweep_metrics_are_registered_and_enabled_by_default():
     for metric_name in metric_names:
         assert metric_definition(metric_name).record_kinds == frozenset({"update"})
         assert metric_name in names
+
+
+def test_rollout_compute_scalar_keys_omits_disabled_groups():
+    cfg = TrainConfig()
+    cfg.telemetry.metric_groups.opponent_composition = False
+    cfg.telemetry.metric_groups.action_decision = False
+    cfg.telemetry.metric_groups.trajectory_shield_debug = False
+
+    keys = rollout_compute_scalar_keys(cfg)
+
+    assert "samples" in keys
+    assert "wins_2p" in keys
+    assert "opponent_slots_total" not in keys
+    assert "stop_rate" not in keys
+    assert "trajectory_shield_blocked_count" not in keys
+
+
+def test_required_ppo_metric_names_keep_plateau_when_losses_disabled():
+    from src.telemetry.metric_registry import required_ppo_metric_names
+
+    cfg = TrainConfig()
+    cfg.telemetry.metric_groups.losses = False
+    cfg.training.plateau_metric = "policy_loss"
+    cfg.artifacts.checkpoint_retention.best_metric_name = "total_loss"
+
+    names = required_ppo_metric_names(
+        cfg,
+        ("policy_loss", "value_loss", "approx_kl", "total_loss", "minibatches"),
+    )
+
+    assert "policy_loss" in names
+    assert "total_loss" in names
+    assert "approx_kl" in names
+    assert "value_loss" not in names
+    assert "minibatches" not in names
+
+
+def test_prune_scalar_metrics_drops_disabled_keys():
+    pruned = prune_scalar_metrics(
+        {"samples": 1.0, "stop_rate": 0.2, "policy_loss": 0.1},
+        frozenset({"samples", "policy_loss"}),
+    )
+
+    assert pruned == {"samples": 1.0, "policy_loss": 0.1}
+
+
+def test_merge_metric_dicts_omits_disabled_group_keys():
+    import jax
+    import jax.numpy as jnp
+
+    from src.jax.train import _merge_metric_dicts
+
+    lean_chunk = {
+        "env_steps": jnp.asarray(8.0),
+        "average_reward": jnp.asarray(0.5),
+        "episode_done": jnp.asarray(0.0),
+        "episode_reward_mean": jnp.asarray(0.0),
+        "samples": jnp.asarray(16.0),
+    }
+
+    merged = _merge_metric_dicts([lean_chunk, lean_chunk])
+
+    assert "stop_rate" not in merged
+    assert "opponent_slots_total" not in merged
+    assert float(merged["samples"]) == 32.0
+
+
+def test_filter_update_record_jsonl_omits_disabled_rollout_groups():
+    cfg = TrainConfig()
+    cfg.telemetry.metric_groups.opponent_composition = False
+    cfg.telemetry.metric_groups.action_decision = False
+
+    record = {
+        "update": 1,
+        "total_env_steps": 64,
+        "completed_episodes": 2,
+        "samples": 32,
+        "episode_reward_mean": 0.4,
+        "overall_win_rate": 0.5,
+        "env_steps_per_sec": 100.0,
+        "opponent_slots_total": 4.0,
+        "stop_rate": 0.2,
+    }
+
+    filtered = filter_update_record(record, cfg)
+
+    assert "opponent_slots_total" not in filtered
+    assert "stop_rate" not in filtered
+    assert filtered["overall_win_rate"] == 0.5

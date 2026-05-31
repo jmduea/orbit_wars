@@ -21,6 +21,10 @@ from src.jax.features import TurnBatch
 from src.jax.policy import edge_action_count, is_distributional_value_head
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
+from src.telemetry.metric_registry import (
+    prune_scalar_metrics,
+    required_ppo_metric_names,
+)
 
 # Cap importance-ratio magnitude before exp; exp(20) allows ~485M and explodes
 # the policy surrogate on negative-advantage samples when replay diverges.
@@ -580,6 +584,8 @@ def _ppo_update_factorized_jax(
     )
     metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
     metrics.update(debug_metrics)
+    allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
+    metrics = prune_scalar_metrics(metrics, allowed)
     return (
         JaxTrainState(
             params=params, opt_state=opt_state, optimizer=train_state.optimizer

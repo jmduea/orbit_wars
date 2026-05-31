@@ -10,6 +10,11 @@ from src.jax.rollout.metric_contract import (
     OPPONENT_SLOT_METRIC_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
+from src.telemetry.metric_registry import (
+    prune_scalar_metrics,
+    rollout_collection_enabled_groups,
+    rollout_compute_scalar_keys,
+)
 
 ZERO_F32 = jnp.array(0.0, dtype=jnp.float32)
 
@@ -72,7 +77,7 @@ def _core_metric_fields(
     cfg: TrainConfig,
     env_count: int,
     samples: jax.Array,
-    include_opponent_slots: bool,
+    compute_keys: frozenset[str],
     data: dict[str, jax.Array],
 ) -> dict[str, jax.Array]:
     episode_done = base["episode_done"]
@@ -80,21 +85,12 @@ def _core_metric_fields(
     episodes_4p = base["episodes_4p"]
     first_place_sum = base["first_place_sum"]
 
-    opponent_slots = {
-        key: (data[key].sum() if include_opponent_slots and key in data else ZERO_F32)
-        for key in OPPONENT_SLOT_METRIC_KEYS
-    }
-
-    return {
+    metrics: dict[str, jax.Array] = {
         "env_steps": jnp.array(
             cfg.training.rollout_steps * env_count,
             dtype=jnp.float32,
         ),
         "samples": samples,
-        **{key: ZERO_F32 for key in TRAJECTORY_SHIELD_COUNT_KEYS},
-        "trajectory_shield_legal_non_noop_count": ZERO_F32,
-        "trajectory_shield_original_non_noop_count": ZERO_F32,
-        "trajectory_shield_legal_non_noop_rate": ZERO_F32,
         "episode_done": episode_done,
         "average_reward": base["reward_mean"],
         "episode_reward_mean": _safe_rate(base["episode_reward_sum"], episode_done),
@@ -108,12 +104,36 @@ def _core_metric_fields(
         "survival_time_sum": base["survival_time_sum"],
         "score_share_sum": base["score_share_sum"],
         "ship_differential_sum": base["ship_differential_sum"],
-        **opponent_slots,
-        "stop_rate": ZERO_F32,
-        "mean_active_launches_per_turn": ZERO_F32,
-        "loss_sample_count_2p": ZERO_F32,
-        "loss_sample_count_4p": ZERO_F32,
     }
+
+    if any(key in compute_keys for key in OPPONENT_SLOT_METRIC_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in OPPONENT_SLOT_METRIC_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+
+    if any(key in compute_keys for key in TRAJECTORY_SHIELD_COUNT_KEYS):
+        metrics.update({key: ZERO_F32 for key in TRAJECTORY_SHIELD_COUNT_KEYS if key in compute_keys})
+        if "trajectory_shield_legal_non_noop_count" in compute_keys:
+            metrics["trajectory_shield_legal_non_noop_count"] = ZERO_F32
+        if "trajectory_shield_original_non_noop_count" in compute_keys:
+            metrics["trajectory_shield_original_non_noop_count"] = ZERO_F32
+        if "trajectory_shield_legal_non_noop_rate" in compute_keys:
+            metrics["trajectory_shield_legal_non_noop_rate"] = ZERO_F32
+
+    if "stop_rate" in compute_keys:
+        metrics["stop_rate"] = ZERO_F32
+    if "mean_active_launches_per_turn" in compute_keys:
+        metrics["mean_active_launches_per_turn"] = ZERO_F32
+    if "loss_sample_count_2p" in compute_keys:
+        metrics["loss_sample_count_2p"] = ZERO_F32
+    if "loss_sample_count_4p" in compute_keys:
+        metrics["loss_sample_count_4p"] = ZERO_F32
+
+    return prune_scalar_metrics(metrics, compute_keys)
 
 
 def _apply_shield_metrics(metrics: dict[str, jax.Array], data: dict[str, jax.Array]) -> None:
@@ -129,7 +149,8 @@ def _apply_shield_metrics(metrics: dict[str, jax.Array], data: dict[str, jax.Arr
         original=original_total,
     )
     for key in TRAJECTORY_SHIELD_COUNT_KEYS:
-        metrics[key] = data[key].sum()
+        if key in metrics:
+            metrics[key] = data[key].sum()
 
 
 def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax.Array]) -> None:
@@ -148,8 +169,10 @@ def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax
     else:
         launch_sum = (non_stop * (ship_bucket.astype(jnp.float32) > 0.0)).sum()
     turn_count = jnp.asarray(stop_flag.shape[0] * stop_flag.shape[1], dtype=jnp.float32)
-    metrics["stop_rate"] = _safe_rate(stop_sum, active_sum)
-    metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
+    if "stop_rate" in metrics:
+        metrics["stop_rate"] = _safe_rate(stop_sum, active_sum)
+    if "mean_active_launches_per_turn" in metrics:
+        metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
 
 
 def rollout_metrics(
@@ -160,6 +183,8 @@ def rollout_metrics(
 ) -> dict[str, jax.Array]:
     """Compute rollout metrics compatible with microbatch aggregation."""
 
+    compute_keys = rollout_compute_scalar_keys(cfg)
+    collection_groups = rollout_collection_enabled_groups(cfg)
     base = _base_episode_metrics(data=data, cfg=cfg)
     samples = data["target_index"].astype(jnp.float32).size
     metrics = _core_metric_fields(
@@ -167,10 +192,11 @@ def rollout_metrics(
         cfg=cfg,
         env_count=env_count,
         samples=samples,
-        include_opponent_slots=not cfg.training.lean_rollout_metrics,
+        compute_keys=compute_keys,
         data=data,
     )
-    if not cfg.training.lean_rollout_metrics:
+    if "trajectory_shield_debug" in collection_groups:
         _apply_shield_metrics(metrics, data)
-    _apply_factorized_metrics(metrics, data)
+    if "action_decision" in collection_groups:
+        _apply_factorized_metrics(metrics, data)
     return metrics

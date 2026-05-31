@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
-from src.jax.rollout.metric_contract import LOGGED_ROLLOUT_SCALAR_KEYS
+from src.jax.rollout.metric_contract import (
+    FINALIZED_ROLLOUT_RATE_KEYS,
+    LOGGED_ROLLOUT_SCALAR_KEYS,
+    ROLLOUT_CHUNK_ONLY_SCALAR_KEYS,
+    ROLLOUT_INTERNAL_SCALAR_KEYS,
+)
 
 METRIC_GROUPS: tuple[str, ...] = (
     "core_progress",
@@ -831,6 +836,46 @@ def filter_event_record(record: dict[str, Any], cfg: Any | None) -> dict[str, An
     )
 
 
+_ROLLOUT_ALWAYS_COMPUTE_KEYS: frozenset[str] = frozenset(
+    {
+        "samples",
+        "env_steps",
+        "episode_done",
+        "average_reward",
+        "episode_reward_mean",
+        "episodes_2p",
+        "episodes_4p",
+        "wins_2p",
+        "first_places_4p",
+        "placement_4p_sum",
+        "survival_time_sum",
+        "score_share_sum",
+        "ship_differential_sum",
+    }
+)
+
+
+def rollout_collection_enabled_groups(cfg: Any | None) -> set[str]:
+    """Metric groups that may be collected during rollout (respects lean mode)."""
+
+    enabled = set(enabled_metric_groups(metric_groups_cfg_from_config(cfg)))
+    training = getattr(cfg, "training", None) if cfg is not None else None
+    if training is not None and bool(getattr(training, "lean_rollout_metrics", False)):
+        enabled.discard("opponent_composition")
+        enabled.discard("trajectory_shield_debug")
+    return enabled
+
+
+def prune_scalar_metrics[T](
+    metrics: dict[str, T],
+    allowed_keys: frozenset[str] | set[str],
+) -> dict[str, T]:
+    """Drop metric entries whose keys are not in ``allowed_keys``."""
+
+    allowed = frozenset(allowed_keys)
+    return {name: value for name, value in metrics.items() if name in allowed}
+
+
 def required_rollout_scalar_names(cfg: Any | None) -> tuple[str, ...]:
     enabled_update_names = enabled_metric_names(
         metric_groups_cfg_from_config(cfg),
@@ -840,6 +885,52 @@ def required_rollout_scalar_names(cfg: Any | None) -> tuple[str, ...]:
     required_names = set(ROLLOUT_INTERNAL_REQUIRED_METRIC_NAMES)
     required_names.update(enabled_update_names & ROLLOUT_OUTPUT_METRIC_NAMES)
     return tuple(name for name in ROLLOUT_SCALAR_ORDER if name in required_names)
+
+
+def rollout_compute_scalar_keys(cfg: Any | None) -> frozenset[str]:
+    """Rollout scalar keys to materialize during collection and merge paths."""
+
+    enabled_groups = rollout_collection_enabled_groups(cfg)
+    required = set(required_rollout_scalar_names(cfg)) - set(FINALIZED_ROLLOUT_RATE_KEYS)
+    keys = set(_ROLLOUT_ALWAYS_COMPUTE_KEYS)
+    keys.update(required)
+
+    for key in ROLLOUT_INTERNAL_SCALAR_KEYS:
+        definition = METRIC_DEFINITIONS_BY_NAME.get(key)
+        if definition is not None and definition.group in enabled_groups:
+            keys.add(key)
+
+    for key in LOGGED_ROLLOUT_SCALAR_KEYS + ROLLOUT_CHUNK_ONLY_SCALAR_KEYS:
+        if key in keys:
+            continue
+        definition = METRIC_DEFINITIONS_BY_NAME.get(key)
+        if definition is not None and definition.group in enabled_groups:
+            keys.add(key)
+
+    keys.difference_update(FINALIZED_ROLLOUT_RATE_KEYS)
+    return frozenset(keys)
+
+
+
+
+def rollout_merge_scalar_keys(cfg: Any | None) -> frozenset[str]:
+    """Rollout scalar keys retained after cross-chunk merge and rate finalization."""
+
+    keys = set(rollout_compute_scalar_keys(cfg))
+    keys.update(
+        name
+        for name in required_rollout_scalar_names(cfg)
+        if name in FINALIZED_ROLLOUT_RATE_KEYS
+    )
+    training = getattr(cfg, "training", None) if cfg is not None else None
+    plateau_metric = (
+        str(getattr(training, "plateau_metric", "") or "").strip()
+        if training is not None
+        else ""
+    )
+    if plateau_metric:
+        keys.add(plateau_metric)
+    return frozenset(keys)
 
 
 def required_ppo_metric_names(

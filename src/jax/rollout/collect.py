@@ -41,6 +41,7 @@ from src.opponents.pool import (
     sample_opponent_type_ids_jax,
 )
 from src.training.curriculum import StageView, default_stage_view
+from src.telemetry.metric_registry import rollout_collection_enabled_groups
 
 from src.jax.normalization import ObservationNormState, normalize_turn_batch
 
@@ -104,6 +105,10 @@ def collect_rollout_jax(
     else:
         initial_decoder_hidden = None
 
+    collection_groups = rollout_collection_enabled_groups(cfg)
+    include_opponent_metrics = "opponent_composition" in collection_groups
+    include_shield_metrics = "trajectory_shield_debug" in collection_groups
+
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache, decoder_hidden = carry
         policy_batch = _policy_turn_batch(batch, norm_state, cfg)
@@ -158,23 +163,26 @@ def collect_rollout_jax(
             active_stage_view.fallback_family_id,
             opponent_type_ids,
         )
-        family_counts = _opponent_count_metrics(
-            effective_type_ids, state.learner_player
-        )
-        historical_fallback_slots = (
-            (
-                (
-                    (opponent_type_ids == OPPONENT_HISTORICAL)
-                    & (effective_type_ids == OPPONENT_LATEST)
-                )
-                & (
-                    jnp.arange(cfg.task.player_count, dtype=jnp.int32)[None, :]
-                    != state.learner_player[:, None]
-                )
+        family_counts: dict[str, jax.Array] = {}
+        historical_fallback_slots = jnp.array(0.0, dtype=jnp.float32)
+        if include_opponent_metrics:
+            family_counts = _opponent_count_metrics(
+                effective_type_ids, state.learner_player
             )
-            .astype(jnp.float32)
-            .sum()
-        )
+            historical_fallback_slots = (
+                (
+                    (
+                        (opponent_type_ids == OPPONENT_HISTORICAL)
+                        & (effective_type_ids == OPPONENT_LATEST)
+                    )
+                    & (
+                        jnp.arange(cfg.task.player_count, dtype=jnp.int32)[None, :]
+                        != state.learner_player[:, None]
+                    )
+                )
+                .astype(jnp.float32)
+                .sum()
+            )
 
         if cfg.task.player_count == 2:
             opp_game = state.game._replace(
@@ -324,23 +332,31 @@ def collect_rollout_jax(
             "terminal_survival_time": result.terminal_survival_time,
             "terminal_score_share": result.terminal_score_share,
             "terminal_ship_differential": result.terminal_ship_differential,
-            **{
-                key: (
-                    historical_fallback_slots
-                    if key == "opponent_historical_fallback_latest_slots"
-                    else family_counts[key]
-                )
-                for key in OPPONENT_SLOT_METRIC_KEYS
-            },
-            "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
-            "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
-            "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
-            "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
-            "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
-            "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
-            "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
-            "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
         }
+        if include_opponent_metrics:
+            transition.update(
+                {
+                    key: (
+                        historical_fallback_slots
+                        if key == "opponent_historical_fallback_latest_slots"
+                        else family_counts[key]
+                    )
+                    for key in OPPONENT_SLOT_METRIC_KEYS
+                }
+            )
+        if include_shield_metrics:
+            transition.update(
+                {
+                    "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
+                    "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
+                    "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
+                    "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
+                    "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
+                    "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
+                    "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
+                    "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
+                }
+            )
         if carry_enabled:
             transition["decoder_hidden"] = decoder_hidden
         if is_continuous_ship_mode(cfg):

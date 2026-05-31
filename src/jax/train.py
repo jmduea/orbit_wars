@@ -40,8 +40,10 @@ from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.telemetry.metric_registry import (
     filter_event_record,
     filter_update_record,
+    prune_scalar_metrics,
     required_ppo_metric_names,
     required_rollout_scalar_names,
+    rollout_merge_scalar_keys,
     ROLLOUT_OUTPUT_METRIC_NAMES,
 )
 from src.training.curriculum import CurriculumController
@@ -454,7 +456,10 @@ def _collect_rollout_microbatched(
             merged_metrics,
             jnp.arange(1, chunk_count, dtype=jnp.int32),
         )
-    merged_metrics = _finalize_cross_chunk_rate_metrics(merged_metrics)
+    merged_metrics = prune_scalar_metrics(
+        _finalize_cross_chunk_rate_metrics(merged_metrics),
+        rollout_merge_scalar_keys(cfg),
+    )
     return (
         rollout_key,
         merged_states,
@@ -1138,7 +1143,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
             else:
                 ppo_transitions = transitions
-            rollout_metrics = _sum_metric_dicts(rollout_metrics_by_group)
+            rollout_metrics = prune_scalar_metrics(
+                _sum_metric_dicts(rollout_metrics_by_group),
+                rollout_merge_scalar_keys(cfg),
+            )
             rollout_scalar_keys = tuple(
                 dict.fromkeys(
                     (
