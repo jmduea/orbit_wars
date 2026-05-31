@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+DEFAULT_KAGGLE_ACCELERATOR = "NvidiaTeslaP100"
+
 KAGGLE_TPU_V5E8 = "TpuV5E8"
 
 # Kaggle CLI machine_shape values for the v5e-8 single-host slice.

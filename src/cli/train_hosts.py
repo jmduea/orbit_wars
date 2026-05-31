@@ -6,6 +6,7 @@ import sys
 from dataclasses import dataclass, field
 
 from src.cli import kaggle_runner as kaggle_cli
+from src.orchestration.accelerators import DEFAULT_KAGGLE_ACCELERATOR
 
 HOSTS = frozenset({"local", "kaggle"})
 KAGGLE_SUBCOMMANDS = frozenset(
@@ -181,7 +182,7 @@ def _build_kaggle_argv(route: TrainRoute) -> list[str]:
         if "--run-type" not in route.kaggle_argv:
             argv.extend(["--run-type", "full"])
         if "--accelerator" not in route.kaggle_argv:
-            argv.extend(["--accelerator", "NvidiaTeslaP100"])
+            argv.extend(["--accelerator", DEFAULT_KAGGLE_ACCELERATOR])
 
     argv.extend(route.kaggle_argv)
 

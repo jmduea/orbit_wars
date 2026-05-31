@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.orchestration.accelerators import DEFAULT_KAGGLE_ACCELERATOR
 from src.orchestration.kaggle_cli import (
     KaggleCli,
     KaggleKernelRef,
@@ -20,7 +21,6 @@ from src.orchestration.kaggle_cli import (
     resolve_kaggle_username,
 )
 from src.orchestration.kernel_package import render_kernel_package
-from src.orchestration.population import AcceleratorPreference
 from src.orchestration.wandb_sweeps import (
     add_population_metadata,
     create_sweep,
@@ -198,6 +198,36 @@ def _packaged_sweep_path(path: Path) -> str:
         return str(path)
 
 
+def _resolve_launch_accelerators(args: PackageRequest | Any) -> tuple[str, ...]:
+    """Return explicit accelerators or the single default P100."""
+
+    accelerators = tuple(getattr(args, "accelerators", ()) or ())
+    if accelerators:
+        return accelerators
+    return (DEFAULT_KAGGLE_ACCELERATOR,)
+
+
+def _push_secrets(*, attach_wandb_secret: bool) -> list[str] | None:
+    if not attach_wandb_secret:
+        return None
+    secret_name = os.environ.get("ORBIT_WARS_KAGGLE_WANDB_SECRET_NAME", "WANDB_API_KEY")
+    if secret_name and kaggle_push_supports_secret_flag():
+        return [secret_name]
+    return None
+
+
+def _completed_push_result(
+    completed: subprocess.CompletedProcess[str],
+) -> dict[str, Any]:
+    command = list(completed.args) if isinstance(completed.args, list) else []
+    return {
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
 def launch(args: PackageRequest | Any, accelerators: tuple[str, ...]) -> None:
     """Prepare and push one package per accelerator with full diagnostics.
 
@@ -216,16 +246,20 @@ def launch(args: PackageRequest | Any, accelerators: tuple[str, ...]) -> None:
         default=allow_flag_fallback,
     )
 
+    cli = KaggleCli()
+    secrets = _push_secrets(attach_wandb_secret=not bool(getattr(args, "no_wandb", False)))
+
     for accelerator in accelerators:
         package = prepare(args, sweep_id=args.sweep_id, accelerator=accelerator)
-        result = _push_kernel(
+        completed = cli.push(
             package.package_dir,
             accelerator=accelerator,
             timeout_seconds=args.timeout_seconds,
+            secrets=secrets,
             use_accelerator_flag=True,
             dry_run=bool(args.dry_run),
-            attach_wandb_secret=not bool(getattr(args, "no_wandb", False)),
         )
+        result = _completed_push_result(completed)
         record = _launch_ledger_record(
             args=args,
             package_dir=package.package_dir,
@@ -264,14 +298,15 @@ def launch(args: PackageRequest | Any, accelerators: tuple[str, ...]) -> None:
                 "retrying without the flag while keeping metadata/worker-env GPU enabled.",
                 flush=True,
             )
-            fallback = _push_kernel(
+            fallback_completed = cli.push(
                 package.package_dir,
                 accelerator=accelerator,
                 timeout_seconds=args.timeout_seconds,
+                secrets=secrets,
                 use_accelerator_flag=False,
                 dry_run=bool(args.dry_run),
-                attach_wandb_secret=not bool(getattr(args, "no_wandb", False)),
             )
+            fallback = _completed_push_result(fallback_completed)
             fallback_record = _launch_ledger_record(
                 args=args,
                 package_dir=package.package_dir,
@@ -297,47 +332,6 @@ def launch(args: PackageRequest | Any, accelerators: tuple[str, ...]) -> None:
                 return
 
     raise SystemExit(_format_launch_failure(attempts, args.ledger))
-
-
-def _push_kernel(
-    package_dir: Path,
-    *,
-    accelerator: str | None,
-    timeout_seconds: int | None,
-    use_accelerator_flag: bool,
-    dry_run: bool,
-    attach_wandb_secret: bool = True,
-) -> dict[str, Any]:
-    command = ["kaggle", "kernels", "push", "-p", str(package_dir)]
-    if accelerator and use_accelerator_flag:
-        command.extend(["--accelerator", accelerator])
-    if timeout_seconds is not None:
-        command.extend(["--timeout", str(int(timeout_seconds))])
-    secret_name = os.environ.get("ORBIT_WARS_KAGGLE_WANDB_SECRET_NAME", "WANDB_API_KEY")
-    if attach_wandb_secret and secret_name and kaggle_push_supports_secret_flag():
-        command.extend(["--secret", secret_name])
-
-    if dry_run:
-        return {
-            "command": command,
-            "returncode": 0,
-            "stdout": " ".join(command),
-            "stderr": "",
-        }
-
-    completed = subprocess.run(
-        command,
-        cwd=package_dir,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return {
-        "command": command,
-        "returncode": completed.returncode,
-        "stdout": completed.stdout,
-        "stderr": completed.stderr,
-    }
 
 
 def _looks_like_unsupported_accelerator_flag(stdout: str, stderr: str) -> bool:
@@ -827,9 +821,7 @@ def run_prepare(args: PackageRequest | Any) -> None:
     """Render a worker package and print summary JSON."""
 
     _validate_package_hydra_overrides(args)
-    accelerators = tuple(
-        args.accelerators or AcceleratorPreference().accelerator_ids
-    )
+    accelerators = _resolve_launch_accelerators(args)
     package = prepare(args, sweep_id=args.sweep_id, accelerator=accelerators[0])
     print(
         json.dumps(
@@ -885,6 +877,6 @@ def run_launch(args: PackageRequest | Any) -> None:
                 sweep, project=args.project or "orbit_wars", entity=args.entity
             )
     args.sweep_id = sweep_id
-    accelerators = tuple(args.accelerators or AcceleratorPreference().accelerator_ids)
+    accelerators = _resolve_launch_accelerators(args)
     launch(args, accelerators)
 

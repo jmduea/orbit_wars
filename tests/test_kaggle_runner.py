@@ -9,7 +9,7 @@ import pytest
 from hydra.errors import MissingConfigException
 
 from src.orchestration import kaggle_runner as launcher
-from src.orchestration.accelerators import KAGGLE_TPU_V5E8, is_tpu_accelerator
+from src.orchestration.accelerators import DEFAULT_KAGGLE_ACCELERATOR, KAGGLE_TPU_V5E8, is_tpu_accelerator
 from src.orchestration.kaggle_cli import (
     KaggleCli,
     KaggleKernelRef,
@@ -45,6 +45,32 @@ def test_accelerator_preference_ordered_fallback() -> None:
     assert pref.first_available(["A"]) == "B"
     assert pref.candidates_after(["A", "C"]) == ("B",)
     assert pref.first_available(["A", "B", "C"]) is None
+
+
+def test_resolve_launch_accelerators_defaults_to_p100() -> None:
+    args = launcher.PackageRequest(
+        work_dir=launcher.DEFAULT_WORK_DIR,
+        kernel_id="owner/kernel",
+        title="test",
+        sweep_yaml=launcher.DEFAULT_SWEEP,
+    )
+
+    assert launcher._resolve_launch_accelerators(args) == (DEFAULT_KAGGLE_ACCELERATOR,)
+
+
+def test_resolve_launch_accelerators_honors_explicit_values() -> None:
+    args = launcher.PackageRequest(
+        work_dir=launcher.DEFAULT_WORK_DIR,
+        kernel_id="owner/kernel",
+        title="test",
+        sweep_yaml=launcher.DEFAULT_SWEEP,
+        accelerators=("NvidiaH100", "NvidiaTeslaT4"),
+    )
+
+    assert launcher._resolve_launch_accelerators(args) == (
+        "NvidiaH100",
+        "NvidiaTeslaT4",
+    )
 
 
 def test_default_accelerator_preference_prefers_single_gpu_vram() -> None:
@@ -430,16 +456,56 @@ def test_default_sweep_points_at_conf_mvp_yaml() -> None:
     assert launcher.DEFAULT_SWEEP.parts[-3:] == ("sweeps", "wandb", "kaggle_runner_mvp.yaml")
 
 
+def test_run_launch_without_accelerator_pushes_p100_once(monkeypatch) -> None:
+    pushed: list[str | None] = []
+
+    def fake_push(
+        self,
+        package_dir: Path,
+        *,
+        accelerator: str | None = None,
+        timeout_seconds: int | None = None,
+        secrets: object = None,
+        use_accelerator_flag: bool = True,
+        dry_run: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        del self, package_dir, timeout_seconds, secrets, use_accelerator_flag, dry_run
+        pushed.append(accelerator)
+        return subprocess.CompletedProcess(
+            ["kaggle", "kernels", "push"],
+            0,
+            stdout="https://www.kaggle.com/code/owner/kernel",
+            stderr="",
+        )
+
+    monkeypatch.setattr(KaggleCli, "push", fake_push)
+    monkeypatch.setattr(launcher, "preflight", lambda args: {"ok": True, "checks": []})
+    monkeypatch.setattr(launcher, "prepare", lambda *args, **kwargs: type("Pkg", (), {"package_dir": Path("/tmp/pkg")})())
+
+    args = launcher.PackageRequest(
+        work_dir=launcher.DEFAULT_WORK_DIR,
+        kernel_id="owner/kernel",
+        title="test",
+        sweep_yaml=launcher.DEFAULT_SWEEP,
+        no_wandb=True,
+        dry_run=True,
+    )
+
+    launcher.run_launch(args)
+
+    assert pushed == [DEFAULT_KAGGLE_ACCELERATOR]
+
+
 def test_run_launch_rejects_invalid_hydra_override_before_push(monkeypatch) -> None:
     pushed = False
 
-    def fake_push(*args: object, **kwargs: object) -> dict[str, object]:
-        del args, kwargs
+    def fake_push(self, *args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del self, args, kwargs
         nonlocal pushed
         pushed = True
-        return {"command": [], "returncode": 0, "stdout": "", "stderr": ""}
+        return subprocess.CompletedProcess([], 0, stdout="", stderr="")
 
-    monkeypatch.setattr(launcher, "_push_kernel", fake_push)
+    monkeypatch.setattr(KaggleCli, "push", fake_push)
 
     args = launcher.PackageRequest(
         work_dir=launcher.DEFAULT_WORK_DIR,

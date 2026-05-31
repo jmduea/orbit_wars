@@ -158,15 +158,24 @@ class KaggleCli:
         accelerator: str | None = None,
         timeout_seconds: int | None = None,
         secrets: Sequence[str] | None = None,
+        use_accelerator_flag: bool = True,
+        dry_run: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         command = [self._executable, "kernels", "push", "-p", str(package_dir)]
-        if accelerator:
+        if accelerator and use_accelerator_flag:
             command.extend(["--accelerator", accelerator])
         if timeout_seconds is not None:
             command.extend(["--timeout", str(int(timeout_seconds))])
         if secrets and kaggle_push_supports_secret_flag(executable=self._executable):
             for secret in secrets:
                 command.extend(["--secret", secret])
+        if dry_run:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=" ".join(command),
+                stderr="",
+            )
         return self._runner(command, cwd=package_dir)
 
     def status(self, ref: KaggleKernelRef) -> KaggleKernelStatus:
