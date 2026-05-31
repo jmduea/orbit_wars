@@ -243,8 +243,8 @@ def test_ppo_health_metrics_are_registered_as_losses():
         assert metric_definition(name).group == "losses"
 
 
-def test_per_format_timing_metrics_are_registered_as_timing():
-    expected_names = {
+def test_per_format_timing_metrics_are_registered_as_debug():
+    per_format_names = {
         "rollout_seconds_2p",
         "rollout_seconds_4p",
         "env_steps_per_sec_2p",
@@ -255,18 +255,30 @@ def test_per_format_timing_metrics_are_registered_as_timing():
         "samples_per_sec_4p",
         "rollout_samples_per_sec_2p",
         "rollout_samples_per_sec_4p",
+    }
+    timing_names = {
         "update_time_rollout_fraction",
         "update_time_ppo_fraction",
     }
-    names = enabled_metric_names(
+    debug_names = enabled_metric_names(
+        _metric_groups(debug=True),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+    timing_group_names = enabled_metric_names(
         _metric_groups(timing=True),
         record_kind="update",
         extra_protected_names=protected_metric_names(),
     )
 
-    for name in expected_names:
+    for name in per_format_names:
+        assert metric_definition(name).group == "debug"
+        assert name in debug_names
+        assert name not in timing_group_names
+
+    for name in timing_names:
         assert metric_definition(name).group == "timing"
-        assert name in names
+        assert name in timing_group_names
 
 
 def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:

@@ -219,13 +219,13 @@ def test_export_runtime_artifact_accepts_planet_graph_transformer(tmp_path: Path
         "feature_metadata": {
             "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 19,
+            "edge_feature_dim": 25,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
             "edge_layout": "top_k_per_source",
             "edge_k": 3,
-            "intercept_anchors": (1.0, 6.0),
+            "intercept_anchors": (1.0, 3.0, 6.0),
         },
     }
     with checkpoint.open("wb") as file:
@@ -253,13 +253,13 @@ def test_export_runtime_artifact_includes_factorized_pointer_decoder(
         "feature_metadata": {
             "schema_version": 5,
             "planet_feature_dim": 13,
-            "edge_feature_dim": 19,
+            "edge_feature_dim": 25,
             "global_feature_dim": 46,
             "feature_history_steps": 1,
             "ship_feature_scale": 1000.0,
             "edge_layout": "top_k_per_source",
             "edge_k": 3,
-            "intercept_anchors": (1.0, 6.0),
+            "intercept_anchors": (1.0, 3.0, 6.0),
             "pointer_decoder": "factorized_topk",
             "action_layout_version": 2,
         },

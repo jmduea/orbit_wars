@@ -247,7 +247,7 @@ def test_running_optional_job_protects_checkpoint_from_retention(tmp_path: Path)
 
 def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
     from src.config import TrainConfig
-    from src.jax.train import _queue_optional_jobs_if_due
+    from src.jax.train_queue import queue_optional_jobs_if_due
 
     cfg = TrainConfig()
     cfg.artifacts.replay.enabled = True
@@ -255,7 +255,7 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
-    job_paths = _queue_optional_jobs_if_due(
+    job_paths = queue_optional_jobs_if_due(
         cfg,
         update=1,
         checkpoint_path=checkpoint_path,
@@ -278,7 +278,7 @@ def test_replay_job_defaults_to_docker_backend(tmp_path: Path):
 
 def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     from src.config import TrainConfig
-    from src.jax.train import _queue_optional_jobs_if_due
+    from src.jax.train_queue import queue_optional_jobs_if_due
 
     cfg = TrainConfig()
     cfg.artifacts.replay.enabled = False
@@ -286,7 +286,7 @@ def test_docker_job_can_be_queued_when_replay_is_disabled(tmp_path: Path):
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
-    job_paths = _queue_optional_jobs_if_due(
+    job_paths = queue_optional_jobs_if_due(
         cfg,
         update=1,
         checkpoint_path=checkpoint_path,
@@ -470,7 +470,7 @@ def test_worker_accepts_custom_result_root_from_trusted_worker_option(
 
 def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
     from src.config import TrainConfig
-    from src.jax import train as jax_train
+    from src.jax import train_queue
 
     monkeypatch.setenv("ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA", "1")
     launched: dict[str, object] = {}
@@ -487,10 +487,10 @@ def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, m
     cfg = TrainConfig()
     cfg.artifacts.artifact_pipeline.worker_poll_seconds = 0.5
     cfg.artifacts.artifact_pipeline.worker_idle_exit_seconds = 1.0
-    monkeypatch.setattr(jax_train.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(train_queue.subprocess, "Popen", fake_popen)
 
     worker_state: dict[str, object] = {}
-    jax_train._start_artifact_worker_if_needed(
+    train_queue.start_artifact_worker_if_needed(
         cfg,
         queue_dir=tmp_path,
         worker_state=worker_state,

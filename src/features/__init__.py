@@ -1,8 +1,7 @@
 from importlib import import_module
 
 _REGISTRY_EXPORTS = {
-    "FeatureGroupRegistry",
-    "FeatureItem",
+    "CatalogView",
     "GLOBAL_FEATURE_SCHEMA",
     "PLANET_FEATURE_SCHEMA",
     "EDGE_FEATURE_SCHEMA",

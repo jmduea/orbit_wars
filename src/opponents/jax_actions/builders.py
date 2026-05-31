@@ -255,20 +255,31 @@ def _edge_scripted_context(
     cfg: TrainConfig,
     ship_bucket_mask: jax.Array | None,
 ):
-    from src.features.registry import EDGE_FEATURE_SCHEMA, edge_k
+    from src.features.catalog.edge import intercept_anchor_label
+    from src.features.registry import edge_feature_schema
 
     env_count = batch.planet_features.shape[0]
     k = edge_k(cfg.task)
     flat_count = MAX_PLANETS * k
     flat_mask = batch.edge_mask.reshape(env_count, flat_count)
-    owner_slice = EDGE_FEATURE_SCHEMA.slice("target_owner_slot")
+    edge_schema = edge_feature_schema(cfg.task)
+    owner_slice = edge_schema.slice("target_owner_slot")
     owner_slots = batch.edge_features[..., owner_slice].reshape(
         env_count, flat_count, 4
     )
-    # Sniper/turtle scripted opponents rank edges by fast-anchor intercept distance.
-    distance = batch.edge_features[
-        ..., EDGE_FEATURE_SCHEMA.slice("intercept_distance_s1")
-    ].reshape(env_count, flat_count)
+    anchor_speeds = tuple(float(s) for s in cfg.task.intercept_anchors)
+    distance_slices = [
+        edge_schema.slice(f"intercept_distance_{intercept_anchor_label(speed)}")
+        for speed in anchor_speeds
+    ]
+    distance_stack = jnp.stack(
+        [
+            batch.edge_features[..., feature_slice].reshape(env_count, flat_count)
+            for feature_slice in distance_slices
+        ],
+        axis=-1,
+    )
+    distance = jnp.min(distance_stack, axis=-1)
     if ship_bucket_mask is None:
         full_mask = jnp.concatenate(
             [flat_mask, jnp.ones((env_count, 1), dtype=bool)], axis=1

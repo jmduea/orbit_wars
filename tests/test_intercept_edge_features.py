@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from src.config.schema import TaskConfig
+from src.features.catalog.edge import expected_edge_feature_dim
 from src.features.registry import EDGE_FEATURE_SCHEMA
 from src.game.constants import MAX_PLANETS, MAX_STEPS
 from src.jax.features import encode_turn
@@ -221,7 +222,7 @@ def test_edge_rank_mode_intercept_min_composes_and_encodes() -> None:
         step=12,
     )
     batch = encode_turn(game, cfg)
-    assert batch.edge_features.shape[-1] == EDGE_FEATURE_SCHEMA.base_dim
+    assert batch.edge_features.shape[-1] == expected_edge_feature_dim(3)
 
 
 def test_edge_rank_mode_snapshot_is_default() -> None:

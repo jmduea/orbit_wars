@@ -1,50 +1,32 @@
 from __future__ import annotations
 
-import json
 import logging
-import subprocess
-import sys
 import time
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from src.artifacts.checkpoint_compat import (
-    checkpoint_feature_metadata,
-    feature_metadata,
-    load_checkpoint_payload,
-    validate_checkpoint_config_compatibility,
-    validate_checkpoint_encoder_compatibility,
-    validate_checkpoint_feature_compatibility,
-    validate_checkpoint_pointer_decoder_compatibility,
-)
-from src.artifacts.checkpoint_retention import prune_checkpoints
-from src.artifacts.promotion import promote_if_better
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
-    CheckpointJob,
     CheckpointResult,
-    commit_checkpoint_payload,
-    load_active_optional_jobs,
-    protected_paths_from_jobs,
-    write_optional_job,
 )
-from src.artifacts.replay import maybe_write_jax_checkpoint_replay
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
-from src.config.rollout_allocation import infer_static_format_weights, resolve_rollout_group_specs
+from src.config.rollout_allocation import (
+    infer_static_format_weights,
+    resolve_rollout_group_specs,
+)
 from src.telemetry import build_telemetry
 from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.telemetry.metric_registry import (
-    filter_event_record,
-    filter_update_record,
+    enabled_metric_groups,
+    metric_groups_cfg_from_config,
     prune_scalar_metrics,
     required_ppo_metric_names,
     required_rollout_scalar_names,
     rollout_merge_scalar_keys,
-    ROLLOUT_OUTPUT_METRIC_NAMES,
 )
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
@@ -66,16 +48,35 @@ from src.jax.rollout.metrics import (  # noqa: E402
 
 from .env import JaxEnvState, assign_learner_players, batched_reset  # noqa: E402
 from .features import TurnBatch  # noqa: E402
-from .policy import build_jax_policy  # noqa: E402
-from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
-from .rollout.collect import collect_rollout_jax  # noqa: E402
-from .rollout.types import JaxTransitionBatch  # noqa: E402
 from .normalization import (
     init_observation_norm_state,
     normalize_transition_batch,
     update_norm_state_from_transitions,
 )  # noqa: E402
+from .policy import build_jax_policy  # noqa: E402
+from .ppo_update import concatenate_transition_batches, ppo_update_jax  # noqa: E402
+from .rollout.collect import collect_rollout_jax  # noqa: E402
+from .rollout.types import JaxTransitionBatch  # noqa: E402
+from .train_checkpoint import (  # noqa: E402
+    CheckpointHandler,
+    HistoricalSnapshotPool,
+    load_jax_checkpoint,
+    save_jax_checkpoint,
+)
+from .train_checkpoint import (
+    restore_curriculum_artifacts as _restore_curriculum_artifacts,
+)
 from .train_state import init_train_state, validate_policy_param_shapes  # noqa: E402
+from .train_telemetry import (  # noqa: E402
+    build_per_format_timing_metrics as _build_per_format_timing_metrics,
+)
+from .train_telemetry import (
+    build_update_record,
+    write_filtered_update_records,
+)
+from .train_telemetry import (
+    historical_pool_snapshot_telemetry as _historical_pool_snapshot_telemetry,
+)
 
 
 @dataclass(slots=True)
@@ -87,17 +88,6 @@ class JaxRolloutGroup:
     env_state: JaxEnvState
     turn_batch: TurnBatch
     collect_fn: Callable
-
-
-@dataclass(slots=True)
-class HistoricalSnapshotPool:
-    params: dict
-    snapshot_ids: jax.Array
-    snapshot_updates: jax.Array
-    valid_mask: jax.Array
-    next_slot: int = 0
-    next_id: int = 1
-
 
 
 def _copy_config_for_rollout_group(
@@ -223,7 +213,11 @@ def _slice_env_axis(
     start_index = jnp.asarray(start, dtype=jnp.int32)
 
     def slice_leaf(value):
-        if isinstance(value, jax.Array) and value.ndim > 0 and value.shape[0] == env_count:
+        if (
+            isinstance(value, jax.Array)
+            and value.ndim > 0
+            and value.shape[0] == env_count
+        ):
             return jax.lax.dynamic_slice_in_dim(value, start_index, size, axis=0)
         return value
 
@@ -281,9 +275,7 @@ def _merge_metric_dicts(
 
     if len(metrics_by_chunk) == 1:
         return metrics_by_chunk[0]
-    metrics = jax.tree.map(
-        lambda *xs: jnp.stack(xs).sum(axis=0), *metrics_by_chunk
-    )
+    metrics = jax.tree.map(lambda *xs: jnp.stack(xs).sum(axis=0), *metrics_by_chunk)
     reward_weight = jnp.maximum(metrics["env_steps"], 1.0)
     metrics["average_reward"] = (
         jnp.stack(
@@ -305,7 +297,8 @@ def _merge_metric_dicts(
     if "valid_non_noop_target_rows" in metrics:
         metrics["valid_non_noop_targets_per_row"] = jnp.where(
             metrics["valid_non_noop_target_rows"] > 0.0,
-            metrics["valid_non_noop_targets_sum"] / metrics["valid_non_noop_target_rows"],
+            metrics["valid_non_noop_targets_sum"]
+            / metrics["valid_non_noop_target_rows"],
             0.0,
         )
         metrics["only_noop_fraction"] = jnp.where(
@@ -324,7 +317,9 @@ def _merge_metric_dicts(
     return metrics
 
 
-def _sum_metric_dicts(metrics_by_chunk: list[dict[str, jax.Array]]) -> dict[str, jax.Array]:
+def _sum_metric_dicts(
+    metrics_by_chunk: list[dict[str, jax.Array]],
+) -> dict[str, jax.Array]:
     if len(metrics_by_chunk) == 1:
         return metrics_by_chunk[0]
     return _finalize_cross_chunk_rate_metrics(_merge_metric_dicts(metrics_by_chunk))
@@ -335,30 +330,6 @@ def _empty_per_format_rollout_stats() -> dict[int, dict[str, float]]:
         2: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
         4: {"seconds": 0.0, "env_steps": 0.0, "samples": 0.0},
     }
-
-
-def _build_per_format_timing_metrics(
-    format_stats: dict[int, dict[str, float]],
-    *,
-    update_seconds: float,
-    rollout_seconds: float,
-    ppo_seconds: float,
-) -> dict[str, float]:
-    metrics = {
-        "update_time_rollout_fraction": rollout_seconds / max(update_seconds, 1e-9),
-        "update_time_ppo_fraction": ppo_seconds / max(update_seconds, 1e-9),
-    }
-    for player_count, suffix in ((2, "2p"), (4, "4p")):
-        stats = format_stats.get(player_count, {})
-        seconds = float(stats.get("seconds", 0.0))
-        env_steps = float(stats.get("env_steps", 0.0))
-        samples = float(stats.get("samples", 0.0))
-        metrics[f"rollout_seconds_{suffix}"] = seconds
-        metrics[f"env_steps_per_sec_{suffix}"] = env_steps / max(update_seconds, 1e-9)
-        metrics[f"rollout_env_steps_per_sec_{suffix}"] = env_steps / max(seconds, 1e-9)
-        metrics[f"samples_per_sec_{suffix}"] = samples / max(update_seconds, 1e-9)
-        metrics[f"rollout_samples_per_sec_{suffix}"] = samples / max(seconds, 1e-9)
-    return metrics
 
 
 def _collect_rollout_microbatched(
@@ -502,188 +473,6 @@ def _replace_rollout_group_state(
     )
 
 
-def _checkpoint_payload_builder(
-    train_state: object,
-    cfg: TrainConfig,
-    *,
-    key: jax.Array,
-    update: int,
-    total_env_steps: int,
-    completed_episodes: int,
-    curriculum: CurriculumController | None = None,
-    historical_pool: HistoricalSnapshotPool | None = None,
-) -> Callable[[], dict[str, object]]:
-    params = train_state.params
-    opt_state = train_state.opt_state
-    rng_key = key
-    cfg_snapshot = deepcopy(cfg)
-    metadata = feature_metadata(
-        cfg_snapshot.task,
-        model_cfg=cfg_snapshot.model,
-    )
-    curriculum_state_snapshot = (
-        deepcopy(curriculum.state_dict()) if curriculum is not None else None
-    )
-    historical_pool_snapshot = None
-    if historical_pool is not None:
-        historical_pool_snapshot = {
-            "params": jax.device_get(historical_pool.params),
-            "snapshot_ids": jax.device_get(historical_pool.snapshot_ids),
-            "snapshot_updates": jax.device_get(historical_pool.snapshot_updates),
-            "valid_mask": jax.device_get(historical_pool.valid_mask),
-            "next_slot": historical_pool.next_slot,
-            "next_id": historical_pool.next_id,
-        }
-
-    def build_payload() -> dict[str, object]:
-        payload: dict[str, object] = {
-            "update": update,
-            "params": jax.device_get(params),
-            "opt_state": jax.device_get(opt_state),
-            "rng_key": jax.device_get(rng_key),
-            "config": cfg_snapshot,
-            "feature_metadata": metadata,
-            "total_env_steps": total_env_steps,
-            "completed_episodes": completed_episodes,
-        }
-        if curriculum_state_snapshot is not None:
-            payload["curriculum_state"] = deepcopy(curriculum_state_snapshot)
-        if historical_pool_snapshot is not None:
-            payload["historical_snapshot_pool"] = historical_pool_snapshot
-        return payload
-
-    return build_payload
-
-
-def _checkpoint_replay_due(cfg: TrainConfig, update: int) -> bool:
-    if not cfg.artifacts.replay.enabled:
-        return False
-    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
-    return checkpoint_index % every_n == 0 or update == cfg.training.total_updates
-
-
-def _queue_optional_jobs_if_due(
-    cfg: TrainConfig,
-    *,
-    update: int,
-    checkpoint_path: Path,
-    log_path: Path,
-    queue_dir: Path,
-    result_root: Path | None = None,
-    queue_replay: bool,
-    queue_docker_validation: bool,
-) -> list[Path]:
-    job_paths: list[Path] = []
-    if queue_replay and _checkpoint_replay_due(cfg, update):
-        job_paths.append(
-            write_optional_job(
-                queue_dir,
-                kind="replay",
-                update=update,
-                checkpoint_path=checkpoint_path,
-                payload={
-                    "backend": cfg.artifacts.artifact_pipeline.replay_backend,
-                    "log_path": str(log_path),
-                    "replay_output_dir": cfg.artifacts.replay.output_dir,
-                    "docker_image": cfg.artifacts.artifact_pipeline.docker_image,
-                    "player_count": cfg.artifacts.artifact_pipeline.docker_player_count,
-                    "timeout_seconds": cfg.artifacts.artifact_pipeline.docker_timeout_seconds,
-                    "episode_steps": cfg.artifacts.replay.max_steps,
-                    "seed": cfg.seed + update,
-                },
-                result_root=result_root,
-            )
-        )
-    if queue_docker_validation:
-        job_paths.append(
-            write_optional_job(
-                queue_dir,
-                kind="docker_validation",
-                update=update,
-                checkpoint_path=checkpoint_path,
-                payload={
-                    "docker_image": cfg.artifacts.artifact_pipeline.docker_image,
-                    "player_count": cfg.artifacts.artifact_pipeline.docker_player_count,
-                    "timeout_seconds": cfg.artifacts.artifact_pipeline.docker_timeout_seconds,
-                    "episode_steps": cfg.artifacts.replay.max_steps,
-                    "seed": cfg.seed + update,
-                },
-                result_root=result_root,
-            )
-        )
-    return job_paths
-
-
-def _queue_tournament_job_if_eligible(
-    cfg: TrainConfig,
-    *,
-    update: int,
-    checkpoint_path: Path,
-    queue_dir: Path,
-    result_root: Path | None,
-    promotion_attempt_reason: str,
-) -> Path | None:
-    tournament_reasons = {"metric_eligible_queue_tournament", "tournament_only"}
-    if promotion_attempt_reason not in tournament_reasons:
-        return None
-    if cfg.artifacts.promotion.strategy in {"hybrid", "tournament"}:
-        cfg.artifacts.tournament.enabled = True
-    if not cfg.artifacts.tournament.enabled:
-        return None
-    return write_optional_job(
-        queue_dir,
-        kind="tournament",
-        update=update,
-        checkpoint_path=checkpoint_path,
-        payload={
-            "campaign": cfg.output.campaign,
-            "run_id": cfg.output.run_id,
-        },
-        result_root=result_root,
-    )
-
-
-def _start_artifact_worker_if_needed(
-    cfg: TrainConfig,
-    *,
-    queue_dir: Path,
-    result_root: Path | None = None,
-    worker_state: dict[str, subprocess.Popen[object]],
-) -> None:
-    if not cfg.artifacts.artifact_pipeline.worker_autostart:
-        return
-    worker = worker_state.get("process")
-    if worker is not None and worker.poll() is None:
-        return
-    queue_dir.mkdir(parents=True, exist_ok=True)
-    stdout_path = queue_dir / "worker.stdout.log"
-    stderr_path = queue_dir / "worker.stderr.log"
-    command = [
-        sys.executable,
-        str(Path(__file__).resolve().parents[2] / "scripts" / "run_artifact_worker.py"),
-        str(queue_dir),
-        "--poll-seconds",
-        str(cfg.artifacts.artifact_pipeline.worker_poll_seconds),
-        "--idle-exit-seconds",
-        str(cfg.artifacts.artifact_pipeline.worker_idle_exit_seconds),
-    ]
-    if result_root is not None:
-        command.extend(["--result-root", str(result_root)])
-    from src.artifacts.worker_env import artifact_worker_subprocess_env
-
-    stdout = stdout_path.open("a", encoding="utf-8")
-    stderr = stderr_path.open("a", encoding="utf-8")
-    worker_state["process"] = subprocess.Popen(
-        command,
-        cwd=Path(__file__).resolve().parents[1],
-        stdout=stdout,
-        stderr=stderr,
-        env=artifact_worker_subprocess_env(),
-        start_new_session=True,
-    )
-
-
 def _active_group_indices(
     groups: list[JaxRolloutGroup],
     format_weights: dict[int, float],
@@ -762,43 +551,6 @@ def _add_historical_snapshot(
         "historical_snapshot_evicted": was_valid,
     }
     return next_pool, event
-
-
-def _restore_historical_snapshot_pool(
-    payload: object, fallback: HistoricalSnapshotPool
-) -> HistoricalSnapshotPool:
-    if not isinstance(payload, dict):
-        return fallback
-    try:
-        return HistoricalSnapshotPool(
-            params=jax.device_put(payload["params"]),
-            snapshot_ids=jax.device_put(payload["snapshot_ids"]),
-            snapshot_updates=jax.device_put(payload["snapshot_updates"]),
-            valid_mask=jax.device_put(payload["valid_mask"]),
-            next_slot=int(payload.get("next_slot", fallback.next_slot)),
-            next_id=int(payload.get("next_id", fallback.next_id)),
-        )
-    except KeyError:
-        return fallback
-
-
-def _restore_curriculum_artifacts(
-    checkpoint_path: str,
-    curriculum: CurriculumController,
-    historical_pool: HistoricalSnapshotPool,
-) -> HistoricalSnapshotPool:
-    checkpoint = load_checkpoint_payload(checkpoint_path)
-    validate_checkpoint_config_compatibility(
-        checkpoint, checkpoint_path=checkpoint_path
-    )
-    if not isinstance(checkpoint, dict):
-        return historical_pool
-    state = checkpoint.get("curriculum_state")
-    if isinstance(state, dict):
-        curriculum.load_state_dict(state)
-    return _restore_historical_snapshot_pool(
-        checkpoint.get("historical_snapshot_pool"), historical_pool
-    )
 
 
 def _snapshot_due(cfg: TrainConfig, update: int) -> bool:
@@ -916,154 +668,22 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         if artifact_cfg.enabled
         else None
     )
-    checkpoint_failures: list[CheckpointResult] = []
-    artifact_worker_state: dict[str, subprocess.Popen[object]] = {}
-    run_promotion_best: float | None = None
-
-    def protected_artifact_paths() -> set[Path]:
-        paths = {run_dir / "jax_ckpt_last.pkl"}
-        if checkpoint_pipeline is not None:
-            paths.update(checkpoint_pipeline.protected_paths())
-        paths.update(protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir)))
-        return paths
-
-    def handle_checkpoint_results(results: list[CheckpointResult]) -> None:
-        nonlocal run_promotion_best
-        for result in results:
-            event_record = {
-                "event": "checkpoint_result",
-                "update": result.update,
-                "checkpoint_status": result.status,
-                "checkpoint_final": result.final,
-                "checkpoint_reason": result.reason,
-                "checkpoint_error": result.error,
-            }
-            filtered_event = filter_event_record(event_record, cfg)
-            append_jsonl(log_path, filtered_event)
-            telemetry.log(filtered_event, step=result.update)
-            if result.status == "failed":
-                checkpoint_failures.append(result)
-                continue
-            if not result.committed or result.numbered_path is None:
-                continue
-
-            protected_paths = protected_artifact_paths()
-            protected_paths.add(result.numbered_path)
-            if result.latest_path is not None:
-                protected_paths.add(result.latest_path)
-            if result.final:
-                protected_paths.add(result.numbered_path)
-            if artifact_cfg.replay_async or artifact_cfg.docker_validation_async:
-                job_paths = _queue_optional_jobs_if_due(
-                    cfg,
-                    update=result.update,
-                    checkpoint_path=result.numbered_path,
-                    log_path=log_path,
-                    queue_dir=artifact_queue_dir,
-                    result_root=run_context.evaluations_dir,
-                    queue_replay=artifact_cfg.replay_async,
-                    queue_docker_validation=artifact_cfg.docker_validation_async,
-                )
-                if job_paths:
-                    _start_artifact_worker_if_needed(
-                        cfg,
-                        queue_dir=artifact_queue_dir,
-                        result_root=run_context.evaluations_dir,
-                        worker_state=artifact_worker_state,
-                    )
-                protected_paths.update(
-                    protected_paths_from_jobs(load_active_optional_jobs(artifact_queue_dir))
-                )
-
-            retention = cfg.artifacts.checkpoint_retention
-            pruning = prune_checkpoints(
-                run_dir,
-                log_path=log_path,
-                keep_last_n=retention.keep_last_n,
-                keep_every_n_updates=retention.keep_every_n_updates,
-                keep_best_k_by_metric=retention.keep_best_k_by_metric,
-                best_metric_name=retention.best_metric_name,
-                best_metric_mode=retention.best_metric_mode,
-                min_update_for_pruning=retention.min_update_for_pruning,
-                dry_run_pruning=retention.dry_run_pruning,
-                protected_paths=protected_paths,
-            )
-            action_label = "would prune" if pruning.dry_run else "pruned"
-            print(
-                f"checkpoint retention: {action_label} {len(pruning.deleted)} files, "
-                f"reclaimed_bytes={pruning.reclaimed_bytes}"
-            )
-            promotion_attempt, run_promotion_best = promote_if_better(
-                cfg,
-                run_context,
-                checkpoint_path=result.numbered_path,
-                update=result.update,
-                log_path=log_path,
-                run_best_value=run_promotion_best,
-            )
-            if promotion_attempt.promoted:
-                append_jsonl(
-                    log_path,
-                    {
-                        "event": "checkpoint_promoted",
-                        "update": result.update,
-                        "metric_name": promotion_attempt.metric_name,
-                        "metric_value": promotion_attempt.metric_value,
-                        "promoted_manifest_path": str(
-                            promotion_attempt.promoted_manifest_path
-                        ),
-                    },
-                )
-                if cfg.telemetry.wandb.log_artifacts:
-                    telemetry.log_promoted_checkpoint(
-                        result.numbered_path,
-                        update=result.update,
-                        metric_name=promotion_attempt.metric_name,
-                        metric_value=float(promotion_attempt.metric_value or 0.0),
-                    )
-            tournament_job = _queue_tournament_job_if_eligible(
-                cfg,
-                update=result.update,
-                checkpoint_path=result.numbered_path,
-                queue_dir=artifact_queue_dir,
-                result_root=run_context.evaluations_dir,
-                promotion_attempt_reason=promotion_attempt.reason,
-            )
-            if tournament_job is not None:
-                append_jsonl(
-                    log_path,
-                    {
-                        "event": "tournament_job_queued",
-                        "update": result.update,
-                        "job_path": str(tournament_job),
-                    },
-                )
-                _start_artifact_worker_if_needed(
-                    cfg,
-                    queue_dir=artifact_queue_dir,
-                    result_root=run_context.evaluations_dir,
-                    worker_state=artifact_worker_state,
-                )
-            if not artifact_cfg.replay_async:
-                replay_meta_path = maybe_write_jax_checkpoint_replay(
-                    cfg,
-                    update=result.update,
-                    checkpoint_path=result.numbered_path,
-                    log_path=log_path,
-                )
-                if replay_meta_path is not None:
-                    telemetry.log_artifact(
-                        replay_meta_path,
-                        name=f"replay-meta-u{result.update}",
-                        artifact_type="replay_metadata",
-                    )
+    checkpoint_handler = CheckpointHandler(
+        cfg=cfg,
+        run_dir=run_dir,
+        log_path=log_path,
+        run_context=run_context,
+        telemetry=telemetry,
+        artifact_queue_dir=artifact_queue_dir,
+        checkpoint_pipeline=checkpoint_pipeline,
+    )
 
     completed_training = False
     close_error: Exception | None = None
     try:
         for update in range(start_update, cfg.training.total_updates + 1):
             if checkpoint_pipeline is not None:
-                handle_checkpoint_results(checkpoint_pipeline.drain_results())
+                checkpoint_handler.handle_results(checkpoint_pipeline.drain_results())
             update_start = time.perf_counter()
             reseed_events: list[dict[str, object]] = []
             rollout_start = time.perf_counter()
@@ -1097,7 +717,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 rotate_format_rollouts=cfg.training.rotate_format_rollouts,
             )
             key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
-            for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
+            for group_idx, rollout_key in zip(
+                active_indices, rollout_keys, strict=True
+            ):
                 group = rollout_groups[group_idx]
                 group_rollout_start = time.perf_counter()
                 (
@@ -1133,7 +755,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 transitions_by_group.append(transitions)
                 rollout_metrics_by_group.append(rollout_metrics)
             merged_groups = list(rollout_groups)
-            for group_idx, updated_group in zip(active_indices, next_groups, strict=True):
+            for group_idx, updated_group in zip(
+                active_indices, next_groups, strict=True
+            ):
                 merged_groups[group_idx] = updated_group
             rollout_groups = merged_groups
             transitions = concatenate_transition_batches(transitions_by_group)
@@ -1199,6 +823,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 update_seconds=update_seconds,
                 rollout_seconds=rollout_seconds,
                 ppo_seconds=ppo_seconds,
+                include_per_format="debug"
+                in enabled_metric_groups(metric_groups_cfg_from_config(cfg)),
             )
             env_steps = int(rollout_scalars["env_steps"])
             episodes = int(rollout_scalars["episode_done"])
@@ -1212,7 +838,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             overall_win_rate = float(rollout_scalars["overall_win_rate"])
             total_env_steps += env_steps
             completed_episodes += episodes
-            seed_scheduler.update_metric(float(rollout_scalars[cfg.training.plateau_metric]))
+            seed_scheduler.update_metric(
+                float(rollout_scalars[cfg.training.plateau_metric])
+            )
             curriculum_telemetry = curriculum.stage_telemetry(stage_view, update)
             update_events = list(phase_events)
             transition = curriculum.update(
@@ -1235,48 +863,32 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     historical_pool, train_state.params, update=update
                 )
                 snapshot_event.update(
-                    _historical_pool_snapshot_telemetry(
-                        historical_pool, update=update
-                    )
+                    _historical_pool_snapshot_telemetry(historical_pool, update=update)
                 )
                 update_events.append(snapshot_event)
             phase_events = []
-            record: dict[str, object] = {
-                "update": update,
-                "total_env_steps": total_env_steps,
-                "completed_episodes": completed_episodes,
-                "samples": int(rollout_samples),
-                "win_rate_2p": win_rate_2p,
-                "first_place_rate_4p": first_place_rate_4p,
-                "average_placement_4p": average_placement_4p,
-                "overall_win_rate": overall_win_rate,
-                "average_reward": average_reward,
-                "episode_reward_mean": episode_reward_mean,
-                **_rollout_metrics_for_update_record(rollout_scalars, cfg),
-                "survival_time": survival_time,
-                "score_share": score_share,
-                "update_seconds": update_seconds,
-                "elapsed_seconds": time.perf_counter() - train_start_time,
-                "rollout_seconds": rollout_seconds,
-                "ppo_seconds": ppo_seconds,
-                "env_steps_per_sec": env_steps / max(update_seconds, 1e-9),
-                "rollout_env_steps_per_sec": env_steps / max(rollout_seconds, 1e-9),
-                "samples_per_sec": rollout_samples / max(update_seconds, 1e-9),
-                "ppo_samples_per_sec": rollout_samples / max(ppo_seconds, 1e-9),
-                **per_format_timing_metrics,
-                "seed_scheduler_policy": seed_scheduler.next_seed_policy(update),
-                "seed_scheduler_plateau_metric": cfg.training.plateau_metric,
-                "reseed_events": reseed_events,
-                **curriculum_telemetry,
-                "historical_pool_size": int(
-                    jax.device_get(historical_pool.valid_mask).sum()
-                ),
-                "historical_pool_capacity": int(historical_pool.valid_mask.shape[0]),
-                **{name: float(value) for name, value in metrics_host.items()},
-                "curriculum_phase_events": list(update_events),
-                **gpu_tracker.sample_update_metrics(),
-            }
-            _write_filtered_update_records(
+            record = build_update_record(
+                update=update,
+                total_env_steps=total_env_steps,
+                completed_episodes=completed_episodes,
+                rollout_samples=rollout_samples,
+                rollout_scalars=rollout_scalars,
+                metrics_host=metrics_host,
+                update_seconds=update_seconds,
+                rollout_seconds=rollout_seconds,
+                ppo_seconds=ppo_seconds,
+                train_start_time=train_start_time,
+                per_format_timing_metrics=per_format_timing_metrics,
+                curriculum_telemetry=curriculum_telemetry,
+                reseed_events=reseed_events,
+                update_events=update_events,
+                historical_pool=historical_pool,
+                gpu_update_metrics=gpu_tracker.sample_update_metrics(),
+                seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
+                plateau_metric=cfg.training.plateau_metric,
+                cfg=cfg,
+            )
+            write_filtered_update_records(
                 log_path=log_path,
                 debug_log_path=debug_log_path,
                 record=record,
@@ -1298,7 +910,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
                     f"{entropy_line}"
                 )
-            if update % cfg.artifacts.checkpoint_every == 0 or update == cfg.training.total_updates:
+            if (
+                update % cfg.artifacts.checkpoint_every == 0
+                or update == cfg.training.total_updates
+            ):
                 is_final = update == cfg.training.total_updates
                 if checkpoint_pipeline is None:
                     checkpoint_path = save_jax_checkpoint(
@@ -1312,7 +927,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         curriculum=curriculum,
                         historical_pool=historical_pool,
                     )
-                    handle_checkpoint_results(
+                    checkpoint_handler.handle_results(
                         [
                             CheckpointResult(
                                 job_id=f"sync-{update}",
@@ -1325,23 +940,20 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         ]
                     )
                 else:
-                    job = CheckpointJob(
+                    job = checkpoint_handler.build_checkpoint_job(
                         update=update,
-                        run_dir=run_dir,
-                        build_payload=_checkpoint_payload_builder(
-                            train_state,
-                            cfg,
-                            key=key,
-                            update=update,
-                            total_env_steps=total_env_steps,
-                            completed_episodes=completed_episodes,
-                            curriculum=curriculum,
-                            historical_pool=historical_pool,
-                        ),
+                        train_state=train_state,
+                        key=key,
+                        total_env_steps=total_env_steps,
+                        completed_episodes=completed_episodes,
+                        curriculum=curriculum,
+                        historical_pool=historical_pool,
                         final=is_final,
                     )
-                    handle_checkpoint_results(checkpoint_pipeline.submit_checkpoint(job))
-    
+                    checkpoint_handler.handle_results(
+                        checkpoint_pipeline.submit_checkpoint(job)
+                    )
+
         completed_training = True
     finally:
         if checkpoint_pipeline is not None:
@@ -1351,7 +963,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 else artifact_cfg.exception_flush_timeout_seconds
             )
             try:
-                handle_checkpoint_results(
+                checkpoint_handler.handle_results(
                     checkpoint_pipeline.close(timeout_seconds=timeout_seconds)
                 )
             except Exception as exc:
@@ -1362,188 +974,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         raise ArtifactPipelineError(
             f"artifact pipeline shutdown failed: {close_error}"
         ) from close_error
-    if checkpoint_failures and artifact_cfg.fail_training_on_checkpoint_error:
-        first_failure = checkpoint_failures[0]
+    if (
+        checkpoint_handler.checkpoint_failures
+        and artifact_cfg.fail_training_on_checkpoint_error
+    ):
+        first_failure = checkpoint_handler.first_failure()
+        assert first_failure is not None
         raise ArtifactPipelineError(
             f"checkpoint worker failed at update {first_failure.update}: "
             f"{first_failure.error or first_failure.reason or first_failure.status}"
         )
     return log_path
-
-
-
-def _historical_pool_snapshot_telemetry(
-    historical_pool: HistoricalSnapshotPool, *, update: int
-) -> dict[str, object]:
-    """Return valid historical snapshot ids and ages for event records."""
-
-    historical_ids = jax.device_get(historical_pool.snapshot_ids).tolist()
-    historical_ages = jax.device_get(
-        jnp.where(
-            historical_pool.valid_mask,
-            jnp.asarray(update, dtype=jnp.int32) - historical_pool.snapshot_updates,
-            0,
-        )
-    ).tolist()
-    return {
-        "historical_snapshot_ids": historical_ids,
-        "historical_snapshot_ages_updates": historical_ages,
-    }
-
-
-def _rollout_metrics_for_update_record(
-    rollout_scalars: dict[str, float],
-    cfg: TrainConfig,
-) -> dict[str, float]:
-    """Merge optional rollout scalars selected by metric-group filtering."""
-
-    core_keys = frozenset(
-        {
-            "samples",
-            "env_steps",
-            "episode_done",
-            "average_reward",
-            "episode_reward_mean",
-            "win_rate_2p",
-            "first_place_rate_4p",
-            "average_placement_4p",
-            "overall_win_rate",
-            "survival_time",
-            "score_share",
-        }
-    )
-    metrics = {
-        key: float(rollout_scalars[key])
-        for key in rollout_scalars
-        if key in ROLLOUT_OUTPUT_METRIC_NAMES and key not in core_keys
-    }
-    if "mean_active_launches_per_turn" in rollout_scalars:
-        metrics["stop_utilization_ratio"] = float(
-            rollout_scalars["mean_active_launches_per_turn"]
-        ) / max(float(cfg.model.max_moves_k), 1.0)
-    return metrics
-
-
-def _split_debug_update_record(
-    record: dict[str, object],
-) -> tuple[dict[str, object], dict[str, object]]:
-    """Split debug/parity keys into a secondary JSONL payload."""
-
-    lean: dict[str, object] = {}
-    debug: dict[str, object] = {}
-    for name, value in record.items():
-        if name.startswith("debug_") or name.startswith("debug/"):
-            debug[name] = value
-        else:
-            lean[name] = value
-    return lean, debug
-
-
-def _write_filtered_update_records(
-    *,
-    log_path: Path,
-    debug_log_path: Path,
-    record: dict[str, object],
-    cfg: TrainConfig,
-    telemetry: object,
-    update: int,
-) -> None:
-    """Apply metric-group filtering and write lean/debug JSONL sinks."""
-
-    lean, debug = _split_debug_update_record(record)
-    filtered_lean = filter_update_record(lean, cfg)
-    append_jsonl(log_path, filtered_lean)
-    if debug:
-        append_jsonl(debug_log_path, {"update": update, **debug})
-    telemetry.log(filtered_lean, step=update)
-
-
-
-def append_jsonl(path: Path, record: dict[str, object]) -> None:
-    """Append a JSON metrics record to ``path``, creating parents as needed."""
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record, sort_keys=True) + "\n")
-
-
-def load_jax_checkpoint(
-    checkpoint_path: str, train_state: object, cfg: TrainConfig
-) -> tuple[object, jax.Array, int, int, int]:
-    """Load JAX training state and counters from a checkpoint payload."""
-
-    checkpoint = load_checkpoint_payload(checkpoint_path)
-    if not isinstance(checkpoint, dict) or "params" not in checkpoint:
-        raise ValueError(
-            f"JAX checkpoint must contain a parameter payload: {checkpoint_path}"
-        )
-    validate_checkpoint_config_compatibility(
-        checkpoint, checkpoint_path=checkpoint_path
-    )
-    validate_checkpoint_feature_compatibility(
-        checkpoint, cfg.task, checkpoint_path=checkpoint_path
-    )
-    stored_metadata = checkpoint_feature_metadata(checkpoint)
-    validate_checkpoint_encoder_compatibility(
-        stored_metadata,
-        cfg,
-        checkpoint_path=checkpoint_path,
-    )
-    validate_checkpoint_pointer_decoder_compatibility(
-        stored_metadata,
-        cfg,
-        checkpoint_path=checkpoint_path,
-    )
-    params = jax.device_put(checkpoint["params"])
-    opt_state = checkpoint.get("opt_state")
-    if opt_state is None:
-        opt_state = train_state.optimizer.init(params)
-    else:
-        opt_state = jax.device_put(opt_state)
-    checkpoint_update = int(checkpoint.get("update", 0))
-    key_payload = checkpoint.get("rng_key")
-    key = (
-        jax.device_put(key_payload)
-        if key_payload is not None
-        else jax.random.PRNGKey(cfg.seed + checkpoint_update)
-    )
-    total_env_steps = int(
-        checkpoint.get(
-            "total_env_steps",
-            checkpoint_update * cfg.training.rollout_steps * cfg.training.num_envs,
-        )
-    )
-    completed_episodes = int(checkpoint.get("completed_episodes", 0))
-    return (
-        train_state.replace(params=params, opt_state=opt_state),
-        key,
-        checkpoint_update + 1,
-        total_env_steps,
-        completed_episodes,
-    )
-
-
-def save_jax_checkpoint(
-    run_dir: Path,
-    update: int,
-    train_state: object,
-    cfg: TrainConfig,
-    *,
-    key: jax.Array,
-    total_env_steps: int,
-    completed_episodes: int,
-    curriculum: CurriculumController | None = None,
-    historical_pool: HistoricalSnapshotPool | None = None,
-) -> Path:
-    """Persist the latest and update-numbered JAX checkpoint payloads."""
-    payload = _checkpoint_payload_builder(
-        train_state,
-        cfg,
-        key=key,
-        update=update,
-        total_env_steps=total_env_steps,
-        completed_episodes=completed_episodes,
-        curriculum=curriculum,
-        historical_pool=historical_pool,
-    )()
-    return commit_checkpoint_payload(run_dir, update, payload)

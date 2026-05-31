@@ -22,6 +22,7 @@ from src.jax.normalization import ObservationNormState, normalize_turn_batch
 from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
+from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
 from src.opponents.jax_actions.builders import (
     build_action_from_factored_batch,
     owned_planet_ships,
@@ -33,11 +34,7 @@ from src.opponents.jax_actions.sampling import (
     _sample_opponent_2p_action,
     _single_stage_family_id,
 )
-from src.opponents.pool import (
-    OPPONENT_HISTORICAL,
-    OPPONENT_LATEST,
-    sample_opponent_type_ids_jax,
-)
+from src.opponents.pool import sample_opponent_type_ids_jax
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
 from src.training.curriculum import StageView, default_stage_view
 

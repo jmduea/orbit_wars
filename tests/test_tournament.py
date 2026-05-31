@@ -263,14 +263,14 @@ def test_run_match_smoke_with_mock_env() -> None:
 
 def test_queue_tournament_job_accepts_tournament_only_reason(tmp_path: Path) -> None:
     from src.config import TrainConfig
-    from src.jax.train import _queue_tournament_job_if_eligible
+    from src.jax.train_queue import queue_tournament_job_if_eligible
 
     cfg = TrainConfig()
     cfg.artifacts.promotion.strategy = "tournament"
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
     checkpoint_path.write_bytes(b"checkpoint")
 
-    job_path = _queue_tournament_job_if_eligible(
+    job_path = queue_tournament_job_if_eligible(
         cfg,
         update=1,
         checkpoint_path=checkpoint_path,

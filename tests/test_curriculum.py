@@ -5,6 +5,7 @@ from omegaconf import OmegaConf
 
 import jax
 
+
 def _configure_rollout_groups(cfg, groups):
     if not groups:
         cfg.training.format_weights = {int(cfg.task.player_count): 1.0}
@@ -373,6 +374,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.artifacts.artifact_pipeline.enabled = False
     cfg.artifacts.replay.enabled = False
     cfg.telemetry.wandb.enabled = False
+    cfg.telemetry.metric_groups.debug = True
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
     _configure_rollout_groups(cfg, [

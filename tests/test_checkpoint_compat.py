@@ -26,12 +26,12 @@ def test_feature_metadata_includes_schema_and_dims() -> None:
 
     assert metadata["schema_version"] == 5
     assert metadata["planet_feature_dim"] == 13
-    assert metadata["edge_feature_dim"] == 19
+    assert metadata["edge_feature_dim"] == 25
     assert metadata["global_feature_dim"] == 46
     assert metadata["ship_feature_scale"] == 1000.0
     assert metadata["edge_layout"] == "top_k_per_source"
     assert metadata["edge_k"] == 3
-    assert metadata["intercept_anchors"] == (1.0, 6.0)
+    assert metadata["intercept_anchors"] == (1.0, 3.0, 6.0)
     assert isinstance(metadata["intercept_anchors"], tuple)
 
 
@@ -81,7 +81,7 @@ def test_infer_metadata_from_state_dict_keys() -> None:
         "params": {
             "encoder_module": {
                 "planet_enc_0": {"kernel": __import__("numpy").zeros((13, 16))},
-                "edge_enc_0": {"kernel": __import__("numpy").zeros((19, 16))},
+                "edge_enc_0": {"kernel": __import__("numpy").zeros((25, 16))},
                 "global_enc_0": {"kernel": __import__("numpy").zeros((46, 16))},
             }
         }
@@ -92,7 +92,7 @@ def test_infer_metadata_from_state_dict_keys() -> None:
     assert inferred is not None
     assert inferred["schema_version"] == 5
     assert inferred["planet_feature_dim"] == 13
-    assert inferred["edge_feature_dim"] == 19
+    assert inferred["edge_feature_dim"] == 25
     assert inferred["global_feature_dim"] == 46
 
 
@@ -163,7 +163,9 @@ def test_validate_rejects_pointer_decoder_mismatch() -> None:
     stored["pointer_decoder"] = "joint_flat"
     stored["action_layout_version"] = 2
 
-    from src.artifacts.checkpoint_compat import validate_checkpoint_pointer_decoder_compatibility
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
 
     with pytest.raises(ValueError, match="pointer_decoder"):
         validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
@@ -177,7 +179,9 @@ def test_validate_rejects_action_layout_mismatch() -> None:
     stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
     stored["action_layout_version"] = 1
 
-    from src.artifacts.checkpoint_compat import validate_checkpoint_pointer_decoder_compatibility
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
 
     with pytest.raises(ValueError, match="action_layout_version"):
         validate_checkpoint_pointer_decoder_compatibility(stored, cfg)

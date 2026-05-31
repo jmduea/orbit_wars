@@ -777,8 +777,7 @@ def apply_cheap_trajectory_shield_factorized_topk(
     computed by encode_turn:
 
       - batch.edge_mask for source ownership, active target, not-current-sun-cross
-      - sun_cross_at_intercept_s1 for slow/small launches
-      - sun_cross_at_intercept_s6 for fast/large launches
+      - per-anchor sun_cross_at_intercept_* for launch-speed buckets
       - per-bucket ship availability
 
     It is not a perfect physics validator. It is a low-cost mask for PPO
@@ -793,19 +792,29 @@ def apply_cheap_trajectory_shield_factorized_topk(
     bucket_ids = jnp.arange(bucket_count, dtype=jnp.int32)
     real_bucket = bucket_ids > 0
 
-    # Existing edge schema currently exposes s1 and s6 anchors.
-    sun_s1 = _edge_scalar_feature(batch, "sun_cross_at_intercept_s1") > 0.5
-    sun_s6 = _edge_scalar_feature(batch, "sun_cross_at_intercept_s6") > 0.5
+    from src.features.catalog.edge import intercept_anchor_label
 
-    # Map lower buckets to slow-anchor risk, upper buckets to fast-anchor risk.
-    # Bucket 0 is reserved for no-launch/noop behavior and is never a real launch.
-    midpoint = max((bucket_count - 1) // 2, 1)
-    use_slow_anchor = bucket_ids <= midpoint
-    bucket_sun_blocked = jnp.where(
-        use_slow_anchor[None, None, :],
-        sun_s1[..., None],
-        sun_s6[..., None],
+    anchor_speeds = tuple(
+        float(s) for s in getattr(env_cfg, "intercept_anchors", (1.0, 3.0, 6.0))
     )
+    sun_by_anchor = jnp.stack(
+        [
+            _edge_scalar_feature(
+                batch, f"sun_cross_at_intercept_{intercept_anchor_label(speed)}"
+            )
+            > 0.5
+            for speed in anchor_speeds
+        ],
+        axis=-1,
+    )
+    launch_bucket_count = max(bucket_count - 1, 1)
+    launch_bucket_ids = jnp.maximum(bucket_ids - 1, 0)
+    anchor_idx = jnp.round(
+        launch_bucket_ids.astype(jnp.float32)
+        * max(len(anchor_speeds) - 1, 0)
+        / max(launch_bucket_count - 1, 1)
+    ).astype(jnp.int32)
+    bucket_sun_blocked = jnp.take(sun_by_anchor, anchor_idx, axis=-1)
 
     ship_counts = ship_count_for_bucket_jax(
         planet_ships[:, None],

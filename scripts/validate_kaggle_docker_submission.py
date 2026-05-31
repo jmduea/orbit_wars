@@ -32,6 +32,7 @@ RUNTIME_FILES = (
     "features/catalog/global_.py",
     "features/catalog/planet.py",
     "features/registry.py",
+    "features/schema_api.py",
     "game/__init__.py",
     "game/constants.py",
     "game/shield_config.py",
@@ -515,7 +516,7 @@ class TaskConfig:
     trajectory_shield_hit_mode: str = "selected_target"
     trajectory_shield_horizon: int = 500
     trajectory_shield_epsilon: float = 1e-6
-    intercept_anchors: tuple[float, float] = (1.0, 6.0)
+    intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"
 
 

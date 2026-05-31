@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import math
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -33,9 +33,9 @@ if nvidia_gpu_present() or os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().l
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
 
-import jax
 import jax.numpy as jnp
 
+import jax
 from src.config import compose_hydra_train_config
 from src.jax.benchmark import rollout_group_summary
 from src.jax.device import ensure_jax_accelerator_backend
@@ -57,8 +57,14 @@ ROLLOUT_KEYS = ("mean_active_launches_per_turn", "overall_win_rate")
 # Workstation validation profile: no curriculum, pure self-play (stability gate).
 WORKSTATION_VALIDATION_OVERRIDES = [
     "model=transformer_factorized",
-    "format=2p_4p_16env",
-    "training=workstation",
+    "training=2p4p_32_split",
+    "training.rollout_steps=128",
+    "training.epochs=2",
+    "training.minibatch_size=512",
+    "training.update_chunk_rows_min=2048",
+    "training.update_chunk_rows_max=8192",
+    "training.enable_gradient_checkpointing=true",
+    "training.lean_rollout_metrics=true",
     "opponents=self_play_only",
     "curriculum=off",
     "telemetry.wandb.enabled=false",
@@ -168,6 +174,8 @@ def parse_args() -> argparse.Namespace:
 def _format_profile_name(overrides: list[str]) -> str | None:
     for override in overrides:
         if override.startswith("format="):
+            return override.split("=", 1)[1]
+        if override.startswith("training="):
             return override.split("=", 1)[1]
     return None
 

@@ -42,6 +42,7 @@ def test_build_per_format_timing_metrics_is_deterministic():
         update_seconds=10.0,
         rollout_seconds=6.0,
         ppo_seconds=3.0,
+        include_per_format=True,
     )
 
     assert metrics["update_time_rollout_fraction"] == 0.6
@@ -58,12 +59,30 @@ def test_build_per_format_timing_metrics_is_deterministic():
     assert metrics["rollout_samples_per_sec_4p"] == 200.0
 
 
+def test_build_per_format_timing_metrics_skips_per_format_by_default():
+    metrics = _build_per_format_timing_metrics(
+        {
+            2: {"seconds": 2.0, "env_steps": 20.0, "samples": 200.0},
+            4: {"seconds": 4.0, "env_steps": 40.0, "samples": 800.0},
+        },
+        update_seconds=10.0,
+        rollout_seconds=6.0,
+        ppo_seconds=3.0,
+    )
+
+    assert metrics == {
+        "update_time_rollout_fraction": 0.6,
+        "update_time_ppo_fraction": 0.3,
+    }
+
+
 def test_build_per_format_timing_metrics_emits_inactive_format_zeros():
     metrics = _build_per_format_timing_metrics(
         {2: {"seconds": 1.0, "env_steps": 10.0, "samples": 30.0}},
         update_seconds=5.0,
         rollout_seconds=1.0,
         ppo_seconds=1.0,
+        include_per_format=True,
     )
 
     assert metrics["rollout_seconds_4p"] == 0.0
@@ -73,7 +92,7 @@ def test_build_per_format_timing_metrics_emits_inactive_format_zeros():
     assert metrics["rollout_samples_per_sec_4p"] == 0.0
 
 def test_rollout_metrics_for_update_record_omits_disabled_groups() -> None:
-    from src.jax.train import _rollout_metrics_for_update_record
+    from src.jax.train_telemetry import rollout_metrics_for_update_record
 
     cfg = SimpleNamespace(model=SimpleNamespace(max_moves_k=4))
     rollout_scalars = {
@@ -82,7 +101,7 @@ def test_rollout_metrics_for_update_record_omits_disabled_groups() -> None:
         "mean_active_launches_per_turn": 2.0,
     }
 
-    metrics = _rollout_metrics_for_update_record(rollout_scalars, cfg)
+    metrics = rollout_metrics_for_update_record(rollout_scalars, cfg)
 
     assert "win_rate_2p" not in metrics
     assert metrics["stop_rate"] == 0.1
