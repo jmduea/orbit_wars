@@ -2,12 +2,12 @@ defaults:
   - base
   - _self_
 
-checkpoint_every: 500
+checkpoint_every: 250
 
 artifact_pipeline:
   enabled: true
-  replay_async: false
-  docker_validation_async: false
+  replay_async: true
+  docker_validation_async: true
   worker_autostart: true
   fail_training_on_optional_job_error: false
 

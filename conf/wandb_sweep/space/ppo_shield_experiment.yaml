@@ -1,0 +1,19 @@
+# @package _global_
+
+parameters:
+  task:
+    values: [shield_off, shield_cheap, shield_tiered]
+  training.gamma:
+    values: [0.99, 0.995, 0.999]
+  training.gae_lambda:
+    values: [0.90, 0.95, 0.99]
+  training.lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.0006
+  training.ent_coef:
+    distribution: log_uniform_values
+    min: 0.001
+    max: 0.01
+  telemetry.wandb.tags:
+    value: [ppo_shield_experiment]

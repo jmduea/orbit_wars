@@ -5,4 +5,4 @@ defaults:
 trajectory_shield_enabled: true
 trajectory_shield_mode: tiered
 trajectory_shield_final_validate_selected: true
-trajectory_shield_horizon: 500
+trajectory_shield_horizon: 50 # 50 is a reasonable default, anything above 100 is probably overkill
