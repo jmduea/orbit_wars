@@ -12,8 +12,11 @@ from src.jax.action_codec import (
     factored_action_log_prob_and_entropy,
 )
 from src.jax.env import batched_reset
-from src.jax.shield import ship_count_for_bucket_jax
-from src.opponents.jax_actions.builders import build_action_from_factored_batch
+from src.jax.ship_action import ship_count_for_action
+from src.opponents.jax_actions.builders import (
+    build_action_from_factored_batch,
+    owned_planet_ships,
+)
 
 
 def _task_cfg(**kwargs) -> TaskConfig:
@@ -22,16 +25,53 @@ def _task_cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
+def _pick_merge_launch(game, batch) -> tuple[int, int, float]:
+    owned = np.asarray(owned_planet_ships(game))
+    if owned.ndim > 1:
+        owned = owned[0]
+    mask = np.asarray(batch.planet_mask[0])
+    k = batch.edge_mask.shape[-1]
+    for row in np.where(mask)[0]:
+        remaining = float(owned[row])
+        if remaining <= 0.0:
+            continue
+        for slot in range(k):
+            if bool(batch.edge_mask[0, row, slot]):
+                return int(row), int(slot), remaining
+    raise AssertionError("no learner-owned launchable edge in fixture")
+
+
 def test_build_action_merges_identical_launches() -> None:
     cfg = TrainConfig()
     cfg.task = _task_cfg()
     cfg.model.max_moves_k = 2
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(7), 1), cfg.task)
     game = state.game
-    src_row = int(np.asarray(jnp.argmax(batch.planet_mask[0].astype(jnp.int32))))
-    slot = 0
+    src_row, slot, remaining = _pick_merge_launch(game, batch)
     src_id = int(np.asarray(batch.edge_src_ids[0, src_row]))
     bucket = 1
+    first_launch = float(
+        np.asarray(
+            ship_count_for_action(
+                jnp.asarray(remaining, dtype=jnp.float32),
+                jnp.asarray(bucket, dtype=jnp.int32),
+                None,
+                cfg,
+            )
+        )
+    )
+    second_launch = float(
+        np.asarray(
+            ship_count_for_action(
+                jnp.asarray(remaining - first_launch, dtype=jnp.float32),
+                jnp.asarray(bucket, dtype=jnp.int32),
+                None,
+                cfg,
+            )
+        )
+    )
+    if first_launch <= 0.0 or second_launch <= 0.0:
+        pytest.skip("fixture planet cannot fund two bucket launches before merge")
 
     action = build_action_from_factored_batch(
         game,
@@ -46,18 +86,8 @@ def test_build_action_merges_identical_launches() -> None:
     valid = np.asarray(action.valid[0])
     assert int(valid.sum()) == 1
     assert int(np.asarray(action.source_id[0, 0])) == src_id
-    remaining = float(np.asarray(game.planets.ships[src_row]))
-    single = float(
-        np.asarray(
-            ship_count_for_bucket_jax(
-                jnp.asarray(remaining, dtype=jnp.float32),
-                jnp.asarray(bucket, dtype=jnp.int32),
-                cfg.task.ship_bucket_count,
-            )
-        )
-    )
     merged = float(np.asarray(action.ships[0, 0]))
-    assert merged == pytest.approx(2.0 * single, rel=1e-5)
+    assert merged == pytest.approx(first_launch + second_launch, rel=1e-5)
 
 
 def test_build_action_merge_respects_max_fleets_cap() -> None:
