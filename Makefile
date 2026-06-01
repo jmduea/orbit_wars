@@ -58,6 +58,17 @@ test-launch-hygiene-throughput:
 		uv run python scripts/benchmark_factorized_sampler.py \
 		--max-moves-k 5 --batch-size 32 --warmup 5 --repeats 20 --assert-max-ms 3.22
 
+# PERF2 tier-2 gate: production-path e2e throughput vs pre-hygiene baseline (GPU; not pytest wall-time).
+# Tier-1 pass (above) does not imply tier-2 pass.
+test-launch-hygiene-e2e-throughput:
+	env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+		uv run ow benchmark training \
+		--preset primary --label launch_hygiene_e2e_gate \
+		--updates 20 --warmup 2 \
+		--out /tmp/launch_hygiene_e2e_gate.json \
+		--baseline docs/benchmarks/launch-hygiene-e2e-baseline.json \
+		--assert-within-pct 10
+
 # Kaggle-relevant JAX env parity (mechanics + 4p); runs in test-jax tier, not slow.
 test-kaggle-parity:
 	$(PYTEST_CPU) tests/test_jax_env_parity.py tests/test_jax_env.py tests/test_jax_env_dispatch.py -m "jax and not slow"

@@ -45,3 +45,40 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
         ]
     )
     assert held_out.eval_checkpoint == Path("/tmp/ckpt.pkl")
+
+
+def test_makefile_e2e_throughput_target_uses_baseline_assert() -> None:
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    assert "test-launch-hygiene-e2e-throughput:" in makefile
+    assert "ow benchmark training" in makefile
+    assert "docs/benchmarks/launch-hygiene-e2e-baseline.json" in makefile
+    assert "--assert-within-pct" in makefile
+    parser = build_parser()
+    training = parser.parse_args(
+        [
+            "training",
+            "--preset",
+            "primary",
+            "--label",
+            "gate",
+            "--out",
+            "/tmp/gate.json",
+            "--baseline",
+            "docs/benchmarks/launch-hygiene-e2e-baseline.json",
+            "--assert-within-pct",
+            "10",
+        ]
+    )
+    assert training.preset == "primary"
+    assert training.updates is None
+    assert training.baseline == Path("docs/benchmarks/launch-hygiene-e2e-baseline.json")
+    assert training.assert_within_pct == 10.0
+
+    training_parser = next(
+        action
+        for action in parser._actions
+        if getattr(action, "choices", None) and "training" in action.choices
+    ).choices["training"]
+    training_help = training_parser.format_help()
+    assert "primary" in training_help
+    assert "shield_cheap" in training_help

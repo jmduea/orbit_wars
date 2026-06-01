@@ -19,8 +19,10 @@ from omegaconf import OmegaConf
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
 from src.jax.training_benchmark import (
+    PRIMARY_E2E_OVERRIDES,
     WORKSTATION_VALIDATION_OVERRIDES,
     compose_benchmark_config,
+    resolve_benchmark_overrides,
 )
 
 SWEEP_COMPOSE_RECIPES = (
@@ -106,6 +108,14 @@ def test_benchmark_sanity_defaults_compose_with_even_2p4p_split() -> None:
     assert not cfg.training.rotate_format_rollouts
     assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
     assert cfg.training.rollout_microbatch_envs <= min(spec.num_envs for spec in specs)
+
+
+def test_benchmark_primary_preset_compose_includes_shield_cheap() -> None:
+    overrides = resolve_benchmark_overrides(preset="primary", overrides=None)
+    assert overrides == list(PRIMARY_E2E_OVERRIDES)
+    cfg = compose_benchmark_config(overrides)
+    assert cfg.task.trajectory_shield_mode == "cheap"
+    assert resolve_rollout_group_specs(cfg)
 
 
 @pytest.mark.parametrize("name,overrides", PRIMARY_EVAL_PROFILES.items())

@@ -38,6 +38,10 @@ def print_benchmark_help() -> None:
         "  make preflight-sanity\n"
         "  make preflight-learn-proof\n"
         "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n\n"
+        "E2E throughput (launch hygiene):\n"
+        "  make test-launch-hygiene-e2e-throughput\n"
+        "  uv run ow benchmark training --preset primary --label gate --out /tmp/gate.json \\\n"
+        "    --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10\n\n"
         "More: uv run ow benchmark learn-proof --help\n"
     )
 
@@ -62,17 +66,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     training.add_argument(
         "--preset",
-        choices=("validation",),
+        choices=("validation", "primary"),
         default=None,
-        help="Workstation stability bundle (--preset validation).",
+        help=(
+            "Benchmark bundle: validation (workstation stability) or primary "
+            "(task=shield_cheap e2e throughput gate profile)."
+        ),
     )
     training.add_argument(
         "--tier",
         default="micro",
         help="Label recorded in JSON (e.g. micro, workstation).",
     )
-    training.add_argument("--updates", type=int, default=30)
+    training.add_argument("--updates", type=int, default=None)
     training.add_argument("--warmup", type=int, default=2)
+    training.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="Repeat measured runs; with --out writes aggregate baseline-style payload.",
+    )
+    training.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Baseline JSON for --assert-within-pct comparison.",
+    )
+    training.add_argument(
+        "--assert-within-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help=(
+            "Exit non-zero when measured env_steps/s, samples/s, or "
+            "seconds/update exceed baseline pass band (default from baseline or 10)."
+        ),
+    )
+    training.add_argument(
+        "--device-check",
+        choices=("warn", "strict"),
+        default="warn",
+        help="Compare JAX devices to baseline fingerprint (default: warn).",
+    )
+    training.add_argument(
+        "--force",
+        action="store_true",
+        help="Compare throughput even when --device-check detects mismatch.",
+    )
     training.add_argument(
         "--snapshot-updates",
         nargs="*",
@@ -263,43 +303,141 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     import jax
     from src.jax.benchmark import rollout_group_summary
     from src.jax.training_benchmark import (
+        E2E_THROUGHPUT_GATE,
+        aggregate_e2e_run_payloads,
+        check_baseline_device_match,
+        compare_e2e_throughput_to_baseline,
         compose_benchmark_config,
+        default_benchmark_updates,
+        derive_e2e_pass_band,
+        e2e_throughput_metric_values,
         format_profile_name,
+        load_e2e_baseline,
         resolve_benchmark_overrides,
+        resolve_e2e_pass_band,
         run_training_benchmark,
         training_benchmark_payload,
     )
 
     _init_benchmark_runtime()
+    updates = (
+        int(args.updates)
+        if args.updates is not None
+        else default_benchmark_updates(preset=args.preset)
+    )
     overrides = resolve_benchmark_overrides(
         preset=args.preset,
         overrides=args.overrides,
     )
     cfg = compose_benchmark_config(overrides)
     group_specs = rollout_group_summary(cfg)
-    result = run_training_benchmark(
-        cfg,
-        label=args.label,
-        overrides=tuple(overrides),
-        warmup=args.warmup,
-        updates=args.updates,
-        snapshot_updates=frozenset(args.snapshot_updates),
-    )
-    payload = training_benchmark_payload(result)
-    payload.update(
-        {
+
+    run_payloads: list[dict[str, object]] = []
+    repeats = max(int(args.repeats), 1)
+    for repeat_idx in range(repeats):
+        label = args.label if repeats == 1 else f"{args.label}_r{repeat_idx + 1}"
+        result = run_training_benchmark(
+            cfg,
+            label=label,
+            overrides=tuple(overrides),
+            warmup=args.warmup,
+            updates=updates,
+            snapshot_updates=frozenset(args.snapshot_updates),
+        )
+        payload = training_benchmark_payload(result)
+        payload.update(
+            {
+                "commit_sha": _git_head_sha(),
+                "tier": args.tier,
+                "jax_version": jax.__version__,
+                "format": format_profile_name(overrides),
+                "rollout_groups": [dict(group) for group in group_specs],
+                "rollout_microbatch_envs": int(cfg.training.rollout_microbatch_envs),
+                "gate": E2E_THROUGHPUT_GATE if args.preset == "primary" else "stability",
+            }
+        )
+        run_payloads.append(payload)
+
+    if repeats == 1:
+        output_payload: dict[str, object] = run_payloads[0]
+    else:
+        aggregate = aggregate_e2e_run_payloads(run_payloads)
+        within_pct = (
+            float(args.assert_within_pct)
+            if args.assert_within_pct is not None
+            else 10.0
+        )
+        pass_band = derive_e2e_pass_band(aggregate, within_pct=within_pct)
+        output_payload = {
+            "gate": E2E_THROUGHPUT_GATE,
+            "label": args.label,
             "commit_sha": _git_head_sha(),
-            "tier": args.tier,
             "jax_version": jax.__version__,
-            "format": format_profile_name(overrides),
-            "rollout_groups": [dict(group) for group in group_specs],
-            "rollout_microbatch_envs": int(cfg.training.rollout_microbatch_envs),
-            "gate": "stability",
+            "overrides": overrides,
+            "updates": updates,
+            "warmup": args.warmup,
+            "repeats": repeats,
+            "runs": run_payloads,
+            "aggregate": aggregate,
+            "pass_band": pass_band,
         }
-    )
+
+    if args.baseline is not None or args.assert_within_pct is not None:
+        if args.baseline is None:
+            print("--assert-within-pct requires --baseline", file=sys.stderr)
+            return 1
+        try:
+            baseline = load_e2e_baseline(args.baseline)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        measured_source = run_payloads[0] if repeats == 1 else output_payload
+        measured = e2e_throughput_metric_values(measured_source)
+        if repeats > 1:
+            aggregate_obj = output_payload.get("aggregate")
+            if isinstance(aggregate_obj, dict):
+                measured = {
+                    key: float(aggregate_obj[key]["mean"])  # type: ignore[index]
+                    for key in measured
+                    if key in aggregate_obj
+                }
+        device_ok, device_message = check_baseline_device_match(
+            baseline,
+            devices=run_payloads[0]["devices"],  # type: ignore[arg-type]
+            default_backend=str(run_payloads[0]["default_backend"]),
+            mode=str(args.device_check),
+            force=bool(args.force),
+        )
+        if device_message:
+            print(device_message, file=sys.stderr)
+        if not device_ok:
+            return 1
+        pass_band = resolve_e2e_pass_band(
+            baseline,
+            within_pct=args.assert_within_pct,
+        )
+        passed, failures = compare_e2e_throughput_to_baseline(
+            measured,
+            pass_band=pass_band,
+        )
+        output_payload["baseline_path"] = str(args.baseline)
+        output_payload["pass_band_applied"] = pass_band
+        output_payload["measured_for_gate"] = measured
+        output_payload["gate_passed"] = passed
+        if failures:
+            output_payload["gate_failures"] = failures
+        if not passed:
+            for reason in failures:
+                print(reason, file=sys.stderr)
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(
+                json.dumps(output_payload, indent=2) + "\n", encoding="utf-8"
+            )
+            return 1
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(payload, sort_keys=True))
+    args.out.write_text(json.dumps(output_payload, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(output_payload, sort_keys=True))
     return 0
 
 
