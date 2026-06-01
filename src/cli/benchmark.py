@@ -79,13 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
     sanity.add_argument(
         "--overrides",
         nargs="*",
-        default=[
-            "model=transformer_factorized_small",
-            "training=2p_16",
-            "opponents=random_only",
-            "curriculum=off",
-            "seed=42",
-        ],
+        default=None,
+        help="Hydra overrides (default: WORKSTATION_VALIDATION_OVERRIDES).",
     )
 
     learn_proof = subparsers.add_parser(
@@ -255,7 +250,13 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
     )
 
     _init_benchmark_runtime()
-    overrides = list(args.overrides)
+    from src.jax.training_benchmark import WORKSTATION_VALIDATION_OVERRIDES
+
+    overrides = (
+        list(args.overrides)
+        if args.overrides is not None
+        else list(WORKSTATION_VALIDATION_OVERRIDES)
+    )
     cfg = compose_benchmark_config(overrides)
     snapshot_updates = frozenset({args.compare_update})
     first = run_training_benchmark(

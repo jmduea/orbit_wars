@@ -19,7 +19,7 @@ Static mix when curriculum stages omit `format_weights` uses `training.format_we
 | --- | --- | --- |
 | `smoke` | 2 (2p-only) | Fast pipeline check |
 | `smoke_2p_16` | 16 (2p-only) | Smoke launch recipe |
-| `workstation` | 16 (`rotate`) | Same mix as `2p4p_16_rotate` + workstation PPO knobs |
+| `workstation` | 32 (16+16 split) | Even 2p/4p mix + workstation PPO knobs |
 | `2p_16`, `2p_32`, `4p_16`, `4p_32` | name = total | Single-format runs |
 | `2p4p_16_split` | 16 (8+8) | Split mode |
 | `2p4p_32_split` | 32 (16+16) | Split mode; old `format=2p_4p_16env` equivalent |

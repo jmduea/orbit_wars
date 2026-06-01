@@ -1,21 +1,13 @@
 defaults:
-  - base
+  - 2p4p_32_split
   - _self_
 
 rollout_steps: 128
-num_envs: 16
-format_weights:
-  2: 0.5
-  4: 0.5
 total_updates: 500
-epochs: 2
 minibatch_size: 512
 
 update_chunk_rows_min: 2048
 update_chunk_rows_max: 8192
-rollout_microbatch_envs: 16
-
-rotate_format_rollouts: true
-lean_rollout_metrics: true
 enable_gradient_checkpointing: true
+lean_rollout_metrics: true
 log_every: 10

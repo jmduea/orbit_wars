@@ -36,6 +36,23 @@ def test_split_mode_total_env_count() -> None:
     assert run_name_env_count(cfg) == 32
 
 
+def test_workstation_profile_uses_even_2p4p_split() -> None:
+    cfg = compose_hydra_train_config(["training=workstation"])
+    assert not cfg.training.rotate_format_rollouts
+    specs = resolve_rollout_group_specs(cfg)
+    assert sum(spec.num_envs for spec in specs) == 32
+    assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
+    assert cfg.training.rollout_microbatch_envs <= min(spec.num_envs for spec in specs)
+
+
+def test_2p_16_compose_passes_rollout_allocation() -> None:
+    cfg = compose_hydra_train_config(["training=2p_16"])
+    specs = resolve_rollout_group_specs(cfg)
+    assert len(specs) == 1
+    assert specs[0].num_envs == 16
+    assert cfg.training.rollout_microbatch_envs == 16
+
+
 def test_single_format_infers_from_task_when_weights_empty() -> None:
     cfg = config_from_plain(
         {

@@ -38,14 +38,7 @@ ROLLOUT_METRIC_KEYS: tuple[str, ...] = (
 
 WORKSTATION_VALIDATION_OVERRIDES: tuple[str, ...] = (
     "model=transformer_factorized",
-    "training=2p4p_32_split",
-    "training.rollout_steps=128",
-    "training.epochs=2",
-    "training.minibatch_size=512",
-    "training.update_chunk_rows_min=2048",
-    "training.update_chunk_rows_max=8192",
-    "training.enable_gradient_checkpointing=true",
-    "training.lean_rollout_metrics=true",
+    "training=workstation",
     "opponents=self_play_only",
     "curriculum=off",
     "telemetry.wandb.enabled=false",

@@ -76,7 +76,7 @@ class TrainingConfig:
     num_envs: int = 4
     format_weights: dict[int, float] = field(default_factory=dict)
     total_updates: int = 200
-    epochs: int = 4
+    epochs: int = 1
     minibatch_size: int = 512
     update_chunk_rows_min: int = 8192
     update_chunk_rows_max: int | None = None
@@ -88,11 +88,11 @@ class TrainingConfig:
     enable_gradient_checkpointing: bool = False
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_coef: float = 0.2
-    ent_coef: float = 0.01
-    vf_coef: float = 0.5
-    lr: float = 3e-4
-    max_grad_norm: float = 0.5
+    clip_coef: float = 0.15
+    ent_coef: float = 0.006
+    vf_coef: float = 1.0
+    lr: float = 6e-5
+    max_grad_norm: float = 1.0
     log_every: int = 1  # TODO: telemetry?
     reseed_every_updates: int = 0  # TODOL curriculum?
     reseed_on_plateau: bool = False  # TODO: curriculum?

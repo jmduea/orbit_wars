@@ -18,6 +18,10 @@ from omegaconf import OmegaConf
 
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
+from src.jax.training_benchmark import (
+    WORKSTATION_VALIDATION_OVERRIDES,
+    compose_benchmark_config,
+)
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
@@ -94,6 +98,14 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
     assert resolve_rollout_group_specs(cfg)
+
+
+def test_benchmark_sanity_defaults_compose_with_even_2p4p_split() -> None:
+    cfg = compose_benchmark_config(list(WORKSTATION_VALIDATION_OVERRIDES))
+    specs = resolve_rollout_group_specs(cfg)
+    assert not cfg.training.rotate_format_rollouts
+    assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
+    assert cfg.training.rollout_microbatch_envs <= min(spec.num_envs for spec in specs)
 
 
 @pytest.mark.parametrize("name,overrides", PRIMARY_EVAL_PROFILES.items())

@@ -1,8 +1,10 @@
 defaults:
-  - workstation
+  - base
   - _self_
 
 num_envs: 16
 format_weights:
   2: 0.5
   4: 0.5
+rotate_format_rollouts: true
+rollout_microbatch_envs: 16
