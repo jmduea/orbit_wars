@@ -5,15 +5,15 @@ format_weights:
   4: 0.0
 total_updates: 100
 
-epochs: 2
+epochs: 1
 minibatch_size: 512
 gamma: 0.99
 gae_lambda: 0.95
-clip_coef: 0.2
-ent_coef: 0.005
-vf_coef: 0.5
-lr: 0.0003
-max_grad_norm: 0.5
+clip_coef: 0.15
+ent_coef: 0.006
+vf_coef: 1.0
+lr: 0.00006
+max_grad_norm: 1.0
 
 update_chunk_rows_min: 1024
 update_chunk_rows_max: 4096

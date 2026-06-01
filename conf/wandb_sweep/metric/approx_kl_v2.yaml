@@ -1,0 +1,5 @@
+# @package _global_
+
+metric:
+  name: approx_kl_v2
+  goal: minimize

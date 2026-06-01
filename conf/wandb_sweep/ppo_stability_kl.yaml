@@ -1,0 +1,32 @@
+# @package _global_
+# Bayes search over PPO hyperparameters to find KL-stable training settings.
+#
+# Context: overnight stable_s42 showed approx_kl pathology onset ~u473 under
+# default PPO settings (lr=3e-4, clip=0.2, epochs=2). This sweep holds the
+# post-encoder stack and mix2p4p self-play fixed (seed 42) while varying PPO knobs.
+#
+# Generate:  uv run ow make wandb_sweep=ppo_stability_kl
+# Register:  uv run wandb sweep outputs/_meta/sweeps/ppo_stability_kl.yaml
+# Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
+#
+# Success criteria (manual review in W&B, last-100-update window):
+#   |approx_kl| <= 0.05, approx_kl_v2 <= 0.05, parity_logprob_delta_abs_mean <= 0.05
+# Compare against unstable baseline: stable_s42 post_encoder_overnight run.
+#
+# After picking winners, rerun 500–1000u grid on top 2–3 configs to confirm.
+
+defaults:
+  - base
+  - command: ow_train
+  - method: bayes
+  - metric: approx_kl_v2
+  - fixed: ppo_stability_kl
+  - space: ppo_stability_kl
+  - _self_
+
+name: ppo_stability_kl
+description: >
+  Bayes PPO hyperparameter sweep on mix2p4p self-play (seed 42, 800 updates).
+  Minimize approx_kl_v2; cross-check approx_kl_first_minibatch and
+  parity_logprob_delta_abs_mean. Targets trust-region stability before long runs.
+run_cap: 24

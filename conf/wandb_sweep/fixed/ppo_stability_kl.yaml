@@ -1,0 +1,43 @@
+# @package _global_
+# Fixed axes for PPO stability sweep: post-encoder stack, stable self-play arm.
+
+parameters:
+  model:
+    value: transformer_factorized
+  task:
+    value: shield_cheap
+  training:
+    value: workstation
+  training.total_updates:
+    value: 800
+  opponents:
+    value: self_play_only
+  curriculum:
+    value: "off"
+  seed:
+    value: 42
+  output.campaign:
+    value: ppo_stability_kl_sweep
+  telemetry:
+    value: default
+  telemetry.wandb.enabled:
+    value: true
+  telemetry.wandb.group:
+    value: ppo_stability_kl
+  telemetry.wandb.log_artifacts:
+    value: false
+  telemetry.wandb.tags:
+    value:
+      - ppo_stability_kl
+      - mix2p4p_selfplay
+      - kl_tuning
+  telemetry.metric_groups.losses:
+    value: true
+  artifacts:
+    value: local_fast
+  artifacts.artifact_pipeline.enabled:
+    value: false
+  artifacts.replay.enabled:
+    value: false
+  artifacts.checkpoint_every:
+    value: 800
