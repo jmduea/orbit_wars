@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import jax
 from src.config import TaskConfig, TrainConfig
@@ -11,6 +12,7 @@ from src.jax.action_codec import (
     factored_action_log_prob_and_entropy,
 )
 from src.jax.env import batched_reset
+from src.jax.shield import ship_count_for_bucket_jax
 from src.opponents.jax_actions.builders import build_action_from_factored_batch
 
 
@@ -44,7 +46,42 @@ def test_build_action_merges_identical_launches() -> None:
     valid = np.asarray(action.valid[0])
     assert int(valid.sum()) == 1
     assert int(np.asarray(action.source_id[0, 0])) == src_id
-    assert float(np.asarray(action.ships[0, 0])) > 0.0
+    remaining = float(np.asarray(game.planets.ships[src_row]))
+    single = float(
+        np.asarray(
+            ship_count_for_bucket_jax(
+                jnp.asarray(remaining, dtype=jnp.float32),
+                jnp.asarray(bucket, dtype=jnp.int32),
+                cfg.task.ship_bucket_count,
+            )
+        )
+    )
+    merged = float(np.asarray(action.ships[0, 0]))
+    assert merged == pytest.approx(2.0 * single, rel=1e-5)
+
+
+def test_build_action_merge_respects_max_fleets_cap() -> None:
+    cfg = TrainConfig()
+    cfg.task = _task_cfg(max_fleets=2)
+    cfg.model.max_moves_k = 3
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(8), 1), cfg.task)
+    game = state.game
+    rows = np.where(np.asarray(batch.planet_mask[0]))[0]
+    assert len(rows) >= 3
+    src_rows = [int(rows[0]), int(rows[1]), int(rows[2])]
+    slots = [0, 0, 0]
+
+    action = build_action_from_factored_batch(
+        game,
+        batch,
+        source_index=jnp.array([src_rows], dtype=jnp.int32),
+        target_slot=jnp.array([slots], dtype=jnp.int32),
+        ship_bucket=jnp.array([[1, 1, 1]], dtype=jnp.int32),
+        stop_flag=jnp.zeros((1, 3), dtype=jnp.int32),
+        step_mask=jnp.ones((1, 3), dtype=jnp.float32),
+        cfg=cfg,
+    )
+    assert int(np.asarray(action.valid[0]).sum()) <= cfg.task.max_fleets
 
 
 def test_build_action_from_factored_batch_stop_emits_no_valid_launches() -> None:

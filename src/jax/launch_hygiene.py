@@ -5,6 +5,10 @@ After each active launch in a turn, cumulatively mask:
 - friendly reverse edges ``B→A`` when ``A→B`` was already chosen (R4–R6).
 
 Masks apply to ``ship_bucket_mask`` before ``source_mask_from_bucket_mask_and_ships``.
+
+Scope (R10): applies to learner rollout, PPO replay, submission/eval inference, and
+neural opponents using the factorized K-step decoder. Heuristic single-step
+edge-batch opponents (random, turtle, sniper, etc.) are out of scope.
 """
 
 from __future__ import annotations
@@ -29,7 +33,10 @@ def _launch_valid_at_step(
 ) -> jax.Array:
     """Whether step ``step_idx`` is an active launch (matches action_sampling)."""
     if is_continuous_ship_mode(cfg):
-        assert ship_fraction is not None
+        if ship_fraction is None:
+            raise ValueError(
+                "ship_fraction is required when ship_action_mode is continuous_fraction"
+            )
         return (
             (stop_flag[:, step_idx] < 0.5)
             & (step_mask[:, step_idx] > 0.5)
@@ -52,21 +59,17 @@ def _planet_id_to_row(batch: TurnBatch, planet_id: jax.Array) -> jax.Array:
     return jnp.where(matches, rows, sentinel).min(axis=-1)
 
 
-def _slot_for_target_on_row(
+def _slots_matching_target_on_row(
     batch: TurnBatch,
     src_row: jax.Array,
     tgt_planet_id: jax.Array,
 ) -> jax.Array:
-    """Slot on ``src_row`` whose target planet equals ``tgt_planet_id``."""
+    """Per-env slot mask where ``src_row`` edges target ``tgt_planet_id``."""
 
     env_count = tgt_planet_id.shape[0]
-    k = batch.edge_tgt_ids.shape[-1]
     batch_idx = jnp.arange(env_count, dtype=jnp.int32)
     tgt_ids_at_row = batch.edge_tgt_ids[batch_idx, src_row, :]
-    matches = tgt_ids_at_row == tgt_planet_id[:, None]
-    slots = jnp.arange(k, dtype=jnp.int32)[None, :]
-    sentinel = jnp.full((1, k), k, dtype=jnp.int32)
-    return jnp.where(matches, slots, sentinel).min(axis=-1)
+    return tgt_ids_at_row == tgt_planet_id[:, None]
 
 
 def _owner_is_learner_pov(batch: TurnBatch, planet_id: jax.Array) -> jax.Array:
@@ -115,8 +118,8 @@ def _apply_one_launch_hygiene(
     )
 
     rev_src_row = _planet_id_to_row(batch, tgt_id)
-    rev_slot = _slot_for_target_on_row(batch, rev_src_row, src_id)
-    rev_valid = (rev_src_row < num_planets) & (rev_slot < max_k)
+    rev_slot_match = _slots_matching_target_on_row(batch, rev_src_row, src_id)
+    rev_valid = (rev_src_row < num_planets) & rev_slot_match.any(axis=-1)
 
     friendly = _owner_is_learner_pov(batch, src_id) & _owner_is_learner_pov(
         batch, tgt_id
@@ -127,10 +130,7 @@ def _apply_one_launch_hygiene(
         jnp.arange(num_planets, dtype=jnp.int32)[None, :, None]
         == rev_src_row[:, None, None]
     )
-    rev_slot_mask = (
-        jnp.arange(max_k, dtype=jnp.int32)[None, None, :] == rev_slot[:, None, None]
-    )
-    rev_mask = rev_row_mask & rev_slot_mask
+    rev_mask = rev_row_mask & rev_slot_match[:, None, :]
     return jnp.where(
         apply_rev[:, None, None, None],
         bucket_mask & ~rev_mask[..., None],
