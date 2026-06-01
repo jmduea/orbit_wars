@@ -8,6 +8,9 @@ Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architectu
 uv sync --group dev
 make test                                         # default verification (= test-fast)
 make test-fast                                    # alias for daily CPU loop
+make preflight-calibrate                          # refresh thresholds from preflight_calibrate_* campaigns
+make preflight-learn-proof                        # Gates 2–3 JAX trend checks
+uv run ow benchmark learn-proof --eval-checkpoint ... --baselines noop  # Gate 5 tournament win proof
 uv run ow train training.total_updates=1000
 uv run ow train print_resolved_config=true
 uv run ow train kaggle
@@ -43,6 +46,8 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - Feature path: obs → `encode_turn` (`TurnBatch`); golden tests in `tests/test_feature_encoding_golden.py`.
 - Rollout metrics: merge with `_merge_metric_dicts` inside `jax.lax.scan`; finalize rates after the scan.
 - Priorities: human `docs/ROADMAP.md` (no automated validation).
+- **Verification thresholds:** derive pass/fail bars from measured calibration or baseline runs (`docs/benchmarks/preflight-calibration.json`, `make preflight-calibrate`); never invent round numbers or relax a threshold until a run passes — that is not verification.
+- **Metric gates:** before gating on a training metric, confirm its denominator and what “chance” means for that opponent and reward mode (e.g. `overall_win_rate` vs `noop_only` is not ~50%; `episode_reward_mean` under `binary_win` is not win rate; self-play ~50% is not a learning signal).
 
 ## Learned User Preferences
 
@@ -52,6 +57,8 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - Use `make test-fast-parallel` / `make test-jax-parallel` for CPU xdist only; never xdist on slow/sweep or with GPU pytest.
 - Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
 - Do not start test runs when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
+- Same terminals check before starting expensive GPU training runs (calibration sweeps, long `ow train`, Gate 5 tournaments); parallel jobs contend on one GPU.
+- New train/eval/benchmark capabilities belong in the `ow` CLI (`src/cli/<module>.py` + dispatch in `src/cli/__init__.py`), not standalone `scripts/*.py`; defer heavy imports (JAX) until command execution, not module load.
 - Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
 - Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
 - Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
@@ -75,3 +82,5 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - **Train run layout:** `ow train` with `output.campaign=<name>` writes under `outputs/campaigns/<campaign>/runs/<run_id>/` — update metrics in `logs/*_jax.jsonl` (not `metrics.jsonl` at run root), checkpoints in `checkpoints/jax_ckpt_*.pkl`, artifact jobs in `queue/optional_jobs/`, evaluation outputs in `evaluations/`.
 - **Curriculum pre-flight:** `curriculum.enabled=true` requires `opponents.snapshot.pool_size > 0` and `opponents.snapshot.interval_updates > 0`; use `curriculum=off` for isolated train smokes that don't exercise historical opponents.
 - **Parametric edge catalog:** default `intercept_anchors` `[1.0, 3.0, 6.0]`; edge dim `6×N+7` (25 for default). Implemented in `src/features/catalog/edge.py` and `conf/task/base.yaml`; `docs/feature-encoding-v2.md` may still describe the older two-anchor layout.
+- **Preflight gates:** Gates 2–4 read JAX learning-signal trend from `logs/*_jax.jsonl`; Gate 5 is tournament win proof on checkpoints via `kaggle_environments` (not Docker). Source of truth for thresholds: `docs/benchmarks/preflight-calibration.json`.
+- **`ow benchmark` dispatch:** subcommands must be registered in `src/cli/__init__.py` (`case "benchmark"`), not only `build_parser()` in tests — verify with `uv run ow benchmark --help`.
