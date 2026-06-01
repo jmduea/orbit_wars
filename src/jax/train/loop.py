@@ -41,6 +41,7 @@ from src.jax.train.rollout_groups import (
     empty_per_format_rollout_stats,
     init_rollout_groups,
     replace_rollout_group_state,
+    reset_rollout_groups_envs,
 )
 from src.jax.train.snapshots import (
     add_historical_snapshot,
@@ -63,7 +64,11 @@ from src.telemetry.metric_registry import (
     required_rollout_scalar_names,
 )
 from src.training.curriculum import CurriculumController
-from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+from src.training.seed_scheduler import (
+    SeedScheduleConfig,
+    SeedScheduler,
+    resolve_reseed_every_updates,
+)
 
 configure_jax_runtime_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
@@ -141,10 +146,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "wandb_data_dir": str(run_context.wandb_data_dir),
         },
     )
+    effective_reseed_every = resolve_reseed_every_updates(
+        configured=cfg.training.reseed_every_updates,
+        total_updates=cfg.training.total_updates,
+    )
     seed_scheduler = SeedScheduler(
         base_seed=cfg.seed,
         cfg=SeedScheduleConfig(
-            reseed_every_updates=cfg.training.reseed_every_updates,
+            reseed_every_updates=effective_reseed_every,
             reseed_on_plateau=cfg.training.reseed_on_plateau,
             plateau_metric=cfg.training.plateau_metric,
             plateau_window=cfg.training.plateau_window,
@@ -206,6 +215,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             if should_reseed:
                 reseed_event = seed_scheduler.reseed(update, reseed_reason)
                 key = jax.random.PRNGKey(reseed_event.new_seed)
+                key, rollout_groups = reset_rollout_groups_envs(key, rollout_groups)
                 reseed_events.append(
                     {
                         "update": reseed_event.update,

@@ -158,11 +158,22 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 
 #### Seed scheduler — config and observability
 
-Periodic rollout reseeding is **off by default** (`training.reseed_every_updates: 0`, `training.reseed_on_plateau: false`). Enable periodic swaps with Hydra, for example:
+Periodic rollout reseeding is **on by default** via auto-scale (`training.reseed_every_updates: -1` → `max(25, total_updates // 10)`). Set `0` to disable. Plateau-triggered reseeding stays off (`training.reseed_on_plateau: false`).
 
 ```bash
-uv run python -m src.train training.reseed_every_updates=50
+uv run ow train training.reseed_every_updates=50   # fixed interval
+uv run ow train training.reseed_every_updates=0    # disable
 ```
+
+On reseed, the training loop replaces the root PRNG key **and** resets all rollout env states so new board layouts take effect immediately. Reseed policies use `random_jump` unless `heldout_eval_seed_set` is non-empty (then `shuffled_pool`).
+
+Calibrate intervals with held-out tournament seeds:
+
+```bash
+uv run ow benchmark calibrate-seed-scheduler --dry-run
+```
+
+See `docs/benchmarks/seed-scheduler-calibration.md`.
 
 Plateau-triggered reseeding uses `training.plateau_metric`, `plateau_window`, and `plateau_delta`. When `heldout_eval_seed_set` is non-empty, reseeds draw from a shuffled pool instead of random jumps.
 

@@ -28,6 +28,8 @@ Static mix when curriculum stages omit `format_weights` uses `training.format_we
 
 `update_chunk_rows` sets rows per PPO `lax.scan` step (capped by rollout batch size); minibatch count is `ceil(total_rows / update_chunk_rows)`.
 
+**Seed scheduler:** `reseed_every_updates: -1` (default) auto-scales to `max(25, total_updates // 10)`. Use `0` to disable periodic reseed. Calibrate with `uv run ow benchmark calibrate-seed-scheduler`.
+
 Typical fields:
 
 ```yaml

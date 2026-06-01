@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+from src.training.seed_scheduler import (
+    SeedScheduleConfig,
+    SeedScheduler,
+    resolve_reseed_every_updates,
+)
 
 
 def test_should_reseed_periodic_at_multiples() -> None:
@@ -91,3 +95,11 @@ def test_parse_seed_set_range_and_list() -> None:
 )
 def test_parse_seed_set_dash_range(raw: str, expected: list[int]) -> None:
     assert SeedScheduler.parse_seed_set(raw) == expected
+
+
+def test_resolve_reseed_every_updates_auto_scale() -> None:
+    assert resolve_reseed_every_updates(configured=-1, total_updates=500) == 50
+    assert resolve_reseed_every_updates(configured=-1, total_updates=100) == 25
+    assert resolve_reseed_every_updates(configured=-1, total_updates=2000) == 200
+    assert resolve_reseed_every_updates(configured=0, total_updates=500) == 0
+    assert resolve_reseed_every_updates(configured=50, total_updates=500) == 50
