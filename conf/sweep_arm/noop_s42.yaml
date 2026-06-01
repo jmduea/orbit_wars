@@ -1,0 +1,13 @@
+# @package _global_
+# Post-encoder-once overnight arm: held-out noop learnability, seed 42.
+
+defaults:
+  - override /opponents: noop_only
+  - override /curriculum: "off"
+  - _self_
+
+seed: 42
+output:
+  campaign: post_encoder_overnight_noop_s42
+training:
+  total_updates: 500

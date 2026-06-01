@@ -25,6 +25,7 @@ SWEEP_COMPOSE_RECIPES = (
     "4p_only_throughput",
     "sps_experiment",
     "sps_experiment_stage2",
+    "post_encoder_once_overnight",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {

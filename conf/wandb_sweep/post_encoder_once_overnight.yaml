@@ -1,0 +1,34 @@
+# @package _global_
+# Overnight grid after encoder-once + prefix-replay fixes.
+# Six explicit arms (~7h on RTX-class GPU @ ~1s/update steady-state):
+#   stable self-play ×2 seeds (5000u), curriculum staged ×2 seeds (3500u),
+#   held-out noop/random (500u) for tournament checkpoints.
+#
+# Generate:  uv run ow make wandb_sweep=post_encoder_once_overnight
+# Register:  uv run wandb sweep outputs/_meta/sweeps/post_encoder_once_overnight.yaml
+# Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
+#
+# Before the agent (optional, ~20 min):
+#   uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json
+#   uv run ow benchmark training --preset validation --updates 100 --warmup 5 \
+#     --out outputs/preflight/post_encoder_once_100u.json
+#
+# Morning tournament on best stable + curriculum checkpoints:
+#   uv run ow benchmark learn-proof --eval-checkpoint <ckpt> --baselines noop,random
+
+defaults:
+  - base
+  - command: ow_train
+  - method: grid
+  - metric: overall_win_rate
+  - fixed: post_encoder_once_overnight
+  - space: post_encoder_once_overnight
+  - _self_
+
+name: post_encoder_once_overnight
+description: >
+  Post-refactor overnight sweep: stable self-play vs curriculum path vs held-out
+  noop/random. W&B enabled. Gates 2-3 use win_rate_delta trend, not absolute
+  self-play win rate. Compare policy_loss/approx_kl on curriculum arms against
+  prior validation-500u spike (self_play_curriculum + self_play_staged).
+run_cap: null

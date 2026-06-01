@@ -1,0 +1,13 @@
+# @package _global_
+# Post-encoder-once overnight arm: production curriculum path, seed 43.
+
+defaults:
+  - override /opponents: self_play_curriculum
+  - override /curriculum: self_play_staged
+  - _self_
+
+seed: 43
+output:
+  campaign: post_encoder_overnight_curriculum_s43
+training:
+  total_updates: 3500

@@ -1,0 +1,11 @@
+# @package _global_
+
+parameters:
+  sweep_arm:
+    values:
+      - stable_s42
+      - stable_s43
+      - curriculum_s42
+      - curriculum_s43
+      - noop_s42
+      - random_s42

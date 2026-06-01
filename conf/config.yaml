@@ -8,6 +8,7 @@ defaults:
   - telemetry: default
   - artifacts: default
   - _self_
+  - sweep_arm: none
 
 seed: 42
 run_name: default
