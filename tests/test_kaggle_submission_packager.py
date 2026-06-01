@@ -56,8 +56,6 @@ def _fake_config() -> SimpleNamespace:
             hidden_size=16,
             attention_heads=4,
             max_moves_k=3,
-            gnn_k_neighbors=3,
-            gnn_message_passing_layers=1,
             normalize_observations=True,
             obs_norm_clip=10.0,
         ),

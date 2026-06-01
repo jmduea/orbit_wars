@@ -34,8 +34,6 @@ def _train_cfg(*, max_moves_k: int, decoder_carry: bool) -> TrainConfig:
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 128
     cfg.model.max_moves_k = max_moves_k
-    cfg.model.gnn_k_neighbors = 4
-    cfg.model.gnn_message_passing_layers = 2
     cfg.model.decoder_carry = decoder_carry
     cfg.task = _task_cfg(trajectory_shield_mode="cheap")
     return cfg

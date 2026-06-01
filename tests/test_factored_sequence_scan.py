@@ -28,8 +28,6 @@ def _train_cfg(**kwargs) -> TrainConfig:
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 32
     cfg.model.max_moves_k = 2
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.task = _task_cfg(**kwargs.pop("task", {}))
     for key, value in kwargs.pop("model", {}).items():
         setattr(cfg.model, key, value)

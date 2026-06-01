@@ -17,8 +17,6 @@ def _overfit_cfg() -> TrainConfig:
     cfg = TrainConfig()
     cfg.model.architecture = "planet_graph_transformer"
     cfg.model.hidden_size = 16
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.model.max_moves_k = 2
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16

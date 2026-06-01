@@ -58,8 +58,6 @@ class ModelConfig:
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
-    gnn_k_neighbors: int = 5
-    gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
     pointer_decoder: str = "factorized_topk"
