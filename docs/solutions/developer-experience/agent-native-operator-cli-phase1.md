@@ -81,6 +81,8 @@ Local `ow train` prints:
 
 JSONL under `logs/*_jax.jsonl` remains the durable metric source; terminal lines are a sampled view.
 
+Benchmark sweeps that subprocess `ow train` (`calibrate-seed-scheduler`, preflight calibration) use a separate harness — see `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`.
+
 ## Why This Matters
 
 Agents and humans already shared `outputs/campaigns/` (high shared-workspace score). The gap was **operator ergonomics**: no first-class read/list/status without knowing layout. Phase 1 closes the highest-leverage introspection holes without refactoring `ow benchmark learn-proof` into primitives.
