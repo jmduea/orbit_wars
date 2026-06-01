@@ -87,6 +87,36 @@ def test_duplicate_source_slot_masked_after_prior_launch() -> None:
 
 
 @pytest.mark.jax
+def test_bucket_zero_prefix_does_not_apply_hygiene() -> None:
+    cfg = _train_cfg()
+    _, batch = batched_reset(jax.random.split(jax.random.PRNGKey(3), 1), cfg.task)
+    k = edge_k(cfg.task)
+    buckets = cfg.task.ship_bucket_count
+    shield = jnp.ones((1, MAX_PLANETS, k, buckets), dtype=bool)
+
+    src_row, tgt_slot = 1, 2
+    source = jnp.array([[src_row, 0, 0]], dtype=jnp.int32)
+    slot = jnp.array([[tgt_slot, 0, 0]], dtype=jnp.int32)
+    stop = jnp.array([[0.0, 0.0, 0.0]], dtype=jnp.float32)
+    step_mask = jnp.ones((1, 3), dtype=jnp.float32)
+    bucket = jnp.array([[0, 0, 0]], dtype=jnp.int32)
+
+    out = compose_hygiene_with_shield_mask(
+        batch,
+        shield[0],
+        source_sequence=source,
+        target_slot_sequence=slot,
+        stop_flag=stop,
+        step_mask=step_mask,
+        ship_bucket=bucket,
+        ship_fraction=None,
+        cfg=cfg,
+        step_idx=1,
+    )
+    np.testing.assert_array_equal(np.asarray(out), np.asarray(shield[0]))
+
+
+@pytest.mark.jax
 def test_hygiene_can_empty_targets_triggering_stop_path() -> None:
     cfg = _train_cfg()
     _, batch = batched_reset(jax.random.split(jax.random.PRNGKey(2), 1), cfg.task)
