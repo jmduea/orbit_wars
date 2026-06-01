@@ -52,6 +52,7 @@ RUNTIME_FILES = (
     "jax/encoders/planet_graph_transformer.py",
     "jax/encoders/remat.py",
     "jax/factored_sequence_scan.py",
+    "jax/launch_hygiene.py",
     "jax/feature_primitives.py",
     "jax/features.py",
     "jax/shield/__init__.py",
@@ -158,10 +159,11 @@ def build_submission_package(args: argparse.Namespace) -> Path:
 
 
 def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
+    from src.artifacts.checkpoint_compat import load_checkpoint_payload
+
     start = time.perf_counter()
     try:
-        with checkpoint_path.open("rb") as file:
-            checkpoint = pickle.load(file)
+        checkpoint = load_checkpoint_payload(checkpoint_path)
     except Exception as exc:
         raise ValidationError("checkpoint_load_failed", str(exc)) from exc
 
@@ -543,8 +545,6 @@ class ModelConfig:
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
-    gnn_k_neighbors: int = 5
-    gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
     normalize_observations: bool = True
@@ -714,7 +714,6 @@ def _initialize_submission() -> None:
         {"params": state["params"]},
         state["cfg"],
         deterministic=True,
-        deterministic_eval=True,
     )
     _warm_submission_path(state)
     state["ready"] = True

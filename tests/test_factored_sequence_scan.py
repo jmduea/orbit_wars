@@ -28,8 +28,6 @@ def _train_cfg(**kwargs) -> TrainConfig:
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 32
     cfg.model.max_moves_k = 2
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.task = _task_cfg(**kwargs.pop("task", {}))
     for key, value in kwargs.pop("model", {}).items():
         setattr(cfg.model, key, value)
@@ -56,7 +54,6 @@ def test_rollout_replay_logprob_parity_distributional_value_head() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -96,7 +93,6 @@ def test_rollout_replay_logprob_parity_with_stepwise_scan() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -148,7 +144,6 @@ def test_rollout_replay_logprob_parity_continuous_fraction() -> None:
         policy,
         cfg,
         deterministic=False,
-        deterministic_eval=False,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -167,7 +162,13 @@ def test_rollout_replay_logprob_parity_continuous_fraction() -> None:
     active = sample.step_mask > 0.0
     delta = (replay.log_prob - sample.log_prob) * active
     assert jnp.all(jnp.isfinite(delta))
-    assert float(jnp.sum(jnp.abs(delta)) / jnp.maximum(active.sum(), 1.0)) < 0.05
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
 
 @pytest.mark.jax
 def test_rollout_replay_logprob_parity_with_decoder_carry() -> None:
@@ -186,7 +187,6 @@ def test_rollout_replay_logprob_parity_with_decoder_carry() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     replay = replay_factored_sequence_logprob(
@@ -240,7 +240,6 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     assert int(jnp.sum(sample.step_mask > 0.0)) >= 2
@@ -315,6 +314,8 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
             ship_bucket_mask=sample.ship_bucket_mask,
             remaining_ships=ships_before,
             ship_fraction=sample.ship_fraction,
+            batch=batch,
+            step_mask=sample.step_mask,
         )
         np.testing.assert_allclose(
             np.asarray(replay.log_prob[:, step_idx]),
@@ -350,7 +351,6 @@ def test_zero_teacher_forward_mismatches_prefix_at_step_one() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     step_idx = 1
     if not bool(jnp.any(sample.step_mask[:, step_idx] > 0.0)):
@@ -417,6 +417,55 @@ def test_zero_teacher_forward_mismatches_prefix_at_step_one() -> None:
 
 
 @pytest.mark.jax
+def test_rollout_replay_logprob_parity_tiered_shield() -> None:
+    """Tiered cheap+exact reject must stay consistent with hygiene replay carry."""
+
+    cfg = _train_cfg(
+        task={
+            "trajectory_shield_mode": "tiered",
+            "trajectory_shield_final_validate_selected": True,
+        },
+        model={"max_moves_k": 3},
+    )
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(71), 1), cfg.task)
+    policy = build_planet_graph_transformer_policy(cfg)
+    params = policy.init(jax.random.PRNGKey(72), batch)
+    player_count = jnp.full((1,), cfg.task.player_count, dtype=jnp.int32)
+
+    sample = _sample_shielded_factored_sequence_with_params(
+        jax.random.PRNGKey(73),
+        state.game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=True,
+    )
+    initial_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        step_mask=sample.step_mask,
+        ship_bucket_mask=sample.ship_bucket_mask,
+        ship_fraction=sample.ship_fraction,
+        initial_remaining_ships=initial_ships,
+    )
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.jax
 def test_prefix_replay_logprob_parity_stochastic_multistep() -> None:
     cfg = _train_cfg(
         task={"trajectory_shield_mode": "cheap"},
@@ -456,4 +505,108 @@ def test_prefix_replay_logprob_parity_stochastic_multistep() -> None:
     active = sample.step_mask > 0.0
     delta = (replay.log_prob - sample.log_prob) * active
     assert jnp.all(jnp.isfinite(delta))
-    assert float(jnp.sum(jnp.abs(delta)) / jnp.maximum(active.sum(), 1.0)) < 0.05
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.jax
+def test_hygiene_duplicate_prefix_replay_logprob_parity() -> None:
+    """Replay recomputes hygiene from prefix; must match sampling when duplicate masked."""
+    from src.jax.factored_sequence_scan import (
+        build_shield_prefix_teacher_sequences,
+        factored_step_logprob_at_index,
+        forward_factored_policy,
+        owned_planet_ships_from_turn_batch,
+        remaining_ships_before_step,
+    )
+
+    cfg = _train_cfg(task={"trajectory_shield_mode": "off"}, model={"max_moves_k": 2})
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(61), 1), cfg.task)
+    policy = build_planet_graph_transformer_policy(cfg)
+    params = policy.init(jax.random.PRNGKey(62), batch)
+    player_count = jnp.full((1,), cfg.task.player_count, dtype=jnp.int32)
+
+    sample = _sample_shielded_factored_sequence_with_params(
+        jax.random.PRNGKey(63),
+        state.game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=True,
+    )
+    if int(jnp.sum(sample.step_mask)) < 2:
+        pytest.skip("fixture did not activate two sub-steps")
+
+    initial_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        step_mask=sample.step_mask,
+        ship_bucket_mask=sample.ship_bucket_mask,
+        ship_fraction=sample.ship_fraction,
+        initial_remaining_ships=initial_ships,
+    )
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
+    step_idx = 1
+    ships_before = remaining_ships_before_step(
+        cfg,
+        initial_remaining_ships=initial_ships,
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        step_mask=sample.step_mask,
+        ship_fraction=sample.ship_fraction,
+        step_idx=step_idx,
+    )
+    source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
+        sample.source_index, sample.target_slot, step_idx
+    )
+    prefix_out = forward_factored_policy(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_sequence=source_prefix,
+        target_slot_sequence=target_prefix,
+        deterministic=True,
+    )
+    lp_with_hygiene = factored_step_logprob_at_index(
+        prefix_out,
+        cfg,
+        step_idx,
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        ship_bucket_mask=sample.ship_bucket_mask,
+        remaining_ships=ships_before,
+        ship_fraction=sample.ship_fraction,
+        batch=batch,
+        step_mask=sample.step_mask,
+    )
+    np.testing.assert_allclose(
+        np.asarray(lp_with_hygiene),
+        np.asarray(replay.log_prob[:, step_idx]),
+        rtol=1e-5,
+        atol=1e-4,
+    )

@@ -29,8 +29,6 @@ def _train_cfg(*, decoder_carry: bool) -> TrainConfig:
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 64
     cfg.model.max_moves_k = 2
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.model.decoder_carry = decoder_carry
     cfg.task = _task_cfg()
     return cfg
@@ -97,7 +95,6 @@ def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     replay = policy.apply(

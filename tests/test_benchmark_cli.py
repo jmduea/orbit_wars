@@ -29,6 +29,12 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert calibrate.analyze_only is True
     assert calibrate.analyze_campaigns == "preflight_calibrate_*"
 
+    seed_sched = parser.parse_args(
+        ["calibrate-seed-scheduler", "--analyze-only", "--dry-run"]
+    )
+    assert seed_sched.command == "calibrate-seed-scheduler"
+    assert seed_sched.analyze_only is True
+
     held_out = parser.parse_args(
         [
             "learn-proof",

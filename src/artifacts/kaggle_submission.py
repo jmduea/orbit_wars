@@ -36,6 +36,7 @@ def package_checkpoint_submission(
     player_count: str = "both",
     per_step_seconds: float = 1.0,
     overage_budget_seconds: float = 60.0,
+    episode_steps: int = 500,
 ) -> Path:
     """Build ``submission.tar.gz`` from a checkpoint; optionally validate in Docker."""
 
@@ -47,6 +48,7 @@ def package_checkpoint_submission(
         player_count=player_count,
         per_step_seconds=per_step_seconds,
         overage_budget_seconds=overage_budget_seconds,
+        episode_steps=episode_steps,
         skip_docker=not validate_docker,
         keep_staging=False,
     )

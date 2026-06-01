@@ -35,6 +35,73 @@ def _launch_angle_for_edge(game, batch: TurnBatch, src_row, slot):
     return jnp.arctan2(tgt_y - src_y, tgt_x - src_x)
 
 
+def _merge_identical_launches(
+    source_id: jax.Array,
+    tgt_id: jax.Array,
+    angle: jax.Array,
+    ships: jax.Array,
+    valid: jax.Array,
+    fleet_slots: int,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Collapse launches sharing ``(src_planet_id, tgt_planet_id)``, summing ships.
+
+    Output length is at most ``fleet_slots``; additional distinct launches are dropped
+    when the merged count would exceed ``max_fleets``.
+    """
+
+    launch_steps = source_id.shape[0]
+    out_src = jnp.full((fleet_slots,), -1, dtype=jnp.int32)
+    out_tgt = jnp.full((fleet_slots,), -1, dtype=jnp.int32)
+    out_angle = jnp.zeros((fleet_slots,), dtype=jnp.float32)
+    out_ships = jnp.zeros((fleet_slots,), dtype=jnp.float32)
+    out_valid = jnp.zeros((fleet_slots,), dtype=bool)
+    out_count = jnp.array(0, dtype=jnp.int32)
+
+    def process_step(i: int, state):
+        out_src, out_tgt, out_angle, out_ships, out_valid, out_count = state
+        is_valid = valid[i] & (ships[i] > 0.0)
+        src = source_id[i]
+        tgt = tgt_id[i]
+        shp = ships[i]
+        ang = angle[i]
+
+        def try_slot(j: int, carry):
+            was_merged, merged_ships = carry
+            in_range = j < out_count
+            match = is_valid & in_range & (out_src[j] == src) & (out_tgt[j] == tgt)
+            merged_ships = merged_ships.at[j].set(
+                jnp.where(match, merged_ships[j] + shp, merged_ships[j])
+            )
+            return was_merged | match, merged_ships
+
+        was_merged, merged_ships = jax.lax.fori_loop(
+            0,
+            fleet_slots,
+            try_slot,
+            (jnp.array(False), out_ships),
+        )
+
+        slot = out_count
+        can_append = is_valid & (~was_merged) & (slot < fleet_slots)
+        out_src = out_src.at[slot].set(jnp.where(can_append, src, out_src[slot]))
+        out_tgt = out_tgt.at[slot].set(jnp.where(can_append, tgt, out_tgt[slot]))
+        out_angle = out_angle.at[slot].set(jnp.where(can_append, ang, out_angle[slot]))
+        out_ships = merged_ships.at[slot].set(
+            jnp.where(can_append, shp, merged_ships[slot])
+        )
+        out_valid = out_valid.at[slot].set(jnp.where(can_append, True, out_valid[slot]))
+        out_count = out_count + jnp.where(can_append, 1, 0).astype(jnp.int32)
+        return (out_src, out_tgt, out_angle, out_ships, out_valid, out_count)
+
+    out_src, out_tgt, out_angle, out_ships, out_valid, _ = jax.lax.fori_loop(
+        0,
+        launch_steps,
+        process_step,
+        (out_src, out_tgt, out_angle, out_ships, out_valid, out_count),
+    )
+    return out_src, out_tgt, out_angle, out_ships, out_valid
+
+
 def build_action_from_factored_batch(
     game,
     batch: TurnBatch,
@@ -92,8 +159,9 @@ def build_action_from_factored_batch(
                 jnp.maximum(remaining[src_row] - launched, 0.0)
             )
             src_id = batch_row.edge_src_ids[src_row]
+            tgt_id = batch_row.edge_tgt_ids[src_row, slot]
             angle = _launch_angle_for_edge(game_row, batch_row, src_row, slot)
-            return remaining, (src_id, angle, launched, valid)
+            return remaining, (src_id, tgt_id, angle, launched, valid)
 
         remaining = owned_planet_ships(game_row)
         _, steps = jax.lax.scan(
@@ -108,22 +176,27 @@ def build_action_from_factored_batch(
                 jnp.moveaxis(fractions, -1, 0),
             ),
         )
-        source_id, angle, ships, valid = steps
-        source_id = jnp.moveaxis(source_id, 0, -1)
-        angle = jnp.moveaxis(angle, 0, -1)
-        ships = jnp.moveaxis(ships, 0, -1)
-        valid = jnp.moveaxis(valid, 0, -1)
-        flat_source = source_id.reshape(launch_steps)
-        flat_angle = angle.reshape(launch_steps)
-        flat_ships = ships.reshape(launch_steps)
-        flat_valid = valid.reshape(launch_steps)
-        action_width = min(launch_steps, fleet_slots)
-        pad = fleet_slots - action_width
+        source_id, tgt_id, angle, ships, valid = steps
+        source_id = jnp.moveaxis(source_id, 0, -1).reshape(launch_steps)
+        tgt_id = jnp.moveaxis(tgt_id, 0, -1).reshape(launch_steps)
+        angle = jnp.moveaxis(angle, 0, -1).reshape(launch_steps)
+        ships = jnp.moveaxis(ships, 0, -1).reshape(launch_steps)
+        valid = jnp.moveaxis(valid, 0, -1).reshape(launch_steps)
+        merged_src, _, merged_angle, merged_ships, merged_valid = (
+            _merge_identical_launches(
+                source_id,
+                tgt_id,
+                angle,
+                ships,
+                valid,
+                fleet_slots,
+            )
+        )
         return JaxAction(
-            source_id=jnp.pad(flat_source[:action_width], (0, pad), constant_values=-1),
-            angle=jnp.pad(flat_angle[:action_width], (0, pad), constant_values=0.0),
-            ships=jnp.pad(flat_ships[:action_width], (0, pad), constant_values=0.0),
-            valid=jnp.pad(flat_valid[:action_width], (0, pad), constant_values=False),
+            source_id=merged_src,
+            angle=merged_angle,
+            ships=merged_ships,
+            valid=merged_valid,
         )
 
     if ship_fraction is None:

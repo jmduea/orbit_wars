@@ -41,8 +41,6 @@ def _train_cfg(*, architecture: str, pointer_decoder: str = "factorized_topk") -
     cfg.model.hidden_size = 64
     cfg.model.attention_heads = 4
     cfg.model.planet_transformer_layers = 2
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.task = _task_cfg()
     return cfg
 

@@ -179,6 +179,56 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--dry-run", action="store_true")
 
+    seed_sched = subparsers.add_parser(
+        "calibrate-seed-scheduler",
+        help="Sweep reseed intervals and evaluate held-out seed generalization.",
+    )
+    seed_sched.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/seed-scheduler-calibration.json"),
+    )
+    seed_sched.add_argument(
+        "--out-md",
+        type=Path,
+        default=Path("docs/benchmarks/seed-scheduler-calibration.md"),
+    )
+    seed_sched.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    seed_sched.add_argument(
+        "--opponents",
+        default="noop_only,random_only,self_play_only",
+    )
+    seed_sched.add_argument(
+        "--reseed-intervals",
+        default="0,25,50,100",
+        help="Comma-separated training.reseed_every_updates values.",
+    )
+    seed_sched.add_argument(
+        "--no-include-total-fifth",
+        action="store_true",
+        help="Do not append total_updates//5 to the interval grid.",
+    )
+    seed_sched.add_argument("--total-updates", type=int, default=500)
+    seed_sched.add_argument("--train-seed", type=int, default=42)
+    seed_sched.add_argument("--eval-seeds", default="0,1,2,3,4,43,44,45,46")
+    seed_sched.add_argument("--baseline", default="noop")
+    seed_sched.add_argument("--games-per-pair", type=int, default=4)
+    seed_sched.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Skip training; analyze existing seed_sched_cal_* campaigns.",
+    )
+    seed_sched.add_argument(
+        "--eval-existing",
+        action="store_true",
+        help="With --analyze-only, run tournament eval on discovered checkpoints.",
+    )
+    seed_sched.add_argument("--dry-run", action="store_true")
+
     return parser
 
 
@@ -477,6 +527,109 @@ def run_calibrate_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
+    from src.jax.preflight_calibration import git_head_sha
+    from src.jax.seed_scheduler_calibration import (
+        DEFAULT_OPPONENTS,
+        analyze_seed_sched_run,
+        build_seed_scheduler_calibration_report,
+        discover_seed_sched_runs,
+        expand_reseed_intervals,
+        run_seed_scheduler_sweep,
+        write_seed_scheduler_calibration_report,
+    )
+
+    started = __import__("time").perf_counter()
+    opponents = tuple(
+        part.strip()
+        for part in args.opponents.split(",")
+        if part.strip() in DEFAULT_OPPONENTS
+    )
+    if not opponents:
+        opponents = DEFAULT_OPPONENTS
+    reseed_intervals = expand_reseed_intervals(
+        tuple(
+            int(part.strip())
+            for part in args.reseed_intervals.split(",")
+            if part.strip()
+        ),
+        total_updates=int(args.total_updates),
+        include_total_fifth=not bool(args.no_include_total_fifth),
+    )
+    eval_seeds = tuple(
+        int(part.strip()) for part in args.eval_seeds.split(",") if part.strip()
+    )
+    snapshots = []
+    if not args.analyze_only:
+        run_seed_scheduler_sweep(
+            opponents=opponents,  # type: ignore[arg-type]
+            reseed_intervals=reseed_intervals,
+            total_updates=int(args.total_updates),
+            output_root=args.output_root,
+            repo_root=REPO_ROOT,
+            dry_run=bool(args.dry_run),
+        )
+    for opponent, reseed_interval, run_dir in discover_seed_sched_runs(
+        args.output_root,
+        total_updates=int(args.total_updates),
+        train_seed=int(args.train_seed),
+    ):
+        if opponent not in opponents:
+            continue
+        if reseed_interval not in reseed_intervals:
+            continue
+        snapshots.append(
+            analyze_seed_sched_run(
+                opponent=opponent,
+                reseed_interval=reseed_interval,
+                total_updates=int(args.total_updates),
+                train_seed=int(args.train_seed),
+                run_dir=run_dir,
+                eval_seeds=eval_seeds,
+                repo_root=REPO_ROOT,
+                output_root=args.output_root,
+                baseline=str(args.baseline),
+                games_per_pair=int(args.games_per_pair),
+                dry_run=bool(args.dry_run),
+                run_eval=not args.analyze_only or bool(args.eval_existing),
+            )
+        )
+    snapshots = [item for item in snapshots if item.record_count > 0]
+    report = build_seed_scheduler_calibration_report(
+        snapshots,
+        commit_sha=git_head_sha(REPO_ROOT),
+        seconds_total=__import__("time").perf_counter() - started,
+        analyze_only=bool(args.analyze_only),
+        eval_seeds=eval_seeds,
+        train_seed=int(args.train_seed),
+        required_opponents=opponents,  # type: ignore[arg-type]
+    )
+    write_seed_scheduler_calibration_report(args.out, report)
+    md_lines = [
+        "# Seed scheduler calibration",
+        "",
+        f"Source JSON: `{args.out}`",
+        "",
+        "## Decision",
+        "",
+        f"```json\n{json.dumps(report.get('decision', {}), indent=2)}\n```",
+        "",
+        "## Reproduce",
+        "",
+        "```bash",
+        "uv run ow benchmark calibrate-seed-scheduler \\",
+        f"  --opponents {','.join(opponents)} \\",
+        f"  --reseed-intervals {','.join(str(v) for v in reseed_intervals)} \\",
+        f"  --total-updates {int(args.total_updates)}",
+        "```",
+        "",
+    ]
+    args.out_md.parent.mkdir(parents=True, exist_ok=True)
+    args.out_md.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2))
+    return 0
+
+
 def run_learn_proof_cli(args: argparse.Namespace) -> int:
     from src.jax.preflight import (
         GATE_ORDER,
@@ -541,6 +694,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_learn_proof_cli(args)
         case "calibrate":
             return run_calibrate_cli(args)
+        case "calibrate-seed-scheduler":
+            return run_calibrate_seed_scheduler_cli(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2

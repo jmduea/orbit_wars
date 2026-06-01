@@ -34,8 +34,6 @@ def _train_cfg(*, max_moves_k: int, decoder_carry: bool) -> TrainConfig:
     cfg.model.pointer_decoder = "factorized_topk"
     cfg.model.hidden_size = 128
     cfg.model.max_moves_k = max_moves_k
-    cfg.model.gnn_k_neighbors = 4
-    cfg.model.gnn_message_passing_layers = 2
     cfg.model.decoder_carry = decoder_carry
     cfg.task = _task_cfg(trajectory_shield_mode="cheap")
     return cfg
@@ -59,6 +57,12 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--repeats", type=int, default=30)
+    parser.add_argument(
+        "--assert-max-ms",
+        type=float,
+        default=None,
+        help="Exit non-zero when mean JIT wall time exceeds this threshold (ms).",
+    )
     args = parser.parse_args()
 
     cfg = _train_cfg(max_moves_k=args.max_moves_k, decoder_carry=args.decoder_carry)
@@ -82,7 +86,6 @@ def main() -> None:
             policy,
             cfg,
             deterministic=True,
-            deterministic_eval=True,
             decoder_hidden_in=carry,
         )
 
@@ -112,7 +115,13 @@ def main() -> None:
     if args.decoder_carry:
         print("  + 1 carry-out decode")
     print("encoder passes (target 1): 1 encode + 0 redundant full policy.apply")
-    print(f"mean wall time per sample (JIT): {mean_s * 1000:.2f} ms")
+    mean_ms = mean_s * 1000.0
+    print(f"mean wall time per sample (JIT): {mean_ms:.2f} ms")
+
+    if args.assert_max_ms is not None and mean_ms > args.assert_max_ms:
+        raise SystemExit(
+            f"mean {mean_ms:.2f} ms exceeds --assert-max-ms {args.assert_max_ms:.2f}"
+        )
 
 
 if __name__ == "__main__":

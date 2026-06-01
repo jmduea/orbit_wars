@@ -36,8 +36,6 @@ def _minimal_reseed_training_cfg(*, reseed_every_updates: int) -> TrainConfig:
     cfg.task.max_fleets = 8
     cfg.task.candidate_count = 4
     cfg.model.hidden_size = 16
-    cfg.model.gnn_k_neighbors = 3
-    cfg.model.gnn_message_passing_layers = 1
     cfg.model.max_moves_k = 2
     _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 1},

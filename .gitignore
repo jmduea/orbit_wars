@@ -244,6 +244,8 @@ __marimo__/
 /docs/Issues.md
 # Cursor plugin hook state (e.g. continual-learning)
 .cursor/hooks/state/
+# Compound Engineering machine-local preferences
+.compound-engineering/*.local.yaml
 # Understand-Anything generated scan output
 .understand-anything/
 
