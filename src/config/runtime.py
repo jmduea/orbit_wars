@@ -279,17 +279,8 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         )
 
     training = cfg.training
-    if int(training.update_chunk_rows_min) <= 0:
-        raise ValueError("training.update_chunk_rows_min must be a positive integer.")
-    if training.update_chunk_rows_max is not None and int(training.update_chunk_rows_max) <= 0:
-        raise ValueError("training.update_chunk_rows_max must be a positive integer when set.")
-    if (
-        training.update_chunk_rows_max is not None
-        and int(training.update_chunk_rows_max) < int(training.update_chunk_rows_min)
-    ):
-        raise ValueError(
-            "training.update_chunk_rows_max must be >= training.update_chunk_rows_min when both are set."
-        )
+    if int(training.update_chunk_rows) <= 0:
+        raise ValueError("training.update_chunk_rows must be a positive integer.")
     if training.rollout_microbatch_envs is not None and int(training.rollout_microbatch_envs) <= 0:
         raise ValueError("training.rollout_microbatch_envs must be a positive integer when set.")
     gae_lambda = float(training.gae_lambda)

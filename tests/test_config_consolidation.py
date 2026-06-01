@@ -196,19 +196,6 @@ def test_wandb_sweep_yaml_smoke_compose() -> None:
         assert cfg.telemetry.wandb.tags
 
 
-def _sweep_chunk_rows_valid(overrides: list[str]) -> bool:
-    min_rows: int | None = None
-    max_rows: int | None = None
-    for override in overrides:
-        if override.startswith("training.update_chunk_rows_min="):
-            min_rows = int(override.split("=", 1)[1])
-        elif override.startswith("training.update_chunk_rows_max="):
-            max_rows = int(override.split("=", 1)[1])
-    if min_rows is not None and max_rows is not None and max_rows < min_rows:
-        return False
-    return True
-
-
 BOUNDED_SWEEP_SAMPLE_SIZE = 200
 BOUNDED_SWEEP_SAMPLE_SEED = 42
 
@@ -217,11 +204,7 @@ BOUNDED_SWEEP_SAMPLE_SEED = 42
 def test_wandb_sweep_campaign_samples_compose_bounded() -> None:
     """Deterministic sample of the full sweep grid (same intent, ~30s vs ~3+ min)."""
 
-    cases = [
-        overrides
-        for overrides in _iter_sweep_compose_cases(full_grid=True)
-        if _sweep_chunk_rows_valid(overrides)
-    ]
+    cases = list(_iter_sweep_compose_cases(full_grid=True))
     assert cases, "expected at least one valid sweep compose case"
     if len(cases) > BOUNDED_SWEEP_SAMPLE_SIZE:
         cases = random.Random(BOUNDED_SWEEP_SAMPLE_SEED).sample(
@@ -245,8 +228,6 @@ def test_wandb_sweep_campaign_samples_compose_bounded() -> None:
 @pytest.mark.sweep
 def test_wandb_sweep_campaign_samples_compose_full() -> None:
     for overrides in _iter_sweep_compose_cases(full_grid=True):
-        if not _sweep_chunk_rows_valid(overrides):
-            continue
         cfg = compose_hydra_train_config(overrides)
         assert cfg.telemetry.wandb.group
         assert cfg.telemetry.wandb.tags

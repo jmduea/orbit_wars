@@ -77,9 +77,7 @@ class TrainingConfig:
     format_weights: dict[int, float] = field(default_factory=dict)
     total_updates: int = 200
     epochs: int = 1
-    minibatch_size: int = 512
-    update_chunk_rows_min: int = 8192
-    update_chunk_rows_max: int | None = None
+    update_chunk_rows: int = 1024
     rollout_microbatch_envs: int | None = (
         None  # Keep since it's used in the rollout group config
     )
