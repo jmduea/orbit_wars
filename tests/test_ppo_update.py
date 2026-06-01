@@ -102,17 +102,9 @@ def test_aggregate_ppo_metrics_ignores_empty_minibatches() -> None:
         (["training.vf_coef=0.25"], "vf_coef", 0.25),
         (["training.lr=0.001"], "lr", 0.001),
         (["training.max_grad_norm=1.0"], "max_grad_norm", 1.0),
-        (["training.minibatch_size=256"], "minibatch_size", 256),
+        (["training.update_chunk_rows=256"], "update_chunk_rows", 256),
         (["training.epochs=3"], "epochs", 3),
-        (["training.update_chunk_rows_min=1024"], "update_chunk_rows_min", 1024),
-        (
-            [
-                "training.update_chunk_rows_min=1024",
-                "training.update_chunk_rows_max=2048",
-            ],
-            "update_chunk_rows_max",
-            2048,
-        ),
+        (["training.update_chunk_rows=2048"], "update_chunk_rows", 2048),
     ],
 )
 def test_training_ppo_hyperparameters_compose_from_hydra(
@@ -125,6 +117,36 @@ def test_training_ppo_hyperparameters_compose_from_hydra(
 def test_default_training_config_uses_canonical_gae_lambda() -> None:
     cfg = compose_hydra_train_config()
     assert cfg.training.gae_lambda == pytest.approx(0.95)
+
+
+@pytest.mark.jax
+def test_ppo_update_chunk_rows_drives_minibatch_count() -> None:
+    import math
+
+    cfg = _small_factorized_cfg()
+    cfg.training.update_chunk_rows = 3
+    num_envs = 7
+    key = jax.random.PRNGKey(31)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
+    turn_batch = make_synthetic_turn_batch(
+        num_envs, cfg.task, key=jax.random.fold_in(key, 2)
+    )
+    transitions, _output = _build_factorized_on_policy_transitions(
+        cfg,
+        train_state,
+        policy,
+        turn_batch,
+        rollout_steps=1,
+        reward=jnp.zeros((1, num_envs), dtype=jnp.float32),
+    )
+    _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert float(metrics["minibatches"]) == pytest.approx(math.ceil(num_envs / 3))
+
+    cfg.training.update_chunk_rows = 100
+    _, metrics_one = ppo_update_jax(train_state, policy, transitions, cfg)
+    assert float(metrics_one["minibatches"]) == pytest.approx(1.0)
 
 
 def test_gae_lambda_one_matches_monte_carlo_path() -> None:
@@ -384,9 +406,7 @@ def _small_factorized_cfg() -> TrainConfig:
     cfg.model.max_moves_k = 2
     cfg.task.candidate_count = 4
     cfg.task.max_fleets = 16
-    cfg.training.minibatch_size = 4
-    cfg.training.update_chunk_rows_min = 1
-    cfg.training.update_chunk_rows_max = 8
+    cfg.training.update_chunk_rows = 8
     return cfg
 
 
@@ -480,9 +500,7 @@ def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
 def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
     cfg = _small_factorized_cfg()
     cfg.training.lr = 0.05
-    cfg.training.minibatch_size = 4
-    cfg.training.update_chunk_rows_min = 1
-    cfg.training.update_chunk_rows_max = 4
+    cfg.training.update_chunk_rows = 4
     num_envs = 8
     key = jax.random.PRNGKey(22)
     policy = build_jax_policy(cfg)

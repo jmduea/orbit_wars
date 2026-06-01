@@ -114,7 +114,7 @@ def _v2_curriculum_training_cfg(*, player_count: int, four_player_num_envs: int)
     cfg.training.rollout_steps = 1
     cfg.training.total_updates = 3
     cfg.training.epochs = 1
-    cfg.training.minibatch_size = 32
+    cfg.training.update_chunk_rows = 32
     cfg.training.rollout_microbatch_envs = 1
     cfg.artifacts.checkpoint_every = 100
     cfg.artifacts.artifact_pipeline.enabled = False

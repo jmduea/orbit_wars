@@ -390,7 +390,7 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.training.rollout_steps = 1
     cfg.training.total_updates = 1
     cfg.training.epochs = 1
-    cfg.training.minibatch_size = 32
+    cfg.training.update_chunk_rows = 32
     cfg.training.rollout_microbatch_envs = 1
     cfg.artifacts.checkpoint_every = 100
 

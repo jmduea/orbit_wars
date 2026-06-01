@@ -44,9 +44,7 @@ _KEY_SHORT_NAMES: dict[str, str] = {
     "training.rollout_steps": "rs",
     "training.num_envs": "env",
     "training.rollout_microbatch_envs": "rmb",
-    "training.minibatch_size": "mb",
-    "training.update_chunk_rows_min": "ucmin",
-    "training.update_chunk_rows_max": "ucmax",
+    "training.update_chunk_rows": "ucr",
     "training.total_updates": "u",
     "training": "tr",
 }

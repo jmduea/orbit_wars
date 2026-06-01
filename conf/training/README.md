@@ -26,6 +26,8 @@ Static mix when curriculum stages omit `format_weights` uses `training.format_we
 | `2p4p_64_split` | 64 (32+32) | Split mode; old `format=2p_4p_32env` equivalent |
 | `2p4p_16_rotate` | 16 active | One format per update |
 
+`update_chunk_rows` sets rows per PPO `lax.scan` step (capped by rollout batch size); minibatch count is `ceil(total_rows / update_chunk_rows)`.
+
 Typical fields:
 
 ```yaml
@@ -36,7 +38,7 @@ format_weights:
   4: 0.5
 total_updates: 100
 epochs: 2
-minibatch_size: 512
+update_chunk_rows: 1024
 gamma: 0.99
 gae_lambda: 0.95
 lr: 0.0003

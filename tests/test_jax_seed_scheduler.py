@@ -46,7 +46,7 @@ def _minimal_reseed_training_cfg(*, reseed_every_updates: int) -> TrainConfig:
     cfg.training.rollout_steps = 1
     cfg.training.total_updates = 4
     cfg.training.epochs = 1
-    cfg.training.minibatch_size = 32
+    cfg.training.update_chunk_rows = 32
     cfg.training.rollout_microbatch_envs = 1
     cfg.training.reseed_every_updates = reseed_every_updates
     cfg.artifacts.checkpoint_every = 100

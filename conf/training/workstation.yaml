@@ -4,10 +4,7 @@ defaults:
 
 rollout_steps: 128
 total_updates: 500
-minibatch_size: 512
-
-update_chunk_rows_min: 2048
-update_chunk_rows_max: 8192
+update_chunk_rows: 2048
 enable_gradient_checkpointing: true
 lean_rollout_metrics: true
 log_every: 10

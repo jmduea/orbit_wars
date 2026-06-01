@@ -24,8 +24,7 @@ def _overfit_cfg() -> TrainConfig:
     cfg.task.max_fleets = 16
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 4
-    cfg.training.minibatch_size = 4
-    cfg.training.update_chunk_rows_min = 1
+    cfg.training.update_chunk_rows = 4
     cfg.opponents.mode.opponent = "random"
     return cfg
 

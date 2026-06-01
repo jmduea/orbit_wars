@@ -9,10 +9,7 @@ format_weights:
   4: 0.0
 total_updates: 2
 epochs: 1
-minibatch_size: 32
-
-update_chunk_rows_min: 64
-update_chunk_rows_max: 256
+update_chunk_rows: 64
 rollout_microbatch_envs: 2
 
 lean_rollout_metrics: true

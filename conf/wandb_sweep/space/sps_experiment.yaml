@@ -12,7 +12,5 @@ parameters:
     values: [4, 8, 16, 32]
   training.rotate_format_rollouts:
     values: [true, false]
-  training.update_chunk_rows_min:
-    values: [256, 512, 1024, 2048]
-  training.update_chunk_rows_max:
-    values: [2048, 4096, 8192]
+  training.update_chunk_rows:
+    values: [256, 512, 1024, 2048, 4096, 8192]

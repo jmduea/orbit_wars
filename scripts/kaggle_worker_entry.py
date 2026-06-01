@@ -687,10 +687,8 @@ def _without_training_shape_overrides(overrides: list[str]) -> list[str]:
     shape_keys = {
         "training.num_envs",
         "training.rollout_steps",
-        "training.minibatch_size",
+        "training.update_chunk_rows",
         "training.rollout_microbatch_envs",
-        "training.update_chunk_rows_min",
-        "training.update_chunk_rows_max",
     }
     return [item for item in overrides if item.split("=", 1)[0] not in shape_keys]
 

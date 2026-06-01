@@ -6,7 +6,7 @@ format_weights:
 total_updates: 100
 
 epochs: 1
-minibatch_size: 512
+update_chunk_rows: 1024
 gamma: 0.99
 gae_lambda: 0.95
 clip_coef: 0.15
@@ -15,8 +15,6 @@ vf_coef: 1.0
 lr: 0.00006
 max_grad_norm: 1.0
 
-update_chunk_rows_min: 1024
-update_chunk_rows_max: 4096
 rollout_microbatch_envs: 32
 
 rotate_format_rollouts: false

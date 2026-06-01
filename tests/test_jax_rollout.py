@@ -30,8 +30,7 @@ def _v2_smoke_cfg(*, rollout_steps: int) -> TrainConfig:
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = rollout_steps
-    cfg.training.update_chunk_rows_min = 1
-    cfg.training.minibatch_size = 2
+    cfg.training.update_chunk_rows = 2
     cfg.opponents.mode.opponent = "random"
     return cfg
 

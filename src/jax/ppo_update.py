@@ -331,14 +331,7 @@ def _ppo_update_factorized_jax(
         )
 
     total_rows = mask.shape[0]
-    min_chunk_rows = int(cfg.training.update_chunk_rows_min)
-    max_chunk_rows = (
-        int(cfg.training.update_chunk_rows_max)
-        if cfg.training.update_chunk_rows_max is not None
-        else total_rows
-    )
-    chunk_target = max(int(cfg.training.minibatch_size), min_chunk_rows)
-    minibatch_size = min(max(chunk_target, 1), max_chunk_rows, total_rows)
+    minibatch_size = min(max(int(cfg.training.update_chunk_rows), 1), total_rows)
     minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
     pad_rows = minibatch_count * minibatch_size - total_rows
 

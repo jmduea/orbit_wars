@@ -45,18 +45,16 @@ def estimate_training_overrides(
     microbatch_envs = _round_to_multiple(max(min(per_group_envs // 2, 32), 4), 4)
     microbatch_envs = largest_compatible_microbatch(microbatch_envs, group_counts)
     rollout_steps = 256 if memory_gb >= 24 and pressure <= 3.0 else 128
-    minibatch_size = _round_to_multiple(
+    mb_estimate = _round_to_multiple(
         max(min(sizing_envs * rollout_steps // 4, 4096), 256),
         128,
     )
-    chunk_max = max(minibatch_size * 2, 1024)
+    update_chunk_rows = _effective_update_chunk_rows(mb_estimate)
 
     overrides: list[str] = [
         f"training.rollout_microbatch_envs={microbatch_envs}",
         f"training.rollout_steps={rollout_steps}",
-        f"training.minibatch_size={minibatch_size}",
-        f"training.update_chunk_rows_min={min(chunk_max, 2048)}",
-        f"training.update_chunk_rows_max={chunk_max}",
+        f"training.update_chunk_rows={update_chunk_rows}",
     ]
     if not _has_training_group_override(hydra_overrides):
         overrides.insert(0, f"training.num_envs={num_envs}")
@@ -80,7 +78,7 @@ def calibration_grid(
         micro_candidates = _compatible_microbatch_candidates(group_counts, per_group)
         variants: list[tuple[str, ...]] = []
         for micro in micro_candidates:
-            minibatch = _round_to_multiple(
+            mb_estimate = _round_to_multiple(
                 max(sizing_envs * rollout_steps // 4, 128),
                 128,
             )
@@ -90,8 +88,8 @@ def calibration_grid(
                     "training.rollout_microbatch_envs",
                     micro,
                 ),
-                "training.minibatch_size",
-                minibatch,
+                "training.update_chunk_rows",
+                _effective_update_chunk_rows(mb_estimate),
             )
             variants.append(finalize_rollout_shape_overrides(variant, hydra_overrides))
         return variants
@@ -102,7 +100,7 @@ def calibration_grid(
         envs = _round_to_multiple(max(int(num_envs * env_multiplier), 4), 4)
         micro = _round_to_multiple(max(min(envs // 2, 32), 4), 4)
         micro = largest_compatible_microbatch(micro, [envs])
-        minibatch = _round_to_multiple(max(envs * rollout_steps // 4, 128), 128)
+        mb_estimate = _round_to_multiple(max(envs * rollout_steps // 4, 128), 128)
         variant = tuple(
             _replace_override(
                 _replace_override(
@@ -110,8 +108,8 @@ def calibration_grid(
                     "training.rollout_microbatch_envs",
                     micro,
                 ),
-                "training.minibatch_size",
-                minibatch,
+                "training.update_chunk_rows",
+                _effective_update_chunk_rows(mb_estimate),
             )
         )
         variants.append(finalize_rollout_shape_overrides(variant, hydra_overrides))
@@ -252,6 +250,15 @@ def _replace_override(
     return tuple(
         f"{key}={value}" if item.startswith(f"{key}=") else item for item in overrides
     )
+
+
+def _effective_update_chunk_rows(mb_estimate: int) -> int:
+    """Match legacy min/max chunk formula used by estimate_training_overrides."""
+
+    mb = max(int(mb_estimate), 1)
+    chunk_max = max(mb * 2, 1024)
+    min_chunk = min(chunk_max, 2048)
+    return min(max(mb, min_chunk), chunk_max)
 
 
 def _round_to_multiple(value: int, multiple: int) -> int:

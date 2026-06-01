@@ -146,22 +146,17 @@ parameters:
     values:
     - 250
     - 500
-  training.minibatch_size:
+  training.update_chunk_rows:
     values:
-    - 256
-    - 512
-    - 1024
+    - 2048
+    - 4096
+    - 8192
   training.rollout_microbatch_envs:
     values:
     - 4
     - 8
     - 16
     - 32
-  training.update_chunk_rows_min:
-    values:
-    - 2048
-    - 4096
-    - 8192
 run_cap: 20
 ```
 
