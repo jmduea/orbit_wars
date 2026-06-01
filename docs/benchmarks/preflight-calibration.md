@@ -58,6 +58,8 @@ Uses `kaggle_environments.make("orbit_wars")`, not Docker. Docker remains on sub
 
 ## Refresh calibration
 
+Live sweeps subprocess `ow train` with W&B disabled; see [`benchmark-subprocess-training-observability.md`](../solutions/developer-experience/benchmark-subprocess-training-observability.md) for terminal progress expectations.
+
 Analyze completed calibration campaigns without retraining:
 
 ```bash

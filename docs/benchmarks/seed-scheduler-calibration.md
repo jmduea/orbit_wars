@@ -4,6 +4,8 @@ Source JSON: [`seed-scheduler-calibration.json`](seed-scheduler-calibration.json
 
 **Status:** partial sweep (9/15 training arms complete). Tournament eval not run yet. Final default stays `-1` auto-scale until held-out eval completes.
 
+Long GPU sweeps stream per-update terminal progress (PR #165). If the CLI looks idle after CUDA warnings, see [`benchmark-subprocess-training-observability.md`](../solutions/developer-experience/benchmark-subprocess-training-observability.md) or `tail -f` the run JSONL under `outputs/campaigns/`.
+
 ## Sweep progress
 
 | Opponent | Reseed interval | Training | Checkpoint | Reseed events |

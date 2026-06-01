@@ -174,7 +174,7 @@ Calibrate intervals with held-out tournament seeds:
 uv run ow benchmark calibrate-seed-scheduler --dry-run
 ```
 
-See `docs/benchmarks/seed-scheduler-calibration.md`.
+See `docs/benchmarks/seed-scheduler-calibration.md`. Benchmark sweeps subprocess `ow train` with W&B off — expect a startup banner and per-update lines after PR #165; if the terminal is silent, see `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`.
 
 Plateau-triggered reseeding uses `training.plateau_metric`, `plateau_window`, and `plateau_delta`. When `heldout_eval_seed_set` is non-empty, reseeds draw from a shuffled pool instead of random jumps.
 

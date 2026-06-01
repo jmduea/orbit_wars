@@ -65,7 +65,7 @@ Leaderboard games use unseen seeds. Single-seed training is brittle (validation 
 - `outputs/campaigns/seed_sched_cal_self_play_only_reseed*_u500/` (artifacts)
 - `src/jax/seed_scheduler_calibration.py` (only if sweep discovery bug found)
 
-**Approach:** Run `uv run ow benchmark calibrate-seed-scheduler --opponents self_play_only --reseed-intervals 25,50,100 --no-include-total-fifth --total-updates 500`. Remove or ignore failed partial run for reseed 25 if it has no JSONL.
+**Approach:** Run `uv run ow benchmark calibrate-seed-scheduler --opponents self_play_only --reseed-intervals 25,50,100 --no-include-total-fifth --total-updates 500`. Failed partial runs with empty JSONL are skipped by `latest_completed_run_dir()` (PR #165). Terminal progress: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`.
 
 **Test scenarios:** Test expectation: none — GPU artifact generation.
 
