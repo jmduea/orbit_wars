@@ -315,7 +315,7 @@ def _sample_shielded_factored_sequence_with_params(
         apply_cumulative_forbidden_to_shield,
         apply_launch_to_cumulative_forbidden,
         build_hygiene_lookups,
-        empty_cumulative_forbidden,
+        empty_forbidden_grid,
     )
     from src.jax.policy import factorized_decode
 
@@ -340,7 +340,7 @@ def _sample_shielded_factored_sequence_with_params(
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
     hygiene_lookups = build_hygiene_lookups(batch)
-    cumulative_forbidden = empty_cumulative_forbidden(
+    cumulative_forbidden = empty_forbidden_grid(
         env_count,
         num_planets=MAX_PLANETS,
         max_k=k,
@@ -626,25 +626,30 @@ def _sample_shielded_factored_sequence_with_params(
             include_value=False,
         )
         decoder_hidden_out = final_output.decoder_hidden
-    replay = replay_factored_sequence_logprob(
-        params,
-        policy,
-        batch,
-        cfg,
-        player_count=player_count,
-        source_index=source_sequence,
-        target_slot=slot_sequence,
-        ship_bucket=bucket_sequence,
-        stop_flag=stop_sequence.astype(jnp.float32),
-        step_mask=step_mask_sequence,
-        ship_bucket_mask=bucket_mask_stack,
-        ship_fraction=ship_fraction_sequence if continuous else None,
-        decoder_hidden=decoder_hidden_in if carry_enabled else None,
-        initial_remaining_ships=owned_planet_ships(game),
-        encoder_out=encoder_out,
+    tiered_revalidate = (
+        trajectory_shield_mode(cfg.task) == "tiered"
+        and trajectory_shield_final_validate_selected(cfg.task)
     )
-    log_prob_sequence = replay.log_prob
-    entropy_sequence = replay.entropy
+    if tiered_revalidate:
+        replay = replay_factored_sequence_logprob(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_index=source_sequence,
+            target_slot=slot_sequence,
+            ship_bucket=bucket_sequence,
+            stop_flag=stop_sequence.astype(jnp.float32),
+            step_mask=step_mask_sequence,
+            ship_bucket_mask=bucket_mask_stack,
+            ship_fraction=ship_fraction_sequence if continuous else None,
+            decoder_hidden=decoder_hidden_in if carry_enabled else None,
+            initial_remaining_ships=owned_planet_ships(game),
+            encoder_out=encoder_out,
+        )
+        log_prob_sequence = replay.log_prob
+        entropy_sequence = replay.entropy
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,

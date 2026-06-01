@@ -119,6 +119,7 @@ def _replay_logprobs_with_prefix_forwards(
         num_planets=MAX_PLANETS,
         max_k=k,
         buckets=cfg.task.ship_bucket_count,
+        max_launches=sequence_k,
     )
 
     def scan_step(carry, step_idx):
