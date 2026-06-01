@@ -30,6 +30,7 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 | `src/features/` | Registry + extractor (planet-edge encoding) |
 | `src/game/` | Reference Python game logic |
 | `conf/` | Hydra responsibility groups |
+| `docs/solutions/` | Documented solutions to past problems (bugs, best practices, workflow patterns); organized by category with YAML frontmatter (`module`, `tags`, `problem_type`); relevant when implementing or debugging in documented areas |
 | `tests/` | pytest; `@pytest.mark.slow` / `jax` for expensive tiers |
 
 ## Test tiers
