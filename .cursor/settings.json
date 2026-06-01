@@ -1,0 +1,28 @@
+{
+  "plugins": {
+    "context7-plugin": {
+      "enabled": true
+    },
+    "compound-engineering": {
+      "enabled": true
+    },
+    "continual-learning": {
+      "enabled": true
+    },
+    "pstack": {
+      "enabled": true
+    },
+    "docs-canvas": {
+      "enabled": true
+    },
+    "cli-for-agent": {
+      "enabled": true
+    },
+    "agent-compatibility": {
+      "enabled": true
+    },
+    "huggingface-skills": {
+      "enabled": true
+    }
+  }
+}
