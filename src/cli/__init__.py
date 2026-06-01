@@ -80,9 +80,14 @@ def main() -> None:
 
             raise SystemExit(eval_cli.main(command_args))
 
+        case "benchmark":
+            from src.cli.benchmark import main as benchmark_main
+
+            raise SystemExit(benchmark_main(command_args))
+
         case "help":
             print_ow_help()
         case _:
             raise SystemExit(
-                f"Unknown ow command: {command!r}. Valid commands: train, eval, make"
+                f"Unknown ow command: {command!r}. Valid commands: train, eval, benchmark, make"
             )

@@ -71,6 +71,14 @@ class KaggleRandomOpponent:
         )
 
 
+class NoopOpponent:
+    """Pass/no-launch baseline (matches JAX ``noop_only`` training profile)."""
+
+    def act(self, observation: Any) -> list[list[float | int]]:
+        del observation
+        return []
+
+
 def build_opponent(
     name: str,
     cfg: TrainConfig | None = None,
@@ -81,6 +89,8 @@ def build_opponent(
         return SniperOpponent()
     if name == "random":
         return KaggleRandomOpponent()
+    if name in {"noop", "noop_only"}:
+        return NoopOpponent()
     raise ValueError(f"Unknown opponent: {name}")
 
 

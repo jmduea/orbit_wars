@@ -39,6 +39,8 @@ def normalize_baseline_name(name: str) -> str:
     normalized = name.strip().lower()
     if normalized in {"nearest_sniper", "sniper"}:
         return "sniper"
+    if normalized in {"noop", "noop_only"}:
+        return "noop"
     return normalized
 
 

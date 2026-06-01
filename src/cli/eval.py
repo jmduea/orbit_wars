@@ -199,6 +199,11 @@ def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
         help="Comma-separated tournament formats.",
     )
     tournament.add_argument(
+        "--baselines",
+        default="sniper",
+        help="Comma-separated baseline ids for 2p_vs_baseline (e.g. noop, random, sniper).",
+    )
+    tournament.add_argument(
         "--write-replays",
         action="store_true",
         help="Write HTML replay artifacts for each match.",
@@ -282,7 +287,7 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         seeds=_parse_csv_ints(args.seeds),
         games_per_pair=int(args.games_per_pair),
         max_steps=int(args.max_steps),
-        baselines=["sniper"],
+        baselines=_parse_csv_strings(args.baselines),
         formats=_parse_csv_strings(args.formats),
         write_replays=bool(args.write_replays),
         per_step_seconds=float(args.per_step_seconds),

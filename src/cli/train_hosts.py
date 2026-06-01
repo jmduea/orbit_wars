@@ -97,6 +97,7 @@ def print_ow_help() -> None:
         "Commands:\n"
         "  train   Local or Kaggle JAX training via Hydra configuration\n"
         "  eval    Tournament eval, artifact worker, Kaggle competition submit\n"
+        "  benchmark  Stability benchmarks and pre-flight learning gates\n"
         "  make    Generate W&B sweep YAML (scripts/make_wandb_sweep.py)\n\n"
         "Bare `ow` or `ow KEY=VALUE` defaults to `ow train`.\n\n"
         "Usage:\n"

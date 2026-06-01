@@ -75,3 +75,13 @@ test-domain-artifacts:
 
 test-domain-curriculum:
 	$(PYTEST_CPU) tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"
+
+preflight-sanity:
+	uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json
+
+preflight-learn-proof:
+	uv run ow benchmark learn-proof --through beat_random --out outputs/preflight/learn_proof_report.json
+
+preflight-calibrate:
+	uv run ow benchmark calibrate --analyze-only --analyze-campaigns
+

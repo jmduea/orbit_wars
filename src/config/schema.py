@@ -225,6 +225,11 @@ class PromotionTournamentConfig:
     min_first_place_rate_4p: float | None = None
     require_head_to_head: bool = True
 
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "min_win_rate_vs_baseline":
+            name = "min_win_rate_vs_sniper"
+        object.__setattr__(self, name, value)
+
 
 @dataclass(slots=True)
 class PromotionConfig:
