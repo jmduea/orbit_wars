@@ -54,7 +54,6 @@ def test_rollout_replay_logprob_parity_distributional_value_head() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -94,7 +93,6 @@ def test_rollout_replay_logprob_parity_with_stepwise_scan() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -146,7 +144,6 @@ def test_rollout_replay_logprob_parity_continuous_fraction() -> None:
         policy,
         cfg,
         deterministic=False,
-        deterministic_eval=False,
     )
     replay = replay_factored_sequence_logprob(
         params,
@@ -184,7 +181,6 @@ def test_rollout_replay_logprob_parity_with_decoder_carry() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     replay = replay_factored_sequence_logprob(
@@ -238,7 +234,6 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     assert int(jnp.sum(sample.step_mask > 0.0)) >= 2
@@ -348,7 +343,6 @@ def test_zero_teacher_forward_mismatches_prefix_at_step_one() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
     )
     step_idx = 1
     if not bool(jnp.any(sample.step_mask[:, step_idx] > 0.0)):

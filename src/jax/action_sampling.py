@@ -58,43 +58,6 @@ def _ensure_bucket_mask_has_choice(
     return jnp.where(use_original[:, None, None], ship_bucket_mask, noop_mask)
 
 
-def _mask_noop_targets_for_eval_deterministic(
-    target_logits: jax.Array,
-    ship_bucket_mask: jax.Array,
-) -> jax.Array:
-    """Hide NOOP from argmax when any shielded non-NOOP launch bucket exists."""
-
-    illegal_logit = jnp.finfo(jnp.float32).min
-    noop_idx = target_logits.shape[-1] - 1
-    launch_mask = ship_bucket_mask[..., 1:].any(axis=-1)
-    non_noop_launch_available = launch_mask[:, :noop_idx].any(axis=-1)
-    noop_columns = jnp.arange(target_logits.shape[-1]) == noop_idx
-    return jnp.where(
-        non_noop_launch_available[:, None] & noop_columns[None, :],
-        illegal_logit,
-        target_logits,
-    )
-
-
-def _pick_eval_deterministic_bucket(
-    target: jax.Array,
-    selected_bucket_mask: jax.Array,
-    bucket: jax.Array,
-    *,
-    noop_idx: int,
-) -> jax.Array:
-    """Prefer the highest-probability non-zero ship bucket for real launches."""
-
-    bucket_ids = jnp.arange(selected_bucket_mask.shape[-1], dtype=jnp.int32)
-    real_buckets = selected_bucket_mask & (bucket_ids[None, :] > 0)
-    preferred = jnp.argmax(real_buckets.astype(jnp.int32), axis=-1)
-    return jnp.where(
-        (target < noop_idx) & real_buckets.any(axis=-1),
-        preferred,
-        bucket,
-    )
-
-
 def _sample_step_from_logits(
     *,
     key: jax.Array,
@@ -102,17 +65,11 @@ def _sample_step_from_logits(
     ship_logits: jax.Array,
     ship_bucket_mask: jax.Array,
     deterministic: bool,
-    deterministic_eval: bool = False,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     key_target, key_ship = jax.random.split(key)
     illegal_logit = jnp.finfo(jnp.float32).min
-    noop_idx = target_logits.shape[-1] - 1
     target_mask = ship_bucket_mask.any(axis=-1)
     target_logits = jnp.where(target_mask, target_logits, illegal_logit)
-    if deterministic and deterministic_eval:
-        target_logits = _mask_noop_targets_for_eval_deterministic(
-            target_logits, ship_bucket_mask
-        )
     target = jnp.where(
         deterministic,
         jnp.argmax(target_logits, axis=-1),
@@ -152,13 +109,6 @@ def _sample_step_from_logits(
             jnp.argmax(selected_ship_logits, axis=-1),
             jax.random.categorical(key_ship, selected_ship_logits, axis=-1),
         )
-        if deterministic and deterministic_eval:
-            bucket = _pick_eval_deterministic_bucket(
-                target,
-                selected_bucket_mask,
-                bucket,
-                noop_idx=noop_idx,
-            )
         ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
         ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
         ship_lp = jnp.take_along_axis(ship_log_probs, bucket[:, None], axis=-1).squeeze(
@@ -185,7 +135,6 @@ def _sample_factored_step_from_logits(
     source_mask: jax.Array,
     ship_bucket_mask: jax.Array,
     deterministic: bool,
-    deterministic_eval: bool = False,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     key_stop, key_source, key_target, key_ship = jax.random.split(key, 4)
 
@@ -199,11 +148,6 @@ def _sample_factored_step_from_logits(
     continuous_heads = ship_logits.shape[-1] == 1
     has_real_bucket = ship_bucket_mask[..., 1:].any()
     can_launch = source_mask.any() & (has_real_bucket | continuous_heads)
-    stop = jnp.where(
-        deterministic & deterministic_eval & can_launch,
-        jnp.zeros_like(stop),
-        stop,
-    )
     stop = jnp.where(can_launch, stop, jnp.ones_like(stop))
     launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
 
@@ -303,7 +247,6 @@ def _sample_shielded_factored_sequence_with_params(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> ShieldedSequenceSample:
     from src.jax.factored_sequence_scan import (
@@ -415,7 +358,7 @@ def _sample_shielded_factored_sequence_with_params(
         )
         source, target_slot, bucket, stop, log_prob, entropy, ship_fraction = jax.vmap(
             _sample_factored_step_from_logits,
-            in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
+            in_axes=(0, 0, 0, 0, 0, 0, 0, None),
         )(
             jax.random.split(jax.random.fold_in(key, 10_000 + step_idx), env_count),
             step_output.source_logits[:, step_idx, :],
@@ -425,7 +368,6 @@ def _sample_shielded_factored_sequence_with_params(
             source_mask,
             step_bucket_mask,
             deterministic,
-            deterministic_eval,
         )
         step_active = sequence_active.astype(jnp.float32)
         stop = jnp.where(sequence_active, stop, jnp.zeros_like(stop))
@@ -640,7 +582,6 @@ def _sample_shielded_sequence_with_params(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> ShieldedSequenceSample:
     if is_factorized_pointer_decoder(cfg.model):
@@ -652,7 +593,6 @@ def _sample_shielded_sequence_with_params(
             policy,
             cfg,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
             decoder_hidden_in=decoder_hidden_in,
         )
 
@@ -766,7 +706,6 @@ def _sample_shielded_sequence_with_params(
             ship_logits=step_output.ship_logits[:, step_idx, :, :],
             ship_bucket_mask=step_bucket_mask,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
         )
         src_rows = target // edge_k(cfg.task)
         current_source_ships = remaining_ships[jnp.arange(env_count), src_rows]
@@ -886,7 +825,6 @@ def _sample_policy_action_with_params(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> tuple[JaxAction, jax.Array | None]:
     sample = _sample_shielded_sequence_with_params(
@@ -897,7 +835,6 @@ def _sample_policy_action_with_params(
         policy,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
         decoder_hidden_in=decoder_hidden_in,
     )
     if is_factorized_pointer_decoder(cfg.model):

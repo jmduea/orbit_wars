@@ -95,7 +95,6 @@ def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
         policy,
         cfg,
         deterministic=True,
-        deterministic_eval=True,
         decoder_hidden_in=carry_in,
     )
     replay = policy.apply(

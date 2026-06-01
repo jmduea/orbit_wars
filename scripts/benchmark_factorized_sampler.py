@@ -80,7 +80,6 @@ def main() -> None:
             policy,
             cfg,
             deterministic=True,
-            deterministic_eval=True,
             decoder_hidden_in=carry,
         )
 

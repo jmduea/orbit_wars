@@ -74,7 +74,6 @@ def build_checkpoint_agent(
         {"params": params},
         act_seed=act_seed,
         deterministic=True,
-        deterministic_eval=True,
     )
     agent.warmup()
     return agent

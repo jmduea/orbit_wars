@@ -202,7 +202,6 @@ def select_runtime_shielded_policy_actions_with_carry(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> tuple[JaxAction, jax.Array | None]:
     """Sample shielded actions and return updated decoder carry when enabled."""
@@ -217,7 +216,6 @@ def select_runtime_shielded_policy_actions_with_carry(
         policy,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
         decoder_hidden_in=decoder_hidden_in,
     )
 
@@ -228,7 +226,6 @@ def compile_shielded_policy_act_with_carry(
     cfg: TrainConfig,
     *,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ):
     """Return a JIT-compiled shielded act fn returning ``(action, decoder_hidden)``."""
 
@@ -253,7 +250,6 @@ def compile_shielded_policy_act_with_carry(
             policy,
             cfg,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
             decoder_hidden_in=decoder_hidden_in,
         )
 
@@ -269,7 +265,6 @@ def select_runtime_shielded_policy_actions(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
 ) -> JaxAction:
     """Sample a shielded v2 policy action sequence and decode it to ``JaxAction``."""
 
@@ -283,7 +278,6 @@ def select_runtime_shielded_policy_actions(
         policy,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
     )
     return action
 
@@ -295,7 +289,6 @@ def compile_shielded_policy_act(
     cfg: TrainConfig,
     *,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ):
     """Return a JIT-compiled shielded policy act fn for submission inference."""
 
@@ -314,7 +307,6 @@ def compile_shielded_policy_act(
             policy,
             cfg,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
         )
         return action
 
@@ -491,7 +483,6 @@ def build_submission_ready_agent(
     *,
     act_seed: int = 0,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ) -> SubmissionReadyAgent:
     """Build a submission-style agent with compiled encode/act/history paths."""
 
@@ -506,7 +497,6 @@ def build_submission_ready_agent(
         variables,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
     )
     state: dict[str, object] = {
         "history": empty_feature_history(cfg.task),

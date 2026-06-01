@@ -158,10 +158,11 @@ def build_submission_package(args: argparse.Namespace) -> Path:
 
 
 def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
+    from src.artifacts.checkpoint_compat import load_checkpoint_payload
+
     start = time.perf_counter()
     try:
-        with checkpoint_path.open("rb") as file:
-            checkpoint = pickle.load(file)
+        checkpoint = load_checkpoint_payload(checkpoint_path)
     except Exception as exc:
         raise ValidationError("checkpoint_load_failed", str(exc)) from exc
 
@@ -712,7 +713,6 @@ def _initialize_submission() -> None:
         {"params": state["params"]},
         state["cfg"],
         deterministic=True,
-        deterministic_eval=True,
     )
     _warm_submission_path(state)
     state["ready"] = True
