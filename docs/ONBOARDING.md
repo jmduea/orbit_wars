@@ -18,12 +18,13 @@
 
 ```bash
 uv sync --group dev
-uv run --group dev pytest
-uv run python -m src.train model=attention training.total_updates=1000
-uv run python -m src.train print_resolved_config=true   # resolve config without training
+make test-fast
+uv run ow train model=attention training.total_updates=1000
+uv run ow train print_resolved_config=true   # resolve config without training
+uv run ow runs list                          # inspect outputs/campaigns
 ```
 
-Canonical references: `README.md` (user-facing) and `AGENTS.md` (agent/editor guidance).
+Canonical references: `README.md` (user-facing), `AGENTS.md` and `docs/AGENT_CAPABILITIES.md` (agent/editor guidance).
 
 ---
 

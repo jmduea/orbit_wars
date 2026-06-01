@@ -132,6 +132,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             **(gpu_tracker.run_metadata() if gpu_tracker is not None else {}),
         },
     )
+    wandb_enabled = bool(cfg.telemetry.wandb.enabled)
+    print(
+        f"orbit_train_start run_dir={run_context.run_dir} log_path={log_path} "
+        f"queue_dir={run_context.queue_dir} wandb={'on' if wandb_enabled else 'off'}"
+    )
     telemetry = build_telemetry(
         cfg,
         {
@@ -509,4 +514,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             f"checkpoint worker failed at update {first_failure.update}: "
             f"{first_failure.error or first_failure.reason or first_failure.status}"
         )
+    last_ckpt = run_dir / "jax_ckpt_last.pkl"
+    ckpt_hint = str(last_ckpt) if last_ckpt.exists() else "none"
+    print(
+        f"orbit_train_complete updates={cfg.training.total_updates} "
+        f"log_path={log_path} checkpoint={ckpt_hint}"
+    )
     return log_path

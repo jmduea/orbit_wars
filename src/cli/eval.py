@@ -23,14 +23,32 @@ from src.artifacts.tournament.resolve import (
     validate_agents_feature_compatible,
 )
 from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_job_worker
+from src.cli.run_status import summarize_run_status
 from src.config.schema import TournamentConfig
+
+
+def print_eval_help() -> None:
+    print(
+        "ow eval — tournament, artifact worker, Kaggle package/submit\n\n"
+        "Subcommands:\n"
+        "  tournament   Head-to-head eval in Kaggle env\n"
+        "  worker       Process queue/optional_jobs for a run\n"
+        "  status       Summarize queue jobs and promotion for a run\n"
+        "  package      Build submission.tar.gz from checkpoint\n"
+        "  submit       Upload package to Kaggle competition\n\n"
+        "Examples:\n"
+        "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id>\n"
+        "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
+        "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
+        "More: uv run ow eval tournament --help\n"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Evaluation, artifact jobs, and Kaggle submission (ow eval).",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     tournament = subparsers.add_parser(
         "tournament",
@@ -77,6 +95,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     worker.add_argument("--poll-seconds", type=float, default=5.0)
     worker.add_argument("--idle-exit-seconds", type=float, default=None)
+    worker.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print per-job start/done lines to stdout.",
+    )
+
+    status = subparsers.add_parser(
+        "status",
+        help="Summarize artifact queue and promotion state for a run.",
+    )
+    status.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
 
     submit = subparsers.add_parser(
         "submit",
@@ -384,7 +418,14 @@ def run_worker_cli(args: argparse.Namespace) -> int:
         idle_exit_seconds=args.idle_exit_seconds,
         recover_running=bool(args.recover_running),
         retry_failed=bool(args.retry_failed),
+        verbose=bool(args.verbose),
     )
+
+
+def run_status_cli(args: argparse.Namespace) -> int:
+    summary = summarize_run_status(args.run)
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    return 0
 
 
 def run_package_cli(args: argparse.Namespace) -> int:
@@ -434,12 +475,20 @@ def run_submit_cli(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not argv:
+        print_eval_help()
+        return 0
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command is None:
+        print_eval_help()
+        return 0
     if args.command == "tournament":
         return run_tournament_cli(args)
     if args.command == "worker":
         return run_worker_cli(args)
+    if args.command == "status":
+        return run_status_cli(args)
     if args.command == "package":
         return run_package_cli(args)
     if args.command == "submit":

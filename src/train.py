@@ -39,7 +39,8 @@ def _run_training_from_cfg(cfg_raw: DictConfig) -> None:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
 
-    run_jax_training(cfg, cfg.resume_checkpoint)
+    log_path = run_jax_training(cfg, cfg.resume_checkpoint)
+    print(f"training_log={log_path}")
 
 
 def main() -> None:
