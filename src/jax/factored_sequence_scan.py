@@ -15,7 +15,8 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.features.registry import PLANET_FEATURE_SCHEMA
+from src.features.registry import PLANET_FEATURE_SCHEMA, edge_k
+from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
     FactoredPolicyOutput,
     _factored_step_log_prob_entropy,
@@ -23,7 +24,13 @@ from src.jax.action_codec import (
 )
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.features import TurnBatch, ship_feature_scale
-from src.jax.launch_hygiene import compose_hygiene_with_shield_mask
+from src.jax.launch_hygiene import (
+    apply_cumulative_forbidden_to_shield,
+    apply_launch_to_cumulative_forbidden,
+    build_hygiene_lookups,
+    compose_hygiene_with_shield_mask,
+    empty_cumulative_forbidden,
+)
 from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
 from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
@@ -105,6 +112,15 @@ def _replay_logprobs_with_prefix_forwards(
     if value_out.value_logits is not None:
         value_logits_out = value_out.value_logits
 
+    hygiene_lookups = build_hygiene_lookups(batch)
+    k = edge_k(cfg.task)
+    cumulative_forbidden = empty_cumulative_forbidden(
+        env_count,
+        num_planets=MAX_PLANETS,
+        max_k=k,
+        buckets=cfg.task.ship_bucket_count,
+    )
+
     def scan_step(carry, step_idx):
         (
             remaining_ships,
@@ -112,6 +128,7 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            cumulative_forbidden,
         ) = carry
 
         source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
@@ -130,17 +147,9 @@ def _replay_logprobs_with_prefix_forwards(
             encoder_out=encoder_out,
         )
         step_active = step_mask[:, step_idx] > 0.0
-        step_bucket_mask = _hygiene_adjusted_step_mask(
-            batch,
-            cfg,
-            ship_bucket_mask=ship_bucket_mask,
-            source_index=source_index,
-            target_slot=target_slot,
-            ship_bucket=ship_bucket,
-            stop_flag=stop_flag,
-            step_mask=step_mask,
-            ship_fraction=ship_fraction,
-            step_idx=step_idx,
+        step_bucket_mask = apply_cumulative_forbidden_to_shield(
+            ship_bucket_mask[:, step_idx],
+            cumulative_forbidden,
         )
         fraction_arg = None
         if continuous and ship_fraction is not None:
@@ -156,8 +165,7 @@ def _replay_logprobs_with_prefix_forwards(
             ship_bucket_mask=ship_bucket_mask,
             remaining_ships=remaining_ships,
             ship_fraction=ship_fraction,
-            batch=batch,
-            step_mask=step_mask,
+            hygiene_bucket_mask=step_bucket_mask,
         )
         _, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
             step_output.source_logits[:, step_idx, :],
@@ -216,6 +224,14 @@ def _replay_logprobs_with_prefix_forwards(
                 & (launched > 0.0)
                 & (stored_bucket > 0)
             )
+        cumulative_forbidden = apply_launch_to_cumulative_forbidden(
+            cumulative_forbidden,
+            batch=batch,
+            lookups=hygiene_lookups,
+            src_row=stored_source,
+            slot=target_slot[:, step_idx],
+            active=launch_valid,
+        )
         remaining_ships = remaining_ships.at[batch_idx, src_rows].set(
             jnp.where(
                 launch_valid,
@@ -230,6 +246,7 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            cumulative_forbidden,
         ), None
 
     (
@@ -239,6 +256,7 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            _cumulative_forbidden,
         ),
         _,
     ) = jax.lax.scan(
@@ -249,6 +267,7 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            cumulative_forbidden,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
@@ -478,23 +497,29 @@ def factored_step_logprob_at_index(
     ship_fraction: jax.Array | None = None,
     batch: TurnBatch | None = None,
     step_mask: jax.Array | None = None,
+    hygiene_bucket_mask: jax.Array | None = None,
 ) -> jax.Array:
     """Log-prob of stored actions at ``step_idx`` under ``step_output`` logits."""
 
-    step_bucket_mask = ship_bucket_mask[:, step_idx]
-    if batch is not None:
-        step_bucket_mask = _hygiene_adjusted_step_mask(
-            batch,
-            cfg,
-            ship_bucket_mask=ship_bucket_mask,
-            source_index=source_index,
-            target_slot=target_slot,
-            ship_bucket=ship_bucket,
-            stop_flag=stop_flag,
-            step_mask=step_mask if step_mask is not None else jnp.ones_like(stop_flag),
-            ship_fraction=ship_fraction,
-            step_idx=step_idx,
-        )
+    if hygiene_bucket_mask is not None:
+        step_bucket_mask = hygiene_bucket_mask
+    else:
+        step_bucket_mask = ship_bucket_mask[:, step_idx]
+        if batch is not None:
+            step_bucket_mask = _hygiene_adjusted_step_mask(
+                batch,
+                cfg,
+                ship_bucket_mask=ship_bucket_mask,
+                source_index=source_index,
+                target_slot=target_slot,
+                ship_bucket=ship_bucket,
+                stop_flag=stop_flag,
+                step_mask=step_mask
+                if step_mask is not None
+                else jnp.ones_like(stop_flag),
+                ship_fraction=ship_fraction,
+                step_idx=step_idx,
+            )
     source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
         step_bucket_mask, remaining_ships
     )

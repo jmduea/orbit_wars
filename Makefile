@@ -28,6 +28,12 @@ test-jax:
 test-jax-parallel:
 	$(XDIST_ENV) $(PYTEST) -m "jax and not slow and not sweep" $(PYTEST_XDIST)
 
+# PERF1 gate: factorized sampler K=5 within 10% of main baseline (isolated process; not under pytest).
+test-launch-hygiene-throughput:
+	env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+		uv run python scripts/benchmark_factorized_sampler.py \
+		--max-moves-k 5 --batch-size 32 --warmup 5 --repeats 20 --assert-max-ms 3.22
+
 # Kaggle-relevant JAX env parity (mechanics + 4p); runs in test-jax tier, not slow.
 test-kaggle-parity:
 	$(PYTEST_CPU) tests/test_jax_env_parity.py tests/test_jax_env.py tests/test_jax_env_dispatch.py -m "jax and not slow"

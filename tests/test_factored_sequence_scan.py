@@ -417,6 +417,55 @@ def test_zero_teacher_forward_mismatches_prefix_at_step_one() -> None:
 
 
 @pytest.mark.jax
+def test_rollout_replay_logprob_parity_tiered_shield() -> None:
+    """Tiered cheap+exact reject must stay consistent with hygiene replay carry."""
+
+    cfg = _train_cfg(
+        task={
+            "trajectory_shield_mode": "tiered",
+            "trajectory_shield_final_validate_selected": True,
+        },
+        model={"max_moves_k": 3},
+    )
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(71), 1), cfg.task)
+    policy = build_planet_graph_transformer_policy(cfg)
+    params = policy.init(jax.random.PRNGKey(72), batch)
+    player_count = jnp.full((1,), cfg.task.player_count, dtype=jnp.int32)
+
+    sample = _sample_shielded_factored_sequence_with_params(
+        jax.random.PRNGKey(73),
+        state.game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=True,
+    )
+    initial_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        step_mask=sample.step_mask,
+        ship_bucket_mask=sample.ship_bucket_mask,
+        ship_fraction=sample.ship_fraction,
+        initial_remaining_ships=initial_ships,
+    )
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.jax
 def test_prefix_replay_logprob_parity_stochastic_multistep() -> None:
     cfg = _train_cfg(
         task={"trajectory_shield_mode": "cheap"},
