@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 import jax.numpy as jnp
+import jax.profiler
+import jax.random
+import jax.tree
 
 import jax
 from src.config import TrainConfig, compose_hydra_train_config
@@ -111,12 +114,21 @@ class TrainingBenchmarkResult:
     samples: int = 0
     env_steps_per_sec: float = 0.0
     samples_per_sec: float = 0.0
+    rollout_collect_seconds_per_update_mean: float | None = None
+    ppo_seconds_per_update_mean: float | None = None
+    host_overhead_seconds_per_update_mean: float | None = None
 
 
 def _scalar_metric(metrics: dict, key: str) -> float | None:
     if key not in metrics:
         return None
     return float(jax.device_get(metrics[key]))
+
+
+def _json_number(value: object) -> float:
+    if isinstance(value, int | float):
+        return float(value)
+    raise TypeError(f"expected JSON number, got {type(value).__name__}")
 
 
 def _survival_time_mean(rollout_metrics: dict) -> float | None:
@@ -171,6 +183,8 @@ def run_training_benchmark(
     warmup: int,
     updates: int,
     snapshot_updates: frozenset[int] | set[int] = frozenset(),
+    detailed_timing: bool = False,
+    profile_dir: Path | None = None,
 ) -> TrainingBenchmarkResult:
     """Run collect + PPO on the production rollout-group path."""
 
@@ -194,6 +208,9 @@ def run_training_benchmark(
     update_fn = jax.jit(lambda ts, tr: ppo_update_jax(ts, policy, tr, cfg))
 
     timings: list[float] = []
+    rollout_timings: list[float] = []
+    ppo_timings: list[float] = []
+    overhead_timings: list[float] = []
     update_sums = {key: 0.0 for key in UPDATE_METRIC_KEYS}
     rollout_sums = {key: 0.0 for key in ROLLOUT_METRIC_KEYS}
     env_steps_total = 0.0
@@ -202,93 +219,133 @@ def run_training_benchmark(
     compile_seconds_to_update_3: float | None = None
     snapshot_targets = set(snapshot_updates)
     snapshots: list[TrainingBenchmarkSnapshot] = []
+    profile_active = False
 
-    for iteration in range(warmup + updates):
-        update = iteration + 1
-        t0 = time.perf_counter()
-        stage_view = curriculum.stage_view(
-            update,
-            snapshot_ids=historical_pool.snapshot_ids,
-            snapshot_valid_mask=historical_pool.valid_mask,
-            snapshot_updates=historical_pool.snapshot_updates,
-        )
-        active_indices = active_group_indices(
-            rollout_groups,
-            curriculum.current_format_weights(),
-            update=update,
-            rotate_format_rollouts=cfg.training.rotate_format_rollouts,
-        )
-        key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
-        transitions_by_group = []
-        rollout_metrics_by_group = []
-        next_groups = []
-        for group_idx, rollout_key in zip(active_indices, rollout_keys, strict=True):
-            group = rollout_groups[group_idx]
-            _, env_state, turn_batch, transitions, rollout_metrics = group.collect_fn(
-                rollout_key,
-                group.env_state,
-                group.turn_batch,
-                train_state,
-                stage_view,
-                historical_pool.params,
-                jnp.asarray(update, dtype=jnp.int32),
-            )
-            next_groups.append(
-                replace_rollout_group_state(group, env_state, turn_batch)
-            )
-            transitions_by_group.append(transitions)
-            rollout_metrics_by_group.append(rollout_metrics)
-        merged_groups = list(rollout_groups)
-        for group_idx, updated_group in zip(active_indices, next_groups, strict=True):
-            merged_groups[group_idx] = updated_group
-        rollout_groups = merged_groups
+    try:
+        for iteration in range(warmup + updates):
+            update = iteration + 1
+            if profile_dir is not None and iteration == warmup:
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                jax.profiler.start_trace(str(profile_dir))
+                profile_active = True
 
-        transitions = concatenate_transition_batches(transitions_by_group)
-        rollout_metrics = sum_metric_dicts(rollout_metrics_by_group)
-        metrics_accum = None
-        for _ in range(cfg.training.epochs):
-            train_state, update_metrics = update_fn(train_state, transitions)
-            metrics_accum = (
-                update_metrics
-                if metrics_accum is None
-                else jax.tree.map(jnp.add, metrics_accum, update_metrics)
-            )
-        assert metrics_accum is not None
-        jax.block_until_ready(metrics_accum["total_loss"])
-        elapsed = time.perf_counter() - t0
-        if update == 3:
-            compile_seconds_to_update_3 = time.perf_counter() - run_started
-        if iteration >= warmup:
-            measured += 1
-            timings.append(elapsed)
-            for metric_key in UPDATE_METRIC_KEYS:
-                if metric_key in metrics_accum:
-                    update_sums[metric_key] += float(
-                        jax.device_get(metrics_accum[metric_key])
-                    )
-            for metric_key in ROLLOUT_METRIC_KEYS:
-                if metric_key in rollout_metrics:
-                    rollout_sums[metric_key] += float(
-                        jax.device_get(rollout_metrics[metric_key])
-                    )
-            if "env_steps" in rollout_metrics:
-                env_steps_total += float(jax.device_get(rollout_metrics["env_steps"]))
-            if "samples" in rollout_metrics:
-                samples_total += float(jax.device_get(rollout_metrics["samples"]))
-        if update in snapshot_targets:
-            epoch_count = max(int(cfg.training.epochs), 1)
-            avg_update_metrics = jax.tree.map(
-                lambda value: value / epoch_count,
-                metrics_accum,
-            )
-            snapshots.append(
-                _update_snapshot(
-                    update=update,
-                    update_metrics=avg_update_metrics,
-                    rollout_metrics=rollout_metrics,
-                    curriculum=curriculum,
+            t0 = time.perf_counter()
+            with jax.profiler.TraceAnnotation("ow_benchmark_update"):
+                stage_view = curriculum.stage_view(
+                    update,
+                    snapshot_ids=historical_pool.snapshot_ids,
+                    snapshot_valid_mask=historical_pool.valid_mask,
+                    snapshot_updates=historical_pool.snapshot_updates,
                 )
-            )
+                active_indices = active_group_indices(
+                    rollout_groups,
+                    curriculum.current_format_weights(),
+                    update=update,
+                    rotate_format_rollouts=cfg.training.rotate_format_rollouts,
+                )
+                key, *rollout_keys = jax.random.split(key, len(active_indices) + 1)
+                rollout_t0 = time.perf_counter()
+                transitions_by_group = []
+                rollout_metrics_by_group = []
+                next_groups = []
+                with jax.profiler.TraceAnnotation("ow_rollout_collect"):
+                    for group_idx, rollout_key in zip(
+                        active_indices, rollout_keys, strict=True
+                    ):
+                        group = rollout_groups[group_idx]
+                        (
+                            _,
+                            env_state,
+                            turn_batch,
+                            transitions,
+                            rollout_metrics,
+                        ) = group.collect_fn(
+                            rollout_key,
+                            group.env_state,
+                            group.turn_batch,
+                            train_state,
+                            stage_view,
+                            historical_pool.params,
+                            jnp.asarray(update, dtype=jnp.int32),
+                        )
+                        next_groups.append(
+                            replace_rollout_group_state(group, env_state, turn_batch)
+                        )
+                        transitions_by_group.append(transitions)
+                        rollout_metrics_by_group.append(rollout_metrics)
+                    merged_groups = list(rollout_groups)
+                    for group_idx, updated_group in zip(
+                        active_indices, next_groups, strict=True
+                    ):
+                        merged_groups[group_idx] = updated_group
+                    rollout_groups = merged_groups
+
+                    transitions = concatenate_transition_batches(transitions_by_group)
+                    rollout_metrics = sum_metric_dicts(rollout_metrics_by_group)
+                    if detailed_timing:
+                        jax.block_until_ready(transitions.log_prob)
+                rollout_elapsed = time.perf_counter() - rollout_t0
+
+                ppo_t0 = time.perf_counter()
+                metrics_accum = None
+                with jax.profiler.TraceAnnotation("ow_ppo_update_epochs"):
+                    for _ in range(cfg.training.epochs):
+                        train_state, update_metrics = update_fn(
+                            train_state, transitions
+                        )
+                        metrics_accum = (
+                            update_metrics
+                            if metrics_accum is None
+                            else jax.tree.map(jnp.add, metrics_accum, update_metrics)
+                        )
+                assert metrics_accum is not None
+                jax.block_until_ready(metrics_accum["total_loss"])
+                ppo_elapsed = time.perf_counter() - ppo_t0
+            elapsed = time.perf_counter() - t0
+            if update == 3:
+                compile_seconds_to_update_3 = time.perf_counter() - run_started
+            if iteration >= warmup:
+                measured += 1
+                timings.append(elapsed)
+                if detailed_timing:
+                    rollout_timings.append(rollout_elapsed)
+                    ppo_timings.append(ppo_elapsed)
+                    overhead_timings.append(
+                        max(elapsed - rollout_elapsed - ppo_elapsed, 0.0)
+                    )
+                for metric_key in UPDATE_METRIC_KEYS:
+                    if metric_key in metrics_accum:
+                        update_sums[metric_key] += float(
+                            jax.device_get(metrics_accum[metric_key])
+                        )
+                for metric_key in ROLLOUT_METRIC_KEYS:
+                    if metric_key in rollout_metrics:
+                        rollout_sums[metric_key] += float(
+                            jax.device_get(rollout_metrics[metric_key])
+                        )
+                if "env_steps" in rollout_metrics:
+                    env_steps_total += float(
+                        jax.device_get(rollout_metrics["env_steps"])
+                    )
+                if "samples" in rollout_metrics:
+                    samples_total += float(jax.device_get(rollout_metrics["samples"]))
+            if update in snapshot_targets:
+                epoch_count = max(int(cfg.training.epochs), 1)
+                avg_update_metrics = jax.tree.map(
+                    lambda value: value / epoch_count,
+                    metrics_accum,
+                )
+                snapshots.append(
+                    _update_snapshot(
+                        update=update,
+                        update_metrics=avg_update_metrics,
+                        rollout_metrics=rollout_metrics,
+                        curriculum=curriculum,
+                    )
+                )
+    finally:
+        if profile_active:
+            jax.profiler.stop_trace()
 
     total_seconds = sum(timings)
     update_means = {
@@ -321,6 +378,15 @@ def run_training_benchmark(
         samples=samples,
         env_steps_per_sec=env_steps / max(total_seconds, 1e-9),
         samples_per_sec=samples / max(total_seconds, 1e-9),
+        rollout_collect_seconds_per_update_mean=(
+            statistics.fmean(rollout_timings) if rollout_timings else None
+        ),
+        ppo_seconds_per_update_mean=(
+            statistics.fmean(ppo_timings) if ppo_timings else None
+        ),
+        host_overhead_seconds_per_update_mean=(
+            statistics.fmean(overhead_timings) if overhead_timings else None
+        ),
     )
 
 
@@ -345,6 +411,16 @@ def training_benchmark_payload(result: TrainingBenchmarkResult) -> dict[str, obj
         "env_steps_per_sec": result.env_steps_per_sec,
         "samples_per_sec": result.samples_per_sec,
     }
+    if result.rollout_collect_seconds_per_update_mean is not None:
+        payload["rollout_collect_seconds_per_update_mean"] = (
+            result.rollout_collect_seconds_per_update_mean
+        )
+    if result.ppo_seconds_per_update_mean is not None:
+        payload["ppo_seconds_per_update_mean"] = result.ppo_seconds_per_update_mean
+    if result.host_overhead_seconds_per_update_mean is not None:
+        payload["host_overhead_seconds_per_update_mean"] = (
+            result.host_overhead_seconds_per_update_mean
+        )
     payload.update(result.update_metric_means)
     payload.update(result.rollout_metric_means)
     if result.snapshots:
@@ -397,7 +473,7 @@ def default_benchmark_updates(*, preset: str | None) -> int:
 
 def e2e_throughput_metric_values(payload: Mapping[str, object]) -> dict[str, float]:
     return {
-        key: float(payload[key])  # type: ignore[arg-type]
+        key: _json_number(payload[key])
         for key in E2E_THROUGHPUT_METRICS
         if key in payload and payload[key] is not None
     }
@@ -409,7 +485,7 @@ def aggregate_e2e_run_payloads(
     aggregate: dict[str, dict[str, float]] = {}
     for metric in E2E_THROUGHPUT_METRICS:
         values = [
-            float(run[metric])
+            _json_number(run[metric])
             for run in runs
             if metric in run and run[metric] is not None
         ]
@@ -475,9 +551,7 @@ def load_e2e_baseline(path: Path) -> dict[str, object]:
         raise ValueError(f"baseline artifact must be a JSON object: {path}")
     errors = validate_e2e_baseline_artifact(baseline)
     if errors:
-        raise ValueError(
-            f"invalid baseline artifact {path}: {'; '.join(errors)}"
-        )
+        raise ValueError(f"invalid baseline artifact {path}: {'; '.join(errors)}")
     return baseline
 
 

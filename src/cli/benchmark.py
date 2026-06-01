@@ -120,6 +120,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Per-update metric snapshots at these global update indices.",
     )
+    training.add_argument(
+        "--detailed-timing",
+        action="store_true",
+        help=(
+            "Synchronize at rollout/PPO boundaries and emit timing buckets. "
+            "Use for profiling only; it adds extra barriers."
+        ),
+    )
+    training.add_argument(
+        "--profile-dir",
+        type=Path,
+        default=None,
+        help="Write a JAX trace with named benchmark regions to this directory.",
+    )
 
     sanity = subparsers.add_parser(
         "sanity",
@@ -343,6 +357,8 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
             warmup=args.warmup,
             updates=updates,
             snapshot_updates=frozenset(args.snapshot_updates),
+            detailed_timing=bool(args.detailed_timing),
+            profile_dir=args.profile_dir,
         )
         payload = training_benchmark_payload(result)
         payload.update(
@@ -352,8 +368,14 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
                 "jax_version": jax.__version__,
                 "format": format_profile_name(overrides),
                 "rollout_groups": [dict(group) for group in group_specs],
-                "rollout_microbatch_envs": int(cfg.training.rollout_microbatch_envs),
-                "gate": E2E_THROUGHPUT_GATE if args.preset == "primary" else "stability",
+                "rollout_microbatch_envs": (
+                    int(cfg.training.rollout_microbatch_envs)
+                    if cfg.training.rollout_microbatch_envs is not None
+                    else None
+                ),
+                "gate": E2E_THROUGHPUT_GATE
+                if args.preset == "primary"
+                else "stability",
             }
         )
         run_payloads.append(payload)
@@ -519,7 +541,12 @@ def _run_held_out_eval(args: argparse.Namespace) -> int:
         else "random_min_win_rate"
     )
     min_win_rate = float(win_proof.get(min_win_rate_key, 0.45))
-    games_per_pair = int(win_proof.get("games_per_pair", args.games_per_pair))
+    raw_games_per_pair = win_proof.get("games_per_pair")
+    games_per_pair = (
+        int(raw_games_per_pair)
+        if isinstance(raw_games_per_pair, int | float | str)
+        else int(args.games_per_pair)
+    )
     seeds = str(win_proof.get("seeds", args.seeds))
 
     output_dir = (
