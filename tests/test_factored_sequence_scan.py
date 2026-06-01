@@ -308,6 +308,8 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
             ship_bucket_mask=sample.ship_bucket_mask,
             remaining_ships=ships_before,
             ship_fraction=sample.ship_fraction,
+            batch=batch,
+            step_mask=sample.step_mask,
         )
         np.testing.assert_allclose(
             np.asarray(replay.log_prob[:, step_idx]),

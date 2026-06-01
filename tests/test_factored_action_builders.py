@@ -6,7 +6,10 @@ import numpy as np
 import jax
 from src.config import TaskConfig, TrainConfig
 from src.features.registry import edge_k
-from src.jax.action_codec import FactoredPolicyOutput, factored_action_log_prob_and_entropy
+from src.jax.action_codec import (
+    FactoredPolicyOutput,
+    factored_action_log_prob_and_entropy,
+)
 from src.jax.env import batched_reset
 from src.opponents.jax_actions.builders import build_action_from_factored_batch
 
@@ -15,6 +18,33 @@ def _task_cfg(**kwargs) -> TaskConfig:
     base = dict(candidate_count=4, ship_bucket_count=4, max_fleets=8)
     base.update(kwargs)
     return TaskConfig(**base)
+
+
+def test_build_action_merges_identical_launches() -> None:
+    cfg = TrainConfig()
+    cfg.task = _task_cfg()
+    cfg.model.max_moves_k = 2
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(7), 1), cfg.task)
+    game = state.game
+    src_row = int(np.asarray(jnp.argmax(batch.planet_mask[0].astype(jnp.int32))))
+    slot = 0
+    src_id = int(np.asarray(batch.edge_src_ids[0, src_row]))
+    bucket = 1
+
+    action = build_action_from_factored_batch(
+        game,
+        batch,
+        source_index=jnp.array([[src_row, src_row]], dtype=jnp.int32),
+        target_slot=jnp.array([[slot, slot]], dtype=jnp.int32),
+        ship_bucket=jnp.array([[bucket, bucket]], dtype=jnp.int32),
+        stop_flag=jnp.zeros((1, 2), dtype=jnp.int32),
+        step_mask=jnp.ones((1, 2), dtype=jnp.float32),
+        cfg=cfg,
+    )
+    valid = np.asarray(action.valid[0])
+    assert int(valid.sum()) == 1
+    assert int(np.asarray(action.source_id[0, 0])) == src_id
+    assert float(np.asarray(action.ships[0, 0])) > 0.0
 
 
 def test_build_action_from_factored_batch_stop_emits_no_valid_launches() -> None:
