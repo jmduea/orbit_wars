@@ -31,6 +31,7 @@ def run_optional_job_worker(
     idle_exit_seconds: float | None = None,
     recover_running: bool = False,
     retry_failed: bool = False,
+    verbose: bool = False,
 ) -> int:
     """Poll ``queue_dir`` and process optional jobs until idle or ``once`` completes."""
 
@@ -48,11 +49,21 @@ def run_optional_job_worker(
             job_file = Path(str(job["job_file"]))
             if result_root is not None:
                 job["_trusted_result_root"] = str(result_root)
+            kind = job.get("kind", "unknown")
+            if verbose:
+                print(f"artifact_job_start kind={kind} file={job_file.name}")
             try:
                 write_status(job_file, "running")
                 process_job(job)
+                if verbose:
+                    print(f"artifact_job_done kind={kind} file={job_file.name} status=completed")
             except Exception as exc:
                 write_status(job_file, "failed", error=str(exc))
+                if verbose:
+                    print(
+                        f"artifact_job_failed kind={kind} file={job_file.name} "
+                        f"error={exc}"
+                    )
                 return 1
         if once:
             return 0

@@ -1,11 +1,13 @@
 # Orbit Wars Agent Guide
 
-Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architecture depth and `docs/CURSOR.md` for plugin setup.
+Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architecture depth, `docs/AGENT_CAPABILITIES.md` for task prompts, and `docs/CURSOR.md` for plugin setup.
 
 ## Commands
 
 ```bash
 uv sync --group dev
+make help                                         # Makefile targets + agent-context
+make agent-context                              # JSON: preflight, roadmap, recent runs
 make test                                         # default verification (= test-fast)
 make test-fast                                    # alias for daily CPU loop
 make preflight-calibrate                          # refresh thresholds from preflight_calibrate_* campaigns
@@ -16,7 +18,10 @@ uv run ow train print_resolved_config=true
 uv run ow train kaggle
 uv run ow eval tournament --checkpoint ... --campaign my_campaign
 uv run ow eval package --checkpoint ... --validate-docker
-uv run ow eval worker --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow runs list
+uv run ow runs show --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow eval status --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow eval worker --run outputs/campaigns/<c>/runs/<run_id> [--verbose]
 uv run ow eval submit --checkpoint outputs/.../jax_ckpt_last.pkl
 uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + tournament async
 ```

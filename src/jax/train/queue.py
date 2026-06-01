@@ -144,3 +144,6 @@ def start_artifact_worker_if_needed(
         env=artifact_worker_subprocess_env(),
         start_new_session=True,
     )
+    print(
+        f"artifact_worker_started stdout_log={stdout_path} stderr_log={stderr_path}"
+    )
