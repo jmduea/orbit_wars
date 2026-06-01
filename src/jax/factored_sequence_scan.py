@@ -1,9 +1,9 @@
 """Shared stepwise factorized sequence scan for rollout sampling and PPO replay.
 
-Rollout and PPO must use the same prefix-growing ``policy.apply`` loop so stored
-actions receive logits identical to those seen during sampling. PPO replay uses
-one teacher-forced forward with zeroed sequence inputs (matching per-step prefix
-semantics) plus a lightweight mask scan for log-probs.
+Rollout sampling and PPO replay both score sub-steps with the same shield-prefix
+``policy.apply`` semantics: teacher columns ``0..step_idx-1`` committed, column
+``step_idx`` zeroed (see :func:`build_shield_prefix_teacher_sequences`). A single
+zeroed-sequence forward does **not** match multi-step prefixes.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from src.jax.action_codec import (
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.features import TurnBatch, ship_feature_scale
 from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
+from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
 
 class FactoredSequenceLogProbResult(NamedTuple):
@@ -51,10 +52,13 @@ def owned_planet_ships_from_turn_batch(
     return jnp.where(owned, ships, 0.0)
 
 
-def _replay_masks_and_logprobs_from_output(
-    step_output: FactoredPolicyOutput,
+def _replay_logprobs_with_prefix_forwards(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
     cfg: TrainConfig,
     *,
+    player_count: jax.Array,
     source_index: jax.Array,
     target_slot: jax.Array,
     ship_bucket: jax.Array,
@@ -63,9 +67,9 @@ def _replay_masks_and_logprobs_from_output(
     ship_bucket_mask: jax.Array,
     ship_fraction: jax.Array | None,
     initial_remaining_ships: jax.Array | None,
-    batch: TurnBatch,
+    decoder_hidden: jax.Array | None = None,
 ) -> FactoredSequenceLogProbResult:
-    """Compute per-step log-probs from one full-sequence policy forward."""
+    """Replay log-probs with one shield-prefix ``policy.apply`` per sub-step."""
 
     from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
@@ -82,6 +86,13 @@ def _replay_masks_and_logprobs_from_output(
     entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     stop_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     move_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    value_out = jnp.zeros((env_count,), dtype=jnp.float32)
+    use_distributional = cfg.model.value_head.strip().lower() == "distributional"
+    value_logits_out: jax.Array | None = (
+        jnp.zeros((env_count, cfg.model.value_bins), dtype=jnp.float32)
+        if use_distributional
+        else None
+    )
 
     def scan_step(carry, step_idx):
         (
@@ -90,32 +101,54 @@ def _replay_masks_and_logprobs_from_output(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            value_out,
+            value_logits_out,
         ) = carry
 
+        source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
+            source_index, target_slot, step_idx
+        )
+        step_output = forward_factored_policy(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_sequence=source_prefix,
+            target_slot_sequence=target_prefix,
+            decoder_hidden=decoder_hidden,
+            deterministic=True,
+        )
         step_active = step_mask[:, step_idx] > 0.0
         step_bucket_mask = ship_bucket_mask[:, step_idx]
-        source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
-            step_bucket_mask, remaining_ships
-        )
-        stored_stop = stop_flag[:, step_idx]
-        stored_source = source_index[:, step_idx]
-        stored_target = target_slot[:, step_idx]
-        stored_bucket = ship_bucket[:, step_idx]
         fraction_arg = None
         if continuous and ship_fraction is not None:
             fraction_arg = ship_fraction[:, step_idx]
-
-        step_lp, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
+        step_lp = factored_step_logprob_at_index(
+            step_output,
+            cfg,
+            step_idx,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            ship_bucket_mask=ship_bucket_mask,
+            remaining_ships=remaining_ships,
+            ship_fraction=ship_fraction,
+        )
+        _, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
             step_output.source_logits[:, step_idx, :],
             step_output.target_logits[:, step_idx, :],
             step_output.stop_logits[:, step_idx],
             step_output.ship_logits[:, step_idx, :, :],
-            source_mask,
+            jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
+                step_bucket_mask, remaining_ships
+            ),
             step_bucket_mask,
-            stored_source,
-            stored_target,
-            stored_bucket,
-            stored_stop.astype(jnp.float32),
+            source_index[:, step_idx],
+            target_slot[:, step_idx],
+            ship_bucket[:, step_idx],
+            stop_flag[:, step_idx],
             ship_fraction=fraction_arg,
         )
         active_f = step_active.astype(jnp.float32)
@@ -129,9 +162,12 @@ def _replay_masks_and_logprobs_from_output(
         stop_entropy_out = stop_entropy_out.at[:, step_idx].set(stop_ent)
         move_entropy_out = move_entropy_out.at[:, step_idx].set(move_ent)
 
+        stored_stop = stop_flag[:, step_idx]
+        stored_source = source_index[:, step_idx]
+        stored_bucket = ship_bucket[:, step_idx]
         stop_bool = stored_stop.astype(bool) & step_active
-        src_rows = stored_source
         batch_idx = jnp.arange(env_count, dtype=jnp.int32)
+        src_rows = stored_source
         current_source_ships = remaining_ships[batch_idx, src_rows]
         if continuous and fraction_arg is not None:
             launched = jax.vmap(
@@ -164,6 +200,11 @@ def _replay_masks_and_logprobs_from_output(
                 current_source_ships,
             )
         )
+        value_out = jnp.where(step_idx == 0, step_output.value, value_out)
+        if step_output.value_logits is not None:
+            value_logits_out = jnp.where(
+                step_idx == 0, step_output.value_logits, value_logits_out
+            )
 
         return (
             remaining_ships,
@@ -171,6 +212,8 @@ def _replay_masks_and_logprobs_from_output(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            value_out,
+            value_logits_out,
         ), None
 
     (
@@ -180,6 +223,8 @@ def _replay_masks_and_logprobs_from_output(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            value_out,
+            value_logits_out,
         ),
         _,
     ) = jax.lax.scan(
@@ -190,6 +235,8 @@ def _replay_masks_and_logprobs_from_output(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            value_out,
+            value_logits_out,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
@@ -198,9 +245,294 @@ def _replay_masks_and_logprobs_from_output(
         entropy=entropy_out,
         stop_entropy=stop_entropy_out,
         move_entropy=move_entropy_out,
-        value=step_output.value,
-        value_logits=step_output.value_logits,
+        value=value_out,
+        value_logits=value_logits_out,
     )
+
+
+def forward_factored_policy(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    player_count: jax.Array,
+    source_sequence: jax.Array,
+    target_slot_sequence: jax.Array,
+    decoder_hidden: jax.Array | None = None,
+    deterministic: bool = True,
+) -> FactoredPolicyOutput:
+    """Run one factorized ``policy.apply`` with explicit teacher prefix sequences."""
+
+    apply_kwargs = {
+        "player_count": player_count,
+        "source_sequence": source_sequence,
+        "target_slot_sequence": target_slot_sequence,
+        "deterministic": deterministic,
+    }
+    if decoder_carry_enabled(cfg) and decoder_hidden is not None:
+        apply_kwargs["decoder_hidden"] = decoder_hidden
+    return policy.apply(params, batch, **apply_kwargs)
+
+
+def forward_factored_replay_policy(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    player_count: jax.Array,
+    sequence_k: int,
+    decoder_hidden: jax.Array | None = None,
+) -> FactoredPolicyOutput:
+    """Match the zeroed teacher sequences used by :func:`replay_factored_sequence_logprob`."""
+
+    zeros_source = jnp.zeros(
+        (batch.planet_features.shape[0], sequence_k), dtype=jnp.int32
+    )
+    zeros_target = jnp.zeros_like(zeros_source)
+    return forward_factored_policy(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        source_sequence=zeros_source,
+        target_slot_sequence=zeros_target,
+        decoder_hidden=decoder_hidden,
+        deterministic=True,
+    )
+
+
+def build_shield_prefix_teacher_sequences(
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    step_idx: int,
+) -> tuple[jax.Array, jax.Array]:
+    """Teacher sequences matching shield scan ``policy.apply`` at ``step_idx``."""
+
+    step_cols = jnp.arange(source_index.shape[1], dtype=jnp.int32)
+    committed = step_cols < jnp.asarray(step_idx, dtype=jnp.int32)
+    source_prefix = jnp.where(committed[None, :], source_index, 0)
+    target_prefix = jnp.where(committed[None, :], target_slot, 0)
+    return source_prefix, target_prefix
+
+
+def remaining_ships_before_step(
+    cfg: TrainConfig,
+    *,
+    initial_remaining_ships: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    step_mask: jax.Array,
+    ship_fraction: jax.Array | None,
+    step_idx: int,
+) -> jax.Array:
+    """Reconstruct garrisons before sub-step ``step_idx`` (replay scan semantics)."""
+
+    from src.jax.ship_action import is_continuous_ship_mode
+
+    remaining = initial_remaining_ships.astype(jnp.float32)
+    env_count = source_index.shape[0]
+    batch_idx = jnp.arange(env_count, dtype=jnp.int32)
+    continuous = is_continuous_ship_mode(cfg)
+
+    def body(carry, prior_step):
+        remaining_ships = carry
+        step_active = step_mask[:, prior_step] > 0.0
+        stored_stop = stop_flag[:, prior_step]
+        stored_source = source_index[:, prior_step]
+        stored_bucket = ship_bucket[:, prior_step]
+        stop_bool = stored_stop.astype(bool) & step_active
+        src_rows = stored_source
+        current_source_ships = remaining_ships[batch_idx, src_rows]
+        if continuous and ship_fraction is not None:
+            fraction_arg = ship_fraction[:, prior_step]
+            launched = jax.vmap(
+                lambda ships, bucket, fraction: ship_count_for_action(
+                    ships, bucket, fraction, cfg
+                )
+            )(current_source_ships, stored_bucket, fraction_arg)
+            launch_valid = (
+                step_active
+                & jnp.logical_not(stop_bool)
+                & (launched > 0.0)
+                & (fraction_arg > 0.0)
+            )
+        else:
+            launched = jax.vmap(
+                lambda ships, bucket: ship_count_for_bucket_jax(
+                    ships, bucket, cfg.task.ship_bucket_count
+                )
+            )(current_source_ships, stored_bucket)
+            launch_valid = (
+                step_active
+                & jnp.logical_not(stop_bool)
+                & (launched > 0.0)
+                & (stored_bucket > 0)
+            )
+        return remaining_ships.at[batch_idx, src_rows].set(
+            jnp.where(
+                launch_valid,
+                jnp.maximum(current_source_ships - launched, 0.0),
+                current_source_ships,
+            )
+        ), None
+
+    if step_idx <= 0:
+        return remaining
+    return jax.lax.fori_loop(0, step_idx, lambda i, r: body(r, i)[0], remaining)
+
+
+def factored_step_logprob_at_index(
+    step_output: FactoredPolicyOutput,
+    cfg: TrainConfig,
+    step_idx: int,
+    *,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    ship_bucket_mask: jax.Array,
+    remaining_ships: jax.Array,
+    ship_fraction: jax.Array | None = None,
+) -> jax.Array:
+    """Log-prob of stored actions at ``step_idx`` under ``step_output`` logits."""
+
+    source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
+        ship_bucket_mask[:, step_idx], remaining_ships
+    )
+    fraction_arg = None
+    if ship_fraction is not None:
+        fraction_arg = ship_fraction[:, step_idx]
+    step_lp, _, _, _ = _factored_step_log_prob_entropy(
+        step_output.source_logits[:, step_idx, :],
+        step_output.target_logits[:, step_idx, :],
+        step_output.stop_logits[:, step_idx],
+        step_output.ship_logits[:, step_idx, :, :],
+        source_mask,
+        ship_bucket_mask[:, step_idx],
+        source_index[:, step_idx],
+        target_slot[:, step_idx],
+        ship_bucket[:, step_idx],
+        stop_flag[:, step_idx],
+        ship_fraction=fraction_arg,
+    )
+    return step_lp
+
+
+def prefix_replay_step_logprob_deltas(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    player_count: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    step_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    ship_fraction: jax.Array | None = None,
+    decoder_hidden: jax.Array | None = None,
+    initial_remaining_ships: jax.Array | None = None,
+) -> dict[str, jax.Array]:
+    """Per-step |log p_prefix - log p_replay| for active sub-steps."""
+
+    if initial_remaining_ships is not None:
+        initial_ships = initial_remaining_ships.astype(jnp.float32)
+    else:
+        initial_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
+
+    sequence_k = source_index.shape[1]
+    replay_out = forward_factored_replay_policy(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=player_count,
+        sequence_k=sequence_k,
+        decoder_hidden=decoder_hidden,
+    )
+
+    deltas = []
+    active_flags = []
+    for step_idx in range(sequence_k):
+        active = step_mask[:, step_idx] > 0.0
+        if not bool(jnp.any(active)):
+            continue
+        ships_before = remaining_ships_before_step(
+            cfg,
+            initial_remaining_ships=initial_ships,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            step_mask=step_mask,
+            ship_fraction=ship_fraction,
+            step_idx=step_idx,
+        )
+        source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
+            source_index, target_slot, step_idx
+        )
+        prefix_out = forward_factored_policy(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_sequence=source_prefix,
+            target_slot_sequence=target_prefix,
+            decoder_hidden=decoder_hidden,
+            deterministic=True,
+        )
+        lp_prefix = factored_step_logprob_at_index(
+            prefix_out,
+            cfg,
+            step_idx,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            ship_bucket_mask=ship_bucket_mask,
+            remaining_ships=ships_before,
+            ship_fraction=ship_fraction,
+        )
+        lp_replay = factored_step_logprob_at_index(
+            replay_out,
+            cfg,
+            step_idx,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            ship_bucket_mask=ship_bucket_mask,
+            remaining_ships=ships_before,
+            ship_fraction=ship_fraction,
+        )
+        deltas.append(jnp.abs(lp_prefix - lp_replay))
+        active_flags.append(active.astype(jnp.float32))
+
+    if not deltas:
+        zero = jnp.zeros((source_index.shape[0],), dtype=jnp.float32)
+        return {
+            "delta_abs": zero,
+            "delta_abs_max": jnp.array(0.0, dtype=jnp.float32),
+            "delta_abs_mean_active": jnp.array(0.0, dtype=jnp.float32),
+        }
+
+    stacked = jnp.stack(deltas, axis=1)
+    mask = jnp.stack(active_flags, axis=1)
+    masked = stacked * mask
+    denom = jnp.maximum(mask.sum(), 1.0)
+    return {
+        "delta_abs": stacked,
+        "delta_abs_max": jnp.max(masked),
+        "delta_abs_mean_active": masked.sum() / denom,
+    }
 
 
 def replay_factored_sequence_logprob(
@@ -222,21 +554,12 @@ def replay_factored_sequence_logprob(
 ) -> FactoredSequenceLogProbResult:
     """Replay stored factorized actions with rollout-matching prefix decoding."""
 
-    carry_enabled = decoder_carry_enabled(cfg)
-    # Zero teacher sequences match per-step prefix replay: only column ``step_idx``
-    # is read during decode, and it is zero before the step is committed.
-    apply_kwargs = {
-        "player_count": player_count,
-        "source_sequence": jnp.zeros_like(source_index),
-        "target_slot_sequence": jnp.zeros_like(target_slot),
-        "deterministic": True,
-    }
-    if carry_enabled and decoder_hidden is not None:
-        apply_kwargs["decoder_hidden"] = decoder_hidden
-    step_output = policy.apply(params, batch, **apply_kwargs)
-    return _replay_masks_and_logprobs_from_output(
-        step_output,
+    return _replay_logprobs_with_prefix_forwards(
+        params,
+        policy,
+        batch,
         cfg,
+        player_count=player_count,
         source_index=source_index,
         target_slot=target_slot,
         ship_bucket=ship_bucket,
@@ -245,7 +568,7 @@ def replay_factored_sequence_logprob(
         ship_bucket_mask=ship_bucket_mask,
         ship_fraction=ship_fraction,
         initial_remaining_ships=initial_remaining_ships,
-        batch=batch,
+        decoder_hidden=decoder_hidden,
     )
 
 
