@@ -12,7 +12,6 @@ from typing import Literal
 
 from src.jax.preflight_calibration import (
     find_latest_checkpoint,
-    latest_run_dir,
     read_jsonl_records,
     run_ow_train,
 )
@@ -38,6 +37,7 @@ SEED_SCHED_TRAIN_BASE: tuple[str, ...] = (
     "telemetry.wandb.enabled=false",
     "artifacts.artifact_pipeline.enabled=false",
     "artifacts.replay.enabled=false",
+    "training.log_every=1",
 )
 
 SEED_SCHED_CAMPAIGN_RE = re.compile(
@@ -327,6 +327,24 @@ def analyze_seed_sched_run(
     )
 
 
+def latest_completed_run_dir(*, campaign: str, output_root: Path) -> Path | None:
+    """Return the newest run directory that has a non-empty JAX training JSONL."""
+
+    runs_root = output_root / "campaigns" / campaign / "runs"
+    if not runs_root.is_dir():
+        return None
+    completed: list[Path] = []
+    for run_dir in runs_root.iterdir():
+        if not run_dir.is_dir():
+            continue
+        logs = sorted(run_dir.glob("logs/*_jax.jsonl"))
+        if logs and logs[-1].stat().st_size > 0:
+            completed.append(run_dir)
+    if not completed:
+        return None
+    return max(completed, key=lambda path: path.stat().st_mtime)
+
+
 def discover_seed_sched_runs(
     output_root: Path, *, total_updates: int, train_seed: int
 ) -> list[tuple[OpponentProfile, int, Path]]:
@@ -344,10 +362,12 @@ def discover_seed_sched_runs(
         if int(updates_text) != int(total_updates):
             continue
         try:
-            run_dir = latest_run_dir(
+            run_dir = latest_completed_run_dir(
                 campaign=campaign_dir.name, output_root=output_root
             )
         except FileNotFoundError:
+            run_dir = None
+        if run_dir is None:
             continue
         discovered.append((opponent, int(reseed_text), run_dir))  # type: ignore[arg-type]
     return discovered
@@ -362,22 +382,40 @@ def run_seed_scheduler_sweep(
     repo_root: Path,
     dry_run: bool,
 ) -> None:
-    for opponent in opponents:
-        for reseed_interval in reseed_intervals:
-            campaign = seed_sched_campaign(
-                opponent,
-                reseed_interval=reseed_interval,
-                total_updates=total_updates,
-            )
-            overrides = [
-                *SEED_SCHED_TRAIN_BASE,
-                f"opponents={opponent}",
-                f"training.total_updates={total_updates}",
-                f"training.reseed_every_updates={reseed_interval}",
-                f"output.campaign={campaign}",
-                f"output.root={output_root}",
-            ]
-            run_ow_train(overrides, repo_root=repo_root, dry_run=dry_run)
+    arms = [
+        (opponent, reseed_interval)
+        for opponent in opponents
+        for reseed_interval in reseed_intervals
+    ]
+    print(
+        f"Seed-scheduler calibration: {len(arms)} training arm(s), "
+        f"{total_updates} updates each, output_root={output_root}",
+        flush=True,
+    )
+    for arm_index, (opponent, reseed_interval) in enumerate(arms, start=1):
+        campaign = seed_sched_campaign(
+            opponent,
+            reseed_interval=reseed_interval,
+            total_updates=total_updates,
+        )
+        overrides = [
+            *SEED_SCHED_TRAIN_BASE,
+            f"opponents={opponent}",
+            f"training.total_updates={total_updates}",
+            f"training.reseed_every_updates={reseed_interval}",
+            f"output.campaign={campaign}",
+            f"output.root={output_root}",
+        ]
+        run_ow_train(
+            overrides,
+            repo_root=repo_root,
+            dry_run=dry_run,
+            label=(
+                f"seed-scheduler calibration arm {arm_index}/{len(arms)} "
+                f"opponent={opponent} reseed={reseed_interval} "
+                f"updates={total_updates} campaign={campaign}"
+            ),
+        )
 
 
 def _stability_passes(snapshot: SeedSchedRunSnapshot) -> bool:

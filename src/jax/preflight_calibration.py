@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import statistics
 import subprocess
@@ -23,6 +24,7 @@ PREFLIGHT_TRAIN_BASE: tuple[str, ...] = (
     "telemetry.metric_groups.action_decision=true",
     "task=shield_cheap",
     "seed=42",
+    "training.log_every=1",
 )
 
 
@@ -77,14 +79,32 @@ def run_ow_train(
     *,
     repo_root: Path,
     dry_run: bool = False,
+    label: str | None = None,
 ) -> None:
     cmd = ["uv", "run", "ow", "train", *overrides]
     if dry_run:
         print(" ".join(cmd), flush=True)
         return
-    proc = subprocess.run(cmd, cwd=repo_root, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(f"ow train failed with exit code {proc.returncode}")
+    banner = label or "ow train"
+    print(f"\n=== {banner} ===", flush=True)
+    print(" ".join(cmd), flush=True)
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    proc = subprocess.Popen(
+        cmd,
+        cwd=repo_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        env=env,
+    )
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+    return_code = proc.wait()
+    if return_code != 0:
+        raise RuntimeError(f"ow train failed with exit code {return_code}")
 
 
 def latest_run_dir(*, campaign: str, output_root: Path) -> Path:
@@ -489,7 +509,12 @@ def run_calibration_train(
             opponent, seed=seed, total_updates=total_updates, model=model
         ),
     ]
-    run_ow_train(overrides, repo_root=repo_root, dry_run=dry_run)
+    run_ow_train(
+        overrides,
+        repo_root=repo_root,
+        dry_run=dry_run,
+        label=f"preflight calibration {opponent} seed={seed} updates={total_updates}",
+    )
     if dry_run:
         return extract_training_signals(
             [],

@@ -3,27 +3,20 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
 from src.jax.preflight_calibration import (
+    PREFLIGHT_TRAIN_BASE,
     WINDOW_UPDATES,
     default_calibration_json_path,
     load_thresholds,
+    run_ow_train,
 )
 
 Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
-
-PREFLIGHT_TRAIN_BASE: tuple[str, ...] = (
-    "telemetry.wandb.enabled=false",
-    "artifacts.artifact_pipeline.enabled=false",
-    "telemetry.metric_groups.action_decision=true",
-    "task=shield_cheap",
-    "seed=42",
-)
 
 GATE_ORDER: tuple[str, ...] = ("beat_noop", "beat_random", "curriculum_staged")
 
@@ -367,21 +360,6 @@ def gate_evaluation_to_dict(evaluation: GateEvaluation) -> dict[str, object]:
     }
 
 
-def run_ow_train(
-    overrides: list[str],
-    *,
-    repo_root: Path,
-    dry_run: bool = False,
-) -> None:
-    cmd = ["uv", "run", "ow", "train", *overrides]
-    if dry_run:
-        print(" ".join(cmd), flush=True)
-        return
-    proc = subprocess.run(cmd, cwd=repo_root, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(f"ow train failed with exit code {proc.returncode}")
-
-
 def run_preflight_gate(
     gate_id: str,
     *,
@@ -402,7 +380,12 @@ def run_preflight_gate(
         f"output.root={output_root.as_posix()}",
         *spec.train_overrides,
     ]
-    run_ow_train(overrides, repo_root=root, dry_run=dry_run)
+    run_ow_train(
+        overrides,
+        repo_root=root,
+        dry_run=dry_run,
+        label=f"preflight gate {gate_id} campaign={campaign}",
+    )
     if dry_run:
         return GateEvaluation(
             gate_id=gate_id,

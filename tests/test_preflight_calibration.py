@@ -5,11 +5,16 @@ from __future__ import annotations
 import json
 
 from src.jax.preflight_calibration import (
+    PREFLIGHT_TRAIN_BASE,
     derive_thresholds,
     discover_calibration_snapshots,
     extract_training_signals,
     summarize_calibration,
 )
+
+
+def test_preflight_train_base_logs_every_update() -> None:
+    assert "training.log_every=1" in PREFLIGHT_TRAIN_BASE
 
 
 def test_extract_training_signals_computes_trend() -> None:
