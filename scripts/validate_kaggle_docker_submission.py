@@ -52,6 +52,7 @@ RUNTIME_FILES = (
     "jax/encoders/planet_graph_transformer.py",
     "jax/encoders/remat.py",
     "jax/factored_sequence_scan.py",
+    "jax/launch_hygiene.py",
     "jax/feature_primitives.py",
     "jax/features.py",
     "jax/shield/__init__.py",

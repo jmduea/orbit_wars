@@ -337,6 +337,7 @@ def test_build_submission_package_includes_factorized_runtime_modules(
     assert "src/jax/encoders/_types.py" in names
     assert "src/jax/encoders/remat.py" in names
     assert "src/jax/factored_sequence_scan.py" in names
+    assert "src/jax/launch_hygiene.py" in names
     assert "src/jax/ship_action.py" in names
     assert "src/features/catalog/planet.py" in names
     assert "src/features/catalog/edge.py" in names
