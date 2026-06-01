@@ -31,6 +31,21 @@ class HygieneLookups(NamedTuple):
     learner_owned_at_row: jax.Array
 
 
+class ForbiddenCarry(NamedTuple):
+    """Compact per-turn forbidden (source_row, slot) pairs for scan carry."""
+
+    rows: jax.Array
+    slots: jax.Array
+    count: jax.Array
+
+
+def forbidden_cell_cap(*, max_k: int, max_launches: int | None = None) -> int:
+    """Upper bound on forbidden cells accumulated in one turn."""
+
+    launches = max_launches if max_launches is not None else max_k
+    return launches * (1 + max_k)
+
+
 def build_hygiene_lookups(batch: TurnBatch) -> HygieneLookups:
     """Precompute planet-id → row and learner-ownership flags for one turn."""
 
@@ -51,25 +66,86 @@ def build_hygiene_lookups(batch: TurnBatch) -> HygieneLookups:
     )
 
 
-def empty_cumulative_forbidden(
+def empty_forbidden_grid(
     env_count: int,
     *,
     num_planets: int,
     max_k: int,
     buckets: int,
 ) -> jax.Array:
-    """Zero cumulative forbidden mask for scan carry initialization."""
+    """Dense forbidden grid for small-batch rollout sampling."""
 
     return jnp.zeros((env_count, num_planets, max_k, buckets), dtype=jnp.bool_)
 
 
+def empty_cumulative_forbidden(
+    env_count: int,
+    *,
+    num_planets: int,
+    max_k: int,
+    buckets: int,
+    max_launches: int | None = None,
+) -> ForbiddenCarry:
+    """Empty compact forbidden carry for scan initialization."""
+
+    del num_planets, buckets
+    cap = forbidden_cell_cap(max_k=max_k, max_launches=max_launches)
+    return ForbiddenCarry(
+        rows=jnp.zeros((env_count, cap), dtype=jnp.int32),
+        slots=jnp.zeros((env_count, cap), dtype=jnp.int32),
+        count=jnp.zeros((env_count,), dtype=jnp.int32),
+    )
+
+
+def _apply_sparse_forbidden_to_shield(
+    shield_bucket_mask: jax.Array,
+    carry: ForbiddenCarry,
+) -> jax.Array:
+    """Mask only recorded forbidden cells instead of a full-grid AND NOT."""
+
+    env_count = shield_bucket_mask.shape[0]
+    cap = carry.rows.shape[1]
+    batch_idx = jnp.arange(env_count, dtype=jnp.int32)
+
+    def clear_cell(i: int, mask: jax.Array) -> jax.Array:
+        active = carry.count > i
+        row = carry.rows[batch_idx, i]
+        slot = carry.slots[batch_idx, i]
+        current = mask[batch_idx, row, slot, :]
+        return mask.at[batch_idx, row, slot, :].set(
+            jnp.where(active[:, None], False, current)
+        )
+
+    return jax.lax.fori_loop(0, cap, clear_cell, shield_bucket_mask)
+
+
 def apply_cumulative_forbidden_to_shield(
     shield_bucket_mask: jax.Array,
-    cumulative_forbidden: jax.Array,
+    cumulative_forbidden: ForbiddenCarry | jax.Array,
 ) -> jax.Array:
     """Compose shield legality with prefix-derived forbidden cells."""
 
-    return shield_bucket_mask & ~cumulative_forbidden
+    if isinstance(cumulative_forbidden, ForbiddenCarry):
+        return jax.lax.cond(
+            jnp.any(cumulative_forbidden.count > 0),
+            lambda shield: jnp.where(
+                (cumulative_forbidden.count > 0)[:, None, None, None],
+                _apply_sparse_forbidden_to_shield(shield, cumulative_forbidden),
+                shield,
+            ),
+            lambda shield: shield,
+            shield_bucket_mask,
+        )
+    return jax.lax.cond(
+        jnp.any(cumulative_forbidden),
+        lambda shield: jnp.where(
+            cumulative_forbidden.any(axis=(1, 2, 3))[:, None, None, None],
+            shield & ~cumulative_forbidden,
+            shield,
+        ),
+        lambda shield: shield,
+        shield_bucket_mask,
+    )
 
 
 def launch_valid_at_step(
@@ -143,26 +219,29 @@ def _owner_is_learner_pov(batch: TurnBatch, planet_id: jax.Array) -> jax.Array:
     return valid_row & is_self & batch.planet_mask[batch_idx, row]
 
 
-def _forbidden_cells_for_launch(
-    shape: tuple[int, ...],
+def _mark_launch_forbidden_cells(
+    forbidden: jax.Array,
     *,
     batch: TurnBatch,
     lookups: HygieneLookups,
     src_row: jax.Array,
     slot: jax.Array,
+    active: jax.Array,
 ) -> jax.Array:
-    """Bool mask of bucket cells newly forbidden by one launch."""
+    """Sparse dup + friendly-reverse marks on a dense forbidden grid (oracle helper)."""
 
-    env_count = shape[0]
-    num_planets = shape[1]
-    max_k = shape[2]
+    env_count = forbidden.shape[0]
+    num_planets = forbidden.shape[1]
+    max_k = forbidden.shape[2]
     batch_idx = jnp.arange(env_count, dtype=jnp.int32)
 
     src_id = batch.edge_src_ids[batch_idx, src_row]
     tgt_id = batch.edge_tgt_ids[batch_idx, src_row, slot]
 
-    forbidden = jnp.zeros(shape, dtype=jnp.bool_)
-    forbidden = forbidden.at[batch_idx, src_row, slot, :].set(True)
+    dup_cells = forbidden[batch_idx, src_row, slot, :]
+    forbidden = forbidden.at[batch_idx, src_row, slot, :].set(
+        jnp.where(active[:, None], True, dup_cells)
+    )
 
     rev_row = _row_for_planet_id(lookups, tgt_id)
     rev_valid = rev_row < num_planets
@@ -173,37 +252,134 @@ def _forbidden_cells_for_launch(
         & rev_valid
         & lookups.learner_owned_at_row[batch_idx, tgt_row]
     )
-    apply_rev = rev_valid & rev_slot_match.any(axis=-1) & friendly
+    apply_rev = active & rev_valid & rev_slot_match.any(axis=-1) & friendly
 
     def mark_rev_slot(i: int, mask: jax.Array) -> jax.Array:
         slot_active = apply_rev & rev_slot_match[:, i]
+        existing = mask[batch_idx, rev_row, i, :]
         return mask.at[batch_idx, rev_row, i, :].set(
-            jnp.where(slot_active[:, None], True, mask[batch_idx, rev_row, i, :])
+            jnp.where(slot_active[:, None], True, existing)
         )
 
     return jax.lax.fori_loop(0, max_k, mark_rev_slot, forbidden)
 
 
-def apply_launch_to_cumulative_forbidden(
-    cumulative_forbidden: jax.Array,
+def _forbidden_cells_for_launch(
+    shape: tuple[int, ...],
+    *,
+    batch: TurnBatch,
+    lookups: HygieneLookups,
+    src_row: jax.Array,
+    slot: jax.Array,
+) -> jax.Array:
+    """Bool mask of bucket cells newly forbidden by one launch (oracle helper)."""
+
+    forbidden = jnp.zeros(shape, dtype=jnp.bool_)
+    return _mark_launch_forbidden_cells(
+        forbidden,
+        batch=batch,
+        lookups=lookups,
+        src_row=src_row,
+        slot=slot,
+        active=jnp.ones((shape[0],), dtype=bool),
+    )
+
+
+def _append_launch_to_forbidden_carry(
+    carry: ForbiddenCarry,
     *,
     batch: TurnBatch,
     lookups: HygieneLookups,
     src_row: jax.Array,
     slot: jax.Array,
     active: jax.Array,
-) -> jax.Array:
+) -> ForbiddenCarry:
+    """Append dup + friendly-reverse forbidden cells to compact carry."""
+
+    env_count = carry.count.shape[0]
+    max_k = batch.edge_tgt_ids.shape[-1]
+    num_planets = batch.planet_mask.shape[-1]
+    batch_idx = jnp.arange(env_count, dtype=jnp.int32)
+
+    src_id = batch.edge_src_ids[batch_idx, src_row]
+    tgt_id = batch.edge_tgt_ids[batch_idx, src_row, slot]
+
+    rows = carry.rows
+    slots = carry.slots
+    count = carry.count
+
+    rows = rows.at[batch_idx, count].set(
+        jnp.where(active, src_row, rows[batch_idx, count])
+    )
+    slots = slots.at[batch_idx, count].set(jnp.where(active, slot, slots[batch_idx, count]))
+    count = count + active.astype(jnp.int32)
+
+    rev_row = _row_for_planet_id(lookups, tgt_id)
+    rev_valid = rev_row < num_planets
+    rev_slot_match = _slots_matching_target_on_row(batch, rev_row, src_id)
+    tgt_row = _row_for_planet_id(lookups, tgt_id)
+    friendly = (
+        lookups.learner_owned_at_row[batch_idx, src_row]
+        & rev_valid
+        & lookups.learner_owned_at_row[batch_idx, tgt_row]
+    )
+    apply_rev = active & rev_valid & rev_slot_match.any(axis=-1) & friendly
+
+    def append_rev_slot(i: int, state: tuple[jax.Array, jax.Array, jax.Array]):
+        rev_rows, rev_slots, rev_count = state
+        slot_active = apply_rev & rev_slot_match[:, i]
+        rev_rows = rev_rows.at[batch_idx, rev_count].set(
+            jnp.where(slot_active, rev_row, rev_rows[batch_idx, rev_count])
+        )
+        rev_slots = rev_slots.at[batch_idx, rev_count].set(
+            jnp.where(slot_active, i, rev_slots[batch_idx, rev_count])
+        )
+        rev_count = rev_count + slot_active.astype(jnp.int32)
+        return rev_rows, rev_slots, rev_count
+
+    rows, slots, count = jax.lax.fori_loop(
+        0, max_k, append_rev_slot, (rows, slots, count)
+    )
+    return ForbiddenCarry(rows=rows, slots=slots, count=count)
+
+
+def apply_launch_to_cumulative_forbidden(
+    cumulative_forbidden: ForbiddenCarry | jax.Array,
+    *,
+    batch: TurnBatch,
+    lookups: HygieneLookups,
+    src_row: jax.Array,
+    slot: jax.Array,
+    active: jax.Array,
+) -> ForbiddenCarry | jax.Array:
     """Mark duplicate and friendly-reverse cells forbidden after one launch."""
 
-    delta = _forbidden_cells_for_launch(
-        cumulative_forbidden.shape,
-        batch=batch,
-        lookups=lookups,
-        src_row=src_row,
-        slot=slot,
-    )
-    return jnp.where(
-        active[:, None, None, None], cumulative_forbidden | delta, cumulative_forbidden
+    if isinstance(cumulative_forbidden, ForbiddenCarry):
+        return jax.lax.cond(
+            jnp.any(active),
+            lambda carry: _append_launch_to_forbidden_carry(
+                carry,
+                batch=batch,
+                lookups=lookups,
+                src_row=src_row,
+                slot=slot,
+                active=active,
+            ),
+            lambda carry: carry,
+            cumulative_forbidden,
+        )
+    return jax.lax.cond(
+        jnp.any(active),
+        lambda grid: _mark_launch_forbidden_cells(
+            grid,
+            batch=batch,
+            lookups=lookups,
+            src_row=src_row,
+            slot=slot,
+            active=active,
+        ),
+        lambda grid: grid,
+        cumulative_forbidden,
     )
 
 
@@ -321,7 +497,7 @@ def cumulative_forbidden_matches_oracle(
     ship_fraction: jax.Array | None,
     cfg: TrainConfig,
     step_idx: int,
-    cumulative_forbidden: jax.Array,
+    cumulative_forbidden: ForbiddenCarry | jax.Array,
     lookups: HygieneLookups | None = None,
 ) -> jax.Array:
     """True per-env when carry forbidden matches prefix oracle at ``step_idx``."""
