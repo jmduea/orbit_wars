@@ -23,6 +23,7 @@ from src.jax.action_codec import (
 )
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.features import TurnBatch, ship_feature_scale
+from src.jax.launch_hygiene import compose_hygiene_with_shield_mask
 from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
 from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
@@ -129,7 +130,18 @@ def _replay_logprobs_with_prefix_forwards(
             encoder_out=encoder_out,
         )
         step_active = step_mask[:, step_idx] > 0.0
-        step_bucket_mask = ship_bucket_mask[:, step_idx]
+        step_bucket_mask = _hygiene_adjusted_step_mask(
+            batch,
+            cfg,
+            ship_bucket_mask=ship_bucket_mask,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            step_mask=step_mask,
+            ship_fraction=ship_fraction,
+            step_idx=step_idx,
+        )
         fraction_arg = None
         if continuous and ship_fraction is not None:
             fraction_arg = ship_fraction[:, step_idx]
@@ -144,6 +156,8 @@ def _replay_logprobs_with_prefix_forwards(
             ship_bucket_mask=ship_bucket_mask,
             remaining_ships=remaining_ships,
             ship_fraction=ship_fraction,
+            batch=batch,
+            step_mask=step_mask,
         )
         _, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
             step_output.source_logits[:, step_idx, :],
@@ -421,6 +435,35 @@ def remaining_ships_before_step(
     return jax.lax.fori_loop(0, step_idx, lambda i, r: body(r, i)[0], remaining)
 
 
+def _hygiene_adjusted_step_mask(
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    ship_bucket_mask: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    step_mask: jax.Array,
+    ship_fraction: jax.Array | None,
+    step_idx: int,
+) -> jax.Array:
+    """Recompute prefix-derived hygiene on shield-only ``ship_bucket_mask``."""
+
+    return compose_hygiene_with_shield_mask(
+        batch,
+        ship_bucket_mask[:, step_idx],
+        source_sequence=source_index,
+        target_slot_sequence=target_slot,
+        stop_flag=stop_flag,
+        step_mask=step_mask,
+        ship_bucket=ship_bucket,
+        ship_fraction=ship_fraction,
+        cfg=cfg,
+        step_idx=step_idx,
+    )
+
+
 def factored_step_logprob_at_index(
     step_output: FactoredPolicyOutput,
     cfg: TrainConfig,
@@ -433,11 +476,27 @@ def factored_step_logprob_at_index(
     ship_bucket_mask: jax.Array,
     remaining_ships: jax.Array,
     ship_fraction: jax.Array | None = None,
+    batch: TurnBatch | None = None,
+    step_mask: jax.Array | None = None,
 ) -> jax.Array:
     """Log-prob of stored actions at ``step_idx`` under ``step_output`` logits."""
 
+    step_bucket_mask = ship_bucket_mask[:, step_idx]
+    if batch is not None:
+        step_bucket_mask = _hygiene_adjusted_step_mask(
+            batch,
+            cfg,
+            ship_bucket_mask=ship_bucket_mask,
+            source_index=source_index,
+            target_slot=target_slot,
+            ship_bucket=ship_bucket,
+            stop_flag=stop_flag,
+            step_mask=step_mask if step_mask is not None else jnp.ones_like(stop_flag),
+            ship_fraction=ship_fraction,
+            step_idx=step_idx,
+        )
     source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
-        ship_bucket_mask[:, step_idx], remaining_ships
+        step_bucket_mask, remaining_ships
     )
     fraction_arg = None
     if ship_fraction is not None:
@@ -448,7 +507,7 @@ def factored_step_logprob_at_index(
         step_output.stop_logits[:, step_idx],
         step_output.ship_logits[:, step_idx, :, :],
         source_mask,
-        ship_bucket_mask[:, step_idx],
+        step_bucket_mask,
         source_index[:, step_idx],
         target_slot[:, step_idx],
         ship_bucket[:, step_idx],
@@ -535,6 +594,8 @@ def prefix_replay_step_logprob_deltas(
             ship_bucket_mask=ship_bucket_mask,
             remaining_ships=ships_before,
             ship_fraction=ship_fraction,
+            batch=batch,
+            step_mask=step_mask,
         )
         lp_replay = factored_step_logprob_at_index(
             replay_out,
@@ -547,6 +608,8 @@ def prefix_replay_step_logprob_deltas(
             ship_bucket_mask=ship_bucket_mask,
             remaining_ships=ships_before,
             ship_fraction=ship_fraction,
+            batch=batch,
+            step_mask=step_mask,
         )
         deltas.append(jnp.abs(lp_prefix - lp_replay))
         active_flags.append(active.astype(jnp.float32))

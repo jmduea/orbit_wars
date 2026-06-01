@@ -311,6 +311,7 @@ def _sample_shielded_factored_sequence_with_params(
         forward_factorized_encode,
         replay_factored_sequence_logprob,
     )
+    from src.jax.launch_hygiene import compose_hygiene_with_shield_mask
     from src.jax.policy import factorized_decode
 
     env_count = batch.planet_features.shape[0]
@@ -409,7 +410,19 @@ def _sample_shielded_factored_sequence_with_params(
             + step_diagnostics.original_non_noop_count,
             legal_non_noop_rate=diagnostic_zero,
         )
-        step_bucket_mask = shielded.ship_bucket_mask
+        shield_step_mask = shielded.ship_bucket_mask
+        step_bucket_mask = compose_hygiene_with_shield_mask(
+            batch,
+            shield_step_mask,
+            source_sequence=source_sequence,
+            target_slot_sequence=slot_sequence,
+            stop_flag=stop_sequence.astype(jnp.float32),
+            step_mask=step_mask_sequence,
+            ship_bucket=bucket_sequence,
+            ship_fraction=ship_fraction_sequence if continuous else None,
+            cfg=cfg,
+            step_idx=step_idx,
+        )
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
         )
@@ -506,7 +519,7 @@ def _sample_shielded_factored_sequence_with_params(
         ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(
             ship_fraction
         )
-        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(step_bucket_mask)
+        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(shield_step_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
         return (
             source_sequence,
