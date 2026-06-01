@@ -38,7 +38,7 @@ def _launch_valid_at_step(
     return (
         (stop_flag[:, step_idx] < 0.5)
         & (step_mask[:, step_idx] > 0.5)
-        & (ship_bucket[:, step_idx] >= 0)
+        & (ship_bucket[:, step_idx] > 0)
     )
 
 
