@@ -311,7 +311,12 @@ def _sample_shielded_factored_sequence_with_params(
         forward_factorized_encode,
         replay_factored_sequence_logprob,
     )
-    from src.jax.launch_hygiene import compose_hygiene_with_shield_mask
+    from src.jax.launch_hygiene import (
+        apply_cumulative_forbidden_to_shield,
+        apply_launch_to_cumulative_forbidden,
+        build_hygiene_lookups,
+        empty_cumulative_forbidden,
+    )
     from src.jax.policy import factorized_decode
 
     env_count = batch.planet_features.shape[0]
@@ -334,6 +339,13 @@ def _sample_shielded_factored_sequence_with_params(
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
+    hygiene_lookups = build_hygiene_lookups(batch)
+    cumulative_forbidden = empty_cumulative_forbidden(
+        env_count,
+        num_planets=MAX_PLANETS,
+        max_k=k,
+        buckets=cfg.task.ship_bucket_count,
+    )
     diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
     diagnostics = ShieldDiagnostics(
         blocked_count=diagnostic_zero,
@@ -367,6 +379,7 @@ def _sample_shielded_factored_sequence_with_params(
             bucket_mask_stack,
             sequence_active,
             decoder_hidden_carry,
+            cumulative_forbidden,
         ) = carry
         step_kwargs = {
             "player_count": player_count,
@@ -411,17 +424,9 @@ def _sample_shielded_factored_sequence_with_params(
             legal_non_noop_rate=diagnostic_zero,
         )
         shield_step_mask = shielded.ship_bucket_mask
-        step_bucket_mask = compose_hygiene_with_shield_mask(
-            batch,
+        step_bucket_mask = apply_cumulative_forbidden_to_shield(
             shield_step_mask,
-            source_sequence=source_sequence,
-            target_slot_sequence=slot_sequence,
-            stop_flag=stop_sequence.astype(jnp.float32),
-            step_mask=step_mask_sequence,
-            ship_bucket=bucket_sequence,
-            ship_fraction=ship_fraction_sequence if continuous else None,
-            cfg=cfg,
-            step_idx=step_idx,
+            cumulative_forbidden,
         )
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
@@ -502,6 +507,16 @@ def _sample_shielded_factored_sequence_with_params(
             launched = jnp.where(reject_launch, 0.0, launched)
             launch_valid = launch_valid & exact_safe
 
+        # Tiered exact reject runs before hygiene carry update: rejected launches
+        # must not mark (source, slot) forbidden (stored stop=1 / bucket=0).
+        cumulative_forbidden = apply_launch_to_cumulative_forbidden(
+            cumulative_forbidden,
+            batch=batch,
+            lookups=hygiene_lookups,
+            src_row=source,
+            slot=target_slot,
+            active=launch_valid,
+        )
         remaining_ships = remaining_ships.at[jnp.arange(env_count), src_rows].set(
             jnp.where(
                 launch_valid,
@@ -535,6 +550,7 @@ def _sample_shielded_factored_sequence_with_params(
             bucket_mask_stack,
             sequence_active,
             decoder_hidden_carry,
+            cumulative_forbidden,
         ), None
 
     (
@@ -552,6 +568,7 @@ def _sample_shielded_factored_sequence_with_params(
             bucket_mask_stack,
             _sequence_active,
             decoder_hidden_out,
+            _cumulative_forbidden,
         ),
         _,
     ) = jax.lax.scan(
@@ -570,6 +587,7 @@ def _sample_shielded_factored_sequence_with_params(
             bucket_mask_stack,
             sequence_active,
             decoder_hidden_carry,
+            cumulative_forbidden,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
