@@ -26,6 +26,7 @@ from src.jax.distributional_value import (
     value_support,
 )
 from src.jax.encoders import EncoderOutput
+from src.jax.encoders.planet_encoder_common import PlanetEdgeEncoderOutput
 from src.jax.encoders.planet_graph_transformer import PlanetGraphTransformerEncoder
 from src.jax.features import TurnBatch
 
@@ -218,18 +219,42 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
     decoder_carry: bool = False
     hidden_size: int = 128
 
-    @nn.compact
-    def __call__(
+    def _resolve_value_head(self) -> nn.Module:
+        value_head_module = self.value_head_module
+        if value_head_module is None:
+            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
+        return value_head_module
+
+    def encode(self, batch: TurnBatch) -> PlanetEdgeEncoderOutput:
+        """Run the planet graph encoder once per fixed ``TurnBatch``."""
+
+        return self.encoder_module(batch)
+
+    def critic(
         self,
-        batch: TurnBatch,
+        encoder_out: PlanetEdgeEncoderOutput,
+        player_count: jax.Array | None = None,
+    ) -> ValueHeadOutput:
+        """Bootstrap value from cached encoder output."""
+
+        return self._resolve_value_head()(
+            encoder_out.value_input, player_count=player_count
+        )
+
+    def decode(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        *,
         player_count: jax.Array | None = None,
         source_sequence: jax.Array | None = None,
         target_slot_sequence: jax.Array | None = None,
         decoder_hidden: jax.Array | None = None,
         rng: jax.Array | None = None,
         deterministic: bool = False,
+        include_value: bool = True,
     ) -> FactoredPolicyOutput:
-        encoder_out = self.encoder_module(batch)
+        """Decoder-only forward on cached ``encoder_out``."""
+
         (
             source_logits,
             target_logits,
@@ -248,25 +273,106 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
             deterministic=deterministic,
         )
 
-        value_head_module = self.value_head_module
-        if value_head_module is None:
-            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        value_out = value_head_module(
-            encoder_out.value_input, player_count=player_count
-        )
+        if include_value:
+            value_out = self.critic(encoder_out, player_count=player_count)
+            value = value_out.value
+            value_logits = value_out.value_logits
+        else:
+            batch_size = encoder_out.context_query.shape[0]
+            value = jnp.zeros((batch_size,), dtype=jnp.float32)
+            value_logits = None
 
         return FactoredPolicyOutput(
             source_logits=source_logits,
             target_logits=target_logits,
             stop_logits=stop_logits,
             ship_logits=ship_logits,
-            value=value_out.value,
+            value=value,
             decoded_source_sequence=decoded_source_sequence,
             decoded_target_slot_sequence=decoded_target_slot_sequence,
             decoded_stop_sequence=decoded_stop_sequence,
-            value_logits=value_out.value_logits,
+            value_logits=value_logits,
             decoder_hidden=decoder_hidden_out if self.decoder_carry else None,
         )
+
+    @nn.compact
+    def __call__(
+        self,
+        batch: TurnBatch,
+        player_count: jax.Array | None = None,
+        source_sequence: jax.Array | None = None,
+        target_slot_sequence: jax.Array | None = None,
+        decoder_hidden: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> FactoredPolicyOutput:
+        encoder_out = self.encode(batch)
+        return self.decode(
+            encoder_out,
+            player_count=player_count,
+            source_sequence=source_sequence,
+            target_slot_sequence=target_slot_sequence,
+            decoder_hidden=decoder_hidden,
+            rng=rng,
+            deterministic=deterministic,
+            include_value=True,
+        )
+
+
+def factorized_encode(
+    params: dict,
+    policy: nn.Module,
+    batch: TurnBatch,
+) -> PlanetEdgeEncoderOutput:
+    """Encode ``TurnBatch`` without running the decoder."""
+
+    return policy.apply(params, batch, method=ComposableFactorizedPlanetPolicy.encode)
+
+
+def factorized_critic(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    *,
+    player_count: jax.Array | None = None,
+) -> ValueHeadOutput:
+    """Run the critic head on cached encoder output."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        player_count=player_count,
+        method=ComposableFactorizedPlanetPolicy.critic,
+    )
+
+
+def factorized_decode(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    *,
+    player_count: jax.Array | None = None,
+    source_sequence: jax.Array | None = None,
+    target_slot_sequence: jax.Array | None = None,
+    decoder_hidden: jax.Array | None = None,
+    rng: jax.Array | None = None,
+    deterministic: bool = False,
+    include_value: bool = False,
+) -> FactoredPolicyOutput:
+    """Decoder-only forward on cached encoder output."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        player_count=player_count,
+        source_sequence=source_sequence,
+        target_slot_sequence=target_slot_sequence,
+        decoder_hidden=decoder_hidden,
+        rng=rng,
+        deterministic=deterministic,
+        include_value=include_value,
+        method=ComposableFactorizedPlanetPolicy.decode,
+    )
 
 
 def edge_action_count(task_cfg) -> int:

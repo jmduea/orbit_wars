@@ -1,9 +1,10 @@
 """Shared stepwise factorized sequence scan for rollout sampling and PPO replay.
 
 Rollout sampling and PPO replay both score sub-steps with the same shield-prefix
-``policy.apply`` semantics: teacher columns ``0..step_idx-1`` committed, column
-``step_idx`` zeroed (see :func:`build_shield_prefix_teacher_sequences`). A single
-zeroed-sequence forward does **not** match multi-step prefixes.
+decoder semantics: teacher columns ``0..step_idx-1`` committed, column
+``step_idx`` zeroed (see :func:`build_shield_prefix_teacher_sequences`). Each path
+encodes ``TurnBatch`` once and reuses ``PlanetEdgeEncoderOutput`` for decoder-only
+prefix forwards.
 """
 
 from __future__ import annotations
@@ -68,8 +69,9 @@ def _replay_logprobs_with_prefix_forwards(
     ship_fraction: jax.Array | None,
     initial_remaining_ships: jax.Array | None,
     decoder_hidden: jax.Array | None = None,
+    encoder_out=None,
 ) -> FactoredSequenceLogProbResult:
-    """Replay log-probs with one shield-prefix ``policy.apply`` per sub-step."""
+    """Replay log-probs with one shield-prefix decoder forward per sub-step."""
 
     from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
@@ -86,13 +88,21 @@ def _replay_logprobs_with_prefix_forwards(
     entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     stop_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     move_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
-    value_out = jnp.zeros((env_count,), dtype=jnp.float32)
     use_distributional = cfg.model.value_head.strip().lower() == "distributional"
     value_logits_out: jax.Array | None = (
         jnp.zeros((env_count, cfg.model.value_bins), dtype=jnp.float32)
         if use_distributional
         else None
     )
+
+    if encoder_out is None:
+        encoder_out = forward_factorized_encode(params, policy, batch)
+    value_out = forward_factorized_critic(
+        params, policy, encoder_out, player_count=player_count
+    )
+    value_out_scalar = value_out.value
+    if value_out.value_logits is not None:
+        value_logits_out = value_out.value_logits
 
     def scan_step(carry, step_idx):
         (
@@ -101,8 +111,6 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
-            value_out,
-            value_logits_out,
         ) = carry
 
         source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
@@ -118,6 +126,7 @@ def _replay_logprobs_with_prefix_forwards(
             target_slot_sequence=target_prefix,
             decoder_hidden=decoder_hidden,
             deterministic=True,
+            encoder_out=encoder_out,
         )
         step_active = step_mask[:, step_idx] > 0.0
         step_bucket_mask = ship_bucket_mask[:, step_idx]
@@ -200,11 +209,6 @@ def _replay_logprobs_with_prefix_forwards(
                 current_source_ships,
             )
         )
-        value_out = jnp.where(step_idx == 0, step_output.value, value_out)
-        if step_output.value_logits is not None:
-            value_logits_out = jnp.where(
-                step_idx == 0, step_output.value_logits, value_logits_out
-            )
 
         return (
             remaining_ships,
@@ -212,8 +216,6 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
-            value_out,
-            value_logits_out,
         ), None
 
     (
@@ -223,8 +225,6 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
-            value_out,
-            value_logits_out,
         ),
         _,
     ) = jax.lax.scan(
@@ -235,8 +235,6 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
-            value_out,
-            value_logits_out,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
@@ -245,9 +243,35 @@ def _replay_logprobs_with_prefix_forwards(
         entropy=entropy_out,
         stop_entropy=stop_entropy_out,
         move_entropy=move_entropy_out,
-        value=value_out,
+        value=value_out_scalar,
         value_logits=value_logits_out,
     )
+
+
+def forward_factorized_encode(
+    params: dict,
+    policy: object,
+    batch: TurnBatch,
+):
+    """Run the planet encoder once for a fixed ``TurnBatch``."""
+
+    from src.jax.policy import factorized_encode
+
+    return factorized_encode(params, policy, batch)
+
+
+def forward_factorized_critic(
+    params: dict,
+    policy: object,
+    encoder_out,
+    *,
+    player_count: jax.Array,
+):
+    """Run the critic head on cached encoder output."""
+
+    from src.jax.policy import factorized_critic
+
+    return factorized_critic(params, policy, encoder_out, player_count=player_count)
 
 
 def forward_factored_policy(
@@ -261,9 +285,12 @@ def forward_factored_policy(
     target_slot_sequence: jax.Array,
     decoder_hidden: jax.Array | None = None,
     deterministic: bool = True,
+    encoder_out=None,
 ) -> FactoredPolicyOutput:
-    """Run one factorized ``policy.apply`` with explicit teacher prefix sequences."""
+    """Run one factorized decoder forward with explicit teacher prefix sequences."""
 
+    if encoder_out is None:
+        encoder_out = forward_factorized_encode(params, policy, batch)
     apply_kwargs = {
         "player_count": player_count,
         "source_sequence": source_sequence,
@@ -272,7 +299,15 @@ def forward_factored_policy(
     }
     if decoder_carry_enabled(cfg) and decoder_hidden is not None:
         apply_kwargs["decoder_hidden"] = decoder_hidden
-    return policy.apply(params, batch, **apply_kwargs)
+    from src.jax.policy import factorized_decode
+
+    return factorized_decode(
+        params,
+        policy,
+        encoder_out,
+        include_value=False,
+        **apply_kwargs,
+    )
 
 
 def forward_factored_replay_policy(
@@ -551,6 +586,7 @@ def replay_factored_sequence_logprob(
     ship_fraction: jax.Array | None = None,
     decoder_hidden: jax.Array | None = None,
     initial_remaining_ships: jax.Array | None = None,
+    encoder_out=None,
 ) -> FactoredSequenceLogProbResult:
     """Replay stored factorized actions with rollout-matching prefix decoding."""
 
@@ -569,6 +605,7 @@ def replay_factored_sequence_logprob(
         ship_fraction=ship_fraction,
         initial_remaining_ships=initial_remaining_ships,
         decoder_hidden=decoder_hidden,
+        encoder_out=encoder_out,
     )
 
 

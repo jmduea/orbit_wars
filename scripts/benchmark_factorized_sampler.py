@@ -42,9 +42,9 @@ def _train_cfg(*, max_moves_k: int, decoder_carry: bool) -> TrainConfig:
 
 
 def _expected_apply_count(max_moves_k: int, *, decoder_carry: bool) -> int:
-    """Probe + K shield scans + K prefix replay logprob + optional carry-out."""
+    """Encode once + critic + K shield decodes + K replay decodes + optional carry-out."""
 
-    count = 1 + max_moves_k + max_moves_k
+    count = 2 + max_moves_k + max_moves_k
     if decoder_carry:
         count += 1
     return count
@@ -100,25 +100,19 @@ def main() -> None:
     expected = _expected_apply_count(args.max_moves_k, decoder_carry=args.decoder_carry)
     replay_applies = args.max_moves_k
     mean_s = sum(timings) / len(timings)
-    encoder_once_bound = 1 + args.max_moves_k + (1 if args.decoder_carry else 0) + 1
 
     print(
         f"max_moves_k={args.max_moves_k} decoder_carry={args.decoder_carry} batch={args.batch_size}"
     )
-    print(f"structural policy.apply per sample (sampler): ~{expected}")
+    print(f"structural module applies per sample (sampler): ~{expected}")
     print(
-        f"  breakdown: 1 probe + {args.max_moves_k} shield scan + replay {replay_applies} prefix"
+        f"  breakdown: 1 encode + 1 critic + {args.max_moves_k} shield decode + "
+        f"{replay_applies} replay decode"
     )
     if args.decoder_carry:
-        print("  + 1 carry-out teacher replay")
-    print(
-        f"encoder-once target (1 enc + K dec + carry? + replay): ~{encoder_once_bound}"
-    )
+        print("  + 1 carry-out decode")
+    print("encoder passes (target 1): 1 encode + 0 redundant full policy.apply")
     print(f"mean wall time per sample (JIT): {mean_s * 1000:.2f} ms")
-    print(
-        "redundant full encoder passes vs encoder-once target: "
-        f"~{max(0.0, expected - encoder_once_bound):.1f}"
-    )
 
 
 if __name__ == "__main__":

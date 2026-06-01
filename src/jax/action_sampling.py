@@ -16,13 +16,11 @@ from src.jax.action_codec import (
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.jax.policy import edge_action_count
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_to_turn_batch_v2,
-    default_edge_action_bucket_mask,
     selected_factored_launch_is_exact_safe_jax,
     trajectory_shield_final_validate_selected,
     trajectory_shield_mode,
@@ -39,6 +37,7 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
+
 
 def _noop_bucket_mask(
     row_count: int, candidate_count: int, bucket_count: int
@@ -307,21 +306,22 @@ def _sample_shielded_factored_sequence_with_params(
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> ShieldedSequenceSample:
-    from src.jax.factored_sequence_scan import replay_factored_sequence_logprob
+    from src.jax.factored_sequence_scan import (
+        forward_factorized_critic,
+        forward_factorized_encode,
+        replay_factored_sequence_logprob,
+    )
+    from src.jax.policy import factorized_decode
 
     env_count = batch.planet_features.shape[0]
     player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
     carry_enabled = decoder_carry_enabled(cfg)
     continuous = is_continuous_ship_mode(cfg)
-    probe_kwargs = {
-        "player_count": player_count,
-        "rng": key,
-        "deterministic": deterministic,
-    }
-    if carry_enabled:
-        probe_kwargs["decoder_hidden"] = decoder_hidden_in
-    probe_output = policy.apply(params, batch, **probe_kwargs)
-    sequence_k = probe_output.source_logits.shape[1]
+    encoder_out = forward_factorized_encode(params, policy, batch)
+    value_out = forward_factorized_critic(
+        params, policy, encoder_out, player_count=player_count
+    )
+    sequence_k = cfg.model.max_moves_k
     k = edge_k(cfg.task)
     source_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
     slot_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
@@ -376,7 +376,13 @@ def _sample_shielded_factored_sequence_with_params(
         }
         if carry_enabled:
             step_kwargs["decoder_hidden"] = decoder_hidden_carry
-        step_output = policy.apply(params, batch, **step_kwargs)
+        step_output = factorized_decode(
+            params,
+            policy,
+            encoder_out,
+            include_value=False,
+            **step_kwargs,
+        )
         shielded = jax.vmap(
             lambda game_row, batch_row, ships: (
                 apply_configured_trajectory_shield_factorized_topk(
@@ -577,14 +583,16 @@ def _sample_shielded_factored_sequence_with_params(
         target_sequence,
     )
     if carry_enabled:
-        final_output = policy.apply(
+        final_output = factorized_decode(
             params,
-            batch,
+            policy,
+            encoder_out,
             player_count=player_count,
             source_sequence=source_sequence,
             target_slot_sequence=slot_sequence,
             decoder_hidden=decoder_hidden_in,
             deterministic=deterministic,
+            include_value=False,
         )
         decoder_hidden_out = final_output.decoder_hidden
     replay = replay_factored_sequence_logprob(
@@ -602,6 +610,7 @@ def _sample_shielded_factored_sequence_with_params(
         ship_fraction=ship_fraction_sequence if continuous else None,
         decoder_hidden=decoder_hidden_in if carry_enabled else None,
         initial_remaining_ships=owned_planet_ships(game),
+        encoder_out=encoder_out,
     )
     log_prob_sequence = replay.log_prob
     entropy_sequence = replay.entropy
@@ -610,7 +619,7 @@ def _sample_shielded_factored_sequence_with_params(
         ship_bucket=bucket_sequence,
         log_prob=log_prob_sequence,
         entropy=entropy_sequence,
-        value=probe_output.value,
+        value=value_out.value,
         ship_bucket_mask=bucket_mask_stack,
         diagnostics=diagnostics,
         source_index=source_sequence,
