@@ -35,5 +35,6 @@ Python 3.12 RL project (Hydra + JAX PPO). Dependencies: **uv** only (`uv sync --
 ## Agent workflow
 
 - Use Cursor plugins for planning/review/exploration — see `docs/CURSOR.md`.
-- Prefer surgical diffs; run `make targeted tests after edits.
+- Prefer surgical diffs; run targeted tests after edits (`make test-fast` or `make test-domain-*`).
+- Operator docs: `docs/AGENT_CAPABILITIES.md`; session context: `make agent-context`.
 - Do not push unless the user asks.

@@ -25,11 +25,28 @@ def _git_head_sha() -> str | None:
     return result.stdout.strip() or None
 
 
+def print_benchmark_help() -> None:
+    print(
+        "ow benchmark — stability runs and preflight gates\n\n"
+        "Subcommands:\n"
+        "  training                 Short timed training benchmark\n"
+        "  sanity                   Gate 1 reproducibility\n"
+        "  learn-proof              Gates 2–5 learning proof ladder\n"
+        "  calibrate                Derive preflight thresholds\n"
+        "  calibrate-seed-scheduler Reseed-interval calibration\n\n"
+        "Examples:\n"
+        "  make preflight-sanity\n"
+        "  make preflight-learn-proof\n"
+        "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n\n"
+        "More: uv run ow benchmark learn-proof --help\n"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Stability benchmarks and pre-flight learning gates (ow benchmark).",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     training = subparsers.add_parser(
         "training",
@@ -683,8 +700,14 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not argv:
+        print_benchmark_help()
+        return 0
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command is None:
+        print_benchmark_help()
+        return 0
     match args.command:
         case "training":
             return run_training_benchmark_cli(args)

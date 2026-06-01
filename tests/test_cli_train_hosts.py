@@ -28,6 +28,9 @@ def test_ow_help_does_not_invoke_hydra(capsys, monkeypatch) -> None:
     assert "Orbit Wars CLI (ow)" in captured
     assert "ow train" in captured
     assert "ow eval" in captured
+    assert "ow runs" in captured
+    assert "AGENT_CAPABILITIES" in captured
+    assert "ow benchmark --help" in captured
     assert "Hydra overrides" in captured
     assert "Powered by Hydra" not in captured
 

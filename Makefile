@@ -11,6 +11,30 @@ XDIST_ENV := ORBIT_WARS_PYTEST_XDIST=1 JAX_PLATFORMS=cpu
 setup:
 	uv sync --group dev
 
+.PHONY: help agent-context
+
+help:
+	@echo "Orbit Wars Makefile targets"
+	@echo ""
+	@echo "Tests (default: make test = test-fast):"
+	@echo "  test, test-fast          CPU fast tier"
+	@echo "  test-jax                 Lightweight JAX tier"
+	@echo "  test-daily               test-fast + test-jax (parallel)"
+	@echo "  test-premerge            test-daily + test-slow"
+	@echo "  test-sweep               Full W&B sweep grid (pre-release)"
+	@echo "  test-fast-parallel       CPU xdist (ORBIT_WARS_PYTEST_XDIST=1)"
+	@echo "  test-domain-{config,features,jax-env,policy,artifacts,curriculum}"
+	@echo ""
+	@echo "Preflight:"
+	@echo "  preflight-sanity, preflight-learn-proof, preflight-calibrate"
+	@echo ""
+	@echo "Agents:"
+	@echo "  agent-context            JSON session context for coding agents"
+	@echo "  See docs/AGENT_CAPABILITIES.md and AGENTS.md"
+
+agent-context:
+	uv run python scripts/agent_context.py
+
 # Default dev loop: CPU-only, no slow/JAX-compile smokes (safe on WSL2 + NVIDIA).
 test: test-fast
 
