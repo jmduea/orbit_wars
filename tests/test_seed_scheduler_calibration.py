@@ -2,12 +2,36 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.jax.seed_scheduler_calibration import (
+    SEED_SCHED_TRAIN_BASE,
     SeedSchedRunSnapshot,
     count_distinct_reseed_seeds,
     expand_reseed_intervals,
+    latest_completed_run_dir,
     pick_reseed_interval,
 )
+
+
+def test_seed_sched_train_base_logs_every_update() -> None:
+    assert "training.log_every=1" in SEED_SCHED_TRAIN_BASE
+
+
+def test_run_seed_scheduler_sweep_dry_run_prints_arm_plan(capsys) -> None:
+    from src.jax.seed_scheduler_calibration import run_seed_scheduler_sweep
+
+    run_seed_scheduler_sweep(
+        opponents=("noop_only",),
+        reseed_intervals=(0, 25),
+        total_updates=500,
+        output_root=Path("outputs"),
+        repo_root=Path("."),
+        dry_run=True,
+    )
+    captured = capsys.readouterr().out
+    assert "2 training arm(s)" in captured
+    assert "training.log_every=1" in captured or "ow train" in captured
 
 
 def test_expand_reseed_intervals_includes_total_fifth() -> None:
@@ -24,6 +48,23 @@ def test_count_distinct_reseed_seeds() -> None:
         {"reseed_events": []},
     ]
     assert count_distinct_reseed_seeds(records) == 2
+
+
+def test_latest_completed_run_dir_skips_empty_jsonl(tmp_path: Path) -> None:
+    campaign = "seed_sched_cal_self_play_only_reseed25_u500"
+    runs_root = tmp_path / "campaigns" / campaign / "runs"
+    empty_run = runs_root / "empty-run"
+    good_run = runs_root / "good-run"
+    empty_run.mkdir(parents=True)
+    good_run.mkdir(parents=True)
+    (empty_run / "logs").mkdir()
+    (good_run / "logs").mkdir()
+    (empty_run / "logs" / "empty_jax.jsonl").write_text("", encoding="utf-8")
+    (good_run / "logs" / "good_jax.jsonl").write_text(
+        '{"update": 1}\n', encoding="utf-8"
+    )
+
+    assert latest_completed_run_dir(campaign=campaign, output_root=tmp_path) == good_run
 
 
 def _snapshot(

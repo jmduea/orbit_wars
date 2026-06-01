@@ -198,6 +198,21 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         checkpoint_pipeline=checkpoint_pipeline,
     )
 
+    wandb_status = "on" if cfg.telemetry.wandb.enabled else "off"
+    print(
+        f"JAX training starting: campaign={run_context.campaign_slug} "
+        f"run_id={run_context.run_id} updates={start_update}-"
+        f"{cfg.training.total_updates} log_every={cfg.training.log_every} "
+        f"wandb={wandb_status} log={log_path}",
+        flush=True,
+    )
+    if not cfg.telemetry.wandb.enabled:
+        print(
+            "Terminal progress: one line per log_every update(s). "
+            "First update may stall during JAX compile.",
+            flush=True,
+        )
+
     completed_training = False
     close_error: Exception | None = None
     try:
