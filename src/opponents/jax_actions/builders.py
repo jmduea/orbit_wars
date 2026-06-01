@@ -43,7 +43,11 @@ def _merge_identical_launches(
     valid: jax.Array,
     fleet_slots: int,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Collapse launches sharing ``(src_planet_id, tgt_planet_id)``, summing ships."""
+    """Collapse launches sharing ``(src_planet_id, tgt_planet_id)``, summing ships.
+
+    Output length is at most ``fleet_slots``; additional distinct launches are dropped
+    when the merged count would exceed ``max_fleets``.
+    """
 
     launch_steps = source_id.shape[0]
     out_src = jnp.full((fleet_slots,), -1, dtype=jnp.int32)
