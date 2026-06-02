@@ -187,6 +187,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     learn_proof.add_argument("--dry-run", action="store_true")
     learn_proof.add_argument(
+        "--thresholds-path",
+        type=Path,
+        default=None,
+        help="Optional preflight calibration JSON for learning gates.",
+    )
+    learn_proof.add_argument(
+        "--profile-path",
+        type=Path,
+        default=None,
+        help="Optional preflight-profiles.json (default docs/benchmarks/preflight-profiles.json).",
+    )
+    learn_proof.add_argument(
+        "--train-overrides",
+        nargs="*",
+        default=[],
+        help="Extra Hydra overrides appended after gate and profile overrides.",
+    )
+    learn_proof.add_argument(
         "--eval-checkpoint",
         type=Path,
         default=None,
@@ -247,6 +265,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--analyze-only",
         action="store_true",
         help="Skip training; analyze --analyze-jsonl and/or --analyze-campaigns.",
+    )
+    calibrate.add_argument(
+        "--profile-path",
+        type=Path,
+        default=None,
+        help="Optional preflight-profiles.json for per-model PPO overrides.",
     )
     calibrate.add_argument("--dry-run", action="store_true")
 
@@ -693,6 +717,7 @@ def run_calibrate_cli(args: argparse.Namespace) -> int:
                 output_root=args.output_root,
                 repo_root=REPO_ROOT,
                 dry_run=args.dry_run,
+                profiles_path=args.profile_path,
             )
         )
     summary = summarize_calibration(snapshots)
@@ -828,6 +853,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     if args.gate is not None and args.through is not None:
         raise SystemExit("Use only one of --gate or --through.")
 
+    extra_train_overrides = tuple(args.train_overrides)
     started = __import__("time").perf_counter()
     if args.gate is not None:
         evaluation = run_preflight_gate(
@@ -836,6 +862,9 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             output_root=args.output_root,
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
+            thresholds_path=args.thresholds_path,
+            profiles_path=args.profile_path,
+            extra_train_overrides=extra_train_overrides,
         )
         overall = evaluation.verdict
         stages = [evaluation]
@@ -847,6 +876,9 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             output_root=args.output_root,
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
+            thresholds_path=args.thresholds_path,
+            profiles_path=args.profile_path,
+            extra_train_overrides=extra_train_overrides,
         )
 
     report: dict[str, object] = {

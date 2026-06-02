@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "notes": [
+    "PPO overrides are appended after gate envelope overrides in preflight/calibrate.",
+    "Refresh when a W&B sweep winner is promoted (e.g. ppo_stability_kl).",
+    "Thresholds in preflight-calibration.json must be measured under these PPO settings."
+  ],
+  "models": {
+    "transformer_factorized_small": {
+      "source": "20260531 preflight_calibrate_noop_s42_u200 + conf/training/README workstation PPO; intended ship profile until ppo_stability_kl winner is recorded here",
+      "ppo_overrides": [
+        "training.lr=0.0003",
+        "training.clip_coef=0.2",
+        "training.ent_coef=0.005",
+        "training.vf_coef=0.5",
+        "training.max_grad_norm=0.5",
+        "training.epochs=2",
+        "training.update_chunk_rows=1024",
+        "training.reseed_every_updates=0"
+      ]
+    },
+    "transformer_factorized": {
+      "source": "alias: same PPO as transformer_factorized_small for preflight gates",
+      "ppo_overrides": [
+        "training.lr=0.0003",
+        "training.clip_coef=0.2",
+        "training.ent_coef=0.005",
+        "training.vf_coef=0.5",
+        "training.max_grad_norm=0.5",
+        "training.epochs=2",
+        "training.update_chunk_rows=1024",
+        "training.reseed_every_updates=0"
+      ]
+    }
+  }
+}

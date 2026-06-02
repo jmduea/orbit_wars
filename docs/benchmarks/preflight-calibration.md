@@ -24,6 +24,20 @@ A 200-update preflight run (seed 42, `transformer_factorized_small`) showed lear
 
 Absolute JAX win rate is a poor gate with untuned self-play PPO defaults. Trend is a better fast signal. Tournament eval is the win-proof layer.
 
+## Per-model PPO profiles (gates + calibration)
+
+Preflight **does not** use drifting `conf/training/base.yaml` PPO defaults. Each model maps to promoted hyperparameters in `docs/benchmarks/preflight-profiles.json` (loaded by `src/jax/preflight_profiles.py`). Gate envelopes (`training=2p_16`, `rollout_steps=128`, opponents, update counts) stay in code.
+
+When a W&B sweep winner is promoted (e.g. `ppo_stability_kl`), update `ppo_overrides` in that JSON, then re-run calibration and learn-proof for that model.
+
+```bash
+uv run ow benchmark learn-proof --model transformer_factorized_small --through beat_random \
+  --profile-path docs/benchmarks/preflight-profiles.json \
+  --out outputs/preflight/learn_proof_report.json
+```
+
+Optional `--train-overrides` append after the profile (Planet Flow smoke winner pattern on the worktree branch).
+
 ## Calibrated thresholds
 
 Source of truth: `docs/benchmarks/preflight-calibration.json` (regenerate with `make preflight-calibrate`).

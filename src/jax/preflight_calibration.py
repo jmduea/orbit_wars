@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from src.jax.preflight_profiles import (
+    default_profiles_path,
+    ppo_overrides_for_model,
+)
+
 OpponentProfile = Literal["noop_only", "random_only"]
 
 DEFAULT_SEEDS: tuple[int, ...] = (42, 43)
@@ -246,7 +251,15 @@ def calibration_train_overrides(
     seed: int,
     total_updates: int,
     model: str = DEFAULT_MODEL,
+    profiles_path: Path | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, ...]:
+    path = profiles_path or default_profiles_path(repo_root)
+    ppo_profile = ppo_overrides_for_model(
+        model,
+        profiles_path=path,
+        repo_root=repo_root,
+    )
     return (
         f"model={model}",
         "training=2p_16",
@@ -255,6 +268,7 @@ def calibration_train_overrides(
         f"opponents={opponent}",
         "curriculum=off",
         *PREFLIGHT_TRAIN_BASE,
+        *ppo_profile,
         f"seed={seed}",
     )
 
@@ -500,13 +514,19 @@ def run_calibration_train(
     output_root: Path = Path("outputs"),
     repo_root: Path,
     dry_run: bool = False,
+    profiles_path: Path | None = None,
 ) -> TrainingSignalSnapshot:
     campaign = calibration_campaign(opponent, seed=seed, total_updates=total_updates)
     overrides = [
         f"output.campaign={campaign}",
         f"output.root={output_root.as_posix()}",
         *calibration_train_overrides(
-            opponent, seed=seed, total_updates=total_updates, model=model
+            opponent,
+            seed=seed,
+            total_updates=total_updates,
+            model=model,
+            profiles_path=profiles_path,
+            repo_root=repo_root,
         ),
     ]
     run_ow_train(
@@ -548,6 +568,7 @@ def run_calibration_sweep(
     output_root: Path = Path("outputs"),
     repo_root: Path,
     dry_run: bool = False,
+    profiles_path: Path | None = None,
 ) -> list[TrainingSignalSnapshot]:
     snapshots: list[TrainingSignalSnapshot] = []
     for opponent in opponents:
@@ -562,6 +583,7 @@ def run_calibration_sweep(
                         output_root=output_root,
                         repo_root=repo_root,
                         dry_run=dry_run,
+                        profiles_path=profiles_path,
                     )
                 )
     return snapshots

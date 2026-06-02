@@ -101,9 +101,12 @@ def merge_metric_dicts(
 def sum_metric_dicts(
     metrics_by_chunk: list[dict[str, jax.Array]],
 ) -> dict[str, jax.Array]:
-    if len(metrics_by_chunk) == 1:
-        return metrics_by_chunk[0]
-    return finalize_cross_chunk_rate_metrics(merge_metric_dicts(metrics_by_chunk))
+    merged = (
+        metrics_by_chunk[0]
+        if len(metrics_by_chunk) == 1
+        else merge_metric_dicts(metrics_by_chunk)
+    )
+    return finalize_cross_chunk_rate_metrics(merged)
 
 
 def prune_merged_rollout_metrics(

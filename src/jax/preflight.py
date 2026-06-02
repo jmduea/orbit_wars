@@ -15,6 +15,10 @@ from src.jax.preflight_calibration import (
     load_thresholds,
     run_ow_train,
 )
+from src.jax.preflight_profiles import (
+    default_profiles_path,
+    ppo_overrides_for_model,
+)
 
 Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
 
@@ -77,12 +81,19 @@ def _gate_specs(
     model: str,
     *,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
 ) -> dict[str, PreflightGateSpec]:
     learning = _learning_signal_thresholds(thresholds_path)
     window = int(learning.get("window_updates", WINDOW_UPDATES))
     min_delta = float(learning.get("min_win_rate_delta", 0.08))
     max_kl = float(learning.get("max_approx_kl", 0.15))
     min_ent = float(learning.get("min_entropy", 1.0e-4))
+    profile_path = profiles_path or default_profiles_path(_repo_root())
+    ppo_profile = ppo_overrides_for_model(
+        model,
+        profiles_path=profile_path,
+        repo_root=_repo_root(),
+    )
     return {
         "beat_noop": PreflightGateSpec(
             gate_id="beat_noop",
@@ -94,6 +105,7 @@ def _gate_specs(
                 "opponents=noop_only",
                 "curriculum=off",
                 *PREFLIGHT_TRAIN_BASE,
+                *ppo_profile,
             ),
             min_win_rate_delta=min_delta,
             window_updates=window,
@@ -110,6 +122,7 @@ def _gate_specs(
                 "opponents=random_only",
                 "curriculum=off",
                 *PREFLIGHT_TRAIN_BASE,
+                *ppo_profile,
             ),
             min_win_rate_delta=min_delta,
             window_updates=window,
@@ -368,8 +381,14 @@ def run_preflight_gate(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> GateEvaluation:
-    specs = _gate_specs(model, thresholds_path=thresholds_path)
+    specs = _gate_specs(
+        model,
+        thresholds_path=thresholds_path,
+        profiles_path=profiles_path,
+    )
     if gate_id not in specs:
         raise ValueError(f"Unknown preflight gate: {gate_id!r}")
     spec = specs[gate_id]
@@ -379,6 +398,7 @@ def run_preflight_gate(
         f"output.campaign={campaign}",
         f"output.root={output_root.as_posix()}",
         *spec.train_overrides,
+        *extra_train_overrides,
     ]
     run_ow_train(
         overrides,
@@ -432,6 +452,8 @@ def run_preflight_ladder(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> tuple[PreflightVerdict, list[GateEvaluation]]:
     if through not in GATE_ORDER:
         raise ValueError(f"--through must be one of {GATE_ORDER}, got {through!r}")
@@ -447,6 +469,8 @@ def run_preflight_ladder(
             repo_root=repo_root,
             dry_run=dry_run,
             thresholds_path=thresholds_path,
+            profiles_path=profiles_path,
+            extra_train_overrides=extra_train_overrides,
         )
         evaluations.append(evaluation)
         if evaluation.verdict != PreflightVerdict.VERIFIED:
