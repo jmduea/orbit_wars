@@ -312,7 +312,7 @@ def run_training_benchmark(
                     transitions = concatenate_transition_batches(transitions_by_group)
                     rollout_metrics = sum_metric_dicts(rollout_metrics_by_group)
                     if detailed_timing:
-                        jax.block_until_ready(transitions.log_prob)
+                        jax.block_until_ready(transitions.action_replay.log_prob)
                 rollout_elapsed = time.perf_counter() - rollout_t0
 
                 ppo_t0 = time.perf_counter()

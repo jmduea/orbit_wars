@@ -25,7 +25,15 @@ from src.jax.factored_sequence_scan import (
 )
 from src.jax.features import TurnBatch
 from src.jax.policy import is_distributional_value_head
-from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.rollout.types import (
+    FactorizedActionReplay,
+    JaxTrainState,
+    JaxTransitionBatch,
+    PlanetFlowActionReplay,
+    require_factorized_replay,
+    require_planet_flow_replay,
+    transition_env_rows,
+)
 from src.jax.ship_action import is_continuous_ship_mode
 from src.telemetry.metric_registry import (
     prune_scalar_metrics,
@@ -171,7 +179,7 @@ def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
 
 
 def _flatten_transition_to_turn_batch(batch: JaxTransitionBatch) -> TurnBatch:
-    env_rows = batch.target_index.shape[0] * batch.target_index.shape[1]
+    env_rows = transition_env_rows(batch)
     return TurnBatch(
         planet_features=batch.planet_features.reshape(
             env_rows, *batch.planet_features.shape[2:]
@@ -395,33 +403,25 @@ def _ppo_update_factorized_jax(
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    if (
-        batch.planet_flow_target_bucket is not None
-        or batch.planet_flow_target_pressure is not None
-        or batch.planet_flow_target_mask is not None
-    ):
-        raise ValueError(
-            "Factorized PPO received Planet Flow pressure-action replay fields. "
-            "Use a matching model.pointer_decoder checkpoint/config pair."
-        )
+    replay = require_factorized_replay(batch)
 
     from src.features.registry import edge_k
     from src.game.constants import MAX_PLANETS
 
-    sequence_k = batch.source_index.shape[-1]
+    sequence_k = replay.source_index.shape[-1]
     k = edge_k(cfg.task)
-    env_rows = batch.source_index.shape[0] * batch.source_index.shape[1]
-    mask = batch.step_mask.reshape(env_rows, sequence_k)
+    env_rows = transition_env_rows(batch)
+    mask = replay.step_mask.reshape(env_rows, sequence_k)
     turn_batch = _flatten_transition_to_turn_batch(batch)
     player_count = batch.player_count.reshape(env_rows)
-    ship_bucket_mask = batch.ship_bucket_mask.reshape(
+    ship_bucket_mask = replay.ship_bucket_mask.reshape(
         env_rows, sequence_k, MAX_PLANETS, k, cfg.task.ship_bucket_count
     )
-    source = batch.source_index.reshape(env_rows, sequence_k)
-    target_slot = batch.target_slot.reshape(env_rows, sequence_k)
-    bucket = batch.ship_bucket.reshape(env_rows, sequence_k)
-    stop_flag = batch.stop_flag.reshape(env_rows, sequence_k)
-    old_log_prob = batch.log_prob.reshape(env_rows, sequence_k)
+    source = replay.source_index.reshape(env_rows, sequence_k)
+    target_slot = replay.target_slot.reshape(env_rows, sequence_k)
+    bucket = replay.ship_bucket.reshape(env_rows, sequence_k)
+    stop_flag = replay.stop_flag.reshape(env_rows, sequence_k)
+    old_log_prob = replay.log_prob.reshape(env_rows, sequence_k)
     returns_state = _flatten_state_scalars(batch.returns, env_rows)
     advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
     advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
@@ -432,11 +432,11 @@ def _ppo_update_factorized_jax(
     advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
     continuous = is_continuous_ship_mode(cfg)
     ship_fraction = None
-    if continuous and batch.ship_fraction is not None:
-        ship_fraction = batch.ship_fraction.reshape(env_rows, sequence_k)
+    if continuous and replay.ship_fraction is not None:
+        ship_fraction = replay.ship_fraction.reshape(env_rows, sequence_k)
     decoder_hidden = None
-    if cfg.model.decoder_carry and batch.decoder_hidden is not None:
-        decoder_hidden = batch.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
+    if cfg.model.decoder_carry and replay.decoder_hidden is not None:
+        decoder_hidden = replay.decoder_hidden.reshape(env_rows, cfg.model.hidden_size)
     initial_planet_ships = None
     if batch.initial_planet_ships is not None:
         initial_planet_ships = batch.initial_planet_ships.reshape(
@@ -780,24 +780,21 @@ def _ppo_update_planet_flow_jax(
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    if batch.planet_flow_target_bucket is None or batch.planet_flow_target_mask is None:
-        raise ValueError(
-            "Planet Flow PPO requires stored pressure bucket and target mask fields."
-        )
+    replay = require_planet_flow_replay(batch)
 
     invalid_bucket_count = planet_flow_invalid_bucket_count(
-        batch.planet_flow_target_bucket,
+        replay.target_bucket,
         len(cfg.model.planet_flow.pressure_bucket_values),
-        batch.planet_flow_target_mask,
+        replay.target_mask,
     )
     _check_planet_flow_bucket_count(invalid_bucket_count)
 
-    env_rows = batch.target_index.shape[0] * batch.target_index.shape[1]
+    env_rows = transition_env_rows(batch)
     turn_batch = _flatten_transition_to_turn_batch(batch)
     player_count = batch.player_count.reshape(env_rows)
-    target_bucket = batch.planet_flow_target_bucket.reshape(env_rows, -1)
-    target_mask = batch.planet_flow_target_mask.reshape(env_rows, -1)
-    old_log_prob = batch.log_prob.reshape(env_rows)
+    target_bucket = replay.target_bucket.reshape(env_rows, -1)
+    target_mask = replay.target_mask.reshape(env_rows, -1)
+    old_log_prob = replay.log_prob.reshape(env_rows)
     returns_state = _flatten_state_scalars(batch.returns, env_rows)
     advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
     advantage_mean = jnp.mean(advantages_state)
@@ -981,8 +978,16 @@ def ppo_update_jax(
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    if is_factorized_pointer_decoder(cfg.model):
+    if isinstance(batch.action_replay, FactorizedActionReplay):
+        if not is_factorized_pointer_decoder(cfg.model):
+            raise ValueError(
+                "Factorized action replay requires a factorized pointer_decoder config."
+            )
         return _ppo_update_factorized_jax(train_state, policy, batch, cfg)
-    if is_planet_flow_pointer_decoder(cfg.model):
+    if isinstance(batch.action_replay, PlanetFlowActionReplay):
+        if not is_planet_flow_pointer_decoder(cfg.model):
+            raise ValueError(
+                "Planet Flow action replay requires a planet_flow pointer_decoder config."
+            )
         return _ppo_update_planet_flow_jax(train_state, policy, batch, cfg)
-    raise ValueError(f"Unsupported pointer_decoder={cfg.model.pointer_decoder!r}.")
+    raise ValueError("Transition batch action_replay variant is unsupported.")

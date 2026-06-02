@@ -13,7 +13,11 @@ from src.jax.action_codec import (
     sample_planet_flow_pressure_action,
 )
 from src.jax.ppo_update import ppo_update_jax
-from src.jax.rollout.types import JaxTransitionBatch
+from src.jax.rollout.types import (
+    FactorizedActionReplay,
+    JaxTransitionBatch,
+    PlanetFlowActionReplay,
+)
 
 
 def _policy_output() -> PlanetFlowPolicyOutput:
@@ -114,7 +118,7 @@ def test_planet_flow_invalid_bucket_count_ignores_inactive_targets() -> None:
     assert int(invalid) == 1
 
 
-def _minimal_transition_batch() -> JaxTransitionBatch:
+def _minimal_shared_batch_fields() -> dict[str, jax.Array]:
     zeros_2d = jnp.zeros((1, 1), dtype=jnp.float32)
     zeros_planets = jnp.zeros((1, 1, 3), dtype=jnp.float32)
     bool_planets = jnp.ones((1, 1, 3), dtype=bool)
@@ -123,68 +127,78 @@ def _minimal_transition_batch() -> JaxTransitionBatch:
     zeros_ids = jnp.zeros((1, 1, 3, 2), dtype=jnp.int32)
     zeros_sequence = jnp.zeros((1, 1, 2), dtype=jnp.int32)
     float_sequence = jnp.zeros((1, 1, 2), dtype=jnp.float32)
+    return {
+        "planet_features": zeros_planets,
+        "planet_mask": bool_planets,
+        "edge_features": zeros_edges,
+        "edge_mask": bool_edges,
+        "edge_src_ids": zeros_ids,
+        "edge_tgt_ids": zeros_ids,
+        "global_features": jnp.zeros((1, 1, 4), dtype=jnp.float32),
+        "theta_ref": zeros_2d,
+        "player_count": jnp.full((1, 1), 2, dtype=jnp.int32),
+        "returns": zeros_2d,
+        "advantages": zeros_2d,
+        "factorized_replay": FactorizedActionReplay(
+            ship_bucket_mask=jnp.ones((1, 1, 2, 3, 2, 5), dtype=bool),
+            target_index=zeros_sequence,
+            ship_bucket=zeros_sequence,
+            log_prob=float_sequence,
+            source_index=zeros_sequence,
+            target_slot=zeros_sequence,
+            stop_flag=zeros_sequence,
+            step_mask=float_sequence,
+        ),
+    }
 
+
+def _minimal_transition_batch() -> JaxTransitionBatch:
+    fields = _minimal_shared_batch_fields()
     return JaxTransitionBatch(
-        planet_features=zeros_planets,
-        planet_mask=bool_planets,
-        edge_features=zeros_edges,
-        edge_mask=bool_edges,
-        edge_src_ids=zeros_ids,
-        edge_tgt_ids=zeros_ids,
-        global_features=jnp.zeros((1, 1, 4), dtype=jnp.float32),
-        theta_ref=zeros_2d,
-        player_count=jnp.full((1, 1), 2, dtype=jnp.int32),
-        ship_bucket_mask=jnp.ones((1, 1, 2, 3, 2, 5), dtype=bool),
-        target_index=zeros_sequence,
-        ship_bucket=zeros_sequence,
-        log_prob=float_sequence,
-        returns=zeros_2d,
-        advantages=zeros_2d,
-        source_index=zeros_sequence,
-        target_slot=zeros_sequence,
-        stop_flag=zeros_sequence,
-        step_mask=float_sequence,
+        planet_features=fields["planet_features"],
+        planet_mask=fields["planet_mask"],
+        edge_features=fields["edge_features"],
+        edge_mask=fields["edge_mask"],
+        edge_src_ids=fields["edge_src_ids"],
+        edge_tgt_ids=fields["edge_tgt_ids"],
+        global_features=fields["global_features"],
+        theta_ref=fields["theta_ref"],
+        player_count=fields["player_count"],
+        returns=fields["returns"],
+        advantages=fields["advantages"],
+        action_replay=fields["factorized_replay"],
     )
 
 
 def _minimal_planet_flow_transition_batch() -> JaxTransitionBatch:
     batch = _minimal_transition_batch()
-    zeros_sequence = jnp.zeros((1, 1, 1), dtype=jnp.int32)
     return batch._replace(
-        ship_bucket_mask=jnp.ones((1, 1, 1, 1, 1), dtype=bool),
-        target_index=zeros_sequence,
-        ship_bucket=zeros_sequence,
-        source_index=zeros_sequence,
-        target_slot=zeros_sequence,
-        stop_flag=zeros_sequence,
-        step_mask=jnp.zeros((1, 1, 1), dtype=jnp.float32),
-        log_prob=jnp.zeros((1, 1), dtype=jnp.float32),
-        planet_flow_target_bucket=jnp.array([[[2, 0, 4]]], dtype=jnp.int32),
-        planet_flow_target_pressure=jnp.array([[[0.5, 0.0, 1.0]]]),
-        planet_flow_target_mask=jnp.array([[[True, False, True]]]),
+        action_replay=PlanetFlowActionReplay(
+            target_bucket=jnp.array([[[2, 0, 4]]], dtype=jnp.int32),
+            target_pressure=jnp.array([[[0.5, 0.0, 1.0]]]),
+            target_mask=jnp.array([[[True, False, True]]]),
+            log_prob=jnp.zeros((1, 1), dtype=jnp.float32),
+        )
     )
 
 
-def test_transition_batch_has_planet_flow_pressure_storage_fields() -> None:
+def test_transition_batch_stores_planet_flow_replay_variant() -> None:
     batch = _minimal_transition_batch()
+    pressure_batch = _minimal_planet_flow_transition_batch()
 
-    pressure_batch = batch._replace(
-        planet_flow_target_bucket=jnp.array([[[2, 0, 4]]], dtype=jnp.int32),
-        planet_flow_target_pressure=jnp.array([[[0.5, 0.0, 1.0]]]),
-        planet_flow_target_mask=jnp.array([[[True, False, True]]]),
-    )
-
-    assert batch.planet_flow_target_bucket is None
-    assert pressure_batch.planet_flow_target_bucket is not None
-    assert pressure_batch.planet_flow_target_mask is not None
+    assert isinstance(batch.action_replay, FactorizedActionReplay)
+    assert isinstance(pressure_batch.action_replay, PlanetFlowActionReplay)
+    replay = pressure_batch.action_replay
+    assert replay.target_bucket is not None
+    assert replay.target_mask is not None
 
 
-def test_ppo_update_rejects_planet_flow_without_pressure_replay_fields() -> None:
+def test_ppo_update_rejects_factorized_replay_under_planet_flow_config() -> None:
     cfg = TrainConfig()
     cfg.model.pointer_decoder = "planet_flow_target_heatmap"
     batch = _minimal_transition_batch()
 
-    with pytest.raises(ValueError, match="pressure bucket and target mask"):
+    with pytest.raises(ValueError, match="Factorized action replay requires"):
         ppo_update_jax(
             None,  # type: ignore[arg-type]
             None,
@@ -193,12 +207,14 @@ def test_ppo_update_rejects_planet_flow_without_pressure_replay_fields() -> None
         )
 
 
-def test_ppo_update_rejects_planet_flow_payload_under_factorized_config() -> None:
+def test_ppo_update_rejects_planet_flow_replay_under_factorized_config() -> None:
     cfg = TrainConfig()
     cfg.model.pointer_decoder = "factorized_topk"
     batch = _minimal_planet_flow_transition_batch()
 
-    with pytest.raises(ValueError, match="Planet Flow pressure-action"):
+    with pytest.raises(
+        ValueError, match="Planet Flow action replay requires a planet_flow"
+    ):
         ppo_update_jax(
             None,  # type: ignore[arg-type]
             None,
@@ -210,8 +226,12 @@ def test_ppo_update_rejects_planet_flow_payload_under_factorized_config() -> Non
 def test_ppo_update_rejects_invalid_planet_flow_pressure_bucket() -> None:
     cfg = TrainConfig()
     cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    replay = _minimal_planet_flow_transition_batch().action_replay
+    assert isinstance(replay, PlanetFlowActionReplay)
     batch = _minimal_planet_flow_transition_batch()._replace(
-        planet_flow_target_bucket=jnp.array([[[99, 0, 4]]], dtype=jnp.int32),
+        action_replay=replay._replace(
+            target_bucket=jnp.array([[[99, 0, 4]]], dtype=jnp.int32),
+        )
     )
 
     with pytest.raises(ValueError, match="out-of-range pressure bucket"):
