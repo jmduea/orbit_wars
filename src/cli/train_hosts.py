@@ -98,6 +98,7 @@ def print_ow_help() -> None:
         "  train   Local or Kaggle JAX training via Hydra configuration\n"
         "  eval    Tournament eval, artifact worker, run status, Kaggle submit\n"
         "  runs    List/show/tail campaign run directories under outputs/\n"
+        "  promote Show/history/demote campaign promoted checkpoints\n"
         "  benchmark  Stability benchmarks and pre-flight learning gates\n"
         "  make    Generate W&B sweep YAML (scripts/make_wandb_sweep.py)\n\n"
         "Bare `ow` or `ow KEY=VALUE` defaults to `ow train`.\n\n"
@@ -123,6 +124,7 @@ def print_ow_help() -> None:
         "  uv run ow eval --help\n"
         "  uv run ow benchmark --help\n"
         "  uv run ow runs --help\n"
+        "  uv run ow promote --help\n"
         "  docs/AGENT_CAPABILITIES.md\n"
         "  uv run python -m src.cli.kaggle_runner --help\n"
     )

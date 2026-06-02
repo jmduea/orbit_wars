@@ -13,7 +13,7 @@ uv run ow train print_resolved_config=true
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow benchmark gate beat_noop` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow promote demote`, `ow benchmark gate beat_noop` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -81,12 +81,25 @@ uv run ow train ... artifacts=hybrid_promotion   # async docker + tournament wor
 4. Cancel mistaken queue entries: `ow eval jobs cancel --run <run_dir> --all-queued --dry-run` first, then without `--dry-run`.
 5. Worker processing: `ow eval worker --run <run_dir> --verbose` (or rely on autostart + `queue/worker.stderr.log`).
 
+### Promotion rollback (operator)
+
+```bash
+uv run ow promote show --campaign <c>
+uv run ow promote history --campaign <c> --limit 10
+uv run ow promote demote --campaign <c> --dry-run
+uv run ow promote demote --campaign <c>
+uv run ow promote demote --campaign <c> --to-previous
+```
+
+Clears `promoted/current_best/manifest.json` and campaign `current_best_*` fields; appends an audit row to `indexes/promoted.jsonl`. `--to-previous` restores the prior indexed promotion when its checkpoint still exists.
+
 ## Discovery
 
 ```bash
 uv run ow --help
 uv run ow train --help
 uv run ow eval --help
+uv run ow promote --help
 uv run ow benchmark --help
 make help
 ```
@@ -113,6 +126,10 @@ make help
 **Cancel stale artifact jobs**
 
 > Run `uv run ow eval jobs cancel --run <run_dir> --all-queued --dry-run`, confirm targets, then rerun without `--dry-run`.
+
+**Rollback mistaken promotion**
+
+> Run `uv run ow promote show --campaign <c>`, then `uv run ow promote demote --campaign <c> --dry-run` and confirm JSON action before applying without `--dry-run`.
 
 **Preflight Gates 2–4**
 
