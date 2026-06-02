@@ -26,7 +26,9 @@ Phase 2 extends Phase 1 (`docs/plans/2026-06-01-agent-native-operator-cli-plan.m
 | Metric promotion terminal line | Mirrors tournament promote UX in training |
 | `manifest.json` `produced_artifacts` | Appends checkpoint records at commit boundaries |
 
-## Deferred (not natural small slices)
+## Deferred → Phase 3 schedule
+
+Large refactors are **scheduled** in [`docs/plans/2026-06-02-agent-native-phase3-refactors.md`](plans/2026-06-02-agent-native-phase3-refactors.md) (ordered backlog, effort, acceptance criteria).
 
 | Item | Why deferred |
 |------|----------------|

@@ -13,6 +13,7 @@
 | Item | Link |
 | ---- | ---- |
 | src audit phase 4: checkpoint hooks (#151) | [#151](https://github.com/jmduea/orbit_wars/issues/151) |
+| Agent-native Phase 3 (learn-proof split, gate YAML, sweep unify) | [plan](plans/2026-06-02-agent-native-phase3-refactors.md) · [Phase 2 status](agent-native-phase2-status.md) |
 | Debug metric: average ships per fleet launch | — |
 
 ## Later
