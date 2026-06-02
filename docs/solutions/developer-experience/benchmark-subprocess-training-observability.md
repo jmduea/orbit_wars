@@ -139,4 +139,5 @@ wc -l outputs/campaigns/seed_sched_cal_*/runs/*/logs/*_jax.jsonl
 - Fix: PR [#165](https://github.com/jmduea/orbit_wars/pull/165) (`aa3686c`)
 - Active calibration plan: `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`
 - Direct `ow train` operator lines (different path): `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md` § Training observability
-- Unrelated throughput topic: `docs/solutions/performance-issues/launch-hygiene-incremental-carry-throughput.md`
+- Throughput attribution follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`
+- Related sampler-throughput topic: `docs/solutions/performance-issues/launch-hygiene-incremental-carry-throughput.md`

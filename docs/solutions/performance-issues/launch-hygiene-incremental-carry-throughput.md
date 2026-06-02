@@ -108,5 +108,6 @@ The oracle path (`compose_hygiene_with_shield_mask` / `hygiene_adjusted_bucket_m
 
 - Requirements: `docs/brainstorms/2026-06-01-launch-hygiene-bundle-requirements.md` (R1–R9)
 - Plans: `docs/plans/2026-06-01-launch-hygiene-bundle-plan.md`, `docs/plans/2026-06-01-002-fix-launch-hygiene-throughput-plan.md`
+- Production-path timing follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`
 - PR: [#163](https://github.com/jmduea/orbit_wars/pull/163) (merged 2026-06-01)
 - Session history: [launch hygiene + throughput arc](c1094a23-fcdd-48fb-941a-e3da7e4fdbfe)
