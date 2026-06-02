@@ -138,10 +138,10 @@ flowchart TB
   - **When:** An agent polls `ow eval status` until idle.
   - **Then:** The agent cites `validation_ok` and tournament results from checkpoint_eval manifests; it does not claim submit-valid from `replays/replay_u*.html` alone.
 
-- AE2. **Covers R5, F2**
+- AE2. **Covers R5; negative path before F2**
   - **Given:** An agent asked to validate a checkpoint before upload.
   - **When:** It runs `ow eval package` without `--validate-docker`.
-  - **Then:** That run is classified as layout-only; the agent follows up with `--validate-docker` or hybrid queue proof before reporting success.
+  - **Then:** That run is classified as layout-only; the agent follows up with `--validate-docker` or hybrid queue proof before reporting success (F2 Steps).
 
 - AE3. **Covers R9**
   - **Given:** `run_match` return arity changes in tournament/replay code.
