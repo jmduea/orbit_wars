@@ -34,9 +34,11 @@ Do **not** run `scripts/install_understand_anything_cursor.sh` — use native pl
 
 ## Session-start hook (recommended)
 
-Agents cold-start faster when session context is loaded automatically. Cursor session-start is product-level; the repo documents a copy-paste hook only (no committed user secrets).
+Agents cold-start faster when session context is loaded automatically. Cursor session-start is product-level; the repo ships an optional project hook (no user secrets).
 
-Add to **Cursor Settings → Hooks → Session Start** (or project `.cursor/hooks.json` when supported):
+**Project hook (copy as-is):** `.cursor/hooks.json` runs `.cursor/hooks/session-start-agent-context.sh`, which calls `make agent-context` and returns `additional_context` per [Cursor hooks docs](https://cursor.com/docs/hooks). Enable by keeping those files in the repo root — Cursor reloads on save.
+
+Manual alternative — **Cursor Settings → Hooks → Session Start**:
 
 ```json
 {
@@ -44,7 +46,7 @@ Add to **Cursor Settings → Hooks → Session Start** (or project `.cursor/hook
 }
 ```
 
-Equivalent:
+Equivalent one-liner:
 
 ```bash
 make agent-context
