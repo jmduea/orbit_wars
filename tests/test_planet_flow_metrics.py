@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from src.config import TrainConfig
+from src.jax.rollout.metric_contract import FINALIZED_ROLLOUT_RATE_KEYS
+from src.jax.rollout.planet_flow_metric_descriptors import (
+    PLANET_FLOW_CONTROL_COUNT_KEYS,
+    PLANET_FLOW_CONTROL_DELTA_KEYS,
+    PLANET_FLOW_COUNT_KEYS,
+)
 from src.jax.train.metrics import finalize_cross_chunk_rate_metrics, sum_metric_dicts
 from src.telemetry.metric_registry import (
     METRIC_DEFINITIONS_BY_NAME,
     rollout_compute_scalar_keys,
 )
+from src.telemetry.planet_flow_registry import planet_flow_metric_definitions
 
 
 def _planet_flow_count_metrics() -> dict[str, jnp.ndarray]:
@@ -105,3 +113,21 @@ def test_planet_flow_metrics_are_registered_for_action_decision_group() -> None:
         METRIC_DEFINITIONS_BY_NAME["planet_flow_unreachable_demand_rate"].group
         == "action_decision"
     )
+
+
+def test_planet_flow_descriptors_align_contract_and_registry() -> None:
+    registry_names = {definition.name for definition in planet_flow_metric_definitions()}
+
+    assert set(PLANET_FLOW_COUNT_KEYS).issubset(registry_names)
+    assert set(PLANET_FLOW_CONTROL_COUNT_KEYS).issubset(registry_names)
+    assert set(PLANET_FLOW_CONTROL_DELTA_KEYS).issubset(registry_names)
+    assert set(PLANET_FLOW_CONTROL_DELTA_KEYS).issubset(set(FINALIZED_ROLLOUT_RATE_KEYS))
+
+
+def test_planet_flow_control_delta_keys_finalize_to_finite_numeric_values() -> None:
+    finalized = finalize_cross_chunk_rate_metrics(_planet_flow_count_metrics())
+
+    for key in PLANET_FLOW_CONTROL_DELTA_KEYS:
+        assert key in finalized
+        value = float(finalized[key])
+        assert np.isfinite(value)

@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from src.jax.rollout.planet_flow_metric_descriptors import (
+    PLANET_FLOW_CONTROL_COUNT_KEYS,
+    PLANET_FLOW_CONTROL_DELTA_KEYS,
+    PLANET_FLOW_CONTROL_RATE_KEYS,
+    PLANET_FLOW_COUNT_KEYS,
+    PLANET_FLOW_RATE_KEYS,
+)
+
 TRAJECTORY_SHIELD_COUNT_KEYS: tuple[str, ...] = (
     "trajectory_shield_blocked_count",
     "trajectory_shield_blocked_sun_count",
@@ -25,58 +33,6 @@ OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
 OPPONENT_SLOT_METRIC_KEYS: tuple[str, ...] = (
     *OPPONENT_SLOT_COUNT_KEYS,
     "opponent_historical_fallback_latest_slots",
-)
-
-PLANET_FLOW_COUNT_KEYS: tuple[str, ...] = (
-    "planet_flow_demanded_mass_sum",
-    "planet_flow_unreachable_demand_mass_sum",
-    "planet_flow_held_demand_mass_sum",
-    "planet_flow_requested_ship_mass_sum",
-    "planet_flow_emitted_ship_mass_sum",
-    "planet_flow_capacity_dropped_launch_count",
-    "planet_flow_emitted_launch_count",
-    "planet_flow_small_launch_count",
-    "planet_flow_duplicate_source_target_count",
-)
-
-PLANET_FLOW_CONTROL_COUNT_KEYS: tuple[str, ...] = (
-    "planet_flow_control_demanded_mass_sum",
-    "planet_flow_control_unreachable_demand_mass_sum",
-    "planet_flow_control_held_demand_mass_sum",
-    "planet_flow_control_requested_ship_mass_sum",
-    "planet_flow_control_emitted_ship_mass_sum",
-    "planet_flow_control_capacity_dropped_launch_count",
-    "planet_flow_control_emitted_launch_count",
-    "planet_flow_control_small_launch_count",
-    "planet_flow_control_duplicate_source_target_count",
-)
-
-PLANET_FLOW_RATE_KEYS: tuple[str, ...] = (
-    "planet_flow_unreachable_demand_rate",
-    "planet_flow_held_demand_rate",
-    "planet_flow_emitted_ship_mass_rate",
-    "planet_flow_capacity_drop_rate",
-    "planet_flow_small_launch_rate",
-    "planet_flow_duplicate_source_target_rate",
-)
-
-PLANET_FLOW_CONTROL_RATE_KEYS: tuple[str, ...] = (
-    "planet_flow_control_unreachable_demand_rate",
-    "planet_flow_control_held_demand_rate",
-    "planet_flow_control_emitted_ship_mass_rate",
-    "planet_flow_control_capacity_drop_rate",
-    "planet_flow_control_small_launch_rate",
-    "planet_flow_control_duplicate_source_target_rate",
-)
-
-PLANET_FLOW_CONTROL_DELTA_KEYS: tuple[str, ...] = (
-    "planet_flow_emitted_launch_count_delta_vs_control",
-    "planet_flow_emitted_ship_mass_delta_vs_control",
-    "planet_flow_unreachable_demand_rate_delta_vs_control",
-    "planet_flow_held_demand_rate_delta_vs_control",
-    "planet_flow_emitted_ship_mass_rate_delta_vs_control",
-    "planet_flow_small_launch_rate_delta_vs_control",
-    "planet_flow_duplicate_source_target_rate_delta_vs_control",
 )
 
 # Chunk intermediates used for cross-chunk rate finalization; never logged to telemetry.

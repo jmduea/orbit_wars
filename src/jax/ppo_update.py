@@ -307,6 +307,88 @@ def _value_loss_per_state(
     return 0.5 * (returns - value) ** 2
 
 
+def _ppo_importance_sampling(
+    old_log_prob: jax.Array,
+    new_log_prob: jax.Array,
+    mask: jax.Array,
+    *,
+    clip_coef: float,
+) -> dict[str, jax.Array]:
+    """Shared PPO ratio, KL, and clip diagnostics for factorized and Planet Flow."""
+    log_ratio_raw = new_log_prob - old_log_prob
+    approx_kl = masked_mean(old_log_prob - new_log_prob, mask)
+    ratio_for_kl = jnp.exp(jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP))
+    approx_kl_v2 = masked_mean((ratio_for_kl - 1.0) - log_ratio_raw, mask)
+    log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
+    ratio = jnp.exp(log_ratio)
+    clipped_ratio = jnp.clip(ratio, 1.0 - clip_coef, 1.0 + clip_coef)
+    return {
+        "log_ratio_raw": log_ratio_raw,
+        "approx_kl": approx_kl,
+        "ratio_for_kl": ratio_for_kl,
+        "approx_kl_v2": approx_kl_v2,
+        "ratio": ratio,
+        "clipped_ratio": clipped_ratio,
+        "log_ratio_abs_mean": masked_mean(jnp.abs(log_ratio_raw), mask),
+        "log_ratio_abs_max": jnp.max(
+            jnp.where(mask > 0.0, jnp.abs(log_ratio_raw), 0.0)
+        ),
+        "importance_ratio_mean": masked_mean(ratio, mask),
+        "clip_fraction": masked_mean(
+            (jnp.abs(ratio - 1.0) > clip_coef).astype(jnp.float32),
+            mask,
+        ),
+    }
+
+
+def _ppo_surrogate_losses(
+    cfg: TrainConfig,
+    *,
+    policy_objective: jax.Array,
+    value_error: jax.Array,
+    entropy: jax.Array,
+    mask: jax.Array,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    policy_loss = -masked_mean(policy_objective, mask)
+    value_loss = masked_mean(value_error, mask)
+    entropy_loss = masked_mean(entropy, mask)
+    loss = (
+        policy_loss
+        + cfg.training.vf_coef * value_loss
+        - cfg.training.ent_coef * entropy_loss
+    )
+    return loss, {
+        "policy_loss": policy_loss,
+        "value_loss": value_loss,
+        "entropy": entropy_loss,
+    }
+
+
+def _finalize_ppo_epoch_scan(
+    train_state: JaxTrainState,
+    minibatches: dict[str, jax.Array],
+    update_minibatch,
+    cfg: TrainConfig,
+    minibatch_count: int,
+    *,
+    extra_metrics: dict[str, jax.Array] | None = None,
+) -> tuple[JaxTrainState, dict[str, jax.Array]]:
+    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
+        update_minibatch, (train_state.params, train_state.opt_state), minibatches
+    )
+    metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
+    if extra_metrics:
+        metrics.update(extra_metrics)
+    allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
+    metrics = prune_scalar_metrics(metrics, allowed)
+    return (
+        JaxTrainState(
+            params=params, opt_state=opt_state, optimizer=train_state.optimizer
+        ),
+        metrics,
+    )
+
+
 def _ppo_update_factorized_jax(
     train_state: JaxTrainState,
     policy: object,
@@ -584,32 +666,22 @@ def _ppo_update_factorized_jax(
             entropy = replay.entropy
             stop_entropy = replay.stop_entropy
             move_entropy = replay.move_entropy
-            log_ratio_raw = new_log_prob - minibatch["old_log_prob"]
-            approx_kl = masked_mean(
-                minibatch["old_log_prob"] - new_log_prob,
+            sampling = _ppo_importance_sampling(
+                minibatch["old_log_prob"],
+                new_log_prob,
                 minibatch["mask"],
+                clip_coef=cfg.training.clip_coef,
             )
-            ratio_for_kl = jnp.exp(
-                jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
-            )
-            approx_kl_v2 = masked_mean(
-                (ratio_for_kl - 1.0) - log_ratio_raw,
-                minibatch["mask"],
-            )
-            log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
-            ratio = jnp.exp(log_ratio)
-            clipped_ratio = jnp.clip(
-                ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
-            )
-            log_ratio_abs_mean = masked_mean(jnp.abs(log_ratio_raw), minibatch["mask"])
-            log_ratio_abs_max = jnp.max(
-                jnp.where(minibatch["mask"] > 0.0, jnp.abs(log_ratio_raw), 0.0)
-            )
-            importance_ratio_mean = masked_mean(ratio, minibatch["mask"])
-            clip_fraction = masked_mean(
-                (jnp.abs(ratio - 1.0) > cfg.training.clip_coef).astype(jnp.float32),
-                minibatch["mask"],
-            )
+            log_ratio_raw = sampling["log_ratio_raw"]
+            approx_kl = sampling["approx_kl"]
+            ratio_for_kl = sampling["ratio_for_kl"]
+            approx_kl_v2 = sampling["approx_kl_v2"]
+            ratio = sampling["ratio"]
+            clipped_ratio = sampling["clipped_ratio"]
+            log_ratio_abs_mean = sampling["log_ratio_abs_mean"]
+            log_ratio_abs_max = sampling["log_ratio_abs_max"]
+            importance_ratio_mean = sampling["importance_ratio_mean"]
+            clip_fraction = sampling["clip_fraction"]
             policy_objective = _clipped_policy_objective(
                 minibatch["advantages"],
                 ratio,
@@ -690,19 +762,15 @@ def _ppo_update_factorized_jax(
         metrics["total_loss"] = _loss
         return (params, opt_state), metrics
 
-    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
-        update_minibatch, (train_state.params, train_state.opt_state), minibatches
-    )
-    metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
-    metrics.update(parity_metrics)
-    metrics.update(debug_metrics)
-    allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
-    metrics = prune_scalar_metrics(metrics, allowed)
-    return (
-        JaxTrainState(
-            params=params, opt_state=opt_state, optimizer=train_state.optimizer
-        ),
-        metrics,
+    extra_metrics = dict(parity_metrics)
+    extra_metrics.update(debug_metrics)
+    return _finalize_ppo_epoch_scan(
+        train_state,
+        minibatches,
+        update_minibatch,
+        cfg,
+        minibatch_count,
+        extra_metrics=extra_metrics,
     )
 
 
@@ -820,23 +888,18 @@ def _ppo_update_planet_flow_jax(
                 minibatch["target_bucket"],
                 minibatch["target_mask"],
             )
-            log_ratio_raw = new_log_prob - minibatch["old_log_prob"]
-            approx_kl = masked_mean(
-                minibatch["old_log_prob"] - new_log_prob,
+            sampling = _ppo_importance_sampling(
+                minibatch["old_log_prob"],
+                new_log_prob,
                 minibatch["row_mask"],
+                clip_coef=cfg.training.clip_coef,
             )
-            ratio_for_kl = jnp.exp(
-                jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
-            )
-            approx_kl_v2 = masked_mean(
-                (ratio_for_kl - 1.0) - log_ratio_raw,
-                minibatch["row_mask"],
-            )
-            log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
-            ratio = jnp.exp(log_ratio)
-            clipped_ratio = jnp.clip(
-                ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
-            )
+            log_ratio_raw = sampling["log_ratio_raw"]
+            approx_kl = sampling["approx_kl"]
+            ratio_for_kl = sampling["ratio_for_kl"]
+            approx_kl_v2 = sampling["approx_kl_v2"]
+            ratio = sampling["ratio"]
+            clipped_ratio = sampling["clipped_ratio"]
             policy_objective = _clipped_policy_objective(
                 minibatch["advantages"],
                 ratio,
@@ -848,35 +911,21 @@ def _ppo_update_planet_flow_jax(
                 output.value_logits,
                 minibatch["returns"],
             )
-            policy_loss = -masked_mean(policy_objective, minibatch["row_mask"])
-            value_loss = masked_mean(value_error, minibatch["row_mask"])
-            entropy_loss = masked_mean(entropy, minibatch["row_mask"])
-            loss = (
-                policy_loss
-                + cfg.training.vf_coef * value_loss
-                - cfg.training.ent_coef * entropy_loss
-            )
-            log_ratio_abs_mean = masked_mean(
-                jnp.abs(log_ratio_raw), minibatch["row_mask"]
-            )
-            log_ratio_abs_max = jnp.max(
-                jnp.where(minibatch["row_mask"] > 0.0, jnp.abs(log_ratio_raw), 0.0)
-            )
-            importance_ratio_mean = masked_mean(ratio, minibatch["row_mask"])
-            clip_fraction = masked_mean(
-                (jnp.abs(ratio - 1.0) > cfg.training.clip_coef).astype(jnp.float32),
-                minibatch["row_mask"],
+            loss, core_metrics = _ppo_surrogate_losses(
+                cfg,
+                policy_objective=policy_objective,
+                value_error=value_error,
+                entropy=entropy,
+                mask=minibatch["row_mask"],
             )
             metrics = {
-                "policy_loss": policy_loss,
-                "value_loss": value_loss,
-                "entropy": entropy_loss,
+                **core_metrics,
                 "approx_kl": approx_kl,
                 "approx_kl_v2": approx_kl_v2,
-                "log_ratio_abs_mean": log_ratio_abs_mean,
-                "log_ratio_abs_max": log_ratio_abs_max,
-                "importance_ratio_mean": importance_ratio_mean,
-                "clip_fraction": clip_fraction,
+                "log_ratio_abs_mean": sampling["log_ratio_abs_mean"],
+                "log_ratio_abs_max": sampling["log_ratio_abs_max"],
+                "importance_ratio_mean": sampling["importance_ratio_mean"],
+                "clip_fraction": sampling["clip_fraction"],
                 "loss": loss,
                 "sample_count": minibatch["row_mask"].sum(),
             }
@@ -917,17 +966,12 @@ def _ppo_update_planet_flow_jax(
         metrics["total_loss"] = _loss
         return (params, opt_state), metrics
 
-    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
-        update_minibatch, (train_state.params, train_state.opt_state), minibatches
-    )
-    metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
-    allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
-    metrics = prune_scalar_metrics(metrics, allowed)
-    return (
-        JaxTrainState(
-            params=params, opt_state=opt_state, optimizer=train_state.optimizer
-        ),
-        metrics,
+    return _finalize_ppo_epoch_scan(
+        train_state,
+        minibatches,
+        update_minibatch,
+        cfg,
+        minibatch_count,
     )
 
 

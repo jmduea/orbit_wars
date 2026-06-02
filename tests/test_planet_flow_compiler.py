@@ -416,3 +416,31 @@ def test_seeded_random_compiler_control_uses_planet_flow_compiler() -> None:
 
     assert result.action.source_id.shape == (1, cfg.task.max_fleets)
     assert result.diagnostics.demanded_mass.shape == (1,)
+
+
+def test_seeded_random_compiler_control_diagnostics_finite_with_positive_demand() -> None:
+    cfg = _cfg()
+    _game, _batch, batched_game, batched_batch = _batched_reset(cfg)
+
+    first = compile_seeded_random_planet_flow_control(
+        jax.random.PRNGKey(456),
+        batched_game,
+        batched_batch,
+        cfg,
+    )
+    second = compile_seeded_random_planet_flow_control(
+        jax.random.PRNGKey(456),
+        batched_game,
+        batched_batch,
+        cfg,
+    )
+
+    assert jnp.array_equal(first.action.source_id, second.action.source_id)
+    diagnostics = first.diagnostics
+    assert float(diagnostics.demanded_mass[0]) > 0.0
+    assert jnp.isfinite(diagnostics.demanded_mass).all()
+    assert jnp.isfinite(diagnostics.emitted_ship_mass).all()
+    assert jnp.isfinite(diagnostics.unreachable_demand_mass).all()
+    assert jnp.isfinite(diagnostics.held_demand_mass).all()
+    assert jnp.isfinite(diagnostics.requested_ship_mass).all()
+    assert jnp.isfinite(diagnostics.emitted_launch_count).all()
