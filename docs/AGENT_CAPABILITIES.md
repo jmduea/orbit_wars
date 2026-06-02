@@ -81,21 +81,63 @@ uv run ow eval status --run outputs/campaigns/<c>/runs/<id>
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch --idle-exit-seconds 30
 uv run ow eval results list --run outputs/campaigns/<c>/runs/<id>
-uv run ow eval results show --run outputs/campaigns/<c>/runs/<id> --result tournament_u000010_<id>
+uv run ow eval results show --run outputs/campaigns/<c>/runs/<id> --result checkpoint_eval_u000010_<id>
+uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl --output-dir /tmp/kaggle_submit --validate-docker
 uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --all-queued --dry-run
 uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --job-id <uuid>
 uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose
 uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl --baselines noop
-uv run ow train ... artifacts=hybrid_promotion   # async docker + tournament worker
+uv run ow train ... artifacts=hybrid_promotion   # submit-valid: checkpoint_eval composite
 ```
+
+### Submit-valid decision tree
+
+Use this when the user asks whether a checkpoint is **submit-valid** (Kaggle Docker + promotion gates). Success signals are **manifest- or JSON-backed**—never local replay HTML alone.
+
+```mermaid
+flowchart TB
+  subgraph canonical [Submit-valid — use these]
+    T[ow train artifacts=hybrid_promotion]
+    T --> P[ow eval status --watch]
+    P --> RS[ow eval results show / manifest.json]
+    RS --> CE[checkpoint_eval: validation_ok + tournament]
+    M[ow eval package --validate-docker]
+    M --> OK[JSON ok true]
+  end
+  subgraph inspect [Inspect only — not submit-valid]
+    R[local replay / replay_backend=local HTML]
+    L[ow eval package without --validate-docker]
+    TR[tournament --write-replays]
+  end
+  subgraph demote [Demoted — do not cite as agent default]
+    DR[default async replay replay_backend=docker]
+    SCR[scripts/validate_kaggle_docker_submission.py direct]
+  end
+  canonical -.->|do not substitute| inspect
+  demote -.->|prefer canonical| canonical
+```
+
+| Goal | Command | Pass signal |
+|------|---------|-------------|
+| Prove during training | `ow train … artifacts=hybrid_promotion` → poll status → **results show** | `validation_ok` in `checkpoint_eval` manifest |
+| Prove before upload | `ow eval package … --validate-docker` | Final JSON `"ok": true` |
+| Gate 5 win proof (after Docker) | `ow benchmark tournament-proof --eval-checkpoint …` | Calibrated win rates vs noop/random—not a Docker substitute |
+| Debug policy / HTML | Local replay or `ow eval tournament --write-replays` | Inspection only; still run canonical path for submit-valid |
+
+**Manual pre-upload:** `uv run ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker` → confirm stdout JSON `"ok": true`. Optional `ow eval submit … --validate-docker` before upload.
+
+**Inspect only (not submit-valid):** sync/async replay with `replay_backend=local`; `ow eval package` without `--validate-docker` (layout-only—stderr prints `docker_validation=skipped`); tournament `--write-replays`. After inspect, still run hybrid poll+results or `--validate-docker` before claiming submit-valid.
+
+**Demoted paths (do not use as agent defaults):** bare `ow train` with `artifacts=default` async `replay` + `replay_backend=docker` (real Docker but wrong funnel); packaging-only; `scripts/validate_kaggle_docker_submission.py` / `scripts/run_artifact_worker.py` (prefer `ow eval package` / `ow eval worker`). Standalone `docker_validation` queue jobs are secondary to hybrid `checkpoint_eval`.
 
 ### Hybrid promotion poll contract
 
 1. Train with `artifacts=hybrid_promotion`; note `run_dir` from `orbit_train_start`.
-2. Poll: `uv run ow eval status --run <run_dir> --watch --poll-seconds 5`.
-3. Queue idle when `jobs` has no `queued`/`running` entries; check `promoted_manifest` and worker logs under `queue/`.
-4. Cancel mistaken queue entries: `ow eval jobs cancel --run <run_dir> --all-queued --dry-run` first, then without `--dry-run`.
-5. Worker processing: `ow eval worker --run <run_dir> --verbose` (or rely on autostart + `queue/worker.stderr.log`).
+2. Poll: `uv run ow eval status --run <run_dir> --watch --poll-seconds 5` until queue has no `queued`/`running` jobs.
+3. **Submit-valid proof:** `uv run ow eval results show --run <run_dir> --result <checkpoint_eval_id>` (or read `evaluations/checkpoint_eval_u*/manifest.json`) and confirm `validation_ok` and tournament fields—queue idle alone is not enough. `ow eval status` does not inline `validation_ok` today.
+4. Check `promoted_manifest` in status JSON when promotion applied; worker logs under `queue/`.
+5. Cancel mistaken queue entries: `ow eval jobs cancel --run <run_dir> --all-queued --dry-run` first, then without `--dry-run`.
+6. Worker processing: `ow eval worker --run <run_dir> --verbose` (or rely on autostart + `queue/worker.stderr.log`).
 
 ### Promotion rollback (operator)
 
@@ -135,9 +177,13 @@ make help
 
 > Run `uv run ow train training=smoke training.total_updates=5 curriculum=off task=shield_off` and confirm `orbit_train_start` / `orbit_train_complete` lines and `logs/*_jax.jsonl` under the run dir.
 
+**Validate checkpoint for submission**
+
+> If training: use `artifacts=hybrid_promotion`, poll `ow eval status --run <run_dir> --watch`, then `ow eval results show --run <run_dir> --result <checkpoint_eval_id>` for `validation_ok`. If one-off: `ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker` and confirm JSON `"ok": true`. Do not use local replay HTML or packaging-only as proof.
+
 **Inspect hybrid promotion queue**
 
-> Run `uv run ow eval status --run <run_dir> --watch --poll-seconds 5` and summarize queued/running `checkpoint_eval` / `tournament` jobs; if worker autostarted, read `queue/worker.stderr.log`.
+> Run `uv run ow eval status --run <run_dir> --watch --poll-seconds 5` and summarize queued/running `checkpoint_eval` jobs; when idle, read `ow eval results show` for `validation_ok`; if worker autostarted, read `queue/worker.stderr.log`.
 
 **Cancel stale artifact jobs**
 

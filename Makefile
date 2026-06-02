@@ -112,7 +112,7 @@ test-domain-policy:
 	$(PYTEST_CPU) tests/test_jax_policy_encoder.py tests/test_jax_ppo.py tests/test_ppo_update.py tests/test_trajectory_shield.py -m "jax and not slow"
 
 test-domain-artifacts:
-	$(PYTEST_CPU) tests/test_artifact_pipeline.py tests/test_promotion.py tests/test_replay.py tests/test_tournament.py tests/test_kaggle_submission_packager.py tests/test_checkpoint_compat.py -m "not slow and not jax"
+	$(PYTEST_CPU) tests/test_artifact_pipeline.py tests/test_promotion.py tests/test_replay.py tests/test_tournament.py tests/test_kaggle_submission_packager.py tests/test_checkpoint_compat.py tests/test_eval_validate_invariant.py -m "not slow and not jax"
 
 test-domain-curriculum:
 	$(PYTEST_CPU) tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"

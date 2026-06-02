@@ -46,14 +46,15 @@ def print_eval_help() -> None:
         "  package      Build submission.tar.gz from checkpoint\n"
         "  submit       Upload package to Kaggle competition\n\n"
         "Examples:\n"
-        "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id>\n"
         "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch\n"
-        "  uv run ow eval results list --run outputs/campaigns/<c>/runs/<id>\n"
-        "  uv run ow eval results show --run <path> --result tournament_u000010_<id>\n"
+        "  uv run ow eval results show --run <path> --result checkpoint_eval_u000010_<id>\n"
+        "  uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl \\\n"
+        "    --output-dir /tmp/kaggle_submit --validate-docker\n"
         "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
         "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
         "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
-        "More: uv run ow eval tournament --help\n"
+        "Submit-valid: hybrid poll + results show (validation_ok), or package --validate-docker.\n"
+        "More: uv run ow eval package --help | ow eval tournament --help\n"
     )
 
 
@@ -71,7 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     worker = subparsers.add_parser(
         "worker",
-        help="Process queued optional artifact jobs for a run.",
+        help=(
+            "Process queued artifact jobs (checkpoint_eval, replay, docker_validation). "
+            "Replay local=inspect; replay docker backend is a demoted alias—prefer checkpoint_eval."
+        ),
     )
     worker.add_argument(
         "--run",
@@ -221,7 +225,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     submit = subparsers.add_parser(
         "submit",
-        help="Package a checkpoint and submit submission.tar.gz to Kaggle.",
+        help=(
+            "Package and upload submission.tar.gz. Add --validate-docker for submit-valid "
+            "Docker proof before upload; without it, packaging is layout-only."
+        ),
     )
     submit.add_argument(
         "--checkpoint",
@@ -255,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
     submit.add_argument(
         "--validate-docker",
         action="store_true",
-        help="Run local Kaggle Docker validation before submitting.",
+        help="Run Kaggle Docker validation when packaging (submit-valid proof before upload).",
     )
     submit.add_argument(
         "--dry-run",
@@ -270,7 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     package = subparsers.add_parser(
         "package",
-        help="Build submission.tar.gz from a checkpoint (optional Docker validation).",
+        help=(
+            "Build submission.tar.gz from a checkpoint. Without --validate-docker: layout-only "
+            "(not submit-valid). With --validate-docker: Kaggle Docker submit-valid proof."
+        ),
     )
     package.add_argument("--checkpoint", required=True, type=Path)
     package.add_argument(
@@ -282,7 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     package.add_argument(
         "--validate-docker",
         action="store_true",
-        help="Run Kaggle Docker validation after packaging (requires Docker).",
+        help="Run Kaggle Docker validation after packaging (submit-valid proof; requires Docker).",
     )
 
     return parser
@@ -347,7 +357,9 @@ def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
     tournament.add_argument(
         "--write-replays",
         action="store_true",
-        help="Write HTML replay artifacts for each match.",
+        help=(
+            "Write HTML replay artifacts per match (inspection/debug only—not submit-valid proof)."
+        ),
     )
     tournament.add_argument(
         "--per-step-seconds",
@@ -616,6 +628,11 @@ def run_submit_cli(args: argparse.Namespace) -> int:
             validate_docker=bool(args.validate_docker),
         )
         print(f"package_path={package_path}")
+        if not args.validate_docker:
+            print(
+                "docker_validation=skipped (packaging only; does not prove competition compatibility)",
+                file=sys.stderr,
+            )
     else:
         raise SystemExit(
             "Provide --checkpoint to package or --package to upload an existing tarball."

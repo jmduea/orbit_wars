@@ -2,6 +2,8 @@
 
 Package a trained JAX checkpoint as `submission.tar.gz` for the Orbit Wars competition, validate it locally in Kaggle's simulation Docker image, then upload via `ow eval submit` or the Kaggle CLI.
 
+**Agents:** use the submit-valid funnel in `docs/AGENT_CAPABILITIES.md`—`ow eval package --validate-docker` or hybrid `checkpoint_eval` poll + `ow eval results show` for `validation_ok`. Sections below marked **operator / advanced** are not the default agent path.
+
 ## Requirements
 
 - Trained checkpoint: `jax_ckpt_last.pkl` or `jax_ckpt_XXXXXX.pkl` under a campaign run directory.
@@ -10,6 +12,15 @@ Package a trained JAX checkpoint as `submission.tar.gz` for the Orbit Wars compe
 - WSL hosts without a CUDA JAX wheel: set `ORBIT_WARS_ALLOW_CPU_JAX_ON_NVIDIA=1` for training and packaging; the artifact worker inherits this when spawned from `ow train`.
 
 There is no local no-Docker submission validation path. Packaging alone only checks tarball layout (required files, safe paths). Import probes, Kaggle `exec()` fidelity, and episode self-play run inside Docker.
+
+## Submit-valid (agents)
+
+| Step | Command | Pass signal |
+|------|---------|-------------|
+| During training | `uv run ow train … artifacts=hybrid_promotion` → `ow eval status --watch` → `ow eval results show` | `validation_ok` in `checkpoint_eval` manifest |
+| Before upload | `uv run ow eval package … --validate-docker` | JSON `"ok": true` |
+
+Prefer hybrid `checkpoint_eval` jobs over standalone `docker_validation` when using `artifacts=hybrid_promotion`. Do not treat local replay HTML or packaging-only output as submit-valid proof.
 
 ## Package and validate
 
@@ -33,9 +44,9 @@ Validation inside Docker runs two import paths on the same tarball:
 1. **Kaggle-fidelity** — `exec()` of `main.py` with no `__file__` (matches competition loader).
 2. **Episode self-play** — `importlib` load plus seeded 2p/4p games.
 
-### Packaging only (no validation)
+### Packaging only (no validation) — inspect / layout only
 
-To build `submission.tar.gz` without Docker (layout checks only — **not** competition compatibility):
+To build `submission.tar.gz` without Docker (layout checks only — **not** competition compatibility or submit-valid proof):
 
 ```bash
 uv run ow eval package \
@@ -82,9 +93,11 @@ Manual re-run of a queued job:
 uv run ow eval worker --run outputs/campaigns/<campaign>/runs/<run_id>
 ```
 
-Add `--retry-failed` to pick up failed jobs, or `--watch` to poll until idle. Low-level script equivalent: `scripts/run_artifact_worker.py`.
+Add `--retry-failed` to pick up failed jobs, or `--watch` to poll until idle.
 
-CLI tournament eval (no Docker gate): `uv run ow eval tournament --checkpoint ... --campaign ...`
+**Operator / advanced:** `python scripts/run_artifact_worker.py` mirrors the worker but is not an agent entrypoint—prefer `ow eval worker`.
+
+CLI tournament eval (no Docker gate; `--write-replays` is inspect-only): `uv run ow eval tournament --checkpoint ... --campaign ...`
 
 See `docs/architecture/tournament-eval.md` for formats, baselines, and gate thresholds.
 

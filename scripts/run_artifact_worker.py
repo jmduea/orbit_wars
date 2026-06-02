@@ -13,6 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+if __name__ == "__main__":
+    print(
+        "prefer: uv run ow eval worker --run <run_dir> (agent path for artifact jobs)",
+        file=sys.stderr,
+    )
+
 from src.artifacts.worker_env import bootstrap_artifact_worker_jax_env  # noqa: E402
 
 bootstrap_artifact_worker_jax_env()

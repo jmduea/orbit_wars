@@ -1033,4 +1033,9 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
+    print(
+        "prefer: uv run ow eval package --checkpoint <pkl> --output-dir <dir> "
+        "--validate-docker (agent submit-valid path)",
+        file=sys.stderr,
+    )
     raise SystemExit(main())

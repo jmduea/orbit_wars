@@ -2,7 +2,7 @@
 date: 2026-06-02
 topic: cli-hardening
 type: feat
-status: active
+status: completed
 origin: docs/brainstorms/2026-06-02-cli-hardening-requirements.md
 related_issues:
   - https://github.com/jmduea/orbit_wars/issues/160

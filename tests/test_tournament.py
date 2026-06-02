@@ -424,3 +424,57 @@ def test_eval_package_skips_docker_by_default(
     package_mock.assert_called_once()
     assert package_mock.call_args.kwargs["validate_docker"] is False
     assert "docker_validation=skipped" in capsys.readouterr().err
+
+
+def test_eval_package_help_mentions_validate_docker_for_submit_valid(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = eval_cli.build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["package", "--help"])
+    help_text = capsys.readouterr().out.replace("\n", " ").lower()
+    assert "validate-docker" in help_text
+    assert "submit" in help_text and "valid proof" in help_text
+
+
+def test_eval_tournament_help_classifies_write_replays_as_inspect_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = eval_cli.build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["tournament", "--help"])
+    help_text = capsys.readouterr().out
+    assert "--write-replays" in help_text
+    assert "inspect" in help_text.lower() or "not submit-valid" in help_text.lower()
+
+
+def test_eval_submit_without_validate_docker_prints_packaging_only_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    checkpoint = tmp_path / "jax_ckpt.pkl"
+    checkpoint.write_bytes(b"unused")
+    output_dir = tmp_path / "out"
+    package_path = output_dir / "submission.tar.gz"
+
+    with (
+        patch(
+            "src.cli.eval.package_checkpoint_submission",
+            return_value=package_path,
+        ),
+        patch("src.cli.eval.submit_competition_package"),
+    ):
+        exit_code = eval_cli.main(
+            [
+                "submit",
+                "--checkpoint",
+                str(checkpoint),
+                "--output-dir",
+                str(output_dir),
+                "--dry-run",
+            ]
+        )
+
+    assert exit_code == 0
+    err = capsys.readouterr().err
+    assert "docker_validation=skipped" in err
+    assert "packaging only" in err
