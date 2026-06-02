@@ -7,6 +7,29 @@ from src.cli import eval as eval_cli
 from src.cli.run_status import list_evaluation_results, load_evaluation_result
 
 
+def test_list_evaluation_results_includes_validation_ok_for_checkpoint_eval(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "runs" / "r1"
+    result_dir = run_dir / "evaluations" / "checkpoint_eval_u000010_abcd"
+    result_dir.mkdir(parents=True)
+    (result_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "kind": "checkpoint_eval",
+                "update": 10,
+                "status": "completed",
+                "validation_ok": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = list_evaluation_results(run_dir)
+    assert len(rows) == 1
+    assert rows[0]["validation_ok"] is True
+
+
 def test_list_evaluation_results(tmp_path: Path) -> None:
     run_dir = tmp_path / "runs" / "r1"
     result_dir = run_dir / "evaluations" / "tournament_u000010_abcd"

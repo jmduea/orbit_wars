@@ -106,6 +106,18 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert resolve_rollout_group_specs(cfg)
 
 
+def test_hybrid_promotion_artifacts_profile_composes() -> None:
+    cfg = compose_hydra_train_config(["artifacts=hybrid_promotion"])
+
+    assert cfg.artifacts.promotion.strategy in ACCEPTABLE_PROMOTION_STRATEGIES
+    assert cfg.artifacts.promotion.strategy == "hybrid"
+    assert cfg.artifacts.tournament.enabled
+    assert cfg.artifacts.artifact_pipeline.checkpoint_eval_async
+    assert not cfg.artifacts.artifact_pipeline.docker_validation_async
+    assert not cfg.artifacts.artifact_pipeline.replay_async
+    assert not cfg.artifacts.replay.enabled
+
+
 def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:
     cfg = compose_hydra_train_config(
         [

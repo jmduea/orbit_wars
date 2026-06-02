@@ -134,7 +134,7 @@ flowchart TB
 
 1. Train with `artifacts=hybrid_promotion`; note `run_dir` from `orbit_train_start`.
 2. Poll: `uv run ow eval status --run <run_dir> --watch --poll-seconds 5` until queue has no `queued`/`running` jobs.
-3. **Submit-valid proof:** `uv run ow eval results show --run <run_dir> --result <checkpoint_eval_id>` (or read `evaluations/checkpoint_eval_u*/manifest.json`) and confirm `validation_ok` and tournament fields—queue idle alone is not enough. `ow eval status` does not inline `validation_ok` today.
+3. **Submit-valid proof:** After queue idle, read `checkpoint_evals[].validation_ok` from status JSON (or `ow eval results show --run <run_dir> --result <checkpoint_eval_id>` / `evaluations/checkpoint_eval_u*/manifest.json` for full manifest)—queue idle alone is not enough.
 4. Check `promoted_manifest` in status JSON when promotion applied; worker logs under `queue/`.
 5. Cancel mistaken queue entries: `ow eval jobs cancel --run <run_dir> --all-queued --dry-run` first, then without `--dry-run`.
 6. Worker processing: `ow eval worker --run <run_dir> --verbose` (or rely on autostart + `queue/worker.stderr.log`).

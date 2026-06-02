@@ -9,6 +9,45 @@ from pathlib import Path
 from src.artifacts.pipeline import load_optional_jobs
 from src.artifacts.worker_runner import resolve_run_worker_dirs
 
+_CHECKPOINT_EVAL_MANIFEST_KEYS = (
+    "validation_ok",
+    "update",
+    "status",
+    "promoted",
+    "tournament_id",
+)
+
+
+def _load_checkpoint_eval_summaries(
+    evaluations_dir: Path,
+) -> list[dict[str, object]]:
+    """Summarize checkpoint_eval manifests for submit-valid status polling."""
+
+    rows: list[dict[str, object]] = []
+    if not evaluations_dir.is_dir():
+        return rows
+    for manifest_path in sorted(evaluations_dir.glob("checkpoint_eval_*/manifest.json")):
+        row: dict[str, object] = {
+            "result_dir": str(manifest_path.parent),
+            "manifest_path": str(manifest_path),
+        }
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            row["parse_error"] = True
+            rows.append(row)
+            continue
+        if not isinstance(payload, dict):
+            row["parse_error"] = True
+            rows.append(row)
+            continue
+        for key in _CHECKPOINT_EVAL_MANIFEST_KEYS:
+            if key in payload:
+                row[key] = payload[key]
+        rows.append(row)
+    rows.sort(key=lambda item: (int(item.get("update") or -1), str(item.get("result_dir"))))
+    return rows
+
 
 def summarize_run_status(run_dir: Path) -> dict[str, object]:
     """Build a JSON-serializable status summary for a campaign run directory."""
@@ -70,6 +109,7 @@ def summarize_run_status(run_dir: Path) -> dict[str, object]:
         "queue_dir": str(queue_dir),
         "evaluations_dir": str(evaluations_dir),
         "jobs": job_rows,
+        "checkpoint_evals": _load_checkpoint_eval_summaries(evaluations_dir),
         "promoted_manifest": promoted_manifest,
         "last_log_marker": last_event,
         "worker_stdout_log": str(queue_dir / "worker.stdout.log"),
@@ -110,7 +150,14 @@ def list_evaluation_results(run_dir: Path) -> list[dict[str, object]]:
             rows.append(row)
             continue
         if isinstance(payload, dict):
-            for key in ("kind", "update", "status", "promoted", "tournament_id"):
+            for key in (
+                "kind",
+                "update",
+                "status",
+                "promoted",
+                "tournament_id",
+                "validation_ok",
+            ):
                 if key in payload:
                     row[key] = payload[key]
         rows.append(row)
