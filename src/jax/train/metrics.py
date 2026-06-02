@@ -4,6 +4,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
+from src.jax.rollout.planet_flow_metric_descriptors import PLANET_FLOW_RATE_DELTA_SUFFIXES
 from src.jax.rollout.metrics import trajectory_shield_legal_rate
 from src.jax.train.sweep_score import PLANET_FLOW_MIN_DEMAND_MASS
 from src.telemetry.metric_registry import (
@@ -68,13 +69,7 @@ def _finalize_planet_flow_control_deltas(metrics: dict[str, jax.Array]) -> None:
         metrics["planet_flow_emitted_ship_mass_sum"]
         - metrics["planet_flow_control_emitted_ship_mass_sum"]
     )
-    for name in (
-        "unreachable_demand_rate",
-        "held_demand_rate",
-        "emitted_ship_mass_rate",
-        "small_launch_rate",
-        "duplicate_source_target_rate",
-    ):
+    for name in PLANET_FLOW_RATE_DELTA_SUFFIXES:
         metrics[f"planet_flow_{name}_delta_vs_control"] = (
             metrics[f"planet_flow_{name}"] - metrics[f"planet_flow_control_{name}"]
         )

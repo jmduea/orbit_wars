@@ -8,7 +8,7 @@
 
 | Item | Link |
 | ---- | ---- |
-| Planet Flow: sweep shortlist, decoder replay contracts, PPO epoch driver, metric descriptors, compiler-control tests (#166–#170) | [#166](https://github.com/jmduea/orbit_wars/issues/166) … [#170](https://github.com/jmduea/orbit_wars/issues/170) |
+| Split decoder replay batch contracts (#167) | [#167](https://github.com/jmduea/orbit_wars/issues/167) |
 
 ## Next
 
@@ -28,11 +28,11 @@
 
 | Item | Link |
 | ---- | ---- |
+| Planet Flow queue residuals: shortlist verify, metric descriptors, PPO epoch driver, compiler-control tests (#166, #168–#170) | [plan](plans/2026-06-02-008-feat-planet-flow-queue-residuals-plan.md) · Closes #166, #168, #169, #170 |
 | Submit-valid operator closure: status inlines `checkpoint_evals`, hybrid profile test | [plan](plans/2026-06-02-007-feat-submit-valid-operator-closure-plan.md) |
 | CLI hardening: replay integration test, validate subcommand invariants (#160, #161) | [#160](https://github.com/jmduea/orbit_wars/issues/160) [#161](https://github.com/jmduea/orbit_wars/issues/161) · `30fc7a8` |
 | Agent-native Phase 3: gate YAML, benchmark primitives, `ow sweep` (PR #175) | [plan](plans/2026-06-02-agent-native-phase3-refactors.md) · `7078c40` |
 | src audit phase 4: checkpoint hooks, telemetry, promotion queue, CatalogView, parametric edge (#151–#155) | [#151](https://github.com/jmduea/orbit_wars/issues/151) … [#155](https://github.com/jmduea/orbit_wars/issues/155) · `jax/train/` `features/catalog/` `make test-fast` |
-| src audit phase 3: shield relocation + action_sampling + constants + promotion writer (#147–#150) | [#147](https://github.com/jmduea/orbit_wars/issues/147) … [#150](https://github.com/jmduea/orbit_wars/issues/150) · `jax/shield/` `jax/action_sampling.py` `make test-fast` |
 
 _Last triaged: 2026-06-02_
 
