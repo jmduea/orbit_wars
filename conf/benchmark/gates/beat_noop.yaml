@@ -1,8 +1,34 @@
-# Preflight gate recipe scaffold (Phase 2). Train overrides remain in src/jax/preflight.py.
 gate_id: beat_noop
 title: Beat noop opponent (Gate 2)
 default_model: transformer_factorized_small
 ladder_index: 0
 thresholds_key: learning_signal
 workflow: ow benchmark learn-proof --gate beat_noop
-primitive: ow benchmark gate beat_noop
+primitive: ow benchmark gate run beat_noop
+
+train:
+  default:
+    model_from_cli: true
+    apply_ppo_profile: true
+    train_overrides:
+      - training=2p_16
+      - training.rollout_steps=128
+      - training.total_updates=200
+      - opponents=noop_only
+      - curriculum=off
+    evaluation:
+      min_win_rate_delta: from_thresholds
+
+  planet_flow_target_heatmap:
+    model: planet_flow_target_heatmap
+    thresholds_key: planet_flow_learning_signal
+    train_base: planet_flow
+    train_overrides:
+      - training=planet_flow
+      - training.total_updates=200
+      - opponents=noop_only
+    evaluation:
+      min_win_rate_delta: from_thresholds
+      require_planet_flow_control_metrics: true
+      max_post_mask_unreachable_demand_rate: from_thresholds
+      needs_calibration_key: planet_flow_learning_signal

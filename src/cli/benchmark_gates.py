@@ -5,50 +5,40 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
+from src.jax.preflight_gate_loader import (
+    GATES_DIR,
+    REPO_ROOT,
+    build_gate_spec,
+    gate_yaml_paths,
+    load_gate_yaml,
+)
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-GATES_DIR = REPO_ROOT / "conf" / "benchmark" / "gates"
-
-
-def gate_yaml_paths() -> list[Path]:
-    if not GATES_DIR.is_dir():
-        return []
-    return sorted(GATES_DIR.glob("*.yaml"))
+__all__ = [
+    "GATES_DIR",
+    "REPO_ROOT",
+    "build_gate_spec",
+    "gate_yaml_paths",
+    "load_gate_recipe",
+    "load_gate_yaml",
+    "list_gate_recipes",
+    "run_gate_cli",
+]
 
 
 def load_gate_recipe(gate_id: str) -> dict[str, object]:
-    path = GATES_DIR / f"{gate_id}.yaml"
-    if not path.is_file():
-        known = [item.stem for item in gate_yaml_paths()]
-        raise FileNotFoundError(
-            f"Unknown gate recipe {gate_id!r}. Known YAML gates: {', '.join(known) or '(none)'}"
-        )
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Gate recipe must be a mapping: {path}")
-    recipe_gate_id = str(payload.get("gate_id") or path.stem)
-    if recipe_gate_id != gate_id:
-        raise ValueError(
-            f"Gate recipe gate_id mismatch in {path}: expected {gate_id!r}, got {recipe_gate_id!r}"
-        )
-    payload["path"] = str(path.relative_to(REPO_ROOT))
-    return payload
+    return load_gate_yaml(gate_id)
 
 
 def list_gate_recipes() -> list[dict[str, object]]:
     recipes: list[dict[str, object]] = []
     for path in gate_yaml_paths():
-        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            continue
-        gate_id = str(payload.get("gate_id") or path.stem)
+        payload = load_gate_yaml(path.stem)
         recipes.append(
             {
-                "gate_id": gate_id,
+                "gate_id": payload.get("gate_id"),
                 "title": payload.get("title"),
                 "default_model": payload.get("default_model"),
-                "path": str(path.relative_to(REPO_ROOT)),
+                "path": payload.get("path"),
                 "workflow": payload.get("workflow"),
                 "primitive": payload.get("primitive"),
             }

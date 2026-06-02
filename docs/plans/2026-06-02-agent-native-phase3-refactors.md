@@ -1,7 +1,7 @@
 ---
 date: 2026-06-02
 topic: agent-native-operator-cli
-status: scheduled
+status: completed
 origin: docs/agent-native-phase2-status.md
 depends_on: agent-native-phase2 (PR)
 ---

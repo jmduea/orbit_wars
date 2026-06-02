@@ -100,6 +100,7 @@ def print_ow_help() -> None:
         "  runs    List/show/tail campaign run directories under outputs/\n"
         "  promote Show/history/demote campaign promoted checkpoints\n"
         "  benchmark  Stability benchmarks and pre-flight learning gates\n"
+        "  sweep   Unified W&B / Kaggle sweep create, status, list\n"
         "  make    Generate W&B sweep YAML (scripts/make_wandb_sweep.py)\n\n"
         "Bare `ow` or `ow KEY=VALUE` defaults to `ow train`.\n\n"
         "Usage:\n"
@@ -123,6 +124,7 @@ def print_ow_help() -> None:
         "  ow train --help\n"
         "  uv run ow eval --help\n"
         "  uv run ow benchmark --help\n"
+        "  uv run ow sweep --help\n"
         "  uv run ow runs --help\n"
         "  uv run ow promote --help\n"
         "  docs/AGENT_CAPABILITIES.md\n"
@@ -208,9 +210,12 @@ def parse_train_argv(args: list[str]) -> TrainRoute:
 
     remaining = list(args[index:])
     if "--create-sweep" in remaining:
-        raise SystemExit(
-            "ow train kaggle does not support --create-sweep; use the standalone "
-            "kaggle_runner script directly for W&B sweep creation."
+        import sys
+
+        print(
+            "Deprecation: use `ow sweep create --backend kaggle --sweep-yaml <path>` "
+            "instead of `ow train kaggle launch --create-sweep`.",
+            file=sys.stderr,
         )
     subcommand: str | None = None
     if remaining and remaining[0] in KAGGLE_SUBCOMMANDS:
