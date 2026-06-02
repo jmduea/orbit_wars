@@ -422,3 +422,92 @@ def protected_paths_from_jobs(jobs: Iterable[Mapping[str, object]]) -> set[Path]
         if isinstance(checkpoint_path, str) and checkpoint_path:
             protected.add(Path(checkpoint_path))
     return protected
+
+
+def _write_optional_job_status(
+    job_file: Path,
+    status: str,
+    *,
+    error: str | None = None,
+    cancelled_reason: str | None = None,
+) -> dict[str, object]:
+    payload = json.loads(job_file.read_text(encoding="utf-8"))
+    payload["status"] = status
+    payload["updated_at_unix"] = time.time()
+    if error is not None:
+        payload["error"] = error
+    elif status not in {"failed"}:
+        payload.pop("error", None)
+    if cancelled_reason is not None:
+        payload["cancelled_reason"] = cancelled_reason
+    tmp_path = job_file.with_suffix(job_file.suffix + f".{uuid.uuid4().hex}.tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    tmp_path.replace(job_file)
+    payload["job_file"] = str(job_file)
+    return payload
+
+
+def cancel_optional_jobs(
+    queue_dir: Path,
+    *,
+    job_ids: set[str] | None = None,
+    all_queued: bool = False,
+    include_running: bool = False,
+    dry_run: bool = False,
+    reason: str = "operator_cancel",
+) -> dict[str, object]:
+    """Cancel queued optional jobs by marking their JSON status as ``cancelled``."""
+
+    if not all_queued and not job_ids:
+        raise ValueError("Provide --all-queued and/or --job-id to select jobs to cancel.")
+
+    cancellable_statuses = {"queued"}
+    if include_running:
+        cancellable_statuses.add("running")
+
+    jobs = load_optional_jobs(queue_dir, statuses=cancellable_statuses)
+    if job_ids:
+        jobs = [job for job in jobs if str(job.get("job_id")) in job_ids]
+
+    cancelled: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    for job in jobs:
+        job_file = Path(str(job["job_file"]))
+        row = {
+            "job_id": job.get("job_id"),
+            "kind": job.get("kind"),
+            "status": job.get("status"),
+            "job_file": str(job_file),
+        }
+        if dry_run:
+            row["would_cancel"] = True
+            cancelled.append(row)
+            continue
+        updated = _write_optional_job_status(
+            job_file,
+            "cancelled",
+            cancelled_reason=reason,
+        )
+        cancelled.append(
+            {
+                "job_id": updated.get("job_id"),
+                "kind": updated.get("kind"),
+                "status": updated.get("status"),
+                "job_file": str(job_file),
+            }
+        )
+
+    if job_ids:
+        matched = {str(item.get("job_id")) for item in cancelled}
+        for job_id in sorted(job_ids - matched):
+            skipped.append({"job_id": job_id, "reason": "not_found_or_not_cancellable"})
+
+    return {
+        "queue_dir": str(queue_dir.resolve()),
+        "dry_run": dry_run,
+        "cancelled": cancelled,
+        "skipped": skipped,
+        "cancelled_count": len(cancelled),
+    }

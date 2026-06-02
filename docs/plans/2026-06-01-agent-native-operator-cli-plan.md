@@ -47,11 +47,13 @@ Coding agents share the same `ow` CLI and `outputs/` tree as humans, but lack fi
 **In scope:** R1–R12 above.
 
 **Deferred (Phase 2):**
-- Split `ow benchmark` into atomic primitives + CI composers
-- `conf/benchmark/gates/*.yaml` for preflight recipes
-- `ow eval jobs cancel`, `ow promote demote`
-- Auto-regenerate threshold bullets into `AGENTS.md` on calibrate
-- Remove `.audit/` / `.omg/state/` legacy dirs
+- Split `ow benchmark` into atomic primitives + CI composers — **partial:** `ow benchmark gate <name>` + `conf/benchmark/gates/*.yaml`; full learn-proof decomposition still deferred (see `docs/agent-native-phase2-status.md`)
+- `conf/benchmark/gates/*.yaml` for preflight recipes — **done** (`beat_noop`, `beat_random`, `curriculum_staged`)
+- `ow eval jobs cancel`, `ow promote demote` — **done**
+- Auto-regenerate threshold bullets into `AGENTS.md` on calibrate — **done** (`<!-- preflight-thresholds -->`)
+- Remove `.audit/` / `.omg/state/` legacy dirs — **deferred** (local gitignored data; docs-only)
+
+Phase 2 completion summary: `docs/agent-native-phase2-status.md`
 
 **Out of scope:** Web UI, MCP server restore, W&B/Kaggle browser automation.
 

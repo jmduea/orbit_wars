@@ -655,6 +655,74 @@ def write_calibration_report(path: Path, report: dict[str, object]) -> None:
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 
+PREFLIGHT_THRESHOLDS_START = "<!-- preflight-thresholds -->"
+PREFLIGHT_THRESHOLDS_END = "<!-- /preflight-thresholds -->"
+
+
+def format_agents_md_threshold_block(report: dict[str, object]) -> str:
+    """Render the fixed AGENTS.md threshold subsection from a calibration report."""
+
+    thresholds = report.get("thresholds")
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    learning = thresholds.get("learning_signal")
+    if not isinstance(learning, dict):
+        learning = {}
+    tournament = thresholds.get("win_proof_tournament")
+    if not isinstance(tournament, dict):
+        tournament = {}
+    commit_sha = str(report.get("commit_sha") or "unknown")[:12]
+    return "\n".join(
+        [
+            PREFLIGHT_THRESHOLDS_START,
+            (
+                "- **Calibrated learning signal (Gates 2–4):** "
+                f"`window_updates={learning.get('window_updates')}`, "
+                f"`min_win_rate_delta={learning.get('min_win_rate_delta')}`, "
+                f"`max_approx_kl={learning.get('max_approx_kl')}`, "
+                f"`min_entropy={learning.get('min_entropy')}` "
+                "— source `docs/benchmarks/preflight-calibration.json` "
+                f"(commit `{commit_sha}`)."
+            ),
+            (
+                "- **Tournament win proof (Gate 5):** "
+                f"`noop_min_win_rate={tournament.get('noop_min_win_rate')}`, "
+                f"`random_min_win_rate={tournament.get('random_min_win_rate')}`."
+            ),
+            PREFLIGHT_THRESHOLDS_END,
+        ]
+    )
+
+
+def refresh_agents_md_thresholds(
+    repo_root: Path,
+    report: dict[str, object],
+    *,
+    agents_md_path: Path | None = None,
+) -> bool:
+    """Replace the AGENTS.md preflight threshold block; return True when written."""
+
+    path = agents_md_path or (repo_root / "AGENTS.md")
+    if not path.is_file():
+        return False
+    content = path.read_text(encoding="utf-8")
+    new_block = format_agents_md_threshold_block(report)
+    if PREFLIGHT_THRESHOLDS_START in content and PREFLIGHT_THRESHOLDS_END in content:
+        start = content.index(PREFLIGHT_THRESHOLDS_START)
+        end = content.index(PREFLIGHT_THRESHOLDS_END) + len(PREFLIGHT_THRESHOLDS_END)
+        updated = content[:start] + new_block + content[end:]
+    else:
+        marker = "- **Verification thresholds:**"
+        if marker not in content:
+            return False
+        line_end = content.index("\n", content.index(marker))
+        updated = content[: line_end + 1] + "\n" + new_block + "\n" + content[line_end + 1 :]
+    if updated == content:
+        return False
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def _percentile(values: list[float], quantile: float) -> float | None:
     if not values:
         return None

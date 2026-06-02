@@ -136,6 +136,7 @@ wc -l outputs/campaigns/seed_sched_cal_*/runs/*/logs/*_jax.jsonl
 
 ## Related
 
+- Planet Flow preflight calibration overrides (`calibration_train_overrides`): `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md`
 - Fix: PR [#165](https://github.com/jmduea/orbit_wars/pull/165) (`aa3686c`)
 - Active calibration plan: `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`
 - Direct `ow train` operator lines (different path): `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md` § Training observability

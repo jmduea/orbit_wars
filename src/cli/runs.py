@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
+
+from src.cli.run_status import queue_is_active, summarize_run_status
 
 
 def _default_outputs_root() -> Path:
@@ -91,6 +94,26 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    run_dir = Path(args.run).resolve()
+    poll_seconds = max(float(args.poll_seconds), 0.1)
+    idle_since: float | None = None
+    while True:
+        summary = summarize_run_status(run_dir)
+        print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
+        if not queue_is_active(summary):
+            if args.idle_exit_seconds is None:
+                return 0
+            now = time.monotonic()
+            if idle_since is None:
+                idle_since = now
+            if now - idle_since >= float(args.idle_exit_seconds):
+                return 0
+        else:
+            idle_since = None
+        time.sleep(poll_seconds)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Inspect training runs under outputs/campaigns (ow runs).",
@@ -141,6 +164,25 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.add_argument("--run", type=Path, required=True)
     logs_parser.add_argument("--tail", type=int, default=5)
     logs_parser.set_defaults(handler=cmd_logs)
+
+    watch_parser = subparsers.add_parser(
+        "watch",
+        help="Poll run queue status and last log marker.",
+    )
+    watch_parser.add_argument(
+        "--outputs-root",
+        type=Path,
+        default=parser.get_default("outputs_root"),
+    )
+    watch_parser.add_argument("--run", type=Path, required=True)
+    watch_parser.add_argument("--poll-seconds", type=float, default=5.0)
+    watch_parser.add_argument(
+        "--idle-exit-seconds",
+        type=float,
+        default=None,
+        help="Exit after this many seconds with no queued/running jobs.",
+    )
+    watch_parser.set_defaults(handler=cmd_watch)
     return parser
 
 
@@ -150,7 +192,8 @@ def print_runs_help() -> None:
         "Subcommands:\n"
         "  list [--campaign SLUG] [--limit N]\n"
         "  show --run outputs/campaigns/<c>/runs/<id>\n"
-        "  logs --run <path> [--tail N]\n\n"
+        "  logs --run <path> [--tail N]\n"
+        "  watch --run <path> [--poll-seconds 5]\n\n"
         "Examples:\n"
         "  uv run ow runs list --limit 10\n"
         "  uv run ow runs show --run outputs/campaigns/smoke/runs/run-001\n"

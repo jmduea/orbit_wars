@@ -90,11 +90,16 @@ def main() -> None:
 
             raise SystemExit(runs_cli.main(command_args))
 
+        case "promote":
+            from src.cli import promote as promote_cli
+
+            raise SystemExit(promote_cli.main(command_args))
+
         case "help":
             print_ow_help()
         case _:
             raise SystemExit(
                 f"Unknown ow command: {command!r}. "
-                "Valid commands: train, eval, benchmark, make, runs. "
+                "Valid commands: train, eval, benchmark, make, runs, promote. "
                 "Run: uv run ow --help"
             )

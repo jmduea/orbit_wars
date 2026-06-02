@@ -39,3 +39,31 @@ def test_runs_list_and_show(tmp_path: Path, monkeypatch, capsys) -> None:
     assert runs_cli.main(["logs", "--run", str(run_dir), "--tail", "1"]) == 0
     logs = capsys.readouterr().out
     assert '"update": 2' in logs
+
+
+def test_runs_watch_exits_when_idle(tmp_path: Path, capsys, monkeypatch) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "run-001", "campaign": "cap"}),
+        encoding="utf-8",
+    )
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(runs_cli.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    assert (
+        runs_cli.main(
+            [
+                "watch",
+                "--run",
+                str(run_dir),
+                "--idle-exit-seconds",
+                "0",
+            ]
+        )
+        == 0
+    )
+    assert capsys.readouterr().out.count('"run_id": "run-001"') >= 1
+    assert sleeps == []

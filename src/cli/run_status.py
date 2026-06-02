@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from src.artifacts.pipeline import load_optional_jobs
@@ -73,4 +74,67 @@ def summarize_run_status(run_dir: Path) -> dict[str, object]:
         "last_log_marker": last_event,
         "worker_stdout_log": str(queue_dir / "worker.stdout.log"),
         "worker_stderr_log": str(queue_dir / "worker.stderr.log"),
+    }
+
+
+def queue_is_active(summary: Mapping[str, object]) -> bool:
+    jobs = summary.get("jobs")
+    if not isinstance(jobs, list):
+        return False
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        if str(job.get("status")) in {"queued", "running"}:
+            return True
+    return False
+
+
+def list_evaluation_results(run_dir: Path) -> list[dict[str, object]]:
+    """Glob evaluation manifests under ``run_dir/evaluations/``."""
+
+    run_dir = run_dir.resolve()
+    _, evaluations_dir = resolve_run_worker_dirs(run_dir)
+    rows: list[dict[str, object]] = []
+    if not evaluations_dir.is_dir():
+        return rows
+    for manifest_path in sorted(evaluations_dir.rglob("manifest.json")):
+        row: dict[str, object] = {
+            "result_dir": str(manifest_path.parent),
+            "manifest_path": str(manifest_path),
+            "relative_path": str(manifest_path.relative_to(evaluations_dir)),
+        }
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            row["parse_error"] = True
+            rows.append(row)
+            continue
+        if isinstance(payload, dict):
+            for key in ("kind", "update", "status", "promoted", "tournament_id"):
+                if key in payload:
+                    row[key] = payload[key]
+        rows.append(row)
+    return rows
+
+
+def load_evaluation_result(run_dir: Path, result: str) -> dict[str, object]:
+    """Load one evaluation manifest by path or evaluations-relative id."""
+
+    run_dir = run_dir.resolve()
+    _, evaluations_dir = resolve_run_worker_dirs(run_dir)
+    candidate = Path(result)
+    manifest_path = candidate if candidate.is_file() else evaluations_dir / result
+    if not manifest_path.is_file():
+        manifest_path = evaluations_dir / result / "manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"No evaluation manifest for {result!r} under {evaluations_dir}"
+        )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Evaluation manifest must be a mapping: {manifest_path}")
+    return {
+        "manifest_path": str(manifest_path),
+        "result_dir": str(manifest_path.parent),
+        "manifest": payload,
     }
