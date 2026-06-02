@@ -33,7 +33,9 @@ def print_benchmark_help() -> None:
         "  sanity                   Gate 1 reproducibility\n"
         "  learn-proof              Gates 2–5 learning proof ladder\n"
         "  calibrate                Derive preflight thresholds\n"
-        "  calibrate-seed-scheduler Reseed-interval calibration\n\n"
+        "  calibrate-seed-scheduler Reseed-interval calibration\n"
+        "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
+        "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n\n"
         "Examples:\n"
         "  make preflight-sanity\n"
         "  make preflight-learn-proof\n"
@@ -158,6 +160,67 @@ def build_parser() -> argparse.ArgumentParser:
     learn_proof.add_argument("--campaign", default="preflight_held_out")
     learn_proof.add_argument("--seeds", default="0,1,2,3,4")
     learn_proof.add_argument("--games-per-pair", type=int, default=4)
+    learn_proof.add_argument(
+        "--train-overrides",
+        nargs="*",
+        default=[],
+        help="Extra Hydra overrides appended to each learn-proof ow train gate.",
+    )
+
+    shortlist_pf = subparsers.add_parser(
+        "shortlist-planet-flow-sweep",
+        help="Deterministic Planet Flow sweep shortlist (window-mean KL guardrails).",
+    )
+    shortlist_pf.add_argument("--sweep-id", required=True)
+    shortlist_pf.add_argument("--entity", default="jmduea-jdueadev")
+    shortlist_pf.add_argument("--project", default="planet-flow-policy")
+    shortlist_pf.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/preflight/planet_flow_sweep_shortlist.json"),
+    )
+    shortlist_pf.add_argument(
+        "--max-kl",
+        type=float,
+        default=None,
+        help=f"Window-mean KL ceiling (default {0.15}).",
+    )
+    shortlist_pf.add_argument(
+        "--min-entropy",
+        type=float,
+        default=None,
+        help="Window-mean entropy floor (default 1e-3).",
+    )
+    shortlist_pf.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max eligible entries in ranked output.",
+    )
+
+    noop_smoke = subparsers.add_parser(
+        "planet-flow-noop-smoke",
+        help="200-update noop trains on shortlist top-K; beat_noop gate check.",
+    )
+    noop_smoke.add_argument(
+        "--shortlist",
+        type=Path,
+        required=True,
+        help="JSON from shortlist-planet-flow-sweep.",
+    )
+    noop_smoke.add_argument("--top-k", type=int, default=3)
+    noop_smoke.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/preflight/planet_flow_noop_smoke.json"),
+    )
+    noop_smoke.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    noop_smoke.add_argument("--thresholds-path", type=Path, default=None)
+    noop_smoke.add_argument("--dry-run", action="store_true")
 
     calibrate = subparsers.add_parser(
         "calibrate",
@@ -684,6 +747,56 @@ def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_shortlist_planet_flow_sweep_cli(args: argparse.Namespace) -> int:
+    from src.jax.planet_flow_shortlist import (
+        PLANET_FLOW_MAX_APPROX_KL,
+        PLANET_FLOW_MIN_ENTROPY,
+        build_shortlist_report,
+        fetch_finished_sweep_runs,
+        write_shortlist_report,
+    )
+
+    max_kl = (
+        float(args.max_kl) if args.max_kl is not None else PLANET_FLOW_MAX_APPROX_KL
+    )
+    min_entropy = (
+        float(args.min_entropy)
+        if args.min_entropy is not None
+        else PLANET_FLOW_MIN_ENTROPY
+    )
+    runs = fetch_finished_sweep_runs(
+        entity=args.entity,
+        project=args.project,
+        sweep_id=args.sweep_id,
+    )
+    report = build_shortlist_report(
+        runs,
+        sweep_id=args.sweep_id,
+        max_kl=max_kl,
+        min_entropy=min_entropy,
+        limit=args.limit,
+    )
+    write_shortlist_report(args.out, report)
+    print(json.dumps(report, indent=2))
+    return 0
+
+
+def run_planet_flow_noop_smoke_cli(args: argparse.Namespace) -> int:
+    from src.jax.planet_flow_smoke import run_planet_flow_noop_smoke, write_smoke_report
+
+    report = run_planet_flow_noop_smoke(
+        args.shortlist,
+        top_k=int(args.top_k),
+        output_root=args.output_root,
+        repo_root=REPO_ROOT,
+        thresholds_path=args.thresholds_path,
+        dry_run=bool(args.dry_run),
+    )
+    write_smoke_report(args.out, report)
+    print(json.dumps(report, indent=2))
+    return 0 if report.get("any_passed") else 1
+
+
 def run_learn_proof_cli(args: argparse.Namespace) -> int:
     from src.jax.preflight import (
         GATE_ORDER,
@@ -700,6 +813,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     if args.gate is not None and args.through is not None:
         raise SystemExit("Use only one of --gate or --through.")
 
+    extra_train_overrides = tuple(args.train_overrides)
     started = __import__("time").perf_counter()
     if args.gate is not None:
         evaluation = run_preflight_gate(
@@ -709,6 +823,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
             thresholds_path=args.thresholds_path,
+            extra_train_overrides=extra_train_overrides,
         )
         overall = evaluation.verdict
         stages = [evaluation]
@@ -721,6 +836,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
             thresholds_path=args.thresholds_path,
+            extra_train_overrides=extra_train_overrides,
         )
 
     report: dict[str, object] = {
@@ -758,6 +874,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_cli(args)
         case "calibrate-seed-scheduler":
             return run_calibrate_seed_scheduler_cli(args)
+        case "shortlist-planet-flow-sweep":
+            return run_shortlist_planet_flow_sweep_cli(args)
+        case "planet-flow-noop-smoke":
+            return run_planet_flow_noop_smoke_cli(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2

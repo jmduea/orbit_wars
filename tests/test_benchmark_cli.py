@@ -72,6 +72,30 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     )
     assert held_out.eval_checkpoint == Path("/tmp/ckpt.pkl")
 
+    shortlist = parser.parse_args(
+        [
+            "shortlist-planet-flow-sweep",
+            "--sweep-id",
+            "j0epauu2",
+            "--out",
+            "/tmp/shortlist.json",
+        ]
+    )
+    assert shortlist.command == "shortlist-planet-flow-sweep"
+    assert shortlist.sweep_id == "j0epauu2"
+
+    smoke = parser.parse_args(
+        [
+            "planet-flow-noop-smoke",
+            "--shortlist",
+            "/tmp/shortlist.json",
+            "--top-k",
+            "2",
+        ]
+    )
+    assert smoke.command == "planet-flow-noop-smoke"
+    assert smoke.top_k == 2
+
 
 def test_planet_flow_training_benchmark_requires_control_metrics(
     monkeypatch, tmp_path, capsys

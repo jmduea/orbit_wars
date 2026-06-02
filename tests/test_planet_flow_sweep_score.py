@@ -3,7 +3,9 @@ from __future__ import annotations
 import pytest
 from src.jax.train.sweep_score import (
     PLANET_FLOW_SWEEP_SCORE_INELIGIBLE,
+    MetricWindowTracker,
     WinRateTrendTracker,
+    planet_flow_sweep_guardrail_reasons,
     planet_flow_sweep_score,
 )
 
@@ -47,6 +49,35 @@ def test_planet_flow_sweep_score_is_ineligible_when_post_mask_unreachable_high()
     )
 
     assert score == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+
+
+def test_planet_flow_sweep_score_ineligible_on_high_window_kl_despite_low_point_kl() -> (
+    None
+):
+    score = planet_flow_sweep_score(**{**_eligible_inputs(), "approx_kl": 0.20})
+
+    assert score == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+    reasons = planet_flow_sweep_guardrail_reasons(
+        **{**_eligible_inputs(), "approx_kl": 0.20}
+    )
+    assert any("approx_kl_window_mean" in reason for reason in reasons)
+
+
+def test_planet_flow_sweep_score_ineligible_when_window_entropy_below_floor() -> None:
+    score = planet_flow_sweep_score(**{**_eligible_inputs(), "entropy": 5.0e-4})
+
+    assert score == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+
+
+def test_metric_window_tracker_returns_none_until_window_full() -> None:
+    tracker = MetricWindowTracker(window=3)
+    for value in (0.01, 0.02):
+        tracker.observe(value)
+
+    assert tracker.window_mean() is None
+
+    tracker.observe(0.10)
+    assert tracker.window_mean() == pytest.approx((0.01 + 0.02 + 0.10) / 3)
 
 
 def test_win_rate_trend_tracker_matches_first_and_last_window_means() -> None:

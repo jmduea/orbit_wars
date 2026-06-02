@@ -117,56 +117,43 @@ def _gate_specs(
                 "present in preflight calibration"
             )
         )
+
+        def planet_flow_gate(
+            gate_id: str,
+            *,
+            total_updates: int,
+            opponents: str,
+            min_win_rate_delta: float | None = min_delta,
+        ) -> PreflightGateSpec:
+            return PreflightGateSpec(
+                gate_id=gate_id,
+                train_overrides=(
+                    *planet_flow_base,
+                    "training=planet_flow",
+                    f"training.total_updates={total_updates}",
+                    f"opponents={opponents}",
+                ),
+                min_win_rate_delta=min_win_rate_delta,
+                window_updates=window,
+                max_approx_kl=max_kl,
+                min_entropy=min_ent,
+                max_post_mask_unreachable_demand_rate=max_unreachable,
+                needs_calibration_reason=needs_calibration,
+                require_planet_flow_control_metrics=True,
+            )
+
         return {
-            "beat_noop": PreflightGateSpec(
-                gate_id="beat_noop",
-                train_overrides=(
-                    *planet_flow_base,
-                    "training=2p4p_16_split",
-                    "training.rollout_steps=128",
-                    "training.total_updates=200",
-                    "opponents=noop_only",
-                ),
-                min_win_rate_delta=min_delta,
-                window_updates=window,
-                max_approx_kl=max_kl,
-                min_entropy=min_ent,
-                max_post_mask_unreachable_demand_rate=max_unreachable,
-                needs_calibration_reason=needs_calibration,
-                require_planet_flow_control_metrics=True,
+            "beat_noop": planet_flow_gate(
+                "beat_noop", total_updates=200, opponents="noop_only"
             ),
-            "beat_random": PreflightGateSpec(
-                gate_id="beat_random",
-                train_overrides=(
-                    *planet_flow_base,
-                    "training=2p4p_16_split",
-                    "training.rollout_steps=128",
-                    "training.total_updates=300",
-                    "opponents=random_only",
-                ),
-                min_win_rate_delta=min_delta,
-                window_updates=window,
-                max_approx_kl=max_kl,
-                min_entropy=min_ent,
-                max_post_mask_unreachable_demand_rate=max_unreachable,
-                needs_calibration_reason=needs_calibration,
-                require_planet_flow_control_metrics=True,
+            "beat_random": planet_flow_gate(
+                "beat_random", total_updates=300, opponents="random_only"
             ),
-            "curriculum_staged": PreflightGateSpec(
-                gate_id="curriculum_staged",
-                train_overrides=(
-                    *planet_flow_base,
-                    "training=2p4p_16_split",
-                    "training.rollout_steps=128",
-                    "training.total_updates=500",
-                    "opponents=random_only",
-                ),
-                window_updates=window,
-                max_approx_kl=max_kl,
-                min_entropy=min_ent,
-                max_post_mask_unreachable_demand_rate=max_unreachable,
-                needs_calibration_reason=needs_calibration,
-                require_planet_flow_control_metrics=True,
+            "curriculum_staged": planet_flow_gate(
+                "curriculum_staged",
+                total_updates=500,
+                opponents="random_only",
+                min_win_rate_delta=None,
             ),
         }
     return {
@@ -487,6 +474,7 @@ def run_preflight_gate(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> GateEvaluation:
     specs = _gate_specs(model, thresholds_path=thresholds_path)
     if gate_id not in specs:
@@ -515,6 +503,7 @@ def run_preflight_gate(
         f"output.campaign={campaign}",
         f"output.root={output_root.as_posix()}",
         *spec.train_overrides,
+        *extra_train_overrides,
     ]
     run_ow_train(
         overrides,
@@ -568,6 +557,7 @@ def run_preflight_ladder(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> tuple[PreflightVerdict, list[GateEvaluation]]:
     if through not in GATE_ORDER:
         raise ValueError(f"--through must be one of {GATE_ORDER}, got {through!r}")
@@ -588,6 +578,7 @@ def run_preflight_ladder(
             repo_root=repo_root,
             dry_run=dry_run,
             thresholds_path=thresholds_path,
+            extra_train_overrides=extra_train_overrides,
         )
         evaluations.append(evaluation)
         if evaluation.verdict != PreflightVerdict.VERIFIED:

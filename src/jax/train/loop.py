@@ -27,6 +27,7 @@ from src.jax.normalization import (
 )
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
+from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
 from src.jax.rollout.metrics import FINALIZED_ROLLOUT_RATE_KEYS
 from src.jax.rollout.types import JaxTransitionBatch
 from src.jax.train.checkpoint import (
@@ -50,11 +51,11 @@ from src.jax.train.snapshots import (
     snapshot_due,
 )
 from src.jax.train.state import init_train_state, validate_policy_param_shapes
-from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
 from src.jax.train.sweep_score import (
+    MetricWindowTracker,
     WinRateTrendTracker,
+    collect_planet_flow_sweep_metrics,
     planet_flow_max_post_mask_unreachable_rate,
-    planet_flow_sweep_score,
 )
 from src.jax.train.telemetry import (
     build_per_format_timing_metrics,
@@ -189,6 +190,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     train_start_time = time.perf_counter()
     track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
     win_rate_trend = WinRateTrendTracker() if track_planet_flow_sweep else None
+    approx_kl_window = MetricWindowTracker() if track_planet_flow_sweep else None
+    entropy_window = MetricWindowTracker() if track_planet_flow_sweep else None
     planet_flow_unreachable_ceiling = (
         planet_flow_max_post_mask_unreachable_rate(
             load_thresholds(
@@ -430,43 +433,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             if win_rate_trend is not None and "action_decision" in enabled_metric_groups(
                 metric_groups_cfg_from_config(cfg)
             ):
-                win_rate_trend.observe(overall_win_rate)
-                win_rate_delta_10 = win_rate_trend.win_rate_delta()
-                if win_rate_delta_10 is not None:
-                    planet_flow_sweep_metrics["win_rate_delta_10"] = float(
-                        win_rate_delta_10
-                    )
-                planet_flow_sweep_metrics["planet_flow_sweep_score"] = (
-                    planet_flow_sweep_score(
-                        win_rate_delta=win_rate_delta_10,
-                        mean_active_launches_per_turn=rollout_scalars.get(
-                            "mean_active_launches_per_turn"
-                        ),
-                        planet_flow_demanded_mass_sum=rollout_scalars.get(
-                            "planet_flow_demanded_mass_sum"
-                        ),
-                        planet_flow_emitted_launch_count=rollout_scalars.get(
-                            "planet_flow_emitted_launch_count"
-                        ),
-                        entropy=(
-                            float(metrics_host["entropy"])
-                            if "entropy" in metrics_host
-                            else None
-                        ),
-                        approx_kl=(
-                            float(metrics_host["approx_kl"])
-                            if "approx_kl" in metrics_host
-                            else None
-                        ),
-                        planet_flow_unreachable_demand_rate=rollout_scalars.get(
-                            "planet_flow_unreachable_demand_rate"
-                        ),
-                        max_post_mask_unreachable_rate=(
-                            planet_flow_unreachable_ceiling
-                            if planet_flow_unreachable_ceiling is not None
-                            else 0.05
-                        ),
-                    )
+                planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
+                    win_rate_trend=win_rate_trend,
+                    approx_kl_window=approx_kl_window,
+                    entropy_window=entropy_window,
+                    overall_win_rate=overall_win_rate,
+                    metrics_host=metrics_host,
+                    rollout_scalars=rollout_scalars,
+                    max_post_mask_unreachable_rate=(
+                        planet_flow_unreachable_ceiling
+                        if planet_flow_unreachable_ceiling is not None
+                        else 0.05
+                    ),
                 )
             record = build_update_record(
                 update=update,

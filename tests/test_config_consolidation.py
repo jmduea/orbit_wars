@@ -32,6 +32,7 @@ SWEEP_COMPOSE_RECIPES = (
     "sps_experiment_stage2",
     "post_encoder_once_overnight",
     "planet_flow_ppo_signal",
+    "planet_flow_ppo_signal_short",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
@@ -281,6 +282,49 @@ def test_wandb_sweep_yaml_smoke_compose() -> None:
         assert cfg.telemetry.wandb.tags
 
 
+def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
+    from src.config import compose_hydra_train_config
+
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "training=planet_flow",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=noop_only",
+        ]
+    )
+
+    assert cfg.training.rollout_steps == 512
+    assert cfg.training.update_chunk_rows == 2048
+    assert cfg.model.max_moves_k == 1
+
+
+def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(
+    tmp_path: Path,
+) -> None:
+    cfg = compose_sweep_gen(
+        [
+            "wandb_sweep=planet_flow_ppo_signal_short",
+            f"out_dir={tmp_path}",
+        ]
+    )
+
+    assert cfg["name"] == "planet_flow_ppo_signal_short"
+    assert cfg["run_cap"] == 12
+    parameters = cfg["parameters"]
+    assert parameters["training"]["value"] == "planet_flow"
+    assert parameters["training.total_updates"]["value"] == 100
+    assert (
+        parameters["output.campaign"]["value"]
+        == "planet_flow_ppo_signal_sweep_v3_short"
+    )
+    assert (
+        parameters["telemetry.wandb.group"]["value"]
+        == "planet_flow_ppo_signal_v3_short"
+    )
+
+
 def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
     tmp_path: Path,
 ) -> None:
@@ -298,7 +342,7 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
 
     parameters = cfg["parameters"]
     assert parameters["model"]["value"] == "planet_flow_target_heatmap"
-    assert parameters["training"]["value"] == "2p4p_16_split"
+    assert parameters["training"]["value"] == "planet_flow"
     assert parameters["training.total_updates"]["value"] == 200
     assert parameters["opponents"]["value"] == "random_only"
     assert parameters["curriculum"]["value"] == "off"

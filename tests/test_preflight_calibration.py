@@ -27,7 +27,8 @@ def test_planet_flow_calibration_overrides_use_p0_guards() -> None:
     )
 
     assert "artifacts=planet_flow_proof" in overrides
-    assert "training=2p4p_16_split" in overrides
+    assert "training=planet_flow" in overrides
+    assert "training.rollout_steps=128" not in overrides
     assert "curriculum=off" in overrides
     assert "telemetry.metric_groups.action_decision=true" in overrides
 

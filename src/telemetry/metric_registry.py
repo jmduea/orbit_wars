@@ -659,9 +659,19 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Last-window minus first-window overall_win_rate over 10 updates.",
     ),
     _metric(
+        "approx_kl_window_mean",
+        "action_decision",
+        "Mean approx_kl over the last 10 training updates (preflight-aligned).",
+    ),
+    _metric(
+        "entropy_window_mean",
+        "action_decision",
+        "Mean policy entropy over the last 10 training updates (preflight-aligned).",
+    ),
+    _metric(
         "planet_flow_sweep_score",
         "action_decision",
-        "W&B sweep objective: win_rate_delta_10 when activity floors pass, else -1.",
+        "W&B sweep objective: win_rate_delta_10 when window-mean KL/entropy floors pass, else -1.",
     ),
     _metric(
         "stop_utilization_ratio",

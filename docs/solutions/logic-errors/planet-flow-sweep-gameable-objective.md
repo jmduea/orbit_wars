@@ -113,6 +113,21 @@ Used in `src/jax/preflight.py` and `src/jax/preflight_calibration.py`.
 
 The failure was objective misalignment, not broken Planet Flow telemetry. `overall_win_rate` vs noop rewards inactivity; preflight learn-proof gates instead require **positive win-rate trend** plus stable PPO diagnostics and non-trivial Planet Flow activity. Encoding those floors into the W&B scalar (`planet_flow_sweep_score`) makes Bayes explore policies that actually launch and improve. Tuning on `random_only` avoids the noop degeneracy while learn-proof still validates `beat_noop` → `beat_random`. Async local replays make collapse vs real learning visually obvious without enabling unsupported Docker/tournament paths.
 
+## Sweep score v3 + proof pipeline (2026-06-02)
+
+Post-`j0epauu2`, random-only sweep winners can show strong `win_rate_delta_10` but fail noop learn-proof when **point-sample** `approx_kl` in W&B summary understates last-10 window spikes. **v3** logs `approx_kl_window_mean` / `entropy_window_mean` and applies the same window means in `planet_flow_sweep_score` eligibility as `src/jax/preflight.py` Gates 2–3.
+
+Operator flow (replace `outputs/_meta/sweeps/planet_flow_sweep_followup.py`):
+
+```bash
+uv run ow benchmark shortlist-planet-flow-sweep --sweep-id <sweep_id> --out outputs/preflight/planet_flow_shortlist.json
+uv run ow benchmark planet-flow-noop-smoke --shortlist outputs/preflight/planet_flow_shortlist.json --top-k 3
+uv run ow benchmark learn-proof --model planet_flow_target_heatmap --gate beat_noop \
+  --train-overrides $(jq -r '.learn_proof_train_overrides[]' outputs/preflight/planet_flow_noop_smoke.json)
+```
+
+Use `training=planet_flow` (512 rollout / 2048 chunk / `max_moves_k=1`) on the proof path; re-calibrate after profile changes. Details: `docs/benchmarks/preflight-calibration.md`.
+
 ## Prevention
 
 - **Before gating on a training metric**, confirm its denominator and what “chance” means for that opponent (see AGENTS.md metric gates).

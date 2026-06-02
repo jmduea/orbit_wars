@@ -46,6 +46,14 @@ def _launches_key(records: list[dict[str, object]]) -> str | None:
     return None
 
 
+def window_mean_from_metric_rows(
+    records: list[dict[str, object]], key: str, *, last_n: int
+) -> float | None:
+    """Mean of ``key`` over the last ``last_n`` metric rows (shared with preflight gates)."""
+
+    return _window_mean(records, key, last_n=last_n)
+
+
 def _window_mean(
     records: list[dict[str, object]], key: str, *, last_n: int
 ) -> float | None:
@@ -254,20 +262,23 @@ def calibration_train_overrides(
     model: str = DEFAULT_MODEL,
 ) -> tuple[str, ...]:
     training_profile = (
-        "2p4p_16_split" if model == "planet_flow_target_heatmap" else "2p_16"
+        "planet_flow" if model == "planet_flow_target_heatmap" else "2p_16"
     )
     return (
         f"model={model}",
         f"training={training_profile}",
-        "training.rollout_steps=128",
         f"training.total_updates={total_updates}",
         f"opponents={opponent}",
         "curriculum=off",
         *PREFLIGHT_TRAIN_BASE,
-        *((
-            "artifacts=planet_flow_proof",
-            "artifacts.artifact_pipeline.enabled=true",
-        ) if model == "planet_flow_target_heatmap" else ()),
+        *(
+            (
+                "artifacts=planet_flow_proof",
+                "artifacts.artifact_pipeline.enabled=true",
+            )
+            if model == "planet_flow_target_heatmap"
+            else ()
+        ),
         f"seed={seed}",
     )
 
