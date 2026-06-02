@@ -9,6 +9,10 @@ from typing import Any, Callable, Mapping
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import (
+    ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP,
+    POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+)
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
@@ -142,6 +146,8 @@ def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -
 def apply_feature_metadata_to_model_config(
     cfg: TrainConfig,
     feature_metadata: Mapping[str, object] | None,
+    *,
+    allow_planet_flow: bool = False,
 ) -> TrainConfig:
     """Align runtime model config with checkpoint feature metadata."""
 
@@ -150,6 +156,26 @@ def apply_feature_metadata_to_model_config(
     stored_decoder = feature_metadata.get("pointer_decoder")
     if stored_decoder is not None:
         cfg.model.pointer_decoder = str(stored_decoder)
+    if cfg.model.pointer_decoder == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        if not allow_planet_flow:
+            raise ValueError(
+                "Planet Flow checkpoints are not supported by submission, replay, "
+                "or tournament runtime paths in P0. Run train/benchmark proof "
+                "paths with artifacts disabled instead."
+            )
+        stored_layout = feature_metadata.get("action_layout_version")
+        if (
+            not isinstance(stored_layout, int)
+            or stored_layout != ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP
+        ):
+            raise ValueError(
+                "Planet Flow checkpoint metadata has an invalid or missing "
+                "action_layout_version."
+            )
+        if feature_metadata.get("pressure_bucket_values") is None:
+            raise ValueError(
+                "Planet Flow checkpoint metadata is missing pressure_bucket_values."
+            )
     return cfg
 
 def batch_game(game: JaxGameState) -> JaxGameState:

@@ -5,17 +5,23 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import jax
-from src.artifacts.checkpoint_compat import is_factorized_pointer_decoder
+from src.artifacts.checkpoint_compat import (
+    is_factorized_pointer_decoder,
+    is_planet_flow_pointer_decoder,
+)
 from src.config import TrainConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
+    PlanetFlowPolicyOutput,
     _factored_step_log_prob_entropy,
+    sample_planet_flow_pressure_action,
     source_mask_from_bucket_mask_and_ships,
 )
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
+from src.jax.planet_flow import compile_planet_flow_action, planet_flow_sampling_target_mask
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
@@ -37,6 +43,12 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
+
+
+def _policy_variables(params: dict) -> dict:
+    """Accept either Flax variables or a raw params payload."""
+
+    return params if "params" in params else {"params": params}
 
 
 def _noop_bucket_mask(
@@ -65,7 +77,7 @@ def _sample_step_from_logits(
     ship_logits: jax.Array,
     ship_bucket_mask: jax.Array,
     deterministic: bool,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     key_target, key_ship = jax.random.split(key)
     illegal_logit = jnp.finfo(jnp.float32).min
     target_mask = ship_bucket_mask.any(axis=-1)
@@ -863,6 +875,35 @@ def _sample_policy_action_with_params(
     deterministic: bool,
     decoder_hidden_in: jax.Array | None = None,
 ) -> tuple[JaxAction, jax.Array | None]:
+    if is_planet_flow_pointer_decoder(cfg.model):
+        player_count = jnp.full(
+            (batch.planet_mask.shape[0],), cfg.task.player_count, dtype=jnp.int32
+        )
+        output = policy.apply(
+            _policy_variables(params),
+            batch,
+            player_count=player_count,
+        )
+        if not isinstance(output, PlanetFlowPolicyOutput):
+            raise TypeError(
+                "planet_flow_target_heatmap policy must return "
+                "PlanetFlowPolicyOutput."
+            )
+        pressure_action = sample_planet_flow_pressure_action(
+            key,
+            output,
+            jnp.asarray(cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32),
+            planet_flow_sampling_target_mask(game, batch),
+            deterministic=deterministic,
+        )
+        compile_result = compile_planet_flow_action(
+            game,
+            batch,
+            pressure_action.target_pressure,
+            cfg,
+        )
+        return compile_result.action, decoder_hidden_in
+
     sample = _sample_shielded_sequence_with_params(
         key,
         game,

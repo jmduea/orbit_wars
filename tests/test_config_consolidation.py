@@ -16,6 +16,7 @@ import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
 from src.jax.training_benchmark import (
@@ -32,6 +33,8 @@ SWEEP_COMPOSE_RECIPES = (
     "sps_experiment",
     "sps_experiment_stage2",
     "post_encoder_once_overnight",
+    "planet_flow_ppo_signal",
+    "planet_flow_ppo_signal_short",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
@@ -54,6 +57,7 @@ PRIMARY_EVAL_PROFILES: dict[str, list[str]] = {
 
 SACRED_ARCHITECTURES = frozenset({"planet_graph_transformer"})
 SACRED_POINTER_DECODERS = frozenset({"factorized_topk"})
+EXPERIMENTAL_POINTER_DECODERS = frozenset({"planet_flow_target_heatmap"})
 ACCEPTABLE_VALUE_HEADS = frozenset({"shared", "format_routed", "distributional"})
 ACCEPTABLE_SHIP_ACTION_MODES = frozenset({"buckets", "continuous_fraction"})
 ACCEPTABLE_TRAJECTORY_SHIELD_MODES = frozenset({"off", "cheap", "tiered", "exact"})
@@ -100,6 +104,88 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
     assert resolve_rollout_group_specs(cfg)
+
+
+def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=random_only",
+        ]
+    )
+
+    assert cfg.artifacts.artifact_pipeline.enabled
+    assert cfg.artifacts.artifact_pipeline.replay_async
+    assert cfg.artifacts.artifact_pipeline.replay_backend == "local"
+    assert cfg.artifacts.replay.enabled
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert resolve_rollout_group_specs(cfg)
+
+
+def test_planet_flow_target_heatmap_profile_composes_with_proof_guards() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "artifacts=disabled",
+            "curriculum=off",
+            "opponents=random_only",
+        ]
+    )
+
+    assert cfg.model.pointer_decoder in EXPERIMENTAL_POINTER_DECODERS
+    assert tuple(cfg.model.planet_flow.pressure_bucket_values) == (
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0,
+    )
+    assert not cfg.artifacts.artifact_pipeline.enabled
+    assert not cfg.artifacts.replay.enabled
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert not cfg.curriculum.enabled
+    assert not cfg.opponents.self_play.enabled
+    assert resolve_rollout_group_specs(cfg)
+
+
+def test_planet_flow_rejects_default_artifact_paths() -> None:
+    with pytest.raises(ValueError, match="only supports local async replay"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "curriculum=off",
+                "opponents=random_only",
+            ]
+        )
+
+
+def test_planet_flow_rejects_latest_or_historical_opponent_paths() -> None:
+    with pytest.raises(ValueError, match="latest or historical"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "artifacts=disabled",
+                "curriculum=off",
+                "opponents=latest_only",
+            ]
+        )
+
+
+def test_planet_flow_rejects_invalid_pressure_buckets() -> None:
+    with pytest.raises(ValueError, match="pressure_bucket_values"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "model.planet_flow.pressure_bucket_values=[0.25,0.5]",
+                "artifacts=disabled",
+                "curriculum=off",
+                "opponents=random_only",
+            ]
+        )
 
 
 def test_benchmark_sanity_defaults_compose_with_even_2p4p_split() -> None:
@@ -195,7 +281,7 @@ def test_output_paths_must_be_relative() -> None:
     ],
 )
 def test_output_paths_reject_traversal(override: str) -> None:
-    with pytest.raises(ValueError, match="\.\.|run_id"):
+    with pytest.raises(ValueError, match=r"\.\.|run_id"):
         compose_hydra_train_config([override])
 
 
@@ -204,6 +290,92 @@ def test_wandb_sweep_yaml_smoke_compose() -> None:
         cfg = compose_hydra_train_config(overrides)
         assert cfg.telemetry.wandb.group
         assert cfg.telemetry.wandb.tags
+
+
+def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
+    from src.config import compose_hydra_train_config
+
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "training=planet_flow",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=noop_only",
+        ]
+    )
+
+    assert cfg.training.rollout_steps == 512
+    assert cfg.training.update_chunk_rows == 2048
+    assert cfg.model.max_moves_k == 1
+
+
+def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(
+    tmp_path: Path,
+) -> None:
+    cfg = compose_sweep_gen(
+        [
+            "wandb_sweep=planet_flow_ppo_signal_short",
+            f"out_dir={tmp_path}",
+        ]
+    )
+
+    assert cfg["name"] == "planet_flow_ppo_signal_short"
+    assert cfg["run_cap"] == 12
+    parameters = cfg["parameters"]
+    assert parameters["training"]["value"] == "planet_flow"
+    assert parameters["training.total_updates"]["value"] == 100
+    assert (
+        parameters["output.campaign"]["value"]
+        == "planet_flow_ppo_signal_sweep_v3_short"
+    )
+    assert (
+        parameters["telemetry.wandb.group"]["value"]
+        == "planet_flow_ppo_signal_v3_short"
+    )
+
+
+def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
+    tmp_path: Path,
+) -> None:
+    cfg = compose_sweep_gen(
+        [
+            "wandb_sweep=planet_flow_ppo_signal",
+            f"out_dir={tmp_path}",
+        ]
+    )
+
+    assert cfg["name"] == "planet_flow_ppo_signal"
+    assert cfg["method"] == "bayes"
+    assert cfg["run_cap"] == 24
+    assert cfg["metric"] == {"name": "planet_flow_sweep_score", "goal": "maximize"}
+
+    parameters = cfg["parameters"]
+    assert parameters["model"]["value"] == "planet_flow_target_heatmap"
+    assert parameters["training"]["value"] == "planet_flow"
+    assert parameters["training.total_updates"]["value"] == 200
+    assert parameters["opponents"]["value"] == "random_only"
+    assert parameters["curriculum"]["value"] == "off"
+    assert parameters["artifacts"]["value"] == "planet_flow_proof"
+    assert parameters["telemetry.metric_groups.action_decision"]["value"] is True
+    assert parameters["telemetry.metric_groups.losses"]["value"] is True
+    assert parameters["training.lr"]["min"] == 0.00001
+    assert parameters["training.ent_coef"]["max"] == 0.003
+    assert parameters["training.update_chunk_rows"]["values"] == [512, 1024, 2048]
+
+    out_path = write_wandb_sweep(cfg)
+    generated = OmegaConf.to_container(OmegaConf.load(out_path), resolve=False)
+    assert isinstance(generated, dict)
+    assert out_path == tmp_path / "planet_flow_ppo_signal.yaml"
+    assert generated["metric"] == {
+        "name": "planet_flow_sweep_score",
+        "goal": "maximize",
+    }
+    assert generated["run_cap"] == 24
+    assert (
+        generated["parameters"]["telemetry.metric_groups.action_decision"]["value"]
+        is True
+    )
 
 
 BOUNDED_SWEEP_SAMPLE_SIZE = 200

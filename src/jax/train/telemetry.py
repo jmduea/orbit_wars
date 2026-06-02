@@ -134,6 +134,7 @@ def build_update_record(
     seed_scheduler_policy: str,
     plateau_metric: str,
     cfg: TrainConfig,
+    planet_flow_sweep_metrics: dict[str, float] | None = None,
 ) -> dict[str, object]:
     """Assemble the full per-update telemetry record before metric-group filtering."""
 
@@ -157,6 +158,7 @@ def build_update_record(
         "overall_win_rate": overall_win_rate,
         "episode_reward_mean": episode_reward_mean,
         **rollout_metrics_for_update_record(rollout_scalars, cfg),
+        **(planet_flow_sweep_metrics or {}),
         "survival_time": survival_time,
         "score_share": score_share,
         "update_seconds": update_seconds,

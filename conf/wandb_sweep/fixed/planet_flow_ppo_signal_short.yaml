@@ -1,0 +1,38 @@
+# @package _global_
+# Fixed axes for Planet Flow PPO short re-sweep (v3 window metrics, 100 updates).
+
+parameters:
+  model:
+    value: planet_flow_target_heatmap
+  training:
+    value: planet_flow
+  training.total_updates:
+    value: 100
+  opponents:
+    value: random_only
+  curriculum:
+    value: "off"
+  artifacts:
+    value: planet_flow_proof
+  seed:
+    value: 42
+  output.campaign:
+    value: planet_flow_ppo_signal_sweep_v3_short
+  telemetry:
+    value: default
+  telemetry.wandb.enabled:
+    value: true
+  telemetry.wandb.group:
+    value: planet_flow_ppo_signal_v3_short
+  telemetry.wandb.log_artifacts:
+    value: false
+  telemetry.wandb.tags:
+    value:
+      - planet_flow
+      - planet_flow_ppo_signal
+      - planet_flow_ppo_signal_short
+      - sweep_v3_window
+  telemetry.metric_groups.action_decision:
+    value: true
+  telemetry.metric_groups.losses:
+    value: true

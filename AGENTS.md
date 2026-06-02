@@ -60,30 +60,41 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 
 - Prefer unified v2-only feature encoding; remove legacy v1 paths rather than parallel encoders.
 - Favor full rework over incremental shims when simplifying encoding, rollout, training modules, or any refactor — no backward-compat re-export modules, `_underscore` aliases, or parallel APIs for module moves/renames in a solo project; update call sites instead.
-- Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested; CPU xdist only via `make test-fast-parallel` / `make test-jax-parallel` (never on slow/sweep/GPU).
-- Check the terminals folder before pytest or GPU work; one GPU job at a time; parallel multi-agent: at most one full Makefile suite repo-wide (executors run targeted tests only).
-- Commit and push only when the user explicitly requests it; do not push otherwise.
+- Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested.
+- Use `make test-fast-parallel` / `make test-jax-parallel` for CPU xdist only; never xdist on slow/sweep or with GPU pytest.
+- Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
+- Do not start test runs when another agent/session is already running tests, or when the user says verification is already done — check the terminals folder first.
+- Same terminals check before starting expensive GPU training runs (calibration sweeps, long `ow train`, Gate 5 tournaments); parallel jobs contend on one GPU.
 - New train/eval/benchmark capabilities belong in the `ow` CLI (`src/cli/<module>.py` + dispatch in `src/cli/__init__.py`), not standalone `scripts/*.py`; defer heavy imports (JAX) until command execution, not module load.
+- Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
 - Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
-- Prefer even 2p/4p env splits for training and benchmarks (`training=workstation` → `2p4p_32_split`) to match leaderboard dynamics.
-- Default factorized decoding uses `max_moves_k: 2` in `conf/model/transformer_factorized.yaml` (not 1); raise K only with evidence.
 - Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
-- After major training-loop or checkpoint refactors, verify with short train smoke then a ~100-update benchmark; for PR context use `gh pr view` / `gh pr diff`, not inline diff blobs alone.
+- After major training-loop or checkpoint refactors, verify with short train smoke then a ~100-update benchmark; unit tests alone may miss regressions.
+- When the user attaches PR diff context or cites a PR number, fetch with `gh pr view` / `gh pr diff` — do not rely on inline diff blobs alone.
 - `.audit/` and `.cursor/hooks/state/` are gitignored; keep audit trails and hook state local, not in commits.
 
 ## Learned Workspace Facts
 
-- Canonical feature path: Kaggle/JAX obs → `encode_turn` (planet-edge `TurnBatch`); golden tests in `tests/test_feature_encoding_golden.py`; parametric edges in `src/features/catalog/edge.py` (`intercept_anchors` `[1.0, 3.0, 6.0]`, dim `6×N+7`).
-- JAX is split across rollout, PPO, shielded sampling, shield, and training loop modules; factorized turns encode `TurnBatch` once (cached `encoder_out`) with decoder-only prefix forwards for shield/replay.
-- PPO uses a shared planet-edge encoder with separate policy/value heads (not dual encoders); try `model.value_head=format_routed` before a second encoder experiment.
-- `model.decoder_carry` persists decoder GRU hidden state across turns — not action tokens in observations; incoming carry is stored on transitions for PPO replay.
-- Trajectory shield: JAX in `src/jax/shield/*`; Python reference in `src/game/shield.py`. `OPPONENT_FAMILY_*` in `src/opponents/constants.py`; import `src.opponents.pool` only for pool logic.
-- PPO tile size: `training.update_chunk_rows` (single knob). General PPO defaults in `conf/training/base.yaml` (post-`ppo_stability_kl`: lr `6e-5`, epochs `1`, clip `0.15`, vf_coef `1.0`, max_grad_norm `1.0`, ent_coef `0.006`).
-- **Obs normalization:** `model.normalize_observations` (default true) runs Welford mean/var on `TurnBatch` planet/edge/global with `obs_norm_clip` (default 10) in rollout and PPO (`src/jax/normalization.py`, `train/loop.py`).
-- **`overall_win_rate` under pure `binary_win`:** counts wins from terminal reward sign (`reward>0` on `done`), not `terminal_is_first` alone (`src/jax/rollout/metrics.py`).
-- Hydra schema defaults in `src/config/schema.py` may differ from `conf/` YAML — verify with `print_resolved_config=true`.
-- **Hybrid promotion:** `artifacts=hybrid_promotion` → hybrid strategy + async checkpoint eval (Docker → tournament → promote).
-- **Train runs:** `outputs/campaigns/<campaign>/runs/<run_id>/` — metrics in `logs/*_jax.jsonl`, checkpoints `checkpoints/jax_ckpt_*.pkl`; `curriculum.enabled=true` requires snapshot pool + interval (`curriculum=off` for isolated smokes).
-- **Preflight gates:** Gates 2–4 trend from `logs/*_jax.jsonl`; Gate 5 tournament via `kaggle_environments`. Gates/calibrate append per-model PPO from `docs/benchmarks/preflight-profiles.json` (not drifting `base.yaml`); refresh profiles and `preflight-calibration.json` together when promoting sweep winners. Watch `approx_kl_v2` and |approx_kl| — signed v1 ceiling alone misses negative-KL pathology.
-- **Launch hygiene throughput:** tier-1 `make test-launch-hygiene-throughput`; tier-2 merge gate `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` on the same GPU machine.
-- **`ow benchmark` dispatch:** register subcommands in `src/cli/__init__.py`, not only test parsers.
+- Canonical feature path: Kaggle/JAX obs → `encode_turn` (planet-edge `TurnBatch`); golden tests live in `tests/test_feature_encoding_golden.py`.
+- JAX concerns are split: rollout in `src/jax/rollout/collect.py`, PPO in `src/jax/ppo_update.py`, learner shielded sampling in `src/jax/action_sampling.py`, shield in `src/jax/shield/*`, training loop in `src/jax/train/` (loop, rollout_groups, metrics, snapshots, checkpoint, telemetry, queue, state), opponent builders in `src/opponents/jax_actions/`.
+- Trajectory shield: JAX paths in `src/jax/shield/*`; Python reference helpers in `src/game/shield.py` and `shield_config.py`.
+- `OPPONENT_FAMILY_*` constants live in `src/opponents/constants.py`; import `src.opponents.pool` only for pool logic (`OPPONENT_FAMILY_IDS`, sampling helpers).
+- Per-format timing metrics (`*_2p`/`*_4p`) emit only when telemetry `metric_groups.debug` is enabled; `average_placement_4p` stays on the default path.
+- `model.normalize_observations` appears in model YAMLs but is not wired into JAX training; treat as dead config until implemented or removed.
+- Hydra dataclass defaults in `src/config/schema.py` can differ from `conf/` YAML; verify with `uv run ow train print_resolved_config=true`.
+- Understand-Anything scans honor `.understandignore` for excluding non-project adjacent paths.
+- OMG agent orchestration retired; use Cursor plugins per `docs/CURSOR.md`; legacy OMG/MULTI_AGENT material is under `docs/archive/omg/`.
+- `docs/ROADMAP.md` is human-only — no `scripts/roadmap.py` funnel or `tests/test_roadmap.py` enforcement.
+- **Hybrid promotion:** `artifacts=hybrid_promotion` sets `promotion.strategy=hybrid`, `tournament.enabled=true`, `checkpoint_eval_async=true`. Scalar metric improvements queue a composite `checkpoint_eval` worker job (Docker validation → tournament → promote). Training never writes promoted manifests on metrics alone under hybrid. Artifacts: `evaluations/checkpoint_eval_u<update>_<id>/{docker_validation,tournament}/`. Profile requires Docker on the worker host.
+- **Train run layout:** `ow train` with `output.campaign=<name>` writes under `outputs/campaigns/<campaign>/runs/<run_id>/` — update metrics in `logs/*_jax.jsonl` (not `metrics.jsonl` at run root), checkpoints in `checkpoints/jax_ckpt_*.pkl`, artifact jobs in `queue/optional_jobs/`, evaluation outputs in `evaluations/`.
+- **Curriculum pre-flight:** `curriculum.enabled=true` requires `opponents.snapshot.pool_size > 0` and `opponents.snapshot.interval_updates > 0`; use `curriculum=off` for isolated train smokes that don't exercise historical opponents.
+- **Parametric edge catalog:** default `intercept_anchors` `[1.0, 3.0, 6.0]`; edge dim `6×N+7` (25 for default). Implemented in `src/features/catalog/edge.py` and `conf/task/base.yaml`; `docs/feature-encoding-v2.md` may still describe the older two-anchor layout.
+- **Preflight gates:** Gates 2–4 read JAX learning-signal trend from `logs/*_jax.jsonl`; Gate 5 is tournament win proof on checkpoints via `kaggle_environments` (not Docker). Source of truth for thresholds: `docs/benchmarks/preflight-calibration.json`.
+- **Launch hygiene throughput (tier-1 vs tier-2):** `make test-launch-hygiene-throughput` runs the factorized sampler microbenchmark (`scripts/benchmark_factorized_sampler.py`) — tier-1 only; merge throughput health requires tier-2 `make test-launch-hygiene-e2e-throughput`, which subprocesses `ow benchmark training` on the production path with `--preset primary` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` (`--assert-within-pct`, same GPU machine as baseline capture). Baseline SHA: first parent of PR #163 merge (`79162a2088160b8ed05c3e3a050e064c7f6c9556`, pre-hygiene). Capture: worktree at that SHA, N≥3 runs, `env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0`. Example:
+  ```bash
+  uv run ow benchmark training --preset primary --label capture --repeats 3 \
+    --updates 20 --warmup 2 --out docs/benchmarks/launch-hygiene-e2e-baseline.json
+  uv run ow benchmark training --preset primary --label gate --updates 20 --warmup 2 \
+    --out /tmp/gate.json --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
+  ```
+- **`ow benchmark` dispatch:** subcommands must be registered in `src/cli/__init__.py` (`case "benchmark"`), not only `build_parser()` in tests — verify with `uv run ow benchmark --help`.

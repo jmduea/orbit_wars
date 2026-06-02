@@ -113,6 +113,28 @@ make preflight-calibrate
 | 4 | `ow benchmark learn-proof --through curriculum_staged` | Curriculum promotions |
 | 5 | `ow benchmark learn-proof --eval-checkpoint … --baselines noop` | Tournament win proof |
 
+## Planet Flow proof pipeline (M1)
+
+Sweep → shortlist → noop smoke → learn-proof uses **window-mean** `approx_kl` / `entropy` (same as Gates 2–3), not point samples from the last PPO update. After deploying sweep_score v3, **re-shortlist** finished sweeps; do not promote a pre-v3 W&B winner blindly.
+
+| Step | Command |
+|------|---------|
+| Sweep (200u) | `uv run ow make wandb_sweep=planet_flow_ppo_signal` then `wandb sweep …` |
+| Short re-sweep (100u) | `uv run ow make wandb_sweep=planet_flow_ppo_signal_short` — `run_cap: 12`, campaign `planet_flow_ppo_signal_sweep_v3_short` |
+| Shortlist | `uv run ow benchmark shortlist-planet-flow-sweep --sweep-id <id> --out outputs/preflight/planet_flow_shortlist.json` |
+| Noop smoke | `uv run ow benchmark planet-flow-noop-smoke --shortlist outputs/preflight/planet_flow_shortlist.json --top-k 3` |
+| Learn-proof | `uv run ow benchmark learn-proof --model planet_flow_target_heatmap --gate beat_noop --train-overrides <from smoke JSON>` |
+
+**Planet Flow training profile** (`conf/training/planet_flow.yaml`): `rollout_steps=512`, `update_chunk_rows=2048`; model `max_moves_k=1`. Factorized defaults in `conf/training/base.yaml` are unchanged. Profile changes invalidate prior learn-proof verdicts — re-run `make preflight-calibrate` before interpreting Gates 2–3.
+
+| Knob | Before (proof path) | After (`training=planet_flow`) |
+|------|---------------------|--------------------------------|
+| `rollout_steps` | 128 (preflight override) / 500 (base) | 512 (~full game horizon) |
+| `update_chunk_rows` | 1024 (base) / sweep axis | 2048 (workstation default) |
+| `max_moves_k` | 5 (model base) | 1 (one compound pressure action) |
+
+Gates 2–3 **VERIFIED** is **M1 learnability** only — not proof Planet Flow beats `factorized_topk` (that needs M2 paired comparison). See `docs/brainstorms/2026-06-01-planet-flow-policy-requirements.md` (R20, F4).
+
 ## Open work
 
 - Expand calibration with `random_only` JSONL trajectories and multi-seed sweeps before tightening tournament floors.

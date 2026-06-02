@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import pytest
 
+from src.config import TrainConfig
 from src.jax.action_sampling import _sample_factored_step_from_logits
+from src.jax.submission_runtime import apply_feature_metadata_to_model_config
 
 
 def _sample_stop(*, deterministic: bool, stop_logit: float, seed: int) -> int:
@@ -36,3 +39,15 @@ def test_stochastic_can_sample_stop_when_can_launch() -> None:
         for seed in range(32)
     }
     assert 0 in stops and 1 in stops
+
+
+def test_submission_runtime_rejects_planet_flow_checkpoint_metadata() -> None:
+    cfg = TrainConfig()
+    metadata = {
+        "pointer_decoder": "planet_flow_target_heatmap",
+        "action_layout_version": 3,
+        "pressure_bucket_values": (0.0, 0.25, 0.5, 0.75, 1.0),
+    }
+
+    with pytest.raises(ValueError, match="Planet Flow checkpoints"):
+        apply_feature_metadata_to_model_config(cfg, metadata)

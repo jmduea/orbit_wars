@@ -8,6 +8,8 @@ from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
     OPPONENT_SLOT_METRIC_KEYS,
+    PLANET_FLOW_CONTROL_COUNT_KEYS,
+    PLANET_FLOW_COUNT_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
 from src.telemetry.metric_registry import (
@@ -144,6 +146,23 @@ def _core_metric_fields(
             }
         )
 
+    if any(key in compute_keys for key in PLANET_FLOW_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+    if any(key in compute_keys for key in PLANET_FLOW_CONTROL_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_CONTROL_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+
     if any(key in compute_keys for key in TRAJECTORY_SHIELD_COUNT_KEYS):
         metrics.update({key: ZERO_F32 for key in TRAJECTORY_SHIELD_COUNT_KEYS if key in compute_keys})
         if "trajectory_shield_legal_non_noop_count" in compute_keys:
@@ -204,6 +223,24 @@ def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax
         metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
 
 
+def _apply_planet_flow_metrics(
+    metrics: dict[str, jax.Array],
+    data: dict[str, jax.Array],
+) -> None:
+    emitted_launches = data.get("planet_flow_emitted_launch_count")
+    if emitted_launches is None:
+        return
+    turn_count = jnp.asarray(
+        emitted_launches.shape[0] * emitted_launches.shape[1], dtype=jnp.float32
+    )
+    if "stop_rate" in metrics:
+        metrics["stop_rate"] = ZERO_F32
+    if "mean_active_launches_per_turn" in metrics:
+        metrics["mean_active_launches_per_turn"] = _safe_rate(
+            emitted_launches.sum(), turn_count
+        )
+
+
 def rollout_metrics(
     *,
     data: dict[str, jax.Array],
@@ -215,7 +252,14 @@ def rollout_metrics(
     compute_keys = rollout_compute_scalar_keys(cfg)
     collection_groups = rollout_collection_enabled_groups(cfg)
     base = _base_episode_metrics(data=data, cfg=cfg)
-    samples = data["target_index"].astype(jnp.float32).size
+    if "planet_flow_target_bucket" in data:
+        samples = jnp.asarray(
+            data["planet_flow_target_bucket"].shape[0]
+            * data["planet_flow_target_bucket"].shape[1],
+            dtype=jnp.float32,
+        )
+    else:
+        samples = jnp.asarray(data["target_index"].size, dtype=jnp.float32)
     metrics = _core_metric_fields(
         base=base,
         cfg=cfg,
@@ -227,5 +271,8 @@ def rollout_metrics(
     if "trajectory_shield_debug" in collection_groups:
         _apply_shield_metrics(metrics, data)
     if "action_decision" in collection_groups:
-        _apply_factorized_metrics(metrics, data)
+        if "planet_flow_target_bucket" in data:
+            _apply_planet_flow_metrics(metrics, data)
+        else:
+            _apply_factorized_metrics(metrics, data)
     return metrics

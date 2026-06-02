@@ -8,8 +8,15 @@ artifact_pipeline:
   enabled: false
   replay_async: false
   docker_validation_async: false
+  checkpoint_eval_async: false
   worker_autostart: false
   ledger_enabled: false
 
 replay:
+  enabled: false
+
+promotion:
+  enabled: false
+
+tournament:
   enabled: false

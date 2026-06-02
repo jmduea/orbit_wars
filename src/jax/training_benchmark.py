@@ -39,6 +39,25 @@ UPDATE_METRIC_KEYS: tuple[str, ...] = (
 )
 ROLLOUT_METRIC_KEYS: tuple[str, ...] = (
     "mean_active_launches_per_turn",
+    "planet_flow_unreachable_demand_rate",
+    "planet_flow_held_demand_rate",
+    "planet_flow_emitted_ship_mass_rate",
+    "planet_flow_small_launch_rate",
+    "planet_flow_duplicate_source_target_rate",
+    "planet_flow_emitted_launch_count",
+    "planet_flow_control_emitted_launch_count",
+    "planet_flow_control_unreachable_demand_rate",
+    "planet_flow_control_held_demand_rate",
+    "planet_flow_control_emitted_ship_mass_rate",
+    "planet_flow_control_small_launch_rate",
+    "planet_flow_control_duplicate_source_target_rate",
+    "planet_flow_emitted_launch_count_delta_vs_control",
+    "planet_flow_emitted_ship_mass_delta_vs_control",
+    "planet_flow_unreachable_demand_rate_delta_vs_control",
+    "planet_flow_held_demand_rate_delta_vs_control",
+    "planet_flow_emitted_ship_mass_rate_delta_vs_control",
+    "planet_flow_small_launch_rate_delta_vs_control",
+    "planet_flow_duplicate_source_target_rate_delta_vs_control",
     "overall_win_rate",
 )
 
@@ -78,6 +97,16 @@ E2E_THROUGHPUT_METRICS: tuple[str, ...] = (
 DEFAULT_E2E_WITHIN_PCT = 10.0
 MIN_BASELINE_RUNS = 3
 
+PLANET_FLOW_P0_BENCHMARK_OVERRIDES: tuple[str, ...] = (
+    "model=planet_flow_target_heatmap",
+    "training=2p4p_16_split",
+    "opponents=random_only",
+    "curriculum=off",
+    "artifacts=planet_flow_proof",
+    "telemetry.wandb.enabled=false",
+    "telemetry.metric_groups.action_decision=true",
+    "seed=42",
+)
 
 @dataclass(frozen=True, slots=True)
 class TrainingBenchmarkSnapshot:
@@ -450,13 +479,13 @@ def resolve_benchmark_overrides(
     preset: str | None,
     overrides: list[str] | None,
 ) -> list[str]:
-    if preset == "validation":
-        resolved = list(WORKSTATION_VALIDATION_OVERRIDES)
-        if overrides:
-            resolved.extend(overrides)
-        return resolved
-    if preset == "primary":
-        resolved = list(PRIMARY_E2E_OVERRIDES)
+    preset_overrides = {
+        "validation": WORKSTATION_VALIDATION_OVERRIDES,
+        "primary": PRIMARY_E2E_OVERRIDES,
+        "planet_flow_p0": PLANET_FLOW_P0_BENCHMARK_OVERRIDES,
+    }
+    if preset in preset_overrides:
+        resolved = list(preset_overrides[preset])
         if overrides:
             resolved.extend(overrides)
         return resolved

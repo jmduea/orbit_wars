@@ -1,0 +1,8 @@
+# Planet Flow proof-path training profile (not global factorized defaults).
+# rollout_steps ~ full game horizon; chunk size matches workstation throughput.
+defaults:
+  - 2p4p_16_split
+  - _self_
+
+rollout_steps: 512
+update_chunk_rows: 2048
