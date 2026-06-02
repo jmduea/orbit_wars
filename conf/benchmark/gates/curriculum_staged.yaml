@@ -1,0 +1,8 @@
+# Preflight gate recipe scaffold (Phase 2). Train overrides remain in src/jax/preflight.py.
+gate_id: curriculum_staged
+title: Curriculum staged promotion (Gate 4)
+default_model: transformer_factorized
+ladder_index: 2
+thresholds_key: learning_signal
+workflow: ow benchmark learn-proof --through curriculum_staged
+primitive: ow benchmark gate curriculum_staged

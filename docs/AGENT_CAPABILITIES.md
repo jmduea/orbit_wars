@@ -13,7 +13,7 @@ uv run ow train print_resolved_config=true
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow promote demote`, `ow benchmark gate beat_noop`, `ow benchmark gate beat_random` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow promote demote`, `ow benchmark gate beat_noop`, `ow benchmark gate beat_random`, `ow benchmark gate curriculum_staged` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -56,9 +56,11 @@ uv run ow benchmark gate beat_noop --dry-run
 uv run ow benchmark gate beat_noop --out /tmp/beat_noop.json
 uv run ow benchmark gate beat_random --dry-run
 uv run ow benchmark gate beat_random --out /tmp/beat_random.json
+uv run ow benchmark gate curriculum_staged --dry-run
+uv run ow benchmark gate curriculum_staged --out /tmp/curriculum_staged.json
 ```
 
-Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`; `curriculum_staged` deferred). Train overrides still live in `src/jax/preflight.py` — YAML is metadata for agents. Full ladder remains `ow benchmark learn-proof`.
+Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). Train overrides still live in `src/jax/preflight.py` — YAML is metadata for agents. Full ladder remains `ow benchmark learn-proof`.
 
 Thresholds: `docs/benchmarks/preflight-calibration.json` (never invent gate numbers).
 
