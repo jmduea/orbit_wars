@@ -42,6 +42,7 @@ from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.rollout.metrics import rollout_metrics
 from src.jax.train import init_rollout_groups, init_train_state
 from src.jax.train.metrics import (
     finalize_cross_chunk_rate_metrics,
@@ -150,6 +151,32 @@ def test_rollout_metric_aggregation_recomputes_rate_metrics():
     assert float(metrics["win_rate_2p"]) == pytest.approx(0.75)
     assert float(metrics["first_place_rate_4p"]) == pytest.approx(0.5)
     assert float(metrics["average_placement_4p"]) == pytest.approx(2.5)
+
+
+def test_rollout_metrics_binary_win_rate_matches_terminal_reward() -> None:
+    """Preflight noop gates use binary terminal reward; win rate must follow it."""
+
+    import jax.numpy as jnp
+
+    cfg = TrainConfig()
+    cfg.task.player_count = 2
+    cfg.reward.terminal_reward_mode = "binary_win"
+    cfg.reward.early_terminal_reward_shaping_enabled = False
+    cfg.training.rollout_steps = 4
+    data = {
+        "done": jnp.array([0.0, 0.0, 0.0, 1.0]),
+        "reward": jnp.array([0.0, 0.0, 0.0, 1.0]),
+        "terminal_is_first": jnp.zeros(4, dtype=jnp.float32),
+        "terminal_placement": jnp.zeros(4, dtype=jnp.float32),
+        "terminal_survival_time": jnp.zeros(4, dtype=jnp.float32),
+        "terminal_score_share": jnp.zeros(4, dtype=jnp.float32),
+        "terminal_ship_differential": jnp.zeros(4, dtype=jnp.float32),
+        "target_index": jnp.zeros((4, 1), dtype=jnp.float32),
+    }
+    metrics = rollout_metrics(data=data, cfg=cfg, env_count=1)
+    finalized = finalize_cross_chunk_rate_metrics(dict(metrics))
+    assert float(finalized["episode_reward_mean"]) == pytest.approx(1.0)
+    assert float(finalized["overall_win_rate"]) == pytest.approx(1.0)
 
 
 def test_merge_metric_dicts_skips_removed_action_target_metrics() -> None:

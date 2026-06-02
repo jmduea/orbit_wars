@@ -40,6 +40,35 @@ def trajectory_shield_legal_rate(*, legal: jax.Array, original: jax.Array) -> ja
     return _safe_rate(legal, original)
 
 
+def _binary_terminal_only(cfg: TrainConfig) -> bool:
+    """True when terminal reward is pure ±1 binary with no step shaping."""
+
+    reward_cfg = cfg.reward
+    if reward_cfg.terminal_reward_mode.strip().lower() != "binary_win":
+        return False
+    return not (
+        reward_cfg.early_terminal_reward_shaping_enabled
+        or float(reward_cfg.reward_capture_planet) != 0.0
+        or float(reward_cfg.reward_ship_delta) != 0.0
+        or float(reward_cfg.reward_production_delta) != 0.0
+    )
+
+
+def _episode_first_place_sum(
+    data: dict[str, jax.Array], done_float: jax.Array, cfg: TrainConfig
+) -> jax.Array:
+    """Count first-place finishes for overall_win_rate.
+
+    For pure ``binary_win`` (preflight / noop gates), wins follow the terminal
+    reward sign on done steps so ``overall_win_rate`` stays consistent with
+    ``episode_reward_mean``. Other terminal modes keep ``terminal_is_first``.
+    """
+
+    if _binary_terminal_only(cfg):
+        return ((data["reward"] * done_float) > 0.0).astype(jnp.float32).sum()
+    return (data["terminal_is_first"] * done_float).sum()
+
+
 def _base_episode_metrics(
     *,
     data: dict[str, jax.Array],
@@ -49,7 +78,7 @@ def _base_episode_metrics(
     episode_done = done_float.sum()
     episodes_2p = jnp.where(cfg.task.player_count == 2, episode_done, ZERO_F32)
     episodes_4p = jnp.where(cfg.task.player_count == 4, episode_done, ZERO_F32)
-    first_place_sum = (data["terminal_is_first"] * done_float).sum()
+    first_place_sum = _episode_first_place_sum(data, done_float, cfg)
     return {
         "done_float": done_float,
         "reward_mean": data["reward"].mean(),
