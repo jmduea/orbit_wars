@@ -157,6 +157,9 @@ hygiene validation with rollout/PPO log-prob parity handled deliberately.
 
 ## Related
 
+- `docs/solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md`
+  — shared encoder + separate policy/value heads; PPO replay encodes once before
+  the factorized decoder scan (relevant when judging whether to duplicate the trunk).
 - `docs/solutions/performance-issues/launch-hygiene-incremental-carry-throughput.md`
   documents the earlier isolated sampler microbenchmark fix. This learning is
   adjacent but distinct: it covers production-path attribution after that gate

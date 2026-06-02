@@ -106,6 +106,7 @@ The oracle path (`compose_hygiene_with_shield_mask` / `hygiene_adjusted_bucket_m
 
 ## Related Issues
 
+- Actor–critic encode-once replay contract: `docs/solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md`
 - Requirements: `docs/brainstorms/2026-06-01-launch-hygiene-bundle-requirements.md` (R1–R9)
 - Plans: `docs/plans/2026-06-01-launch-hygiene-bundle-plan.md`, `docs/plans/2026-06-01-002-fix-launch-hygiene-throughput-plan.md`
 - Production-path timing follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`

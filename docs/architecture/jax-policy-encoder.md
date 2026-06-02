@@ -2,7 +2,10 @@
 
 Planet-edge policies share a composable shell: a backbone encoder maps `TurnBatch`
 to per-edge candidate embeddings, then an autoregressive pointer decoder selects
-up to `max_moves_k` launches per turn.
+up to `max_moves_k` launches per turn. The critic reads pooled graph features from
+the same encoder output (`value_input`); policy and value are separate heads on one
+trunk, not dual independent encoders. See
+[`docs/solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md`](../solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md).
 
 ## Encoder dispatch
 
@@ -11,9 +14,20 @@ flowchart LR
     TB[TurnBatch] --> DISPATCH{model.architecture}
     DISPATCH -->|planet_graph_transformer| TX[PlanetGraphTransformerEncoder]
     TX --> OUT[PlanetEdgeEncoderOutput]
-    OUT --> DEC[AutoregressivePointerDecoder]
-    DEC --> ACT[target_logits + ship_logits + value]
+    OUT --> DEC[FactorizedTopKPointerDecoder]
+    OUT --> VH[value head on value_input]
+    DEC --> ACT[target_logits + ship_logits]
+    VH --> VAL[bootstrap value]
 ```
+
+## Actor–critic layout
+
+| Piece | Path | Role |
+|-------|------|------|
+| Policy factory | `src/jax/policy.py` (`build_planet_graph_transformer_policy`) | Wires encoder + decoder + `build_value_head` → `ComposableFactorizedPlanetPolicy` |
+| Encode / decode / critic | `ComposableFactorizedPlanetPolicy` | Single `encoder_out`; PPO replay encodes once (`src/jax/factored_sequence_scan.py`) |
+| Value head config | `model.value_head` | `shared`, `format_routed`, or `distributional` (critic MLP style only) |
+| PPO joint loss | `src/jax/ppo_update.py` | One `params` tree, `policy_loss + vf_coef * value_loss` |
 
 ## Modules
 
