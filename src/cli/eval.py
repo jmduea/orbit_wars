@@ -25,7 +25,12 @@ from src.artifacts.tournament.resolve import (
 )
 from src.artifacts.pipeline import cancel_optional_jobs
 from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_job_worker
-from src.cli.run_status import queue_is_active, summarize_run_status
+from src.cli.run_status import (
+    list_evaluation_results,
+    load_evaluation_result,
+    queue_is_active,
+    summarize_run_status,
+)
 from src.config.schema import TournamentConfig
 
 
@@ -36,12 +41,15 @@ def print_eval_help() -> None:
         "  tournament   Head-to-head eval in Kaggle env\n"
         "  worker       Process queue/optional_jobs for a run\n"
         "  status       Summarize queue jobs and promotion for a run\n"
+        "  results      List or show evaluation manifests under a run\n"
         "  jobs         Queue job operations (cancel)\n"
         "  package      Build submission.tar.gz from checkpoint\n"
         "  submit       Upload package to Kaggle competition\n\n"
         "Examples:\n"
         "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id>\n"
         "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch\n"
+        "  uv run ow eval results list --run outputs/campaigns/<c>/runs/<id>\n"
+        "  uv run ow eval results show --run <path> --result tournament_u000010_<id>\n"
         "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
         "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
         "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
@@ -132,6 +140,39 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="With --watch, exit after this many seconds with no queued/running jobs.",
+    )
+
+    results = subparsers.add_parser(
+        "results",
+        help="List or show evaluation manifests under run/evaluations/.",
+    )
+    results_sub = results.add_subparsers(dest="results_command", required=True)
+
+    results_list = results_sub.add_parser(
+        "list",
+        help="Glob evaluation result directories and manifest paths.",
+    )
+    results_list.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+
+    results_show = results_sub.add_parser(
+        "show",
+        help="Print one evaluation manifest.json payload.",
+    )
+    results_show.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+    results_show.add_argument(
+        "--result",
+        required=True,
+        help="Evaluations-relative path, result dir, or manifest.json path.",
     )
 
     jobs = subparsers.add_parser(
@@ -512,6 +553,21 @@ def run_status_cli(args: argparse.Namespace) -> int:
         time.sleep(poll_seconds)
 
 
+def run_results_list_cli(args: argparse.Namespace) -> int:
+    rows = list_evaluation_results(args.run)
+    print(json.dumps({"results": rows}, indent=2, sort_keys=True))
+    return 0
+
+
+def run_results_show_cli(args: argparse.Namespace) -> int:
+    try:
+        payload = load_evaluation_result(args.run, str(args.result))
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
     queue_dir, _ = resolve_run_worker_dirs(args.run)
     if not queue_dir.is_dir():
@@ -593,6 +649,12 @@ def main(argv: list[str] | None = None) -> int:
         return run_worker_cli(args)
     if args.command == "status":
         return run_status_cli(args)
+    if args.command == "results":
+        if args.results_command == "list":
+            return run_results_list_cli(args)
+        if args.results_command == "show":
+            return run_results_show_cli(args)
+        raise SystemExit("Unknown results command. Use: ow eval results list|show --help")
     if args.command == "jobs":
         if args.jobs_command == "cancel":
             return run_jobs_cancel_cli(args)

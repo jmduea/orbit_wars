@@ -217,3 +217,24 @@ def test_from_promoted_compose_sets_resume_checkpoint(
     assert cfg.output.campaign == "promoted_campaign"
     assert cfg.resume_checkpoint == str(checkpoint_path)
     assert cfg.from_promoted is None
+
+
+def test_append_produced_artifact_is_idempotent(tmp_path: Path) -> None:
+    from src.artifacts.run_paths import append_produced_artifact
+
+    context = _run_context(tmp_path)
+    context.manifest_path.write_text(
+        json.dumps({"produced_artifacts": []}),
+        encoding="utf-8",
+    )
+    entry = {
+        "kind": "checkpoint",
+        "update": 1,
+        "path": str(context.checkpoints_dir / "jax_ckpt_000001.pkl"),
+        "final": False,
+    }
+    append_produced_artifact(context.manifest_path, entry)
+    append_produced_artifact(context.manifest_path, entry)
+    manifest = json.loads(context.manifest_path.read_text(encoding="utf-8"))
+    assert len(manifest["produced_artifacts"]) == 1
+    assert manifest["produced_artifacts"][0]["update"] == 1
