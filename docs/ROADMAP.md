@@ -18,9 +18,11 @@
 
 ## Later
 
-| Item | Link |
-| ---- | ---- |
-| (empty — see Next for near-term backlog) | — |
+| Item | Acceptance | Link |
+| ---- | ------------ | ---- |
+| Launch hygiene tier-2 e2e gate pass on baseline GPU | `make test-launch-hygiene-e2e-throughput` exit 0 on RTX 5080 / same machine as baseline capture | [runbook](operator-runbook.md) · [plan](plans/2026-06-01-launch-hygiene-e2e-throughput-plan.md) |
+| Launch hygiene Phase B (conditional) | Only if tier-2 fails: hot-path recovery per U7; re-gate until pass; tier-1 still green | [plan U7](plans/2026-06-01-launch-hygiene-e2e-throughput-plan.md#u7-conditional-phase-b--profile-driven-hot-path-recovery) |
+| Preflight learn-proof refresh (post-hygiene) | `make preflight-learn-proof` through `beat_random` vs `preflight-calibration.json` after profile/calibration refresh | [runbook](operator-runbook.md) · [plan](plans/2026-06-02-005-feat-preflight-training-profiles-plan.md) |
 
 ## Done (last 5)
 

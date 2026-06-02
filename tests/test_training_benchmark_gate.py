@@ -96,6 +96,16 @@ def test_compare_passes_when_all_metrics_within_band() -> None:
     assert failures == []
 
 
+def test_committed_e2e_baseline_artifact_is_valid() -> None:
+    baseline_path = Path("docs/benchmarks/launch-hygiene-e2e-baseline.json")
+    loaded = load_e2e_baseline(baseline_path)
+    errors = validate_e2e_baseline_artifact(loaded)
+    assert errors == [], f"committed baseline invalid: {errors}"
+    assert loaded["gate"] == E2E_THROUGHPUT_GATE
+    assert len(loaded["runs"]) >= 3
+    assert "pass_band" in loaded
+
+
 def test_load_baseline_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.json"
     with pytest.raises(FileNotFoundError, match="baseline artifact not found"):
