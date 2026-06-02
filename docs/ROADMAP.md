@@ -6,35 +6,38 @@
 
 ## Now
 
-*None — Phase 3 complete; Phase 4 (#151–#155) next.*
+| Item | Link |
+| ---- | ---- |
+| Submit-valid path: Kaggle package, Docker validation, tournament win proof | `docs/AGENT_CAPABILITIES.md` · `ow eval package` · `ow benchmark tournament-proof` |
+| Preflight benchmark primitives (Gates 2–5 without monolithic wrappers) | `conf/benchmark/gates/*.yaml` · `ow benchmark gate run` · `make preflight-learn-proof` |
+| Hybrid promotion train profile (metrics queue checkpoint eval, not scalar-only promote) | `artifacts=hybrid_promotion` · `docs/AGENT_CAPABILITIES.md` |
 
 ## Next
 
 | Item | Link |
 | ---- | ---- |
-| src audit phase 4: checkpoint hooks (#151) | [#151](https://github.com/jmduea/orbit_wars/issues/151) |
-| Agent-native Phase 3 (learn-proof split, gate YAML, sweep unify) | [plan](plans/2026-06-02-agent-native-phase3-refactors.md) · [Phase 2 status](agent-native-phase2-status.md) |
+| Planet Flow: sweep shortlist, decoder replay contracts, PPO epoch driver, metric descriptors, compiler-control tests (#166–#170) | [#166](https://github.com/jmduea/orbit_wars/issues/166) … [#170](https://github.com/jmduea/orbit_wars/issues/170) |
 | Debug metric: average ships per fleet launch | — |
+| Telemetry: `_2p`/`_4p` and update-time-fraction metrics default off behind debug flag | — |
+| CLI hardening: replay integration test (#160), validate subcommand invariant test (#161) | [#160](https://github.com/jmduea/orbit_wars/issues/160) [#161](https://github.com/jmduea/orbit_wars/issues/161) |
 
 ## Later
 
 | Item | Link |
 | ---- | ---- |
-| src audit phase 4: telemetry + CatalogView + tournament queue (#152–#155) | [#152](https://github.com/jmduea/orbit_wars/issues/152) … [#155](https://github.com/jmduea/orbit_wars/issues/155) |
-| ALL _2p and _4p specific telemetry should default off and be toggled with debug flag | — |
-| update time fraction telemetry default off and be toggled with debug flag | — |
+| Cursor session-start hook (document `make agent-context` in `docs/CURSOR.md`; optional `.cursor/hooks` example) | [Phase 3 plan §4](plans/2026-06-02-agent-native-phase3-refactors.md) |
 
 ## Done (last 5)
 
 | Item | Link |
 | ---- | ---- |
+| Agent-native Phase 3: gate YAML, benchmark primitives, `ow sweep` (PR #175) | [plan](plans/2026-06-02-agent-native-phase3-refactors.md) · `7078c40` · `preflight_gate_loader.py` `ow benchmark gate` `make test-fast` |
+| src audit phase 4: checkpoint hooks, telemetry, promotion queue, CatalogView, parametric edge (#151–#155) | [#151](https://github.com/jmduea/orbit_wars/issues/151) … [#155](https://github.com/jmduea/orbit_wars/issues/155) · `jax/train/` `features/catalog/` `make test-fast` |
 | src audit phase 3: shield relocation + action_sampling + constants + promotion writer (#147–#150) | [#147](https://github.com/jmduea/orbit_wars/issues/147) … [#150](https://github.com/jmduea/orbit_wars/issues/150) · `jax/shield/` `jax/action_sampling.py` `make test-fast` |
 | PPO health metrics: approx_kl_v2, first/last minibatch KL, parity (#157) | [#157](https://github.com/jmduea/orbit_wars/issues/157) · `ppo_update.py` `metric_registry.py` `make test-fast` |
 | src audit phase 1: config required-key audit (#141) | [#141](https://github.com/jmduea/orbit_wars/issues/141) · `conf/` `test_config_consolidation.py` `make test-fast` |
-| src audit phase 1: rollout metric contract + telemetry gating (#139–#140) | [#139](https://github.com/jmduea/orbit_wars/issues/139) [#140](https://github.com/jmduea/orbit_wars/issues/140) · `rollout/metrics.py` `metric_registry.py` |
-| src audit phase 1: Kaggle P100 default + unified push (#138) | [#138](https://github.com/jmduea/orbit_wars/issues/138) · `src/orchestration/kaggle_*` `make test-fast` |
 
-_Last triaged: 2026-05-31_
+_Last triaged: 2026-06-02_
 
 ## Maintenance
 
