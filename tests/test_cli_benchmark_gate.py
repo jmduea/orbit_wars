@@ -43,13 +43,17 @@ def test_benchmark_gate_list_cli(capsys) -> None:
 
 
 def test_benchmark_gate_dry_run(capsys) -> None:
-    assert benchmark_cli.main(["gate", "beat_noop", "--dry-run"]) == 1
+    assert benchmark_cli.main(["gate", "run", "beat_noop", "--dry-run"]) == 1
     out = capsys.readouterr().out
     start = out.index('{\n  "gate":')
     payload = json.loads(out[start:])
     assert payload["gate"] == "beat_noop"
     assert payload["verdict"] == "INCONCLUSIVE"
     assert payload["stage"]["reasons"] == ["dry_run"]
+
+
+def test_benchmark_gate_positional_alias_dry_run(capsys) -> None:
+    assert benchmark_cli.main(["gate", "beat_noop", "--dry-run"]) == 1
 
 
 def test_benchmark_gate_beat_random_dry_run(capsys) -> None:

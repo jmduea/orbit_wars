@@ -85,6 +85,11 @@ def main() -> None:
 
             raise SystemExit(benchmark_main(command_args))
 
+        case "sweep":
+            from src.cli.sweep import main as sweep_main
+
+            raise SystemExit(sweep_main(command_args))
+
         case "runs":
             from src.cli import runs as runs_cli
 
@@ -100,6 +105,6 @@ def main() -> None:
         case _:
             raise SystemExit(
                 f"Unknown ow command: {command!r}. "
-                "Valid commands: train, eval, benchmark, make, runs, promote. "
+                "Valid commands: train, eval, benchmark, sweep, make, runs, promote. "
                 "Run: uv run ow --help"
             )

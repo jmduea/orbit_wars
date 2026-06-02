@@ -121,6 +121,7 @@ preflight-sanity:
 	uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json
 
 preflight-learn-proof:
+	# Primitive sequence: gate run beat_noop → beat_random (Gate 5: tournament-proof)
 	uv run ow benchmark learn-proof --through beat_random --out outputs/preflight/learn_proof_report.json
 
 preflight-calibrate:

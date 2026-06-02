@@ -9,15 +9,9 @@ from pathlib import Path
 from typing import Literal
 
 from src.jax.preflight_calibration import (
-    PREFLIGHT_TRAIN_BASE,
     WINDOW_UPDATES,
     default_calibration_json_path,
-    load_thresholds,
     run_ow_train,
-)
-from src.jax.preflight_profiles import (
-    default_profiles_path,
-    ppo_overrides_for_model,
 )
 
 Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
@@ -69,156 +63,20 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _learning_signal_thresholds(
-    thresholds_path: Path | None = None,
-) -> dict[str, object]:
-    path = thresholds_path or default_calibration_json_path(_repo_root())
-    payload = load_thresholds(path)
-    learning = payload.get("learning_signal", {})
-    if not isinstance(learning, dict):
-        learning = {}
-    return learning
-
-
 def _gate_specs(
     model: str,
     *,
     thresholds_path: Path | None = None,
     profiles_path: Path | None = None,
 ) -> dict[str, PreflightGateSpec]:
-    learning = _learning_signal_thresholds(thresholds_path)
-    window = int(learning.get("window_updates", WINDOW_UPDATES))
-    min_delta = float(learning.get("min_win_rate_delta", 0.08))
-    max_kl = float(learning.get("max_approx_kl", 0.15))
-    min_ent = float(learning.get("min_entropy", 1.0e-4))
-    if model == "planet_flow_target_heatmap":
-        thresholds = load_thresholds(
-            thresholds_path or default_calibration_json_path(_repo_root())
-        )
-        planet_flow_learning = thresholds.get("planet_flow_learning_signal")
-        calibrated = isinstance(planet_flow_learning, dict)
-        max_unreachable: float | None = None
-        if calibrated:
-            window = int(planet_flow_learning.get("window_updates", window))
-            min_delta = float(planet_flow_learning.get("min_win_rate_delta", min_delta))
-            max_kl = float(planet_flow_learning.get("max_approx_kl", max_kl))
-            min_ent = float(planet_flow_learning.get("min_entropy", min_ent))
-            max_unreachable = float(
-                planet_flow_learning.get("max_post_mask_unreachable_demand_rate", 0.05)
-            )
-        planet_flow_base = (
-            "model=planet_flow_target_heatmap",
-            "curriculum=off",
-            "telemetry.metric_groups.action_decision=true",
-            *PREFLIGHT_TRAIN_BASE,
-            "artifacts=planet_flow_proof",
-            "artifacts.artifact_pipeline.enabled=true",
-        )
-        needs_calibration = (
-            None
-            if calibrated
-            else (
-                "needs-calibration: Planet Flow pressure-action thresholds are not "
-                "present in preflight calibration"
-            )
-        )
+    from src.jax.preflight_gate_loader import gate_specs as load_gate_specs
 
-        def planet_flow_gate(
-            gate_id: str,
-            *,
-            total_updates: int,
-            opponents: str,
-            min_win_rate_delta: float | None = min_delta,
-        ) -> PreflightGateSpec:
-            return PreflightGateSpec(
-                gate_id=gate_id,
-                train_overrides=(
-                    *planet_flow_base,
-                    "training=planet_flow",
-                    f"training.total_updates={total_updates}",
-                    f"opponents={opponents}",
-                ),
-                min_win_rate_delta=min_win_rate_delta,
-                window_updates=window,
-                max_approx_kl=max_kl,
-                min_entropy=min_ent,
-                max_post_mask_unreachable_demand_rate=max_unreachable,
-                needs_calibration_reason=needs_calibration,
-                require_planet_flow_control_metrics=True,
-            )
-
-        return {
-            "beat_noop": planet_flow_gate(
-                "beat_noop", total_updates=200, opponents="noop_only"
-            ),
-            "beat_random": planet_flow_gate(
-                "beat_random", total_updates=300, opponents="random_only"
-            ),
-            "curriculum_staged": planet_flow_gate(
-                "curriculum_staged",
-                total_updates=500,
-                opponents="random_only",
-                min_win_rate_delta=None,
-            ),
-        }
-    
-    profile_path = profiles_path or default_profiles_path(_repo_root())
-    ppo_profile = ppo_overrides_for_model(
+    return load_gate_specs(
         model,
-        profiles_path=profile_path,
+        thresholds_path=thresholds_path,
+        profiles_path=profiles_path,
         repo_root=_repo_root(),
     )
-    return {
-        "beat_noop": PreflightGateSpec(
-            gate_id="beat_noop",
-            train_overrides=(
-                f"model={model}",
-                "training=2p_16",
-                "training.rollout_steps=128",
-                "training.total_updates=200",
-                "opponents=noop_only",
-                "curriculum=off",
-                *PREFLIGHT_TRAIN_BASE,
-                *ppo_profile,
-            ),
-            min_win_rate_delta=min_delta,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-        "beat_random": PreflightGateSpec(
-            gate_id="beat_random",
-            train_overrides=(
-                f"model={model}",
-                "training=2p_16",
-                "training.rollout_steps=128",
-                "training.total_updates=300",
-                "opponents=random_only",
-                "curriculum=off",
-                *PREFLIGHT_TRAIN_BASE,
-                *ppo_profile,
-            ),
-            min_win_rate_delta=min_delta,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-        "curriculum_staged": PreflightGateSpec(
-            gate_id="curriculum_staged",
-            train_overrides=(
-                "model=transformer_factorized",
-                "training=2p4p_16_split",
-                "training.rollout_steps=128",
-                "training.total_updates=500",
-                "curriculum=self_play_staged",
-                *PREFLIGHT_TRAIN_BASE,
-            ),
-            require_curriculum_promotion=True,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-    }
 
 
 def preflight_campaign(gate_id: str) -> str:

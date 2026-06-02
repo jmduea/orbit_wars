@@ -31,3 +31,34 @@ Do **not** run `scripts/install_understand_anything_cursor.sh` — use native pl
 - No new `alwaysApply: true` rules without removing one.
 - No repo-local skill/agent catalogs — use plugins.
 - No implementation hooks blocking `src/` edits.
+
+## Session-start hook (recommended)
+
+Agents cold-start faster when session context is loaded automatically. Cursor session-start is product-level; the repo documents a copy-paste hook only (no committed user secrets).
+
+Add to **Cursor Settings → Hooks → Session Start** (or project `.cursor/hooks.json` when supported):
+
+```json
+{
+  "command": "make -C /absolute/path/to/orbit_wars agent-context"
+}
+```
+
+Equivalent:
+
+```bash
+make agent-context
+# or: uv run python scripts/agent_context.py
+```
+
+**Failure modes**
+
+| Symptom | Cause | Mitigation |
+|---------|-------|------------|
+| Empty `recent_runs` | No `outputs/campaigns/*/runs/` yet | Run a smoke train or ignore until first campaign |
+| Missing calibration excerpt | `docs/benchmarks/preflight-calibration.json` absent | Run `make preflight-calibrate` when gates matter |
+| Slow hook | Large `outputs/` scan | Hook is read-only; do not run GPU train in the hook |
+| GPU contention | Another session running pytest/train | Check terminals folder before starting heavy jobs |
+
+Do **not** delete `.audit/` or `.cursor/hooks/state/` in automation.
+

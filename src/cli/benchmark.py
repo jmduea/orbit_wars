@@ -34,7 +34,8 @@ def print_benchmark_help() -> None:
         "  learn-proof              Gates 2–5 learning proof ladder\n"
         "  calibrate                Derive preflight thresholds\n"
         "  calibrate-seed-scheduler Reseed-interval calibration\n"
-        "  gate                     Run one preflight gate from conf/benchmark/gates/\n"
+        "  gate                     Composable preflight gates (run/list)\n"
+        "  tournament-proof         Gate 5 held-out tournament win proof\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n\n"
         "Examples:\n"
@@ -42,7 +43,7 @@ def print_benchmark_help() -> None:
         "  make preflight-learn-proof\n"
         "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
         "  uv run ow benchmark gate --list\n"
-        "  uv run ow benchmark gate beat_noop --dry-run\n"
+        "  uv run ow benchmark gate run beat_noop --dry-run\n"
         "  uv run ow benchmark gate beat_random --dry-run\n\n"
         "E2E throughput (launch hygiene):\n"
         "  make test-launch-hygiene-e2e-throughput\n"
@@ -394,18 +395,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     gate = subparsers.add_parser(
         "gate",
-        help="Run one composable preflight gate (YAML recipe in conf/benchmark/gates/).",
+        help="Composable preflight gates (YAML in conf/benchmark/gates/).",
     )
     gate.add_argument(
-        "gate_id",
-        nargs="?",
-        default=None,
-        help="Gate id matching conf/benchmark/gates/<id>.yaml (omit with --list).",
+        "tokens",
+        nargs="*",
+        default=[],
+        help="`list`, `run <id>`, or legacy `<id>` (beat_noop, beat_random, curriculum_staged).",
     )
     gate.add_argument(
         "--list",
         action="store_true",
-        help="List gate YAML recipes.",
+        help="List gate YAML recipes (alias for `gate list`).",
     )
     gate.add_argument(
         "--model",
@@ -432,6 +433,42 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Extra Hydra overrides appended after gate overrides.",
     )
+
+    tournament_proof = subparsers.add_parser(
+        "tournament-proof",
+        help="Gate 5: held-out tournament win proof for a checkpoint.",
+    )
+    tournament_proof.add_argument(
+        "--eval-checkpoint",
+        type=Path,
+        required=True,
+        help="Checkpoint path for tournament eval.",
+    )
+    tournament_proof.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/preflight/tournament_proof_report.json"),
+    )
+    tournament_proof.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    tournament_proof.add_argument("--dry-run", action="store_true")
+    tournament_proof.add_argument(
+        "--thresholds-path",
+        type=Path,
+        default=None,
+        help="Optional preflight calibration JSON for win-proof thresholds.",
+    )
+    tournament_proof.add_argument(
+        "--baselines",
+        default="random",
+        help="Comma-separated baselines (first entry used).",
+    )
+    tournament_proof.add_argument("--campaign", default="preflight_held_out")
+    tournament_proof.add_argument("--seeds", default="0,1,2,3,4")
+    tournament_proof.add_argument("--games-per-pair", type=int, default=4)
 
     return parser
 
@@ -687,7 +724,7 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
     return 0 if verdict == PreflightVerdict.VERIFIED else 1
 
 
-def _run_held_out_eval(args: argparse.Namespace) -> int:
+def run_tournament_proof_cli(args: argparse.Namespace) -> int:
     from src.jax.preflight import PreflightVerdict, write_report
     from src.jax.preflight_calibration import (
         default_calibration_json_path,
@@ -696,7 +733,8 @@ def _run_held_out_eval(args: argparse.Namespace) -> int:
 
     baselines = [part.strip() for part in args.baselines.split(",") if part.strip()]
     baseline = baselines[0] if baselines else "random"
-    thresholds = load_thresholds(default_calibration_json_path(REPO_ROOT))
+    thresholds_path = args.thresholds_path or default_calibration_json_path(REPO_ROOT)
+    thresholds = load_thresholds(thresholds_path)
     win_proof = thresholds.get("win_proof_tournament", {})
     if not isinstance(win_proof, dict):
         win_proof = {}
@@ -983,6 +1021,8 @@ def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
 
 
 def run_learn_proof_cli(args: argparse.Namespace) -> int:
+    """Thin composer over gate-run and tournament-proof primitives."""
+
     from src.jax.preflight import (
         GATE_ORDER,
         PreflightVerdict,
@@ -993,7 +1033,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     )
 
     if args.eval_checkpoint is not None:
-        return _run_held_out_eval(args)
+        return run_tournament_proof_cli(args)
 
     if args.gate is not None and args.through is not None:
         raise SystemExit("Use only one of --gate or --through.")
@@ -1011,11 +1051,11 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             profiles_path=args.profile_path,
             extra_train_overrides=extra_train_overrides,
         )
-        overall = evaluation.verdict
-        stages = [evaluation]
+        overall_verdict = evaluation.verdict
+        stages = [gate_evaluation_to_dict(evaluation)]
     else:
         through = args.through or "beat_random"
-        overall, stages = run_preflight_ladder(
+        overall_verdict, stage_evaluations = run_preflight_ladder(
             through=through,
             model=args.model,
             output_root=args.output_root,
@@ -1025,20 +1065,27 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             profiles_path=args.profile_path,
             extra_train_overrides=extra_train_overrides,
         )
+        stages = [gate_evaluation_to_dict(item) for item in stage_evaluations]
 
     report: dict[str, object] = {
         "gate": "learn_proof",
         "commit_sha": _git_head_sha(),
         "seconds_total": __import__("time").perf_counter() - started,
-        "verdict": overall.value,
+        "verdict": overall_verdict.value,
         "through": args.through or args.gate or "beat_random",
         "model": args.model,
         "gate_order": list(GATE_ORDER),
-        "stages": [gate_evaluation_to_dict(item) for item in stages],
+        "stages": stages,
+        "primitives": [
+            "ow benchmark gate run beat_noop",
+            "ow benchmark gate run beat_random",
+            "ow benchmark gate run curriculum_staged",
+            "ow benchmark tournament-proof --eval-checkpoint <ckpt>",
+        ],
     }
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
-    return 0 if overall == PreflightVerdict.VERIFIED else 1
+    return 0 if overall_verdict == PreflightVerdict.VERIFIED else 1
 
 
 def run_shortlist_planet_flow_sweep_cli(args: argparse.Namespace) -> int:
@@ -1091,15 +1138,33 @@ def run_planet_flow_noop_smoke_cli(args: argparse.Namespace) -> int:
     return 0 if report.get("any_passed") else 1
 
 
+def _resolve_gate_id(args: argparse.Namespace) -> str | None:
+    if args.list:
+        return None
+    tokens = [str(token) for token in args.tokens]
+    if not tokens or tokens[0] == "list":
+        return None
+    if tokens[0] == "run":
+        return tokens[1] if len(tokens) > 1 else None
+    return tokens[0]
+
+
 def run_gate_cli(args: argparse.Namespace) -> int:
     from src.cli.benchmark_gates import list_gate_recipes, run_gate_cli as run_gate
 
-    if args.list or args.gate_id is None:
+    gate_id = _resolve_gate_id(args)
+    if gate_id is None:
         payload = {"gates": list_gate_recipes()}
         print(json.dumps(payload, indent=2))
         return 0
+    if gate_id not in {"beat_noop", "beat_random", "curriculum_staged"}:
+        print(
+            f"Unknown gate id {gate_id!r}. Use: ow benchmark gate run beat_noop",
+            file=sys.stderr,
+        )
+        return 2
     return run_gate(
-        args.gate_id,
+        gate_id,
         model=args.model,
         output_root=args.output_root,
         dry_run=bool(args.dry_run),
@@ -1136,6 +1201,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_planet_flow_noop_smoke_cli(args)
         case "gate":
             return run_gate_cli(args)
+        case "tournament-proof":
+            return run_tournament_proof_cli(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2
