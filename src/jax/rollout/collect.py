@@ -30,7 +30,12 @@ from src.jax.planet_flow import (
     planet_flow_sampling_target_mask,
 )
 from src.jax.ppo_update import gae_returns_and_advantages
-from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.rollout.types import (
+    FactorizedActionReplay,
+    JaxTrainState,
+    JaxTransitionBatch,
+    PlanetFlowActionReplay,
+)
 from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
 from src.opponents.jax_actions.builders import (
@@ -158,23 +163,6 @@ def collect_rollout_jax(
             planet_flow_diagnostics = compile_result.diagnostics
             planet_flow_control_diagnostics = control_result.diagnostics
             decoder_hidden_out = decoder_hidden
-            sequence_shape = (env_count, 1)
-            target_index = jnp.zeros(sequence_shape, dtype=jnp.int32)
-            ship_bucket = jnp.zeros(sequence_shape, dtype=jnp.int32)
-            source_index = jnp.zeros(sequence_shape, dtype=jnp.int32)
-            target_slot = jnp.zeros(sequence_shape, dtype=jnp.int32)
-            stop_flag = jnp.ones(sequence_shape, dtype=jnp.int32)
-            step_mask = jnp.zeros(sequence_shape, dtype=jnp.float32)
-            ship_bucket_mask = jnp.zeros(
-                (
-                    env_count,
-                    1,
-                    1,
-                    1,
-                    1,
-                ),
-                dtype=bool,
-            )
             log_prob = pressure_action.log_prob
             value = output.value
             ship_fraction = None
@@ -398,14 +386,6 @@ def collect_rollout_jax(
             "player_count": jnp.full(
                 (env_count,), cfg.task.player_count, dtype=jnp.int32
             ),
-            "ship_bucket_mask": ship_bucket_mask,
-            "target_index": target_index,
-            "ship_bucket": ship_bucket,
-            "source_index": source_index,
-            "target_slot": target_slot,
-            "stop_flag": stop_flag,
-            "step_mask": step_mask,
-            "log_prob": log_prob,
             "initial_planet_ships": owned_planet_ships(state.game),
             "value": value,
             "reward": result.reward,
@@ -416,6 +396,32 @@ def collect_rollout_jax(
             "terminal_score_share": result.terminal_score_share,
             "terminal_ship_differential": result.terminal_ship_differential,
         }
+        if is_planet_flow_pointer_decoder(cfg.model):
+            transition.update(
+                {
+                    "log_prob": log_prob,
+                    "planet_flow_target_bucket": planet_flow_target_bucket,
+                    "planet_flow_target_pressure": planet_flow_target_pressure,
+                    "planet_flow_target_mask": planet_flow_target_mask,
+                }
+            )
+        else:
+            transition.update(
+                {
+                    "ship_bucket_mask": ship_bucket_mask,
+                    "target_index": target_index,
+                    "ship_bucket": ship_bucket,
+                    "source_index": source_index,
+                    "target_slot": target_slot,
+                    "stop_flag": stop_flag,
+                    "step_mask": step_mask,
+                    "log_prob": log_prob,
+                }
+            )
+            if carry_enabled:
+                transition["decoder_hidden"] = decoder_hidden
+            if is_continuous_ship_mode(cfg):
+                transition["ship_fraction"] = ship_fraction
         if include_opponent_metrics:
             transition.update(
                 {
@@ -440,10 +446,6 @@ def collect_rollout_jax(
                     "trajectory_shield_original_non_noop_count": shield_diagnostics.original_non_noop_count,
                 }
             )
-        if carry_enabled:
-            transition["decoder_hidden"] = decoder_hidden
-        if is_continuous_ship_mode(cfg):
-            transition["ship_fraction"] = ship_fraction
         if is_planet_flow_pointer_decoder(cfg.model):
             pf_diag = planet_flow_diagnostics
             pf_control_diag = planet_flow_control_diagnostics
@@ -451,9 +453,6 @@ def collect_rollout_jax(
             assert pf_control_diag is not None
             transition.update(
                 {
-                    "planet_flow_target_bucket": planet_flow_target_bucket,
-                    "planet_flow_target_pressure": planet_flow_target_pressure,
-                    "planet_flow_target_mask": planet_flow_target_mask,
                     "planet_flow_demanded_mass_sum": pf_diag.demanded_mass,
                     "planet_flow_unreachable_demand_mass_sum": (
                         pf_diag.unreachable_demand_mass
@@ -532,40 +531,43 @@ def collect_rollout_jax(
     )
     returns = returns_step
     advantages = advantages_step
-    transition_kwargs = {
-        "planet_features": data["planet_features"],
-        "planet_mask": data["planet_mask"],
-        "edge_features": data["edge_features"],
-        "edge_mask": data["edge_mask"],
-        "edge_src_ids": data["edge_src_ids"],
-        "edge_tgt_ids": data["edge_tgt_ids"],
-        "global_features": data["global_features"],
-        "theta_ref": data["theta_ref"],
-        "player_count": data["player_count"],
-        "ship_bucket_mask": data["ship_bucket_mask"],
-        "target_index": data["target_index"],
-        "ship_bucket": data["ship_bucket"],
-        "log_prob": data["log_prob"],
-        "returns": returns,
-        "advantages": advantages,
-        "source_index": data["source_index"],
-        "target_slot": data["target_slot"],
-        "stop_flag": data["stop_flag"],
-        "step_mask": data["step_mask"],
-        "initial_planet_ships": data["initial_planet_ships"],
-    }
-    if carry_enabled:
-        transition_kwargs["decoder_hidden"] = data["decoder_hidden"]
-    if is_continuous_ship_mode(cfg):
-        transition_kwargs["ship_fraction"] = data["ship_fraction"]
     if is_planet_flow_pointer_decoder(cfg.model):
-        transition_kwargs.update(
-            {
-                "planet_flow_target_bucket": data["planet_flow_target_bucket"],
-                "planet_flow_target_pressure": data["planet_flow_target_pressure"],
-                "planet_flow_target_mask": data["planet_flow_target_mask"],
-            }
+        action_replay = PlanetFlowActionReplay(
+            target_bucket=data["planet_flow_target_bucket"],
+            target_pressure=data["planet_flow_target_pressure"],
+            target_mask=data["planet_flow_target_mask"],
+            log_prob=data["log_prob"],
         )
-    transitions = JaxTransitionBatch(**transition_kwargs)
+    else:
+        replay_kwargs = {
+            "ship_bucket_mask": data["ship_bucket_mask"],
+            "target_index": data["target_index"],
+            "ship_bucket": data["ship_bucket"],
+            "log_prob": data["log_prob"],
+            "source_index": data["source_index"],
+            "target_slot": data["target_slot"],
+            "stop_flag": data["stop_flag"],
+            "step_mask": data["step_mask"],
+        }
+        if carry_enabled:
+            replay_kwargs["decoder_hidden"] = data["decoder_hidden"]
+        if is_continuous_ship_mode(cfg):
+            replay_kwargs["ship_fraction"] = data["ship_fraction"]
+        action_replay = FactorizedActionReplay(**replay_kwargs)
+    transitions = JaxTransitionBatch(
+        planet_features=data["planet_features"],
+        planet_mask=data["planet_mask"],
+        edge_features=data["edge_features"],
+        edge_mask=data["edge_mask"],
+        edge_src_ids=data["edge_src_ids"],
+        edge_tgt_ids=data["edge_tgt_ids"],
+        global_features=data["global_features"],
+        theta_ref=data["theta_ref"],
+        player_count=data["player_count"],
+        returns=returns,
+        advantages=advantages,
+        action_replay=action_replay,
+        initial_planet_ships=data["initial_planet_ships"],
+    )
     metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     return key, env_state, turn_batch, transitions, metrics

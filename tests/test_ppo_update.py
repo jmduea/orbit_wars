@@ -15,7 +15,7 @@ from src.jax.ppo_update import (
     masked_mean,
     ppo_update_jax,
 )
-from src.jax.rollout.types import JaxTransitionBatch
+from src.jax.rollout.types import FactorizedActionReplay, JaxTransitionBatch
 from src.jax.train import init_train_state
 
 
@@ -323,16 +323,18 @@ def _factorized_transition_batch(
         global_features=expand(turn_batch.global_features),
         theta_ref=expand(turn_batch.theta_ref),
         player_count=player_count,
-        ship_bucket_mask=ship_bucket_mask,
-        target_index=flat,
-        ship_bucket=ship_bucket[None, ...],
-        log_prob=log_prob[None, ...],
         returns=returns,
         advantages=advantages,
-        source_index=source_index,
-        target_slot=target_slot,
-        stop_flag=jnp.zeros((rollout_steps, num_envs, sequence_k), dtype=jnp.int32),
-        step_mask=jnp.ones((rollout_steps, num_envs, sequence_k), dtype=jnp.float32),
+        action_replay=FactorizedActionReplay(
+            ship_bucket_mask=ship_bucket_mask,
+            target_index=flat,
+            ship_bucket=ship_bucket[None, ...],
+            log_prob=log_prob[None, ...],
+            source_index=source_index,
+            target_slot=target_slot,
+            stop_flag=jnp.zeros((rollout_steps, num_envs, sequence_k), dtype=jnp.int32),
+            step_mask=jnp.ones((rollout_steps, num_envs, sequence_k), dtype=jnp.float32),
+        ),
     )
 
 
@@ -387,12 +389,16 @@ def _build_factorized_on_policy_transitions(
         value=output.value,
         reward=reward,
     )
+    replay = transitions.action_replay
+    assert isinstance(replay, FactorizedActionReplay)
     return transitions._replace(
-        source_index=source_index[None, ...],
-        target_slot=target_slot[None, ...],
-        stop_flag=stop_flag[None, ...].astype(jnp.int32),
-        step_mask=step_mask[None, ...],
-        ship_bucket_mask=ship_bucket_mask,
+        action_replay=replay._replace(
+            source_index=source_index[None, ...],
+            target_slot=target_slot[None, ...],
+            stop_flag=stop_flag[None, ...].astype(jnp.int32),
+            step_mask=step_mask[None, ...],
+            ship_bucket_mask=ship_bucket_mask,
+        )
     ), output
 
 

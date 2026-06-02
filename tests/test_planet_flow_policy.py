@@ -15,6 +15,7 @@ from src.jax.policy import build_jax_policy, make_synthetic_turn_batch
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.train import init_train_state
+from src.jax.rollout.types import PlanetFlowActionReplay
 from src.jax.train.metrics import sum_metric_dicts
 
 
@@ -107,20 +108,16 @@ def test_collect_rollout_jax_updates_planet_flow_pressure_action() -> None:
     )
     _train_state, ppo_metrics = ppo_update_jax(train_state, policy, transitions, cfg)
 
-    assert transitions.planet_flow_target_bucket is not None
-    assert transitions.planet_flow_target_pressure is not None
-    assert transitions.planet_flow_target_mask is not None
-    assert transitions.planet_flow_target_bucket.shape == (
+    assert isinstance(transitions.action_replay, PlanetFlowActionReplay)
+    replay = transitions.action_replay
+    assert replay.target_bucket is not None
+    assert replay.target_pressure is not None
+    assert replay.target_mask is not None
+    assert replay.target_bucket.shape == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         MAX_PLANETS,
     )
-    assert transitions.target_index.shape == (
-        cfg.training.rollout_steps,
-        cfg.training.num_envs,
-        1,
-    )
-    assert transitions.ship_bucket_mask.shape[-3:] == (1, 1, 1)
     assert float(metrics["samples"]) == cfg.training.rollout_steps * cfg.training.num_envs
     assert "planet_flow_control_emitted_launch_count" in metrics
     finalized_metrics = sum_metric_dicts([metrics])
