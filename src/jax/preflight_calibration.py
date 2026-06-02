@@ -154,6 +154,7 @@ class CalibrationSummary:
     """Aggregate stats used to derive gate thresholds."""
 
     run_count: int
+    models: tuple[str, ...]
     win_rate_delta_p25: float | None
     win_rate_delta_median: float | None
     best_rolling_win_rate_max: float | None
@@ -188,6 +189,8 @@ def snapshot_from_run_dir(
     if not log_files:
         return None
     records = read_jsonl_records(log_files[0])
+    if not records:
+        return None
     return extract_training_signals(
         records,
         opponent=opponent,
@@ -227,16 +230,19 @@ def discover_calibration_snapshots(
         run_dirs = [path for path in runs_root.iterdir() if path.is_dir()]
         if not run_dirs:
             continue
-        run_dir = max(run_dirs, key=lambda path: path.stat().st_mtime)
-        snapshot = snapshot_from_run_dir(
-            run_dir,
-            opponent=opponent,
-            seed=int(seed_text),
-            total_updates=int(updates_text),
-            model=model,
-        )
-        if snapshot is not None:
-            snapshots.append(snapshot)
+        for run_dir in sorted(
+            run_dirs, key=lambda path: path.stat().st_mtime, reverse=True
+        ):
+            snapshot = snapshot_from_run_dir(
+                run_dir,
+                opponent=opponent,
+                seed=int(seed_text),
+                total_updates=int(updates_text),
+                model=model,
+            )
+            if snapshot is not None:
+                snapshots.append(snapshot)
+                break
     return snapshots
 
 
@@ -253,6 +259,7 @@ def calibration_train_overrides(
         "training.rollout_steps=128",
         f"training.total_updates={total_updates}",
         f"opponents={opponent}",
+        *(("artifacts=disabled",) if model == "planet_flow_target_heatmap" else ()),
         "curriculum=off",
         *PREFLIGHT_TRAIN_BASE,
         f"seed={seed}",
@@ -386,6 +393,7 @@ def summarize_calibration(
     ]
     return CalibrationSummary(
         run_count=len(snapshots),
+        models=tuple(sorted({item.model for item in snapshots})),
         win_rate_delta_p25=_percentile(deltas, 0.25),
         win_rate_delta_median=_percentile(deltas, 0.50),
         best_rolling_win_rate_max=max(rolling) if rolling else None,
@@ -416,14 +424,15 @@ def derive_thresholds(summary: CalibrationSummary) -> dict[str, object]:
     noop_tournament = max(noop_tournament, 0.45)
     random_tournament = max(random_tournament, 0.35)
 
-    return {
+    learning_signal = {
+        "window_updates": WINDOW_UPDATES,
+        "min_win_rate_delta": delta_floor,
+        "max_approx_kl": 0.15,
+        "min_entropy": 1.0e-4,
+    }
+    thresholds = {
         "mode": "trend_plus_tournament" if use_tournament_win_proof else "absolute_jax",
-        "learning_signal": {
-            "window_updates": WINDOW_UPDATES,
-            "min_win_rate_delta": delta_floor,
-            "max_approx_kl": 0.15,
-            "min_entropy": 1.0e-4,
-        },
+        "learning_signal": learning_signal,
         "win_proof_tournament": {
             "noop_min_win_rate": noop_tournament,
             "random_min_win_rate": random_tournament,
@@ -438,6 +447,9 @@ def derive_thresholds(summary: CalibrationSummary) -> dict[str, object]:
             f"max rolling-10 {rolling_max:.3f}.",
         ],
     }
+    if "planet_flow_target_heatmap" in summary.models:
+        thresholds["planet_flow_learning_signal"] = dict(learning_signal)
+    return thresholds
 
 
 def default_thresholds(*, reason: str) -> dict[str, object]:

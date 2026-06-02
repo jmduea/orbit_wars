@@ -455,10 +455,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
                     f"{entropy_line}"
                 )
-            if (
-                update % cfg.artifacts.checkpoint_every == 0
-                or update == cfg.training.total_updates
-            ):
+            checkpoint_every = int(cfg.artifacts.checkpoint_every)
+            checkpoint_due = checkpoint_every > 0 and update % checkpoint_every == 0
+            if checkpoint_due or update == cfg.training.total_updates:
                 is_final = update == cfg.training.total_updates
                 if checkpoint_pipeline is None:
                     checkpoint_path = save_jax_checkpoint(

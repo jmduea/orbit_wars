@@ -46,6 +46,13 @@ class RewardConfig:
 
 
 @dataclass(slots=True)
+class PlanetFlowConfig:
+    """Experimental Planet Flow action-layout configuration."""
+
+    pressure_bucket_values: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+@dataclass(slots=True)
 class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
@@ -62,6 +69,7 @@ class ModelConfig:
     spatial_attention_bias: bool = True
     pointer_decoder: str = "factorized_topk"
     decoder_carry: bool = False
+    planet_flow: PlanetFlowConfig = field(default_factory=PlanetFlowConfig)
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 

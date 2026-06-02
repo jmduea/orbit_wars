@@ -1,0 +1,37 @@
+# @package _global_
+# Fixed axes for Planet Flow PPO signal sweep.
+
+parameters:
+  model:
+    value: planet_flow_target_heatmap
+  training:
+    value: 2p_16
+  training.total_updates:
+    value: 300
+  opponents:
+    value: noop_only
+  curriculum:
+    value: "off"
+  artifacts:
+    value: disabled
+  seed:
+    value: 42
+  output.campaign:
+    value: planet_flow_ppo_signal_sweep
+  telemetry:
+    value: default
+  telemetry.wandb.enabled:
+    value: true
+  telemetry.wandb.group:
+    value: planet_flow_ppo_signal
+  telemetry.wandb.log_artifacts:
+    value: false
+  telemetry.wandb.tags:
+    value:
+      - planet_flow
+      - planet_flow_ppo_signal
+      - beat_noop
+  telemetry.metric_groups.action_decision:
+    value: true
+  telemetry.metric_groups.losses:
+    value: true

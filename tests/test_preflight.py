@@ -8,21 +8,32 @@ from src.jax.preflight import (
     _gate_specs,
     evaluate_gate_records,
     read_jsonl_records,
+    run_preflight_gate,
 )
 
 
-def _records(*rows: dict[str, float]) -> list[dict[str, object]]:
+def _records(
+    *rows: dict[str, float],
+    include_planet_flow_control: bool = False,
+) -> list[dict[str, object]]:
     payload: list[dict[str, object]] = []
     for index, row in enumerate(rows, start=1):
-        payload.append(
-            {
-                "update": index,
-                "overall_win_rate": row["win_rate"],
-                "mean_active_launches_per_turn": row["launches"],
-                "approx_kl": row.get("approx_kl", 0.01),
-                "entropy": row.get("entropy", 0.05),
-            }
-        )
+        record = {
+            "update": index,
+            "overall_win_rate": row["win_rate"],
+            "mean_active_launches_per_turn": row["launches"],
+            "approx_kl": row.get("approx_kl", 0.01),
+            "entropy": row.get("entropy", 0.05),
+        }
+        if include_planet_flow_control:
+            record.update(
+                {
+                    "planet_flow_control_emitted_launch_count": 1.0,
+                    "planet_flow_control_emitted_ship_mass_rate": 0.5,
+                    "planet_flow_emitted_launch_count_delta_vs_control": 0.0,
+                }
+            )
+        payload.append(record)
     return payload
 
 
@@ -107,3 +118,132 @@ def test_preflight_gate_overrides_compose() -> None:
 
     for gate_id, spec in _gate_specs("transformer_factorized_small").items():
         compose_hydra_train_config(list(spec.train_overrides))
+
+
+def test_planet_flow_preflight_gate_overrides_compose_with_p0_guards() -> None:
+    from src.config import compose_hydra_train_config
+
+    spec = _gate_specs("planet_flow_target_heatmap")["beat_random"]
+    cfg = compose_hydra_train_config(list(spec.train_overrides))
+
+    assert cfg.model.pointer_decoder == "planet_flow_target_heatmap"
+    assert cfg.curriculum.enabled is False
+    assert cfg.artifacts.artifact_pipeline.enabled is False
+
+
+def test_planet_flow_preflight_reports_needs_calibration() -> None:
+    spec = _gate_specs("planet_flow_target_heatmap")["beat_noop"]
+    records = _records(
+        *[{"win_rate": 0.1, "launches": 0.2}] * 6
+        + [{"win_rate": 0.9, "launches": 0.6}] * 10
+    )
+
+    evaluation = evaluate_gate_records(
+        spec,
+        records,
+        campaign="preflight_beat_noop",
+        run_dir=None,
+        checkpoint=None,
+    )
+
+    assert evaluation.verdict == PreflightVerdict.INCONCLUSIVE
+    assert any("needs-calibration" in reason for reason in evaluation.reasons)
+
+
+def test_planet_flow_preflight_requires_compiler_control_metrics() -> None:
+    spec = _trend_spec(
+        require_planet_flow_control_metrics=True,
+        min_win_rate_delta=0.08,
+    )
+    records = _records(
+        *[{"win_rate": 0.2, "launches": 0.1}] * 6
+        + [{"win_rate": 0.9, "launches": 0.5}] * 10
+    )
+
+    evaluation = evaluate_gate_records(
+        spec,
+        records,
+        campaign="preflight_beat_noop",
+        run_dir=None,
+        checkpoint=None,
+    )
+
+    assert evaluation.verdict == PreflightVerdict.INCONCLUSIVE
+    assert any("compiler-control metric" in reason for reason in evaluation.reasons)
+
+
+def test_planet_flow_preflight_accepts_compiler_control_metrics() -> None:
+    spec = _trend_spec(
+        require_planet_flow_control_metrics=True,
+        min_win_rate_delta=0.08,
+    )
+    records = _records(
+        *(
+            [{"win_rate": 0.2, "launches": 0.1}] * 6
+            + [{"win_rate": 0.9, "launches": 0.5}] * 10
+        ),
+        include_planet_flow_control=True,
+    )
+
+    evaluation = evaluate_gate_records(
+        spec,
+        records,
+        campaign="preflight_beat_noop",
+        run_dir=None,
+        checkpoint=None,
+    )
+
+    assert evaluation.verdict == PreflightVerdict.VERIFIED
+
+
+def test_planet_flow_preflight_short_circuits_without_calibration(tmp_path) -> None:
+    import json
+
+    thresholds_path = tmp_path / "preflight-calibration.json"
+    thresholds_path.write_text(
+        json.dumps({"learning_signal": {"window_updates": 10}}),
+        encoding="utf-8",
+    )
+
+    evaluation = run_preflight_gate(
+        "beat_noop",
+        model="planet_flow_target_heatmap",
+        output_root=tmp_path / "outputs",
+        repo_root=tmp_path,
+        thresholds_path=thresholds_path,
+    )
+
+    assert evaluation.verdict == PreflightVerdict.INCONCLUSIVE
+    assert evaluation.evaluation_mode == "needs_calibration"
+    assert evaluation.run_dir is None
+
+
+def test_planet_flow_preflight_uses_calibrated_thresholds(tmp_path) -> None:
+    import json
+
+    thresholds_path = tmp_path / "preflight-calibration.json"
+    thresholds_path.write_text(
+        json.dumps(
+            {
+                "thresholds": {
+                    "learning_signal": {"window_updates": 10},
+                    "win_proof_tournament": {},
+                    "planet_flow_learning_signal": {
+                        "window_updates": 4,
+                        "min_win_rate_delta": 0.2,
+                        "max_approx_kl": 0.05,
+                        "min_entropy": 0.01,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    spec = _gate_specs("planet_flow_target_heatmap", thresholds_path=thresholds_path)[
+        "beat_noop"
+    ]
+
+    assert spec.needs_calibration_reason is None
+    assert spec.window_updates == 4
+    assert spec.min_win_rate_delta == 0.2

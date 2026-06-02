@@ -27,6 +27,58 @@ OPPONENT_SLOT_METRIC_KEYS: tuple[str, ...] = (
     "opponent_historical_fallback_latest_slots",
 )
 
+PLANET_FLOW_COUNT_KEYS: tuple[str, ...] = (
+    "planet_flow_demanded_mass_sum",
+    "planet_flow_unreachable_demand_mass_sum",
+    "planet_flow_held_demand_mass_sum",
+    "planet_flow_requested_ship_mass_sum",
+    "planet_flow_emitted_ship_mass_sum",
+    "planet_flow_capacity_dropped_launch_count",
+    "planet_flow_emitted_launch_count",
+    "planet_flow_small_launch_count",
+    "planet_flow_duplicate_source_target_count",
+)
+
+PLANET_FLOW_CONTROL_COUNT_KEYS: tuple[str, ...] = (
+    "planet_flow_control_demanded_mass_sum",
+    "planet_flow_control_unreachable_demand_mass_sum",
+    "planet_flow_control_held_demand_mass_sum",
+    "planet_flow_control_requested_ship_mass_sum",
+    "planet_flow_control_emitted_ship_mass_sum",
+    "planet_flow_control_capacity_dropped_launch_count",
+    "planet_flow_control_emitted_launch_count",
+    "planet_flow_control_small_launch_count",
+    "planet_flow_control_duplicate_source_target_count",
+)
+
+PLANET_FLOW_RATE_KEYS: tuple[str, ...] = (
+    "planet_flow_unreachable_demand_rate",
+    "planet_flow_held_demand_rate",
+    "planet_flow_emitted_ship_mass_rate",
+    "planet_flow_capacity_drop_rate",
+    "planet_flow_small_launch_rate",
+    "planet_flow_duplicate_source_target_rate",
+)
+
+PLANET_FLOW_CONTROL_RATE_KEYS: tuple[str, ...] = (
+    "planet_flow_control_unreachable_demand_rate",
+    "planet_flow_control_held_demand_rate",
+    "planet_flow_control_emitted_ship_mass_rate",
+    "planet_flow_control_capacity_drop_rate",
+    "planet_flow_control_small_launch_rate",
+    "planet_flow_control_duplicate_source_target_rate",
+)
+
+PLANET_FLOW_CONTROL_DELTA_KEYS: tuple[str, ...] = (
+    "planet_flow_emitted_launch_count_delta_vs_control",
+    "planet_flow_emitted_ship_mass_delta_vs_control",
+    "planet_flow_unreachable_demand_rate_delta_vs_control",
+    "planet_flow_held_demand_rate_delta_vs_control",
+    "planet_flow_emitted_ship_mass_rate_delta_vs_control",
+    "planet_flow_small_launch_rate_delta_vs_control",
+    "planet_flow_duplicate_source_target_rate_delta_vs_control",
+)
+
 # Chunk intermediates used for cross-chunk rate finalization; never logged to telemetry.
 ROLLOUT_INTERNAL_SCALAR_KEYS: tuple[str, ...] = (
     "trajectory_shield_legal_non_noop_count",
@@ -61,6 +113,8 @@ BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     *OPPONENT_SLOT_METRIC_KEYS,
     "stop_rate",
     "mean_active_launches_per_turn",
+    *PLANET_FLOW_COUNT_KEYS,
+    *PLANET_FLOW_CONTROL_COUNT_KEYS,
 )
 
 # Rates derived only after cross-chunk or cross-group aggregation.
@@ -71,6 +125,9 @@ FINALIZED_ROLLOUT_RATE_KEYS: tuple[str, ...] = (
     "survival_time",
     "score_share",
     "overall_win_rate",
+    *PLANET_FLOW_RATE_KEYS,
+    *PLANET_FLOW_CONTROL_RATE_KEYS,
+    *PLANET_FLOW_CONTROL_DELTA_KEYS,
 )
 
 # Logged rollout scalars synced with telemetry registry update records.
@@ -92,6 +149,12 @@ LOGGED_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     "first_place_rate_4p",
     "average_placement_4p",
     "overall_win_rate",
+    "planet_flow_unreachable_demand_rate",
+    "planet_flow_held_demand_rate",
+    "planet_flow_emitted_ship_mass_rate",
+    "planet_flow_capacity_drop_rate",
+    "planet_flow_small_launch_rate",
+    "planet_flow_duplicate_source_target_rate",
     "survival_time",
     "score_share",
     "trajectory_shield_blocked_count",
@@ -112,6 +175,11 @@ LOGGED_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     "opponent_historical_fallback_latest_slots",
     "stop_rate",
     "mean_active_launches_per_turn",
+    *PLANET_FLOW_COUNT_KEYS,
+    *PLANET_FLOW_CONTROL_COUNT_KEYS,
+    *PLANET_FLOW_RATE_KEYS,
+    *PLANET_FLOW_CONTROL_RATE_KEYS,
+    *PLANET_FLOW_CONTROL_DELTA_KEYS,
 )
 
 ROLLOUT_ALLOWED_SCALAR_KEYS: frozenset[str] = frozenset(

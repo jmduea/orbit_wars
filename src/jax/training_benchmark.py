@@ -33,6 +33,25 @@ UPDATE_METRIC_KEYS: tuple[str, ...] = (
 )
 ROLLOUT_METRIC_KEYS: tuple[str, ...] = (
     "mean_active_launches_per_turn",
+    "planet_flow_unreachable_demand_rate",
+    "planet_flow_held_demand_rate",
+    "planet_flow_emitted_ship_mass_rate",
+    "planet_flow_small_launch_rate",
+    "planet_flow_duplicate_source_target_rate",
+    "planet_flow_emitted_launch_count",
+    "planet_flow_control_emitted_launch_count",
+    "planet_flow_control_unreachable_demand_rate",
+    "planet_flow_control_held_demand_rate",
+    "planet_flow_control_emitted_ship_mass_rate",
+    "planet_flow_control_small_launch_rate",
+    "planet_flow_control_duplicate_source_target_rate",
+    "planet_flow_emitted_launch_count_delta_vs_control",
+    "planet_flow_emitted_ship_mass_delta_vs_control",
+    "planet_flow_unreachable_demand_rate_delta_vs_control",
+    "planet_flow_held_demand_rate_delta_vs_control",
+    "planet_flow_emitted_ship_mass_rate_delta_vs_control",
+    "planet_flow_small_launch_rate_delta_vs_control",
+    "planet_flow_duplicate_source_target_rate_delta_vs_control",
     "overall_win_rate",
 )
 
@@ -50,6 +69,17 @@ DEFAULT_BENCHMARK_OVERRIDES: tuple[str, ...] = (
     "model=transformer_factorized",
     "opponents=self_play_only",
     "curriculum=off",
+    "seed=42",
+)
+
+PLANET_FLOW_P0_BENCHMARK_OVERRIDES: tuple[str, ...] = (
+    "model=planet_flow_target_heatmap",
+    "training=2p4p_16_split",
+    "opponents=random_only",
+    "curriculum=off",
+    "artifacts=disabled",
+    "telemetry.wandb.enabled=false",
+    "telemetry.metric_groups.action_decision=true",
     "seed=42",
 )
 
@@ -82,7 +112,7 @@ class TrainingBenchmarkResult:
     num_envs: int
     rollout_steps: int
     update_metric_means: Mapping[str, float]
-    rollout_metric_means: Mapping[str, float]
+    rollout_metric_means: Mapping[str, float | None]
     snapshots: tuple[TrainingBenchmarkSnapshot, ...] = field(default_factory=tuple)
     snapshots_all_finite: bool = True
     env_steps_per_sec: float = 0.0
@@ -171,6 +201,7 @@ def run_training_benchmark(
     timings: list[float] = []
     update_sums = {key: 0.0 for key in UPDATE_METRIC_KEYS}
     rollout_sums = {key: 0.0 for key in ROLLOUT_METRIC_KEYS}
+    rollout_seen = {key: False for key in ROLLOUT_METRIC_KEYS}
     measured = 0
     compile_seconds_to_update_3: float | None = None
     snapshot_targets = set(snapshot_updates)
@@ -241,6 +272,7 @@ def run_training_benchmark(
                     )
             for metric_key in ROLLOUT_METRIC_KEYS:
                 if metric_key in rollout_metrics:
+                    rollout_seen[metric_key] = True
                     rollout_sums[metric_key] += float(
                         jax.device_get(rollout_metrics[metric_key])
                     )
@@ -264,7 +296,8 @@ def run_training_benchmark(
         key: update_sums[key] / max(measured, 1) for key in UPDATE_METRIC_KEYS
     }
     rollout_means = {
-        key: rollout_sums[key] / max(measured, 1) for key in ROLLOUT_METRIC_KEYS
+        key: (rollout_sums[key] / max(measured, 1) if rollout_seen[key] else None)
+        for key in ROLLOUT_METRIC_KEYS
     }
     snapshots_all_finite = all(snapshot_metrics_finite(item) for item in snapshots)
     env_steps = measured * int(cfg.training.rollout_steps) * total_envs
@@ -336,8 +369,12 @@ def resolve_benchmark_overrides(
     preset: str | None,
     overrides: list[str] | None,
 ) -> list[str]:
-    if preset == "validation":
-        resolved = list(WORKSTATION_VALIDATION_OVERRIDES)
+    preset_overrides = {
+        "validation": WORKSTATION_VALIDATION_OVERRIDES,
+        "planet_flow_p0": PLANET_FLOW_P0_BENCHMARK_OVERRIDES,
+    }
+    if preset in preset_overrides:
+        resolved = list(preset_overrides[preset])
         if overrides:
             resolved.extend(overrides)
         return resolved

@@ -43,6 +43,13 @@ _RESPONSIBILITY_GROUP_SCHEMAS: dict[str, type] = {
 
 _CURRICULUM_FAMILIES = CURRICULUM_OPPONENT_FAMILIES
 
+_POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
+_POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP = "planet_flow_target_heatmap"
+_SUPPORTED_POINTER_DECODERS = {
+    _POINTER_DECODER_FACTORIZED_TOPK,
+    _POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+}
+
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _SAFE_RELATIVE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/]*$")
 _RUN_ID_CACHE: dict[int, str] = {}
@@ -272,6 +279,15 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             "model.value_head must be 'shared', 'format_routed', or 'distributional'."
         )
 
+    pointer_decoder = str(cfg.model.pointer_decoder).strip().lower()
+    if pointer_decoder not in _SUPPORTED_POINTER_DECODERS:
+        raise ValueError(
+            "model.pointer_decoder must be one of "
+            f"{', '.join(sorted(_SUPPORTED_POINTER_DECODERS))}."
+        )
+    if pointer_decoder == _POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        _validate_planet_flow_profile(cfg)
+
     ship_action_mode = str(task.ship_action_mode).strip().lower()
     if ship_action_mode not in {"buckets", "continuous_fraction"}:
         raise ValueError(
@@ -281,15 +297,22 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     training = cfg.training
     if int(training.update_chunk_rows) <= 0:
         raise ValueError("training.update_chunk_rows must be a positive integer.")
-    if training.rollout_microbatch_envs is not None and int(training.rollout_microbatch_envs) <= 0:
-        raise ValueError("training.rollout_microbatch_envs must be a positive integer when set.")
+    if (
+        training.rollout_microbatch_envs is not None
+        and int(training.rollout_microbatch_envs) <= 0
+    ):
+        raise ValueError(
+            "training.rollout_microbatch_envs must be a positive integer when set."
+        )
     gae_lambda = float(training.gae_lambda)
     if not 0.0 <= gae_lambda <= 1.0:
         raise ValueError("training.gae_lambda must be in [0, 1].")
 
     artifact_pipeline = cfg.artifacts.artifact_pipeline
     if int(artifact_pipeline.checkpoint_queue_size) <= 0:
-        raise ValueError("artifacts.artifact_pipeline.checkpoint_queue_size must be positive.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.checkpoint_queue_size must be positive."
+        )
     for field_name in (
         "checkpoint_timeout_seconds",
         "final_flush_timeout_seconds",
@@ -300,17 +323,25 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         "worker_idle_exit_seconds",
     ):
         if float(getattr(artifact_pipeline, field_name)) <= 0.0:
-            raise ValueError(f"artifacts.artifact_pipeline.{field_name} must be positive.")
+            raise ValueError(
+                f"artifacts.artifact_pipeline.{field_name} must be positive."
+            )
     if artifact_pipeline.replay_backend not in {"docker", "local"}:
-        raise ValueError("artifacts.artifact_pipeline.replay_backend must be 'docker' or 'local'.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.replay_backend must be 'docker' or 'local'."
+        )
     if artifact_pipeline.docker_player_count not in {"2", "4", "both"}:
         raise ValueError(
             "artifacts.artifact_pipeline.docker_player_count must be '2', '4', or 'both'."
         )
     if not str(artifact_pipeline.queue_dir).strip():
-        raise ValueError("artifacts.artifact_pipeline.queue_dir must be a non-empty relative path.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.queue_dir must be a non-empty relative path."
+        )
     if Path(artifact_pipeline.queue_dir).is_absolute():
-        raise ValueError("artifacts.artifact_pipeline.queue_dir must be relative to the run directory.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.queue_dir must be relative to the run directory."
+        )
     _validate_relative_path_fragment(
         str(artifact_pipeline.queue_dir),
         field_name="artifacts.artifact_pipeline.queue_dir",
@@ -360,6 +391,78 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
             )
+
+
+def _validate_planet_flow_profile(cfg: TrainConfig) -> None:
+    values = tuple(
+        float(value) for value in cfg.model.planet_flow.pressure_bucket_values
+    )
+    if len(values) < 2:
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must contain at least two values."
+        )
+    if values[0] != 0.0:
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must start with 0.0 for hold."
+        )
+    if any(value < 0.0 or value > 1.0 for value in values):
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must be normalized to [0, 1]."
+        )
+    if any(left >= right for left, right in zip(values, values[1:], strict=False)):
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must be strictly increasing."
+        )
+
+    artifacts = cfg.artifacts
+    unsupported = []
+    if artifacts.artifact_pipeline.enabled:
+        unsupported.append("artifacts.artifact_pipeline.enabled")
+    if artifacts.artifact_pipeline.replay_async:
+        unsupported.append("artifacts.artifact_pipeline.replay_async")
+    if artifacts.artifact_pipeline.docker_validation_async:
+        unsupported.append("artifacts.artifact_pipeline.docker_validation_async")
+    if artifacts.artifact_pipeline.checkpoint_eval_async:
+        unsupported.append("artifacts.artifact_pipeline.checkpoint_eval_async")
+    if artifacts.replay.enabled:
+        unsupported.append("artifacts.replay.enabled")
+    if artifacts.promotion.enabled:
+        unsupported.append("artifacts.promotion.enabled")
+    if artifacts.tournament.enabled:
+        unsupported.append("artifacts.tournament.enabled")
+    if unsupported:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap is experimental and "
+            "does not support artifact replay, Docker validation, tournament, or "
+            "promotion paths yet. Disable these settings, e.g. with artifacts=disabled. "
+            f"Unsupported settings: {', '.join(unsupported)}."
+        )
+
+    if cfg.curriculum.enabled:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs require "
+            "curriculum=off; historical snapshot/self-play support is P1."
+        )
+    if cfg.opponents.self_play.enabled:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs do not "
+            "support self-play/latest snapshot opponents yet."
+        )
+    if (
+        int(cfg.opponents.snapshot.pool_size) != 0
+        or int(cfg.opponents.snapshot.interval_updates) != 0
+    ):
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap requires snapshot "
+            "pool_size=0 and interval_updates=0 for P0 proof runs."
+        )
+    historical_weight = float(cfg.opponents.mix.weights.get("historical", 0.0))
+    latest_weight = float(cfg.opponents.mix.weights.get("latest", 0.0))
+    if historical_weight > 0.0 or latest_weight > 0.0:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs must not "
+            "use latest or historical opponent weights."
+        )
 
 
 def _apply_from_promoted(cfg: TrainConfig) -> None:

@@ -1,0 +1,8 @@
+defaults:
+  - base
+  - _self_
+
+# Experimental Planet Flow P0 proof slice: target demand heatmap with
+# deterministic source allocation through the existing candidate edge catalog.
+pointer_decoder: planet_flow_target_heatmap
+decoder_carry: false

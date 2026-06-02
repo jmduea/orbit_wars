@@ -1,0 +1,33 @@
+# @package _global_
+# Bayes search over PPO hyperparameters for Planet Flow learning signal.
+#
+# Generate:  uv run ow make wandb_sweep=planet_flow_ppo_signal
+# Register:  uv run wandb sweep outputs/_meta/sweeps/planet_flow_ppo_signal.yaml
+# Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
+#
+# Objective: maximize overall_win_rate because the initial Planet Flow learn-proof
+# failed on win-rate trend, not on late-run KL stability.
+#
+# Manual guardrails when selecting winners:
+#   - approx_kl_v2 should remain in the calibrated stable band for the proof run
+#   - entropy should not immediately collapse, but should move off the high plateau
+#   - samples_per_sec / env_steps_per_sec should stay near the P0 throughput floor
+#   - planet_flow_*_delta_vs_control metrics should show learned behavior that
+#     differs from the seeded compiler-control baseline
+#   - selected configs must pass a follow-up learn-proof run before promotion
+
+defaults:
+  - base
+  - command: ow_train
+  - method: bayes
+  - metric: overall_win_rate
+  - fixed: planet_flow_ppo_signal
+  - space: planet_flow_ppo_signal
+  - _self_
+
+name: planet_flow_ppo_signal
+description: >
+  Bayes PPO hyperparameter sweep for Planet Flow target-heatmap learning signal
+  on noop-only 2p runs. Maximize overall_win_rate, then manually filter by KL,
+  entropy, throughput, and learned-vs-control Planet Flow diagnostics.
+run_cap: 24

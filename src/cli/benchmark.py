@@ -62,9 +62,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     training.add_argument(
         "--preset",
-        choices=("validation",),
+        choices=("validation", "planet_flow_p0"),
         default=None,
-        help="Workstation stability bundle (--preset validation).",
+        help="Named benchmark override bundle.",
     )
     training.add_argument(
         "--tier",
@@ -73,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     training.add_argument("--updates", type=int, default=30)
     training.add_argument("--warmup", type=int, default=2)
+    training.add_argument(
+        "--assert-min-env-steps-per-sec",
+        type=float,
+        default=None,
+        help="Fail if measured env_steps_per_sec is below this floor.",
+    )
     training.add_argument(
         "--snapshot-updates",
         nargs="*",
@@ -132,6 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("outputs"),
     )
     learn_proof.add_argument("--dry-run", action="store_true")
+    learn_proof.add_argument(
+        "--thresholds-path",
+        type=Path,
+        default=None,
+        help="Optional preflight calibration JSON to use for learning gates.",
+    )
     learn_proof.add_argument(
         "--eval-checkpoint",
         type=Path,
@@ -286,6 +298,20 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         snapshot_updates=frozenset(args.snapshot_updates),
     )
     payload = training_benchmark_payload(result)
+    if args.preset == "planet_flow_p0":
+        required_control_metrics = (
+            "planet_flow_control_emitted_launch_count",
+            "planet_flow_control_emitted_ship_mass_rate",
+            "planet_flow_emitted_launch_count_delta_vs_control",
+        )
+        missing = [key for key in required_control_metrics if payload.get(key) is None]
+        if missing:
+            print(
+                "Planet Flow benchmark proof is missing compiler-control metrics: "
+                + ", ".join(missing),
+                file=sys.stderr,
+            )
+            return 1
     payload.update(
         {
             "commit_sha": _git_head_sha(),
@@ -300,6 +326,17 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))
+    if (
+        args.assert_min_env_steps_per_sec is not None
+        and float(payload["env_steps_per_sec"]) < args.assert_min_env_steps_per_sec
+    ):
+        print(
+            "env_steps_per_sec "
+            f"{float(payload['env_steps_per_sec']):.3f} < "
+            f"{args.assert_min_env_steps_per_sec:.3f}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -671,6 +708,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             output_root=args.output_root,
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
+            thresholds_path=args.thresholds_path,
         )
         overall = evaluation.verdict
         stages = [evaluation]
@@ -682,6 +720,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             output_root=args.output_root,
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
+            thresholds_path=args.thresholds_path,
         )
 
     report: dict[str, object] = {
