@@ -201,9 +201,9 @@ def test_enabled_metric_names_include_dynamic_retention_and_plateau_metrics():
     assert "total_loss" in names
 
 
-def test_per_format_loss_metrics_are_registered_as_losses():
+def test_per_format_loss_metrics_are_registered_as_debug():
     names = enabled_metric_names(
-        _metric_groups(losses=True),
+        _metric_groups(debug=True),
         record_kind="update",
         extra_protected_names=protected_metric_names(),
     )
@@ -216,6 +216,19 @@ def test_per_format_loss_metrics_are_registered_as_losses():
         assert f"approx_kl_v2_{suffix}" in names
         assert f"total_loss_{suffix}" in names
         assert f"loss_sample_count_{suffix}" in names
+        assert metric_definition(f"policy_loss_{suffix}").group == "debug"
+
+
+def test_per_format_loss_metrics_are_omitted_without_debug_group():
+    names = enabled_metric_names(
+        _metric_groups(losses=True, debug=False),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+
+    for suffix in ("2p", "4p"):
+        assert f"policy_loss_{suffix}" not in names
+        assert f"loss_sample_count_{suffix}" not in names
 
 
 def test_ppo_health_metrics_are_registered_as_losses():
@@ -257,8 +270,9 @@ def test_per_format_timing_metrics_are_registered_as_debug():
         "rollout_samples_per_sec_4p",
     }
     timing_names = {
-        "update_time_rollout_fraction",
-        "update_time_ppo_fraction",
+        "update_seconds",
+        "rollout_seconds",
+        "ppo_seconds",
     }
     debug_names = enabled_metric_names(
         _metric_groups(debug=True),
@@ -279,6 +293,11 @@ def test_per_format_timing_metrics_are_registered_as_debug():
     for name in timing_names:
         assert metric_definition(name).group == "timing"
         assert name in timing_group_names
+
+    for name in ("update_time_rollout_fraction", "update_time_ppo_fraction"):
+        assert metric_definition(name).group == "debug"
+        assert name in debug_names
+        assert name not in timing_group_names
 
 
 def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:

@@ -39,6 +39,8 @@ OPPONENT_SLOT_METRIC_KEYS: tuple[str, ...] = (
 ROLLOUT_INTERNAL_SCALAR_KEYS: tuple[str, ...] = (
     "trajectory_shield_legal_non_noop_count",
     "trajectory_shield_original_non_noop_count",
+    "launch_ship_count_sum",
+    "active_launch_count",
 )
 
 # Extra per-chunk keys emitted by rollout collection but not aggregated or logged.
@@ -65,6 +67,8 @@ BASE_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     *TRAJECTORY_SHIELD_COUNT_KEYS,
     "trajectory_shield_legal_non_noop_count",
     "trajectory_shield_original_non_noop_count",
+    "launch_ship_count_sum",
+    "active_launch_count",
     "trajectory_shield_legal_non_noop_rate",
     *OPPONENT_SLOT_METRIC_KEYS,
     "stop_rate",
@@ -81,6 +85,7 @@ FINALIZED_ROLLOUT_RATE_KEYS: tuple[str, ...] = (
     "survival_time",
     "score_share",
     "overall_win_rate",
+    "mean_ships_per_launch",
     *PLANET_FLOW_RATE_KEYS,
     *PLANET_FLOW_CONTROL_RATE_KEYS,
     *PLANET_FLOW_CONTROL_DELTA_KEYS,
@@ -131,6 +136,7 @@ LOGGED_ROLLOUT_SCALAR_KEYS: tuple[str, ...] = (
     "opponent_historical_fallback_latest_slots",
     "stop_rate",
     "mean_active_launches_per_turn",
+    "mean_ships_per_launch",
     *PLANET_FLOW_COUNT_KEYS,
     *PLANET_FLOW_CONTROL_COUNT_KEYS,
     *PLANET_FLOW_RATE_KEYS,

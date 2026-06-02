@@ -261,34 +261,34 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Whether replay log-probs are finite on the first minibatch parity slice.",
     ),
     _metric("total_loss", "losses", "Final weighted PPO loss used for optimization."),
-    _metric("policy_loss_2p", "losses", "PPO policy loss for 2-player samples."),
-    _metric("value_loss_2p", "losses", "PPO value loss for 2-player samples."),
-    _metric("entropy_2p", "losses", "Action entropy for 2-player samples."),
-    _metric("approx_kl_2p", "losses", "Approximate KL for 2-player samples."),
+    _metric("policy_loss_2p", "debug", "PPO policy loss for 2-player samples."),
+    _metric("value_loss_2p", "debug", "PPO value loss for 2-player samples."),
+    _metric("entropy_2p", "debug", "Action entropy for 2-player samples."),
+    _metric("approx_kl_2p", "debug", "Approximate KL for 2-player samples."),
     _metric(
         "approx_kl_v2_2p",
-        "losses",
+        "debug",
         "Schulman-style approximate KL for 2-player samples.",
     ),
-    _metric("total_loss_2p", "losses", "Weighted PPO loss for 2-player samples."),
+    _metric("total_loss_2p", "debug", "Weighted PPO loss for 2-player samples."),
     _metric(
         "loss_sample_count_2p",
-        "losses",
+        "debug",
         "Learner decision samples contributing to 2-player PPO loss diagnostics.",
     ),
-    _metric("policy_loss_4p", "losses", "PPO policy loss for 4-player samples."),
-    _metric("value_loss_4p", "losses", "PPO value loss for 4-player samples."),
-    _metric("entropy_4p", "losses", "Action entropy for 4-player samples."),
-    _metric("approx_kl_4p", "losses", "Approximate KL for 4-player samples."),
+    _metric("policy_loss_4p", "debug", "PPO policy loss for 4-player samples."),
+    _metric("value_loss_4p", "debug", "PPO value loss for 4-player samples."),
+    _metric("entropy_4p", "debug", "Action entropy for 4-player samples."),
+    _metric("approx_kl_4p", "debug", "Approximate KL for 4-player samples."),
     _metric(
         "approx_kl_v2_4p",
-        "losses",
+        "debug",
         "Schulman-style approximate KL for 4-player samples.",
     ),
-    _metric("total_loss_4p", "losses", "Weighted PPO loss for 4-player samples."),
+    _metric("total_loss_4p", "debug", "Weighted PPO loss for 4-player samples."),
     _metric(
         "loss_sample_count_4p",
-        "losses",
+        "debug",
         "Learner decision samples contributing to 4-player PPO loss diagnostics.",
     ),
     _metric("minibatches", "losses", "Minibatch count used in the PPO update."),
@@ -367,12 +367,12 @@ _METRICS: tuple[MetricDefinition, ...] = (
     ),
     _metric(
         "update_time_rollout_fraction",
-        "timing",
+        "debug",
         "Fraction of update wall time spent collecting rollouts.",
     ),
     _metric(
         "update_time_ppo_fraction",
-        "timing",
+        "debug",
         "Fraction of update wall time spent in PPO optimization.",
     ),
     _metric(
@@ -499,6 +499,11 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "stop_utilization_ratio",
         "action_decision",
         "mean_active_launches_per_turn divided by model.max_moves_k (L1 gate).",
+    ),
+    _metric(
+        "mean_ships_per_launch",
+        "debug",
+        "Mean ship count across emitted fleet launches in the rollout.",
     ),
     _metric(
         "survival_time",
@@ -1023,6 +1028,8 @@ def rollout_compute_scalar_keys(cfg: Any | None) -> frozenset[str]:
         definition = METRIC_DEFINITIONS_BY_NAME.get(key)
         if definition is not None and definition.group in enabled_groups:
             keys.add(key)
+    if "debug" in enabled_groups:
+        keys.update({"launch_ship_count_sum", "active_launch_count"})
 
     for key in LOGGED_ROLLOUT_SCALAR_KEYS + ROLLOUT_CHUNK_ONLY_SCALAR_KEYS:
         if key in keys:

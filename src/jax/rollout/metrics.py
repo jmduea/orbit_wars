@@ -4,6 +4,7 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
+from src.jax.ship_action import ship_count_for_action
 from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
@@ -176,6 +177,10 @@ def _core_metric_fields(
         metrics["stop_rate"] = ZERO_F32
     if "mean_active_launches_per_turn" in compute_keys:
         metrics["mean_active_launches_per_turn"] = ZERO_F32
+    if "launch_ship_count_sum" in compute_keys:
+        metrics["launch_ship_count_sum"] = ZERO_F32
+    if "active_launch_count" in compute_keys:
+        metrics["active_launch_count"] = ZERO_F32
     if "loss_sample_count_2p" in compute_keys:
         metrics["loss_sample_count_2p"] = ZERO_F32
     if "loss_sample_count_4p" in compute_keys:
@@ -241,6 +246,56 @@ def _apply_planet_flow_metrics(
         )
 
 
+def _apply_launch_sizing_metrics(
+    metrics: dict[str, jax.Array],
+    data: dict[str, jax.Array],
+    cfg: TrainConfig,
+) -> None:
+    if "launch_ship_count_sum" not in metrics and "active_launch_count" not in metrics:
+        return
+
+    emitted_launches = data.get("planet_flow_emitted_launch_count")
+    emitted_ship_mass = data.get("planet_flow_emitted_ship_mass_sum")
+    if emitted_launches is not None and emitted_ship_mass is not None:
+        metrics["launch_ship_count_sum"] = emitted_ship_mass.sum()
+        metrics["active_launch_count"] = emitted_launches.sum()
+        return
+
+    source_index = data.get("source_index")
+    initial_planet_ships = data.get("initial_planet_ships")
+    stop_flag = data.get("stop_flag")
+    step_mask = data.get("step_mask")
+    ship_bucket = data.get("ship_bucket")
+    if (
+        source_index is None
+        or initial_planet_ships is None
+        or stop_flag is None
+        or step_mask is None
+        or ship_bucket is None
+    ):
+        return
+
+    active = step_mask.astype(jnp.float32)
+    non_stop = active * (1.0 - stop_flag.astype(jnp.float32))
+    available_ships = jnp.squeeze(
+        jnp.take_along_axis(
+            initial_planet_ships[..., None, :],
+            source_index[..., None],
+            axis=-1,
+        ),
+        axis=-1,
+    )
+    ship_counts = ship_count_for_action(
+        available_ships,
+        ship_bucket,
+        data.get("ship_fraction"),
+        cfg,
+    )
+    launch_active = non_stop * (ship_counts > 0.0).astype(jnp.float32)
+    metrics["launch_ship_count_sum"] = (ship_counts * launch_active).sum()
+    metrics["active_launch_count"] = launch_active.sum()
+
+
 def rollout_metrics(
     *,
     data: dict[str, jax.Array],
@@ -275,4 +330,6 @@ def rollout_metrics(
             _apply_planet_flow_metrics(metrics, data)
         else:
             _apply_factorized_metrics(metrics, data)
+    if "debug" in collection_groups:
+        _apply_launch_sizing_metrics(metrics, data, cfg)
     return metrics
