@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from src.artifacts.pipeline import load_optional_jobs
@@ -74,3 +75,15 @@ def summarize_run_status(run_dir: Path) -> dict[str, object]:
         "worker_stdout_log": str(queue_dir / "worker.stdout.log"),
         "worker_stderr_log": str(queue_dir / "worker.stderr.log"),
     }
+
+
+def queue_is_active(summary: Mapping[str, object]) -> bool:
+    jobs = summary.get("jobs")
+    if not isinstance(jobs, list):
+        return False
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        if str(job.get("status")) in {"queued", "running"}:
+            return True
+    return False

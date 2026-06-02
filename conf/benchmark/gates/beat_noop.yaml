@@ -1,0 +1,8 @@
+# Preflight gate recipe scaffold (Phase 2). Train overrides remain in src/jax/preflight.py.
+gate_id: beat_noop
+title: Beat noop opponent (Gate 2)
+default_model: transformer_factorized_small
+ladder_index: 0
+thresholds_key: learning_signal
+workflow: ow benchmark learn-proof --gate beat_noop
+primitive: ow benchmark gate beat_noop

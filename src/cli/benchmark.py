@@ -34,12 +34,14 @@ def print_benchmark_help() -> None:
         "  learn-proof              Gates 2–5 learning proof ladder\n"
         "  calibrate                Derive preflight thresholds\n"
         "  calibrate-seed-scheduler Reseed-interval calibration\n"
+        "  gate                     Run one preflight gate from conf/benchmark/gates/\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n\n"
         "Examples:\n"
         "  make preflight-sanity\n"
         "  make preflight-learn-proof\n"
-        "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n\n"
+        "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
+        "  uv run ow benchmark gate beat_noop --dry-run\n\n"
         "E2E throughput (launch hygiene):\n"
         "  make test-launch-hygiene-e2e-throughput\n"
         "  uv run ow benchmark training --preset primary --label gate --out /tmp/gate.json \\\n"
@@ -387,6 +389,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="With --analyze-only, run tournament eval on discovered checkpoints.",
     )
     seed_sched.add_argument("--dry-run", action="store_true")
+
+    gate = subparsers.add_parser(
+        "gate",
+        help="Run one composable preflight gate (YAML recipe in conf/benchmark/gates/).",
+    )
+    gate.add_argument(
+        "gate_id",
+        nargs="?",
+        default=None,
+        help="Gate id matching conf/benchmark/gates/<id>.yaml (omit with --list).",
+    )
+    gate.add_argument(
+        "--list",
+        action="store_true",
+        help="List gate YAML recipes.",
+    )
+    gate.add_argument(
+        "--model",
+        default=None,
+        help="Model override (default from gate YAML).",
+    )
+    gate.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Optional JSON report path.",
+    )
+    gate.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    gate.add_argument("--dry-run", action="store_true")
+    gate.add_argument("--thresholds-path", type=Path, default=None)
+    gate.add_argument("--profile-path", type=Path, default=None)
+    gate.add_argument(
+        "--train-overrides",
+        nargs="*",
+        default=[],
+        help="Extra Hydra overrides appended after gate overrides.",
+    )
 
     return parser
 
@@ -1042,6 +1085,25 @@ def run_planet_flow_noop_smoke_cli(args: argparse.Namespace) -> int:
     return 0 if report.get("any_passed") else 1
 
 
+def run_gate_cli(args: argparse.Namespace) -> int:
+    from src.cli.benchmark_gates import list_gate_recipes, run_gate_cli as run_gate
+
+    if args.list or args.gate_id is None:
+        payload = {"gates": list_gate_recipes()}
+        print(json.dumps(payload, indent=2))
+        return 0
+    return run_gate(
+        args.gate_id,
+        model=args.model,
+        output_root=args.output_root,
+        dry_run=bool(args.dry_run),
+        thresholds_path=args.thresholds_path,
+        profiles_path=args.profile_path,
+        train_overrides=tuple(args.train_overrides),
+        out=args.out,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     if not argv:
         print_benchmark_help()
@@ -1066,6 +1128,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":
             return run_planet_flow_noop_smoke_cli(args)
+        case "gate":
+            return run_gate_cli(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2

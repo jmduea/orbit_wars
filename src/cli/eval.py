@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from src.artifacts.kaggle_submission import (
@@ -22,8 +23,9 @@ from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
 )
+from src.artifacts.pipeline import cancel_optional_jobs
 from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_job_worker
-from src.cli.run_status import summarize_run_status
+from src.cli.run_status import queue_is_active, summarize_run_status
 from src.config.schema import TournamentConfig
 
 
@@ -34,10 +36,13 @@ def print_eval_help() -> None:
         "  tournament   Head-to-head eval in Kaggle env\n"
         "  worker       Process queue/optional_jobs for a run\n"
         "  status       Summarize queue jobs and promotion for a run\n"
+        "  jobs         Queue job operations (cancel)\n"
         "  package      Build submission.tar.gz from checkpoint\n"
         "  submit       Upload package to Kaggle competition\n\n"
         "Examples:\n"
         "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id>\n"
+        "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch\n"
+        "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
         "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
         "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
         "More: uv run ow eval tournament --help\n"
@@ -110,6 +115,67 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="Campaign run directory.",
+    )
+    status.add_argument(
+        "--watch",
+        action="store_true",
+        help="Poll and re-print status JSON until the queue is idle.",
+    )
+    status.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=5.0,
+        help="Poll interval for --watch (default: 5).",
+    )
+    status.add_argument(
+        "--idle-exit-seconds",
+        type=float,
+        default=None,
+        help="With --watch, exit after this many seconds with no queued/running jobs.",
+    )
+
+    jobs = subparsers.add_parser(
+        "jobs",
+        help="Optional artifact queue job operations.",
+    )
+    jobs_sub = jobs.add_subparsers(dest="jobs_command")
+
+    jobs_cancel = jobs_sub.add_parser(
+        "cancel",
+        help="Cancel queued optional jobs under queue/optional_jobs/*.json.",
+    )
+    jobs_cancel.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+    jobs_cancel.add_argument(
+        "--job-id",
+        action="append",
+        default=[],
+        dest="job_ids",
+        help="Cancel a specific job_id (repeatable).",
+    )
+    jobs_cancel.add_argument(
+        "--all-queued",
+        action="store_true",
+        help="Cancel all queued jobs.",
+    )
+    jobs_cancel.add_argument(
+        "--include-running",
+        action="store_true",
+        help="Also cancel jobs currently marked running (use when worker is dead).",
+    )
+    jobs_cancel.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be cancelled without modifying job JSON.",
+    )
+    jobs_cancel.add_argument(
+        "--reason",
+        default="operator_cancel",
+        help="Recorded cancelled_reason on affected jobs.",
     )
 
     submit = subparsers.add_parser(
@@ -423,8 +489,46 @@ def run_worker_cli(args: argparse.Namespace) -> int:
 
 
 def run_status_cli(args: argparse.Namespace) -> int:
-    summary = summarize_run_status(args.run)
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    if not args.watch:
+        summary = summarize_run_status(args.run)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+
+    poll_seconds = max(float(args.poll_seconds), 0.1)
+    idle_since: float | None = None
+    while True:
+        summary = summarize_run_status(args.run)
+        print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
+        if not queue_is_active(summary):
+            if args.idle_exit_seconds is None:
+                return 0
+            now = time.monotonic()
+            if idle_since is None:
+                idle_since = now
+            if now - idle_since >= float(args.idle_exit_seconds):
+                return 0
+        else:
+            idle_since = None
+        time.sleep(poll_seconds)
+
+
+def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
+    queue_dir, _ = resolve_run_worker_dirs(args.run)
+    if not queue_dir.is_dir():
+        raise SystemExit(f"Queue directory does not exist: {queue_dir}")
+    job_ids = {item.strip() for item in args.job_ids if item.strip()}
+    try:
+        result = cancel_optional_jobs(
+            queue_dir,
+            job_ids=job_ids or None,
+            all_queued=bool(args.all_queued),
+            include_running=bool(args.include_running),
+            dry_run=bool(args.dry_run),
+            reason=str(args.reason),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
 
@@ -489,6 +593,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_worker_cli(args)
     if args.command == "status":
         return run_status_cli(args)
+    if args.command == "jobs":
+        if args.jobs_command == "cancel":
+            return run_jobs_cancel_cli(args)
+        raise SystemExit("Unknown jobs command. Use: ow eval jobs cancel --help")
     if args.command == "package":
         return run_package_cli(args)
     if args.command == "submit":

@@ -17,11 +17,21 @@ def test_build_context_includes_preflight_and_roadmap() -> None:
 def test_build_context_recent_runs_from_fixture(tmp_path: Path, monkeypatch) -> None:
     indexes = tmp_path / "outputs" / "indexes"
     indexes.mkdir(parents=True)
-    line = json.dumps({"campaign": "c1", "run_id": "r1"})
+    run_dir = tmp_path / "outputs" / "campaigns" / "c1" / "runs" / "r1"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "r1", "campaign": "c1"}),
+        encoding="utf-8",
+    )
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+    line = json.dumps({"campaign": "c1", "run_id": "r1", "run_dir": str(run_dir)})
     (indexes / "runs.jsonl").write_text(line + "\n", encoding="utf-8")
 
     import scripts.agent_context as mod
 
     monkeypatch.setattr(mod, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(mod, "_read_git_branch", lambda _root: {"present": True, "branch": "main"})
     payload = build_context(limit_runs=5)
     assert len(payload["recent_runs_index"]) == 1
+    assert payload["latest_run_eval"]["present"] is True
+    assert payload["latest_run_eval"]["run_id"] == "r1"

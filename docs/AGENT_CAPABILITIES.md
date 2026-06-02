@@ -5,9 +5,16 @@ Task-oriented guide for coding agents. Canonical policy: `AGENTS.md`. Architectu
 ## Session context
 
 ```bash
-make agent-context          # JSON: preflight thresholds, roadmap, recent runs index
+make agent-context          # JSON: git branch, preflight thresholds, roadmap, recent runs, latest eval queue
 uv run ow train print_resolved_config=true
 ```
+
+## Command tiers
+
+| Tier | Examples | Use when |
+|------|----------|----------|
+| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow benchmark gate beat_noop` | Inspect or mutate one artifact; compose in agent scripts |
+| **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
 
@@ -41,16 +48,38 @@ make preflight-learn-proof   # GPU/time; check terminals first
 make preflight-calibrate
 ```
 
+**Composable gate (Phase 2):**
+
+```bash
+uv run ow benchmark gate --list
+uv run ow benchmark gate beat_noop --dry-run
+uv run ow benchmark gate beat_noop --out /tmp/beat_noop.json
+```
+
+Gate recipes: `conf/benchmark/gates/*.yaml`. Full ladder remains `ow benchmark learn-proof`.
+
 Thresholds: `docs/benchmarks/preflight-calibration.json` (never invent gate numbers).
 
 ## Eval & promotion
 
 ```bash
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id>
+uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch
+uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch --idle-exit-seconds 30
+uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --all-queued --dry-run
+uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --job-id <uuid>
 uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose
 uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl --baselines noop
 uv run ow train ... artifacts=hybrid_promotion   # async docker + tournament worker
 ```
+
+### Hybrid promotion poll contract
+
+1. Train with `artifacts=hybrid_promotion`; note `run_dir` from `orbit_train_start`.
+2. Poll: `uv run ow eval status --run <run_dir> --watch --poll-seconds 5`.
+3. Queue idle when `jobs` has no `queued`/`running` entries; check `promoted_manifest` and worker logs under `queue/`.
+4. Cancel mistaken queue entries: `ow eval jobs cancel --run <run_dir> --all-queued --dry-run` first, then without `--dry-run`.
+5. Worker processing: `ow eval worker --run <run_dir> --verbose` (or rely on autostart + `queue/worker.stderr.log`).
 
 ## Discovery
 
@@ -69,7 +98,7 @@ make help
 | Training hyperparams, opponent mix, curriculum stages | New opponent family / heuristic |
 | `task=shield_*`, reward weights | New shield mode or feature schema |
 | `artifacts=hybrid_promotion`, tournament baselines | PPO / rollout / env mechanics |
-| Preflight threshold JSON (after calibrate) | Preflight gate recipe tuples in Python (Phase 2: YAML) |
+| Preflight threshold JSON (after calibrate) | Preflight gate recipe tuples in Python (Phase 2 YAML metadata in `conf/benchmark/gates/`) |
 
 ## Copy-paste agent prompts
 
@@ -79,8 +108,12 @@ make help
 
 **Inspect hybrid promotion queue**
 
-> Run `uv run ow eval status --run <run_dir>` and summarize queued/running `checkpoint_eval` / `tournament` jobs; if worker autostarted, read `queue/worker.stderr.log`.
+> Run `uv run ow eval status --run <run_dir> --watch --poll-seconds 5` and summarize queued/running `checkpoint_eval` / `tournament` jobs; if worker autostarted, read `queue/worker.stderr.log`.
+
+**Cancel stale artifact jobs**
+
+> Run `uv run ow eval jobs cancel --run <run_dir> --all-queued --dry-run`, confirm targets, then rerun without `--dry-run`.
 
 **Preflight Gates 2–4**
 
-> Run `make preflight-learn-proof` only if no other GPU job is active; compare report to `docs/benchmarks/preflight-calibration.json` thresholds.
+> Run `uv run ow benchmark gate beat_noop --dry-run` to verify overrides, then `make preflight-learn-proof` only if no other GPU job is active; compare report to `docs/benchmarks/preflight-calibration.json` thresholds.

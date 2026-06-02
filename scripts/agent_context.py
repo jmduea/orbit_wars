@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -76,13 +77,76 @@ def _read_recent_runs(repo_root: Path, *, limit: int = 5) -> list[dict[str, obje
     return rows[-limit:]
 
 
+def _read_git_branch(repo_root: Path) -> dict[str, object]:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"present": False}
+    branch = result.stdout.strip()
+    return {"present": True, "branch": branch or None}
+
+
+def _read_latest_run_eval_summary(
+    repo_root: Path,
+    recent_runs: list[dict[str, object]],
+) -> dict[str, object] | None:
+    if not recent_runs:
+        return None
+    latest = recent_runs[-1]
+    run_dir_value = latest.get("run_dir")
+    if not isinstance(run_dir_value, str) or not run_dir_value:
+        return None
+    run_dir = Path(run_dir_value)
+    if not run_dir.is_absolute():
+        run_dir = repo_root / run_dir
+    if not run_dir.is_dir():
+        return {
+            "run_dir": str(run_dir),
+            "present": False,
+            "reason": "run_dir_missing",
+        }
+    from src.cli.run_status import queue_is_active, summarize_run_status
+
+    summary = summarize_run_status(run_dir)
+    jobs = summary.get("jobs")
+    job_count = len(jobs) if isinstance(jobs, list) else 0
+    active_jobs = 0
+    if isinstance(jobs, list):
+        active_jobs = sum(
+            1
+            for job in jobs
+            if isinstance(job, dict)
+            and str(job.get("status")) in {"queued", "running"}
+        )
+    return {
+        "present": True,
+        "run_dir": summary.get("run_dir"),
+        "run_id": summary.get("run_id"),
+        "campaign": summary.get("campaign"),
+        "job_count": job_count,
+        "active_jobs": active_jobs,
+        "queue_active": queue_is_active(summary),
+        "promoted_manifest": summary.get("promoted_manifest"),
+        "last_log_marker": summary.get("last_log_marker"),
+    }
+
+
 def build_context(*, limit_runs: int = 5) -> dict[str, object]:
     repo_root = _repo_root()
+    recent_runs = _read_recent_runs(repo_root, limit=limit_runs)
     return {
         "repo_root": str(repo_root),
+        "git": _read_git_branch(repo_root),
         "preflight": _read_preflight_excerpt(repo_root),
         "roadmap": _read_roadmap_excerpt(repo_root),
-        "recent_runs_index": _read_recent_runs(repo_root, limit=limit_runs),
+        "recent_runs_index": recent_runs,
+        "latest_run_eval": _read_latest_run_eval_summary(repo_root, recent_runs),
         "docs": {
             "agent_capabilities": "docs/AGENT_CAPABILITIES.md",
             "agents": "AGENTS.md",
