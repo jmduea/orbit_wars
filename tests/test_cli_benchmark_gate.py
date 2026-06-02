@@ -10,6 +10,7 @@ def test_list_gate_recipes_includes_beat_noop() -> None:
     recipes = list_gate_recipes()
     gate_ids = {item["gate_id"] for item in recipes}
     assert "beat_noop" in gate_ids
+    assert "beat_random" in gate_ids
 
 
 def test_load_gate_recipe_beat_noop() -> None:
@@ -18,10 +19,19 @@ def test_load_gate_recipe_beat_noop() -> None:
     assert recipe["default_model"] == "transformer_factorized_small"
 
 
+def test_load_gate_recipe_beat_random() -> None:
+    recipe = load_gate_recipe("beat_random")
+    assert recipe["gate_id"] == "beat_random"
+    assert recipe["default_model"] == "transformer_factorized_small"
+    assert recipe["ladder_index"] == 1
+    assert recipe["thresholds_key"] == "learning_signal"
+
+
 def test_benchmark_gate_list_cli(capsys) -> None:
     assert benchmark_cli.main(["gate", "--list"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert any(item["gate_id"] == "beat_noop" for item in payload["gates"])
+    gate_ids = {item["gate_id"] for item in payload["gates"]}
+    assert gate_ids >= {"beat_noop", "beat_random"}
 
 
 def test_benchmark_gate_dry_run(capsys) -> None:
@@ -30,5 +40,15 @@ def test_benchmark_gate_dry_run(capsys) -> None:
     start = out.index('{\n  "gate":')
     payload = json.loads(out[start:])
     assert payload["gate"] == "beat_noop"
+    assert payload["verdict"] == "INCONCLUSIVE"
+    assert payload["stage"]["reasons"] == ["dry_run"]
+
+
+def test_benchmark_gate_beat_random_dry_run(capsys) -> None:
+    assert benchmark_cli.main(["gate", "beat_random", "--dry-run"]) == 1
+    out = capsys.readouterr().out
+    start = out.index('{\n  "gate":')
+    payload = json.loads(out[start:])
+    assert payload["gate"] == "beat_random"
     assert payload["verdict"] == "INCONCLUSIVE"
     assert payload["stage"]["reasons"] == ["dry_run"]
