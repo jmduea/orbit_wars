@@ -103,6 +103,25 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert resolve_rollout_group_specs(cfg)
 
 
+def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=random_only",
+        ]
+    )
+
+    assert cfg.artifacts.artifact_pipeline.enabled
+    assert cfg.artifacts.artifact_pipeline.replay_async
+    assert cfg.artifacts.artifact_pipeline.replay_backend == "local"
+    assert cfg.artifacts.replay.enabled
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert resolve_rollout_group_specs(cfg)
+
+
 def test_planet_flow_target_heatmap_profile_composes_with_proof_guards() -> None:
     cfg = compose_hydra_train_config(
         [
@@ -131,7 +150,7 @@ def test_planet_flow_target_heatmap_profile_composes_with_proof_guards() -> None
 
 
 def test_planet_flow_rejects_default_artifact_paths() -> None:
-    with pytest.raises(ValueError, match="artifacts=disabled"):
+    with pytest.raises(ValueError, match="only supports local async replay"):
         compose_hydra_train_config(
             [
                 "model=planet_flow_target_heatmap",
@@ -275,15 +294,15 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
     assert cfg["name"] == "planet_flow_ppo_signal"
     assert cfg["method"] == "bayes"
     assert cfg["run_cap"] == 24
-    assert cfg["metric"] == {"name": "overall_win_rate", "goal": "maximize"}
+    assert cfg["metric"] == {"name": "planet_flow_sweep_score", "goal": "maximize"}
 
     parameters = cfg["parameters"]
     assert parameters["model"]["value"] == "planet_flow_target_heatmap"
     assert parameters["training"]["value"] == "2p_16"
-    assert parameters["training.total_updates"]["value"] == 300
-    assert parameters["opponents"]["value"] == "noop_only"
+    assert parameters["training.total_updates"]["value"] == 200
+    assert parameters["opponents"]["value"] == "random_only"
     assert parameters["curriculum"]["value"] == "off"
-    assert parameters["artifacts"]["value"] == "disabled"
+    assert parameters["artifacts"]["value"] == "planet_flow_proof"
     assert parameters["telemetry.metric_groups.action_decision"]["value"] is True
     assert parameters["telemetry.metric_groups.losses"]["value"] is True
     assert parameters["training.lr"]["min"] == 0.00001
@@ -294,7 +313,10 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
     generated = OmegaConf.to_container(OmegaConf.load(out_path), resolve=False)
     assert isinstance(generated, dict)
     assert out_path == tmp_path / "planet_flow_ppo_signal.yaml"
-    assert generated["metric"] == {"name": "overall_win_rate", "goal": "maximize"}
+    assert generated["metric"] == {
+        "name": "planet_flow_sweep_score",
+        "goal": "maximize",
+    }
     assert generated["run_cap"] == 24
     assert (
         generated["parameters"]["telemetry.metric_groups.action_decision"]["value"]

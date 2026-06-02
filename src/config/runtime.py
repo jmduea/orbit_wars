@@ -415,26 +415,31 @@ def _validate_planet_flow_profile(cfg: TrainConfig) -> None:
         )
 
     artifacts = cfg.artifacts
-    unsupported = []
-    if artifacts.artifact_pipeline.enabled:
-        unsupported.append("artifacts.artifact_pipeline.enabled")
-    if artifacts.artifact_pipeline.replay_async:
-        unsupported.append("artifacts.artifact_pipeline.replay_async")
-    if artifacts.artifact_pipeline.docker_validation_async:
+    pipeline = artifacts.artifact_pipeline
+    unsupported: list[str] = []
+    if pipeline.docker_validation_async:
         unsupported.append("artifacts.artifact_pipeline.docker_validation_async")
-    if artifacts.artifact_pipeline.checkpoint_eval_async:
+    if pipeline.checkpoint_eval_async:
         unsupported.append("artifacts.artifact_pipeline.checkpoint_eval_async")
-    if artifacts.replay.enabled:
-        unsupported.append("artifacts.replay.enabled")
     if artifacts.promotion.enabled:
         unsupported.append("artifacts.promotion.enabled")
     if artifacts.tournament.enabled:
         unsupported.append("artifacts.tournament.enabled")
+    if pipeline.enabled:
+        if not pipeline.replay_async:
+            unsupported.append("artifacts.artifact_pipeline.replay_async")
+        if pipeline.replay_backend != "local":
+            unsupported.append("artifacts.artifact_pipeline.replay_backend=local")
+        if not artifacts.replay.enabled:
+            unsupported.append("artifacts.replay.enabled")
+    elif artifacts.replay.enabled:
+        unsupported.append("artifacts.replay.enabled")
     if unsupported:
         raise ValueError(
             "model.pointer_decoder=planet_flow_target_heatmap is experimental and "
-            "does not support artifact replay, Docker validation, tournament, or "
-            "promotion paths yet. Disable these settings, e.g. with artifacts=disabled. "
+            "only supports local async replay artifacts (e.g. artifacts=disabled "
+            "or artifacts=planet_flow_proof). Docker validation, tournament, and "
+            "promotion paths are not supported yet. "
             f"Unsupported settings: {', '.join(unsupported)}."
         )
 

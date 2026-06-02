@@ -7,13 +7,13 @@ parameters:
   training:
     value: 2p_16
   training.total_updates:
-    value: 300
+    value: 200
   opponents:
-    value: noop_only
+    value: random_only
   curriculum:
     value: "off"
   artifacts:
-    value: disabled
+    value: planet_flow_proof
   seed:
     value: 42
   output.campaign:

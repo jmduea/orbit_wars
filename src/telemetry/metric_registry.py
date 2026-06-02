@@ -654,6 +654,16 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Learned duplicate launch rate minus seeded-random control rate.",
     ),
     _metric(
+        "win_rate_delta_10",
+        "action_decision",
+        "Last-window minus first-window overall_win_rate over 10 updates.",
+    ),
+    _metric(
+        "planet_flow_sweep_score",
+        "action_decision",
+        "W&B sweep objective: win_rate_delta_10 when activity floors pass, else -1.",
+    ),
+    _metric(
         "stop_utilization_ratio",
         "action_decision",
         "mean_active_launches_per_turn divided by model.max_moves_k (L1 gate).",

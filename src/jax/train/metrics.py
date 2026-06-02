@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import jax
 from src.config import TrainConfig
 from src.jax.rollout.metrics import trajectory_shield_legal_rate
+from src.jax.train.sweep_score import PLANET_FLOW_MIN_DEMAND_MASS
 from src.telemetry.metric_registry import (
     prune_scalar_metrics,
     rollout_merge_scalar_keys,
@@ -27,12 +28,12 @@ def _finalize_planet_flow_rates(
         + metrics[f"{prefix}_capacity_dropped_launch_count"]
     )
     metrics[f"{prefix}_unreachable_demand_rate"] = jnp.where(
-        demanded > 0.0,
+        demanded >= PLANET_FLOW_MIN_DEMAND_MASS,
         metrics[f"{prefix}_unreachable_demand_mass_sum"] / demanded,
         0.0,
     )
     metrics[f"{prefix}_held_demand_rate"] = jnp.where(
-        demanded > 0.0,
+        demanded >= PLANET_FLOW_MIN_DEMAND_MASS,
         metrics[f"{prefix}_held_demand_mass_sum"] / demanded,
         0.0,
     )

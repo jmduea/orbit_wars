@@ -128,7 +128,9 @@ def test_planet_flow_preflight_gate_overrides_compose_with_p0_guards() -> None:
 
     assert cfg.model.pointer_decoder == "planet_flow_target_heatmap"
     assert cfg.curriculum.enabled is False
-    assert cfg.artifacts.artifact_pipeline.enabled is False
+    assert cfg.artifacts.artifact_pipeline.enabled is True
+    assert cfg.artifacts.artifact_pipeline.replay_async is True
+    assert cfg.artifacts.replay.enabled is True
 
 
 def test_planet_flow_preflight_reports_needs_calibration() -> None:

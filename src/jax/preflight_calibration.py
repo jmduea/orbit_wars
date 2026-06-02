@@ -259,9 +259,12 @@ def calibration_train_overrides(
         "training.rollout_steps=128",
         f"training.total_updates={total_updates}",
         f"opponents={opponent}",
-        *(("artifacts=disabled",) if model == "planet_flow_target_heatmap" else ()),
         "curriculum=off",
         *PREFLIGHT_TRAIN_BASE,
+        *((
+            "artifacts=planet_flow_proof",
+            "artifacts.artifact_pipeline.enabled=true",
+        ) if model == "planet_flow_target_heatmap" else ()),
         f"seed={seed}",
     )
 

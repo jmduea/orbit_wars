@@ -99,9 +99,10 @@ def _gate_specs(
         planet_flow_base = (
             "model=planet_flow_target_heatmap",
             "curriculum=off",
-            "artifacts=disabled",
             "telemetry.metric_groups.action_decision=true",
             *PREFLIGHT_TRAIN_BASE,
+            "artifacts=planet_flow_proof",
+            "artifacts.artifact_pipeline.enabled=true",
         )
         needs_calibration = (
             None

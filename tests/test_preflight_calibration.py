@@ -26,7 +26,7 @@ def test_planet_flow_calibration_overrides_use_p0_guards() -> None:
         model="planet_flow_target_heatmap",
     )
 
-    assert "artifacts=disabled" in overrides
+    assert "artifacts=planet_flow_proof" in overrides
     assert "curriculum=off" in overrides
     assert "telemetry.metric_groups.action_decision=true" in overrides
 

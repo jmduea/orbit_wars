@@ -1,0 +1,27 @@
+defaults:
+  - base
+  - _self_
+
+checkpoint_every: 50
+
+artifact_pipeline:
+  enabled: true
+  replay_async: true
+  replay_backend: local
+  docker_validation_async: false
+  checkpoint_eval_async: false
+  worker_autostart: true
+
+replay:
+  enabled: true
+
+promotion:
+  enabled: false
+
+tournament:
+  enabled: false
+
+checkpoint_retention:
+  keep_last_n: 3
+  keep_every_n_updates: 0
+  keep_best_k_by_metric: 0

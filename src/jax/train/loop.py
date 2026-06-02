@@ -12,6 +12,7 @@ from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointResult,
 )
+from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
 from src.config.rollout_allocation import infer_static_format_weights
@@ -48,6 +49,7 @@ from src.jax.train.snapshots import (
     init_historical_snapshot_pool,
     snapshot_due,
 )
+from src.jax.train.sweep_score import WinRateTrendTracker, planet_flow_sweep_score
 from src.jax.train.state import init_train_state, validate_policy_param_shapes
 from src.jax.train.telemetry import (
     build_per_format_timing_metrics,
@@ -180,6 +182,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         )
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
+    track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
+    win_rate_trend = WinRateTrendTracker() if track_planet_flow_sweep else None
     artifact_cfg = cfg.artifacts.artifact_pipeline
     artifact_queue_dir = run_context.queue_dir
     checkpoint_pipeline = (
@@ -408,6 +412,40 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
                 update_events.append(snapshot_event)
             phase_events = []
+            planet_flow_sweep_metrics: dict[str, float] = {}
+            if win_rate_trend is not None and "action_decision" in enabled_metric_groups(
+                metric_groups_cfg_from_config(cfg)
+            ):
+                win_rate_trend.observe(overall_win_rate)
+                win_rate_delta_10 = win_rate_trend.win_rate_delta()
+                if win_rate_delta_10 is not None:
+                    planet_flow_sweep_metrics["win_rate_delta_10"] = float(
+                        win_rate_delta_10
+                    )
+                planet_flow_sweep_metrics["planet_flow_sweep_score"] = (
+                    planet_flow_sweep_score(
+                        win_rate_delta=win_rate_delta_10,
+                        mean_active_launches_per_turn=rollout_scalars.get(
+                            "mean_active_launches_per_turn"
+                        ),
+                        planet_flow_demanded_mass_sum=rollout_scalars.get(
+                            "planet_flow_demanded_mass_sum"
+                        ),
+                        planet_flow_emitted_launch_count=rollout_scalars.get(
+                            "planet_flow_emitted_launch_count"
+                        ),
+                        entropy=(
+                            float(metrics_host["entropy"])
+                            if "entropy" in metrics_host
+                            else None
+                        ),
+                        approx_kl=(
+                            float(metrics_host["approx_kl"])
+                            if "approx_kl" in metrics_host
+                            else None
+                        ),
+                    )
+                )
             record = build_update_record(
                 update=update,
                 total_env_steps=total_env_steps,
@@ -432,6 +470,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
                 plateau_metric=cfg.training.plateau_metric,
                 cfg=cfg,
+                planet_flow_sweep_metrics=planet_flow_sweep_metrics or None,
             )
             write_filtered_update_records(
                 log_path=log_path,

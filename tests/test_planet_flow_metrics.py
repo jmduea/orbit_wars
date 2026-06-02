@@ -21,18 +21,18 @@ def _planet_flow_count_metrics() -> dict[str, jnp.ndarray]:
         "episode_done": jnp.array(1.0),
         "survival_time_sum": jnp.array(10.0),
         "score_share_sum": jnp.array(0.5),
-        "planet_flow_demanded_mass_sum": jnp.array(8.0),
-        "planet_flow_unreachable_demand_mass_sum": jnp.array(2.0),
-        "planet_flow_held_demand_mass_sum": jnp.array(1.0),
+        "planet_flow_demanded_mass_sum": jnp.array(200.0),
+        "planet_flow_unreachable_demand_mass_sum": jnp.array(50.0),
+        "planet_flow_held_demand_mass_sum": jnp.array(25.0),
         "planet_flow_requested_ship_mass_sum": jnp.array(20.0),
         "planet_flow_emitted_ship_mass_sum": jnp.array(15.0),
         "planet_flow_capacity_dropped_launch_count": jnp.array(1.0),
         "planet_flow_emitted_launch_count": jnp.array(3.0),
         "planet_flow_small_launch_count": jnp.array(1.0),
         "planet_flow_duplicate_source_target_count": jnp.array(0.0),
-        "planet_flow_control_demanded_mass_sum": jnp.array(10.0),
-        "planet_flow_control_unreachable_demand_mass_sum": jnp.array(5.0),
-        "planet_flow_control_held_demand_mass_sum": jnp.array(2.0),
+        "planet_flow_control_demanded_mass_sum": jnp.array(250.0),
+        "planet_flow_control_unreachable_demand_mass_sum": jnp.array(125.0),
+        "planet_flow_control_held_demand_mass_sum": jnp.array(50.0),
         "planet_flow_control_requested_ship_mass_sum": jnp.array(12.0),
         "planet_flow_control_emitted_ship_mass_sum": jnp.array(6.0),
         "planet_flow_control_capacity_dropped_launch_count": jnp.array(2.0),
@@ -65,6 +65,18 @@ def test_planet_flow_rates_finalize_from_count_keys() -> None:
     assert float(
         finalized["planet_flow_unreachable_demand_rate_delta_vs_control"]
     ) == pytest.approx(-0.25)
+
+
+def test_planet_flow_rates_zero_when_demand_below_floor() -> None:
+    metrics = _planet_flow_count_metrics()
+    metrics["planet_flow_demanded_mass_sum"] = jnp.array(4.0)
+    metrics["planet_flow_control_demanded_mass_sum"] = jnp.array(4.0)
+
+    finalized = finalize_cross_chunk_rate_metrics(metrics)
+
+    assert float(finalized["planet_flow_held_demand_rate"]) == 0.0
+    assert float(finalized["planet_flow_unreachable_demand_rate"]) == 0.0
+    assert float(finalized["planet_flow_control_held_demand_rate"]) == 0.0
 
 
 def test_planet_flow_rates_finalize_for_single_metric_dict() -> None:
