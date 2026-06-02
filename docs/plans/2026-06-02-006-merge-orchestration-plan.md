@@ -1,7 +1,7 @@
 ---
 title: "ops: Multi-branch merge orchestration"
 type: ops
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/brainstorms/2026-06-02-merge-orchestration-requirements.md
 ---
