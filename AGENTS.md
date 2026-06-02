@@ -20,7 +20,9 @@ uv run ow eval tournament --checkpoint ... --campaign my_campaign
 uv run ow eval package --checkpoint ... --validate-docker
 uv run ow runs list
 uv run ow runs show --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow runs watch --run outputs/campaigns/<c>/runs/<run_id>
 uv run ow eval status --run outputs/campaigns/<c>/runs/<run_id>
+uv run ow eval results list --run outputs/campaigns/<c>/runs/<run_id>
 uv run ow eval worker --run outputs/campaigns/<c>/runs/<run_id> [--verbose]
 uv run ow eval submit --checkpoint outputs/.../jax_ckpt_last.pkl
 uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + tournament async

@@ -13,7 +13,7 @@ uv run ow train print_resolved_config=true
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow eval status`, `ow eval jobs cancel`, `ow promote demote`, `ow benchmark gate beat_noop`, `ow benchmark gate beat_random`, `ow benchmark gate curriculum_staged` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow benchmark gate beat_noop`, `ow benchmark gate beat_random`, `ow benchmark gate curriculum_staged` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -30,6 +30,7 @@ After a run, inspect:
 uv run ow runs list --limit 10
 uv run ow runs show --run outputs/campaigns/<campaign>/runs/<run_id>
 uv run ow runs logs --run outputs/campaigns/<campaign>/runs/<run_id> --tail 5
+uv run ow runs watch --run outputs/campaigns/<campaign>/runs/<run_id> --poll-seconds 5
 ```
 
 ## Verify (tests)
@@ -70,6 +71,8 @@ Thresholds: `docs/benchmarks/preflight-calibration.json` (never invent gate numb
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id>
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch
 uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch --idle-exit-seconds 30
+uv run ow eval results list --run outputs/campaigns/<c>/runs/<id>
+uv run ow eval results show --run outputs/campaigns/<c>/runs/<id> --result tournament_u000010_<id>
 uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --all-queued --dry-run
 uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --job-id <uuid>
 uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose
