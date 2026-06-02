@@ -115,6 +115,12 @@ def finalize_cross_chunk_rate_metrics(
         if "planet_flow_control_demanded_mass_sum" in metrics:
             _finalize_planet_flow_rates(metrics, prefix=_PLANET_FLOW_CONTROL_PREFIX)
             _finalize_planet_flow_control_deltas(metrics)
+    if "launch_ship_count_sum" in metrics:
+        metrics["mean_ships_per_launch"] = jnp.where(
+            metrics["active_launch_count"] > 0.0,
+            metrics["launch_ship_count_sum"] / metrics["active_launch_count"],
+            0.0,
+        )
     return metrics
 
 
