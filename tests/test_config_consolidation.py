@@ -16,13 +16,13 @@ import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
 from src.jax.training_benchmark import (
     WORKSTATION_VALIDATION_OVERRIDES,
     compose_benchmark_config,
 )
-from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
@@ -298,7 +298,7 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
 
     parameters = cfg["parameters"]
     assert parameters["model"]["value"] == "planet_flow_target_heatmap"
-    assert parameters["training"]["value"] == "2p_16"
+    assert parameters["training"]["value"] == "2p4p_16_split"
     assert parameters["training.total_updates"]["value"] == 200
     assert parameters["opponents"]["value"] == "random_only"
     assert parameters["curriculum"]["value"] == "off"

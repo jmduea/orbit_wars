@@ -206,6 +206,7 @@ class OpponentsConfig:
 class ReplayConfig:
     enabled: bool = False
     every_n_checkpoints: int = 1
+    final_checkpoint_only: bool = False
     seed_policy: str = "update"
     max_steps: int = 500
     output_dir: str = "replays"

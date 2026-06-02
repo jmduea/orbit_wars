@@ -49,5 +49,5 @@ def test_planet_flow_p0_benchmark_preset_selects_proof_profile() -> None:
 
     assert "model=planet_flow_target_heatmap" in overrides
     assert "training=2p4p_16_split" in overrides
-    assert "artifacts=disabled" in overrides
+    assert "artifacts=planet_flow_proof" in overrides
     assert overrides[-1] == "training.total_updates=5"

@@ -32,6 +32,33 @@ def _policy_output() -> PlanetFlowPolicyOutput:
     )
 
 
+def test_planet_flow_deterministic_sample_excludes_unreachable_targets() -> None:
+    output = PlanetFlowPolicyOutput(
+        target_demand_logits=jnp.array(
+            [
+                [
+                    [0.0, 1.0, 2.0, 3.0, 4.0],
+                    [10.0, 9.0, 8.0, 7.0, 6.0],
+                    [-1.0, 0.0, 1.0, 2.0, 3.0],
+                ]
+            ],
+            dtype=jnp.float32,
+        ),
+        value=jnp.array([0.0], dtype=jnp.float32),
+    )
+    target_mask = jnp.array([[True, False, True]])
+    sample = sample_planet_flow_pressure_action(
+        jax.random.PRNGKey(0),
+        output,
+        jnp.array([0.0, 0.25, 0.5, 0.75, 1.0], dtype=jnp.float32),
+        target_mask,
+        deterministic=True,
+    )
+
+    assert sample.target_bucket.tolist() == [[4, 0, 4]]
+    assert sample.target_pressure.tolist() == [[1.0, 0.0, 1.0]]
+
+
 def test_planet_flow_deterministic_sample_forces_inactive_targets_to_hold() -> None:
     output = _policy_output()
     target_mask = jnp.array([[True, False, True]])

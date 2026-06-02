@@ -27,6 +27,7 @@ def test_planet_flow_calibration_overrides_use_p0_guards() -> None:
     )
 
     assert "artifacts=planet_flow_proof" in overrides
+    assert "training=2p4p_16_split" in overrides
     assert "curriculum=off" in overrides
     assert "telemetry.metric_groups.action_decision=true" in overrides
 
@@ -100,7 +101,13 @@ def test_planet_flow_calibration_writes_planet_flow_thresholds() -> None:
     )
     thresholds = derive_thresholds(summarize_calibration([snapshot]))
 
-    assert thresholds["planet_flow_learning_signal"] == thresholds["learning_signal"]
+    planet_flow = thresholds["planet_flow_learning_signal"]
+    learning = thresholds["learning_signal"]
+    assert isinstance(planet_flow, dict)
+    assert isinstance(learning, dict)
+    for key, value in learning.items():
+        assert planet_flow[key] == value
+    assert planet_flow["max_post_mask_unreachable_demand_rate"] == 0.05
 
 
 def test_discover_calibration_snapshots_reads_campaign_layout(tmp_path) -> None:

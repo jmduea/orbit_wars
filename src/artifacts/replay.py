@@ -4,6 +4,7 @@ import json
 import random
 from pathlib import Path
 
+from src.artifacts.replay_schedule import checkpoint_replay_due
 from src.config import TrainConfig
 
 from .tournament.runner import build_baseline_agent, build_checkpoint_agent, run_match
@@ -26,11 +27,7 @@ def maybe_write_jax_checkpoint_replay(
     log_path: Path,
     output_dir: Path | None = None,
 ) -> Path | None:
-    if not cfg.artifacts.replay.enabled:
-        return None
-    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
-    if checkpoint_index % every_n != 0 and update != cfg.training.total_updates:
+    if not checkpoint_replay_due(cfg, update):
         return None
 
     run_dir = checkpoint_path.parent

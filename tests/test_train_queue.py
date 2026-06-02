@@ -1,8 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from src.artifacts.replay_schedule import checkpoint_replay_due
+
 from src.jax.train.queue import (
-    checkpoint_replay_due,
     queue_tournament_job_if_eligible,
 )
 
@@ -10,12 +11,33 @@ from src.jax.train.queue import (
 def test_checkpoint_replay_due_on_final_update() -> None:
     cfg = SimpleNamespace(
         artifacts=SimpleNamespace(
-            replay=SimpleNamespace(enabled=True, every_n_checkpoints=1),
+            replay=SimpleNamespace(
+                enabled=True,
+                every_n_checkpoints=1,
+                final_checkpoint_only=False,
+            ),
             checkpoint_every=10,
         ),
         training=SimpleNamespace(total_updates=5),
     )
     assert checkpoint_replay_due(cfg, 5) is True
+
+
+def test_checkpoint_replay_due_final_only_skips_intermediate_checkpoints() -> None:
+    cfg = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            replay=SimpleNamespace(
+                enabled=True,
+                every_n_checkpoints=1,
+                final_checkpoint_only=True,
+            ),
+            checkpoint_every=50,
+        ),
+        training=SimpleNamespace(total_updates=200),
+    )
+    assert checkpoint_replay_due(cfg, 50) is False
+    assert checkpoint_replay_due(cfg, 100) is False
+    assert checkpoint_replay_due(cfg, 200) is True
 
 
 def test_queue_tournament_job_skips_non_tournament_reasons(tmp_path: Path) -> None:

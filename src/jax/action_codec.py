@@ -184,7 +184,7 @@ def planet_flow_action_log_prob_entropy(
     logits = output.target_demand_logits
     target_mask = target_mask.astype(bool)
     target_bucket = jnp.where(target_mask, target_bucket, jnp.zeros_like(target_bucket))
-    bucket_mask = jnp.ones_like(logits, dtype=bool)
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], logits.shape)
     active = target_mask.astype(jnp.float32)
     log_prob = _safe_categorical_log_prob(
         logits,
@@ -201,10 +201,12 @@ def planet_flow_categorical_kl(
     new_output: PlanetFlowPolicyOutput,
     target_mask: jax.Array,
 ) -> jax.Array:
-    """Exact categorical KL over active Planet Flow pressure heads."""
+    """Exact categorical KL over reachable Planet Flow pressure heads."""
 
-    old_logits = old_output.target_demand_logits
-    new_logits = new_output.target_demand_logits
+    target_mask = target_mask.astype(bool)
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], old_output.target_demand_logits.shape)
+    old_logits, _ = _safe_masked_logits(old_output.target_demand_logits, bucket_mask)
+    new_logits, _ = _safe_masked_logits(new_output.target_demand_logits, bucket_mask)
     old_log_probs = jax.nn.log_softmax(old_logits, axis=-1)
     new_log_probs = jax.nn.log_softmax(new_logits, axis=-1)
     old_probs = jax.nn.softmax(old_logits, axis=-1)
@@ -234,12 +236,14 @@ def sample_planet_flow_pressure_action(
     """Sample the target-demand pressure action for Planet Flow P0."""
 
     logits = output.target_demand_logits
+    target_mask = target_mask.astype(bool)
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], logits.shape)
+    safe_logits, _ = _safe_masked_logits(logits, bucket_mask)
     sampled = jnp.where(
         deterministic,
-        jnp.argmax(logits, axis=-1),
-        jax.random.categorical(key, logits, axis=-1),
+        jnp.argmax(safe_logits, axis=-1),
+        jax.random.categorical(key, safe_logits, axis=-1),
     ).astype(jnp.int32)
-    target_mask = target_mask.astype(bool)
     target_bucket = jnp.where(target_mask, sampled, jnp.zeros_like(sampled))
     bucket_values = jnp.asarray(pressure_bucket_values, dtype=jnp.float32)
     target_pressure = jnp.take(bucket_values, target_bucket, axis=0)

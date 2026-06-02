@@ -253,9 +253,12 @@ def calibration_train_overrides(
     total_updates: int,
     model: str = DEFAULT_MODEL,
 ) -> tuple[str, ...]:
+    training_profile = (
+        "2p4p_16_split" if model == "planet_flow_target_heatmap" else "2p_16"
+    )
     return (
         f"model={model}",
-        "training=2p_16",
+        f"training={training_profile}",
         "training.rollout_steps=128",
         f"training.total_updates={total_updates}",
         f"opponents={opponent}",
@@ -451,7 +454,9 @@ def derive_thresholds(summary: CalibrationSummary) -> dict[str, object]:
         ],
     }
     if "planet_flow_target_heatmap" in summary.models:
-        thresholds["planet_flow_learning_signal"] = dict(learning_signal)
+        planet_flow_learning = dict(learning_signal)
+        planet_flow_learning["max_post_mask_unreachable_demand_rate"] = 0.05
+        thresholds["planet_flow_learning_signal"] = planet_flow_learning
     return thresholds
 
 

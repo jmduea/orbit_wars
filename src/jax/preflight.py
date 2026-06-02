@@ -38,6 +38,7 @@ class PreflightGateSpec:
     require_curriculum_promotion: bool = False
     max_approx_kl: float = 0.15
     min_entropy: float = 1.0e-4
+    max_post_mask_unreachable_demand_rate: float | None = None
     needs_calibration_reason: str | None = None
     require_planet_flow_control_metrics: bool = False
 
@@ -91,11 +92,15 @@ def _gate_specs(
         )
         planet_flow_learning = thresholds.get("planet_flow_learning_signal")
         calibrated = isinstance(planet_flow_learning, dict)
+        max_unreachable: float | None = None
         if calibrated:
             window = int(planet_flow_learning.get("window_updates", window))
             min_delta = float(planet_flow_learning.get("min_win_rate_delta", min_delta))
             max_kl = float(planet_flow_learning.get("max_approx_kl", max_kl))
             min_ent = float(planet_flow_learning.get("min_entropy", min_ent))
+            max_unreachable = float(
+                planet_flow_learning.get("max_post_mask_unreachable_demand_rate", 0.05)
+            )
         planet_flow_base = (
             "model=planet_flow_target_heatmap",
             "curriculum=off",
@@ -117,7 +122,7 @@ def _gate_specs(
                 gate_id="beat_noop",
                 train_overrides=(
                     *planet_flow_base,
-                    "training=2p_16",
+                    "training=2p4p_16_split",
                     "training.rollout_steps=128",
                     "training.total_updates=200",
                     "opponents=noop_only",
@@ -126,6 +131,7 @@ def _gate_specs(
                 window_updates=window,
                 max_approx_kl=max_kl,
                 min_entropy=min_ent,
+                max_post_mask_unreachable_demand_rate=max_unreachable,
                 needs_calibration_reason=needs_calibration,
                 require_planet_flow_control_metrics=True,
             ),
@@ -133,7 +139,7 @@ def _gate_specs(
                 gate_id="beat_random",
                 train_overrides=(
                     *planet_flow_base,
-                    "training=2p_16",
+                    "training=2p4p_16_split",
                     "training.rollout_steps=128",
                     "training.total_updates=300",
                     "opponents=random_only",
@@ -142,6 +148,7 @@ def _gate_specs(
                 window_updates=window,
                 max_approx_kl=max_kl,
                 min_entropy=min_ent,
+                max_post_mask_unreachable_demand_rate=max_unreachable,
                 needs_calibration_reason=needs_calibration,
                 require_planet_flow_control_metrics=True,
             ),
@@ -157,6 +164,7 @@ def _gate_specs(
                 window_updates=window,
                 max_approx_kl=max_kl,
                 min_entropy=min_ent,
+                max_post_mask_unreachable_demand_rate=max_unreachable,
                 needs_calibration_reason=needs_calibration,
                 require_planet_flow_control_metrics=True,
             ),
@@ -393,6 +401,22 @@ def evaluate_gate_records(
         for key in required_control_keys:
             if not any(key in record for record in metric_rows):
                 reasons.append(f"missing Planet Flow compiler-control metric: {key}")
+
+    if spec.max_post_mask_unreachable_demand_rate is not None:
+        unreachable_rate = _window_mean(
+            metric_rows,
+            "planet_flow_unreachable_demand_rate",
+            last_n=effective_window,
+        )
+        if unreachable_rate is None:
+            reasons.append("missing planet_flow_unreachable_demand_rate")
+        elif unreachable_rate > spec.max_post_mask_unreachable_demand_rate:
+            reasons.append(
+                "planet_flow_unreachable_demand_rate "
+                f"{unreachable_rate:.4f} > "
+                f"{spec.max_post_mask_unreachable_demand_rate:.4f} "
+                f"(post-mask ceiling)"
+            )
 
     promotions = _count_curriculum_promotions(records)
     if spec.require_curriculum_promotion and promotions == 0:

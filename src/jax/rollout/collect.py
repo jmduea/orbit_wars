@@ -27,6 +27,7 @@ from src.jax.normalization import ObservationNormState, normalize_turn_batch
 from src.jax.planet_flow import (
     compile_planet_flow_action,
     compile_seeded_random_planet_flow_control,
+    planet_flow_sampling_target_mask,
 )
 from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
@@ -138,7 +139,7 @@ def collect_rollout_jax(
                     cfg.model.planet_flow.pressure_bucket_values,
                     dtype=jnp.float32,
                 ),
-                policy_batch.planet_mask,
+                planet_flow_sampling_target_mask(state.game, batch),
                 deterministic=False,
             )
             compile_result = compile_planet_flow_action(

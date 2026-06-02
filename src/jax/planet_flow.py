@@ -51,6 +51,31 @@ def seeded_random_target_pressure(
     return jnp.where(batch.planet_mask, pressure, 0.0)
 
 
+def catalog_target_reachability_row(game_row, batch_row: TurnBatch) -> jax.Array:
+    """Per-row catalog reachability from owned sources (edge_mask only, no demand)."""
+
+    source_ships = owned_planet_ships(game_row)
+    source_active = (source_ships > 0.0) & batch_row.planet_mask
+    feasible_edge = batch_row.edge_mask & source_active[:, None]
+    target_ids = game_row.planets.id
+    reachable = feasible_edge[:, :, None] & (
+        batch_row.edge_tgt_ids[:, :, None] == target_ids[None, None, :]
+    )
+    return reachable.any(axis=(0, 1)) & batch_row.planet_mask
+
+
+def catalog_target_reachability(game, batch: TurnBatch) -> jax.Array:
+    """Batch catalog reachability mask aligned with ``batch.planet_mask`` rows."""
+
+    return jax.vmap(catalog_target_reachability_row, in_axes=(0, 0))(game, batch)
+
+
+def planet_flow_sampling_target_mask(game, batch: TurnBatch) -> jax.Array:
+    """Active planets with at least one catalog-feasible edge from an owned source."""
+
+    return batch.planet_mask & catalog_target_reachability(game, batch)
+
+
 def compile_seeded_random_planet_flow_control(
     key: jax.Array,
     game,
@@ -68,14 +93,17 @@ def compile_seeded_random_planet_flow_control(
 
 
 def _edge_target_pressure(
+    game_row,
     batch_row: TurnBatch,
     target_pressure: jax.Array,
 ) -> jax.Array:
     """Gather per-edge target demand without an all-pairs source-target tensor."""
 
-    target_ids = batch_row.edge_tgt_ids
-    safe_target_ids = jnp.clip(target_ids, 0, MAX_PLANETS - 1)
-    return jnp.take(target_pressure, safe_target_ids, axis=0)
+    match = game_row.planets.id[:, None, None] == batch_row.edge_tgt_ids[None, :, :]
+    return jnp.sum(
+        jnp.where(match, target_pressure[:, None, None], 0.0),
+        axis=0,
+    )
 
 
 def _target_reachability(
@@ -103,7 +131,7 @@ def _compile_planet_flow_row(
     slot_count = min(MAX_PLANETS, fleet_slots)
     source_ships = owned_planet_ships(game_row)
     source_active = (source_ships > 0.0) & batch_row.planet_mask
-    edge_pressure = _edge_target_pressure(batch_row, target_pressure)
+    edge_pressure = _edge_target_pressure(game_row, batch_row, target_pressure)
     feasible_edge = batch_row.edge_mask & source_active[:, None] & (edge_pressure > 0.0)
     feasible_pressure = jnp.where(feasible_edge, edge_pressure, -1.0)
     best_slot = jnp.argmax(feasible_pressure, axis=-1)

@@ -26,6 +26,6 @@ defaults:
 name: planet_flow_ppo_signal
 description: >
   Bayes PPO hyperparameter sweep for Planet Flow target-heatmap learning signal
-  on random_only 2p runs (200 updates). Maximize planet_flow_sweep_score with
+  on random_only 2p/4p split runs (200 updates). Maximize planet_flow_sweep_score with
   async local HTML replays, then calibrate and learn-proof the shortlist winner.
 run_cap: 24

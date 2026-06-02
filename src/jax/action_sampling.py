@@ -21,7 +21,7 @@ from src.jax.action_codec import (
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.jax.planet_flow import compile_planet_flow_action
+from src.jax.planet_flow import compile_planet_flow_action, planet_flow_sampling_target_mask
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
@@ -888,7 +888,7 @@ def _sample_policy_action_with_params(
             key,
             output,
             jnp.asarray(cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32),
-            batch.planet_mask,
+            planet_flow_sampling_target_mask(game, batch),
             deterministic=deterministic,
         )
         compile_result = compile_planet_flow_action(

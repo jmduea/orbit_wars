@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.jax.train.sweep_score import (
     PLANET_FLOW_SWEEP_SCORE_INELIGIBLE,
     WinRateTrendTracker,
@@ -36,6 +35,16 @@ def test_planet_flow_sweep_score_is_ineligible_when_launches_collapse() -> None:
     inputs = _eligible_inputs()
     inputs["mean_active_launches_per_turn"] = 0.0
     score = planet_flow_sweep_score(**inputs)
+
+    assert score == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+
+
+def test_planet_flow_sweep_score_is_ineligible_when_post_mask_unreachable_high() -> None:
+    score = planet_flow_sweep_score(
+        **_eligible_inputs(),
+        planet_flow_unreachable_demand_rate=0.25,
+        max_post_mask_unreachable_rate=0.05,
+    )
 
     assert score == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
 

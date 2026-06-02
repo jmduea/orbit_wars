@@ -5,7 +5,7 @@ parameters:
   model:
     value: planet_flow_target_heatmap
   training:
-    value: 2p_16
+    value: 2p4p_16_split
   training.total_updates:
     value: 200
   opponents:

@@ -9,7 +9,24 @@ PLANET_FLOW_MIN_EMITTED_LAUNCHES = 50.0
 PLANET_FLOW_MIN_MEAN_LAUNCHES = 0.05
 PLANET_FLOW_MIN_ENTROPY = 1.0e-3
 PLANET_FLOW_MAX_APPROX_KL = 0.15
+PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE = 0.05
 PLANET_FLOW_SWEEP_SCORE_INELIGIBLE = -1.0
+
+
+def planet_flow_max_post_mask_unreachable_rate(
+    thresholds: dict[str, object] | None = None,
+) -> float:
+    """Calibrated post-mask unreachable ceiling; falls back to construction default."""
+
+    if thresholds is None:
+        return PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE
+    planet_flow = thresholds.get("planet_flow_learning_signal")
+    if not isinstance(planet_flow, dict):
+        return PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE
+    value = planet_flow.get("max_post_mask_unreachable_demand_rate")
+    if value is None:
+        return PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE
+    return float(value)
 
 
 class WinRateTrendTracker:
@@ -39,6 +56,8 @@ def planet_flow_sweep_score(
     planet_flow_emitted_launch_count: float | None,
     entropy: float | None,
     approx_kl: float | None,
+    planet_flow_unreachable_demand_rate: float | None = None,
+    max_post_mask_unreachable_rate: float = PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE,
 ) -> float:
     """Composite W&B sweep objective aligned with learn-proof trend + activity floors."""
 
@@ -58,5 +77,8 @@ def planet_flow_sweep_score(
         or ent < PLANET_FLOW_MIN_ENTROPY
         or kl > PLANET_FLOW_MAX_APPROX_KL
     ):
+        return PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+    unreachable = planet_flow_unreachable_demand_rate
+    if unreachable is not None and unreachable > max_post_mask_unreachable_rate:
         return PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
     return float(win_rate_delta)

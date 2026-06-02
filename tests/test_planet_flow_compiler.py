@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from src.jax.planet_flow import (
     compile_planet_flow_action,
     compile_seeded_random_planet_flow_control,
@@ -144,6 +145,239 @@ def test_compile_planet_flow_action_reports_capacity_drops() -> None:
     assert result.action.source_id.shape == (1, 1)
     assert float(result.diagnostics.emitted_launch_count[0]) == 1.0
     assert float(result.diagnostics.capacity_dropped_launches[0]) == full_launches - 1.0
+
+
+def test_compile_planet_flow_action_uses_current_orbiting_positions_for_angle() -> None:
+    """Launch angle must use live source/target coords, not initial_planets snapshot."""
+
+    cfg = _cfg(max_fleets=8)
+    _game, _batch, batched_game, batched_batch = _batched_reset(cfg)
+    planet_ids = jnp.arange(MAX_PLANETS, dtype=jnp.int32)[None, :]
+    active = jnp.zeros_like(batched_game.planets.active).at[:, :3].set(True)
+    owned = batched_game.planets._replace(
+        id=planet_ids,
+        active=active,
+        owner=jnp.where(
+            active, batched_game.player[:, None], batched_game.planets.owner
+        ),
+        ships=jnp.where(active, 10.0, batched_game.planets.ships),
+        x=jnp.array([20.0, 0.0, 50.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+        y=jnp.array([30.0, 0.0, 40.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+    )
+    initial = owned._replace(
+        x=jnp.array([10.0, 0.0, 45.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+        y=jnp.array([10.0, 0.0, 35.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+    )
+    batched_game = batched_game._replace(planets=owned, initial_planets=initial)
+    edge_mask = jnp.zeros_like(batched_batch.edge_mask).at[:, 0, 0].set(True)
+    edge_tgt_ids = jnp.zeros_like(batched_batch.edge_tgt_ids).at[:, 0, 0].set(2)
+    batched_batch = batched_batch._replace(
+        planet_mask=active,
+        edge_mask=edge_mask,
+        edge_src_ids=planet_ids,
+        edge_tgt_ids=edge_tgt_ids,
+    )
+    target_pressure = jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32).at[:, 2].set(1.0)
+
+    result = compile_planet_flow_action(
+        batched_game,
+        batched_batch,
+        target_pressure,
+        cfg,
+    )
+
+    expected_angle = float(np.arctan2(40.0 - 30.0, 50.0 - 20.0))
+    wrong_initial_angle = float(np.arctan2(35.0 - 10.0, 45.0 - 10.0))
+    emitted_angle = float(np.asarray(result.action.angle[0, 0]))
+    assert bool(np.asarray(result.action.valid[0, 0]))
+    assert emitted_angle == pytest.approx(expected_angle, abs=1e-5)
+    assert emitted_angle != pytest.approx(wrong_initial_angle, abs=1e-3)
+
+
+def test_edge_target_pressure_uses_target_row_not_planet_id_index() -> None:
+    """Demand is row-indexed; planet id may differ from batch row."""
+
+    cfg = _cfg(max_fleets=8)
+    _game, _batch, batched_game, batched_batch = _batched_reset(cfg)
+    src_row = 5
+    tgt_row = 10
+    src_id = 16
+    tgt_id = 19
+    planet_ids = (
+        batched_game.planets.id.at[0, src_row].set(src_id).at[0, tgt_row].set(tgt_id)
+    )
+    active = jnp.zeros((1, MAX_PLANETS), dtype=bool).at[0, src_row].set(True)
+    active = active.at[0, tgt_row].set(True)
+    owned_planets = batched_game.planets._replace(
+        id=planet_ids,
+        active=active,
+        owner=batched_game.planets.owner.at[0, src_row].set(
+            int(np.asarray(batched_game.player[0]))
+        ),
+        ships=jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32).at[0, src_row].set(20.0),
+    )
+    batched_game = batched_game._replace(planets=owned_planets)
+    edge_mask = jnp.zeros_like(batched_batch.edge_mask).at[0, src_row, 0].set(True)
+    edge_src_ids = (
+        batched_batch.edge_src_ids.at[0, src_row].set(src_id).at[0, tgt_row].set(tgt_id)
+    )
+    edge_tgt_ids = jnp.full_like(batched_batch.edge_tgt_ids, -1)
+    edge_tgt_ids = edge_tgt_ids.at[0, src_row, 0].set(tgt_id)
+    batched_batch = batched_batch._replace(
+        planet_mask=active,
+        edge_mask=edge_mask,
+        edge_src_ids=edge_src_ids,
+        edge_tgt_ids=edge_tgt_ids,
+    )
+    target_pressure = jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32)
+    target_pressure = target_pressure.at[0, tgt_row].set(0.8)
+    target_pressure = target_pressure.at[0, src_row].set(0.1)
+
+    result = compile_planet_flow_action(
+        batched_game,
+        batched_batch,
+        target_pressure,
+        cfg,
+    )
+
+    assert bool(result.action.valid[0, src_row])
+    assert int(result.action.source_id[0, src_row]) == src_id
+    assert float(result.action.ships[0, src_row]) == pytest.approx(16.0, abs=0.5)
+    assert float(result.diagnostics.unreachable_demand_mass[0]) == pytest.approx(0.1)
+
+
+def test_compile_planet_flow_action_fires_best_catalog_edge_when_enemy_unreachable() -> (
+    None
+):
+    """P0: high demand on off-catalog enemy still launches at best legal neutral."""
+
+    cfg = _cfg(max_fleets=8)
+    _game, _batch, batched_game, batched_batch = _batched_reset(cfg)
+    src_row = 0
+    neutral_row = 1
+    enemy_row = 2
+    src_id = 16
+    neutral_id = 24
+    enemy_id = 19
+    planet_ids = (
+        batched_game.planets.id.at[0, src_row]
+        .set(src_id)
+        .at[0, neutral_row]
+        .set(neutral_id)
+        .at[0, enemy_row]
+        .set(enemy_id)
+    )
+    active = jnp.zeros((1, MAX_PLANETS), dtype=bool)
+    active = active.at[0, src_row].set(True)
+    active = active.at[0, neutral_row].set(True)
+    active = active.at[0, enemy_row].set(True)
+    owned_planets = batched_game.planets._replace(
+        id=planet_ids,
+        active=active,
+        owner=batched_game.planets.owner.at[0, src_row].set(
+            int(np.asarray(batched_game.player[0]))
+        ),
+        ships=jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32).at[0, src_row].set(50.0),
+        x=jnp.array([0.0, 10.0, 100.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+        y=jnp.array([0.0, 0.0, 0.0] + [0.0] * (MAX_PLANETS - 3), dtype=jnp.float32)[
+            None, :
+        ],
+    )
+    batched_game = batched_game._replace(planets=owned_planets)
+    edge_mask = jnp.zeros_like(batched_batch.edge_mask).at[0, src_row, 0].set(True)
+    edge_src_ids = (
+        batched_batch.edge_src_ids.at[0, src_row]
+        .set(src_id)
+        .at[0, neutral_row]
+        .set(neutral_id)
+        .at[0, enemy_row]
+        .set(enemy_id)
+    )
+    edge_tgt_ids = jnp.full_like(batched_batch.edge_tgt_ids, -1)
+    edge_tgt_ids = edge_tgt_ids.at[0, src_row, 0].set(neutral_id)
+    batched_batch = batched_batch._replace(
+        planet_mask=active,
+        edge_mask=edge_mask,
+        edge_src_ids=edge_src_ids,
+        edge_tgt_ids=edge_tgt_ids,
+    )
+    target_pressure = jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32)
+    target_pressure = target_pressure.at[0, enemy_row].set(1.0)
+    target_pressure = target_pressure.at[0, neutral_row].set(0.2)
+
+    result = compile_planet_flow_action(
+        batched_game,
+        batched_batch,
+        target_pressure,
+        cfg,
+    )
+
+    assert bool(result.action.valid[0, src_row])
+    assert int(result.action.source_id[0, src_row]) == src_id
+    assert float(result.action.ships[0, src_row]) == pytest.approx(10.0, abs=0.5)
+    assert float(result.diagnostics.unreachable_demand_mass[0]) == pytest.approx(1.0)
+    assert float(result.diagnostics.held_demand_mass[0]) > 0.0
+
+
+def test_compile_planet_flow_action_holds_when_all_demand_is_unreachable() -> None:
+    """Post-mask zero demand (or blocked catalog) must not emit launches."""
+
+    cfg = _cfg(max_fleets=8)
+    _game, _batch, batched_game, batched_batch = _batched_reset(cfg)
+    src_row = 0
+    enemy_row = 2
+    src_id = 16
+    enemy_id = 19
+    planet_ids = (
+        batched_game.planets.id.at[0, src_row]
+        .set(src_id)
+        .at[0, enemy_row]
+        .set(enemy_id)
+    )
+    active = jnp.zeros((1, MAX_PLANETS), dtype=bool)
+    active = active.at[0, src_row].set(True)
+    active = active.at[0, enemy_row].set(True)
+    owned_planets = batched_game.planets._replace(
+        id=planet_ids,
+        active=active,
+        owner=batched_game.planets.owner.at[0, src_row].set(
+            int(np.asarray(batched_game.player[0]))
+        ),
+        ships=jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32).at[0, src_row].set(50.0),
+    )
+    batched_game = batched_game._replace(planets=owned_planets)
+    edge_src_ids = batched_batch.edge_src_ids.at[0, src_row].set(src_id).at[
+        0, enemy_row
+    ].set(enemy_id)
+    batched_batch = batched_batch._replace(
+        planet_mask=active,
+        edge_mask=jnp.zeros_like(batched_batch.edge_mask),
+        edge_src_ids=edge_src_ids,
+        edge_tgt_ids=jnp.full_like(batched_batch.edge_tgt_ids, -1),
+    )
+    target_pressure = jnp.zeros((1, MAX_PLANETS), dtype=jnp.float32)
+    target_pressure = target_pressure.at[0, enemy_row].set(1.0)
+
+    result = compile_planet_flow_action(
+        batched_game,
+        batched_batch,
+        target_pressure,
+        cfg,
+    )
+
+    assert not bool(jnp.any(result.action.valid[0]))
+    assert float(result.diagnostics.emitted_ship_mass[0]) == 0.0
+    assert float(result.diagnostics.unreachable_demand_mass[0]) == pytest.approx(1.0)
 
 
 def test_seeded_random_target_pressure_is_stable_and_masks_inactive() -> None:

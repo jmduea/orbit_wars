@@ -7,12 +7,12 @@ from pathlib import Path
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
     CheckpointResult,
 )
-from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
 from src.config import TrainConfig
 from src.config.rollout_allocation import infer_static_format_weights
@@ -49,8 +49,13 @@ from src.jax.train.snapshots import (
     init_historical_snapshot_pool,
     snapshot_due,
 )
-from src.jax.train.sweep_score import WinRateTrendTracker, planet_flow_sweep_score
 from src.jax.train.state import init_train_state, validate_policy_param_shapes
+from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
+from src.jax.train.sweep_score import (
+    WinRateTrendTracker,
+    planet_flow_max_post_mask_unreachable_rate,
+    planet_flow_sweep_score,
+)
 from src.jax.train.telemetry import (
     build_per_format_timing_metrics,
     build_update_record,
@@ -184,6 +189,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     train_start_time = time.perf_counter()
     track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
     win_rate_trend = WinRateTrendTracker() if track_planet_flow_sweep else None
+    planet_flow_unreachable_ceiling = (
+        planet_flow_max_post_mask_unreachable_rate(
+            load_thresholds(
+                default_calibration_json_path(Path(__file__).resolve().parents[3])
+            )
+        )
+        if track_planet_flow_sweep
+        else None
+    )
     artifact_cfg = cfg.artifacts.artifact_pipeline
     artifact_queue_dir = run_context.queue_dir
     checkpoint_pipeline = (
@@ -443,6 +457,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                             float(metrics_host["approx_kl"])
                             if "approx_kl" in metrics_host
                             else None
+                        ),
+                        planet_flow_unreachable_demand_rate=rollout_scalars.get(
+                            "planet_flow_unreachable_demand_rate"
+                        ),
+                        max_post_mask_unreachable_rate=(
+                            planet_flow_unreachable_ceiling
+                            if planet_flow_unreachable_ceiling is not None
+                            else 0.05
                         ),
                     )
                 )
