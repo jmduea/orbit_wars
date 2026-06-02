@@ -103,6 +103,8 @@ Makefile shortcut (analyze-only on the reference noop run):
 make preflight-calibrate
 ```
 
+Operator runbook (throughput + preflight in one place): [`docs/operator-runbook.md`](../operator-runbook.md).
+
 ## Recommended ladder
 
 | Gate | Command | Proves |

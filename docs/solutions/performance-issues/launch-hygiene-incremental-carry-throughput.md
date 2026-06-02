@@ -99,7 +99,7 @@ The oracle path (`compose_hygiene_with_shield_mask` / `hygiene_adjusted_bucket_m
 ## Prevention
 
 - **Profile inside `lax.scan` before merging mask layers.** Any per-step `fori_loop(0, step_idx, …)` nested in a K-step scan is a red flag for O(K²) cost at default K=5+.
-- **Gate throughput with an isolated benchmark**, not pytest JIT timing or ad-hoc train smokes. Use `make test-launch-hygiene-throughput` or `scripts/benchmark_factorized_sampler.py --assert-max-ms`.
+- **Gate throughput with tiered benchmarks**, not pytest JIT timing or ad-hoc train smokes. Tier-1: `make test-launch-hygiene-throughput` or `scripts/benchmark_factorized_sampler.py --assert-max-ms`. Tier-2 (merge authority): `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` — see `docs/operator-runbook.md`.
 - **Keep shield and hygiene separate.** Shield answers physics/safety; hygiene answers turn rules (dup/reverse). Compose with AND; update carry only on `launch_valid` after optional tiered reject.
 - **Prove carry ≡ oracle** when changing hygiene semantics — do not delete the prefix-recompute path from tests.
 - **When adding scan carry state**, extend rollout and replay scans together (R9); pass pre-composed `hygiene_bucket_mask` into replay logprob helpers to avoid double hygiene.

@@ -25,8 +25,12 @@ help:
 	@echo "  test-fast-parallel       CPU xdist (ORBIT_WARS_PYTEST_XDIST=1)"
 	@echo "  test-domain-{config,features,jax-env,policy,artifacts,curriculum}"
 	@echo ""
-	@echo "Preflight:"
+	@echo "Preflight (GPU for learn-proof; see docs/operator-runbook.md):"
 	@echo "  preflight-sanity, preflight-learn-proof, preflight-calibrate"
+	@echo ""
+	@echo "Launch hygiene throughput (tier-1 CPU-safe; tier-2 GPU):"
+	@echo "  test-launch-hygiene-throughput      tier-1 sampler microbench"
+	@echo "  test-launch-hygiene-e2e-throughput  tier-2 production-path e2e gate"
 	@echo ""
 	@echo "Agents:"
 	@echo "  agent-context            JSON session context for coding agents"
@@ -121,7 +125,9 @@ preflight-sanity:
 	uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json
 
 preflight-learn-proof:
-	# Primitive sequence: gate run beat_noop → beat_random (Gate 5: tournament-proof)
+	# Gates 2–5 ladder: beat_noop → beat_random (+ optional tournament-proof via learn-proof).
+	# Dry-run first: uv run ow benchmark gate run beat_noop --dry-run
+	# Thresholds: docs/benchmarks/preflight-calibration.json (see docs/operator-runbook.md)
 	uv run ow benchmark learn-proof --through beat_random --out outputs/preflight/learn_proof_report.json
 
 preflight-calibrate:
