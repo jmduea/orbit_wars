@@ -1,7 +1,7 @@
 ---
 date: 2026-06-02
 topic: submit-valid-operator-closure
-status: active
+status: completed
 origin: docs/ROADMAP.md (Now: submit-valid path, hybrid promotion)
 ---
 
