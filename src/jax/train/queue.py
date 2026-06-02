@@ -5,15 +5,8 @@ import sys
 from pathlib import Path
 
 from src.artifacts.pipeline import write_optional_job
+from src.artifacts.replay_schedule import checkpoint_replay_due
 from src.config import TrainConfig
-
-
-def checkpoint_replay_due(cfg: TrainConfig, update: int) -> bool:
-    if not cfg.artifacts.replay.enabled:
-        return False
-    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
-    return checkpoint_index % every_n == 0 or update == cfg.training.total_updates
 
 
 def queue_optional_jobs_if_due(

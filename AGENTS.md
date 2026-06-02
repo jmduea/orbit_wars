@@ -90,4 +90,11 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - **Curriculum pre-flight:** `curriculum.enabled=true` requires `opponents.snapshot.pool_size > 0` and `opponents.snapshot.interval_updates > 0`; use `curriculum=off` for isolated train smokes that don't exercise historical opponents.
 - **Parametric edge catalog:** default `intercept_anchors` `[1.0, 3.0, 6.0]`; edge dim `6×N+7` (25 for default). Implemented in `src/features/catalog/edge.py` and `conf/task/base.yaml`; `docs/feature-encoding-v2.md` may still describe the older two-anchor layout.
 - **Preflight gates:** Gates 2–4 read JAX learning-signal trend from `logs/*_jax.jsonl`; Gate 5 is tournament win proof on checkpoints via `kaggle_environments` (not Docker). Source of truth for thresholds: `docs/benchmarks/preflight-calibration.json`.
+- **Launch hygiene throughput (tier-1 vs tier-2):** `make test-launch-hygiene-throughput` runs the factorized sampler microbenchmark (`scripts/benchmark_factorized_sampler.py`) — tier-1 only; merge throughput health requires tier-2 `make test-launch-hygiene-e2e-throughput`, which subprocesses `ow benchmark training` on the production path with `--preset primary` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` (`--assert-within-pct`, same GPU machine as baseline capture). Baseline SHA: first parent of PR #163 merge (`79162a2088160b8ed05c3e3a050e064c7f6c9556`, pre-hygiene). Capture: worktree at that SHA, N≥3 runs, `env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0`. Example:
+  ```bash
+  uv run ow benchmark training --preset primary --label capture --repeats 3 \
+    --updates 20 --warmup 2 --out docs/benchmarks/launch-hygiene-e2e-baseline.json
+  uv run ow benchmark training --preset primary --label gate --updates 20 --warmup 2 \
+    --out /tmp/gate.json --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
+  ```
 - **`ow benchmark` dispatch:** subcommands must be registered in `src/cli/__init__.py` (`case "benchmark"`), not only `build_parser()` in tests — verify with `uv run ow benchmark --help`.

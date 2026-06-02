@@ -4,7 +4,16 @@ import jax.numpy as jnp
 import optax
 
 import jax
+from src.artifacts.checkpoint_compat import (
+    is_factorized_pointer_decoder,
+    is_planet_flow_pointer_decoder,
+)
 from src.config import TrainConfig
+from src.jax.action_codec import (
+    PlanetFlowPolicyOutput,
+    planet_flow_action_log_prob_entropy,
+    planet_flow_invalid_bucket_count,
+)
 from src.jax.distributional_value import (
     sparse_categorical_value_cross_entropy,
     value_support,
@@ -264,6 +273,18 @@ def _aggregate_ppo_metrics(
     return metrics
 
 
+def _check_planet_flow_bucket_count(invalid_bucket_count: jax.Array) -> None:
+    def raise_if_invalid(count) -> None:
+        count_int = int(count)
+        if count_int:
+            raise ValueError(
+                "Planet Flow PPO received out-of-range pressure bucket ids in active "
+                f"targets: {count_int} invalid entries."
+            )
+
+    jax.debug.callback(raise_if_invalid, invalid_bucket_count)
+
+
 def _value_loss_per_state(
     cfg: TrainConfig,
     value: jax.Array,
@@ -292,6 +313,16 @@ def _ppo_update_factorized_jax(
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
+    if (
+        batch.planet_flow_target_bucket is not None
+        or batch.planet_flow_target_pressure is not None
+        or batch.planet_flow_target_mask is not None
+    ):
+        raise ValueError(
+            "Factorized PPO received Planet Flow pressure-action replay fields. "
+            "Use a matching model.pointer_decoder checkpoint/config pair."
+        )
+
     from src.features.registry import edge_k
     from src.game.constants import MAX_PLANETS
 
@@ -675,10 +706,239 @@ def _ppo_update_factorized_jax(
     )
 
 
+def _ppo_update_planet_flow_jax(
+    train_state: JaxTrainState,
+    policy: object,
+    batch: JaxTransitionBatch,
+    cfg: TrainConfig,
+) -> tuple[JaxTrainState, dict[str, jax.Array]]:
+    if batch.planet_flow_target_bucket is None or batch.planet_flow_target_mask is None:
+        raise ValueError(
+            "Planet Flow PPO requires stored pressure bucket and target mask fields."
+        )
+
+    invalid_bucket_count = planet_flow_invalid_bucket_count(
+        batch.planet_flow_target_bucket,
+        len(cfg.model.planet_flow.pressure_bucket_values),
+        batch.planet_flow_target_mask,
+    )
+    _check_planet_flow_bucket_count(invalid_bucket_count)
+
+    env_rows = batch.target_index.shape[0] * batch.target_index.shape[1]
+    turn_batch = _flatten_transition_to_turn_batch(batch)
+    player_count = batch.player_count.reshape(env_rows)
+    target_bucket = batch.planet_flow_target_bucket.reshape(env_rows, -1)
+    target_mask = batch.planet_flow_target_mask.reshape(env_rows, -1)
+    old_log_prob = batch.log_prob.reshape(env_rows)
+    returns_state = _flatten_state_scalars(batch.returns, env_rows)
+    advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
+    advantage_mean = jnp.mean(advantages_state)
+    advantages_state = (advantages_state - advantage_mean) / jnp.sqrt(
+        jnp.mean((advantages_state - advantage_mean) ** 2) + 1e-8
+    )
+
+    total_rows = target_bucket.shape[0]
+    minibatch_size = min(max(int(cfg.training.update_chunk_rows), 1), total_rows)
+    minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
+    pad_rows = minibatch_count * minibatch_size - total_rows
+    row_mask = jnp.pad(
+        jnp.ones((total_rows,), dtype=jnp.float32),
+        (0, pad_rows),
+        constant_values=0.0,
+    ).reshape(minibatch_count, minibatch_size)
+
+    minibatches = {
+        "row_mask": row_mask,
+        "planet_features": _reshape_minibatches(
+            turn_batch.planet_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "planet_mask": _reshape_minibatches(
+            turn_batch.planet_mask, minibatch_count, minibatch_size, False
+        ),
+        "edge_features": _reshape_minibatches(
+            turn_batch.edge_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "edge_mask": _reshape_minibatches(
+            turn_batch.edge_mask, minibatch_count, minibatch_size, False
+        ),
+        "edge_src_ids": _reshape_minibatches(
+            turn_batch.edge_src_ids, minibatch_count, minibatch_size, 0
+        ),
+        "edge_tgt_ids": _reshape_minibatches(
+            turn_batch.edge_tgt_ids, minibatch_count, minibatch_size, 0
+        ),
+        "global_features": _reshape_minibatches(
+            turn_batch.global_features, minibatch_count, minibatch_size, 0.0
+        ),
+        "theta_ref": _reshape_minibatches(
+            turn_batch.theta_ref, minibatch_count, minibatch_size, 0.0
+        ),
+        "player_count": _reshape_minibatches(
+            player_count, minibatch_count, minibatch_size, 0
+        ),
+        "target_bucket": _reshape_minibatches(
+            target_bucket, minibatch_count, minibatch_size, 0
+        ),
+        "target_mask": _reshape_minibatches(
+            target_mask, minibatch_count, minibatch_size, False
+        ),
+        "old_log_prob": _reshape_minibatches(
+            old_log_prob, minibatch_count, minibatch_size, 0.0
+        ),
+        "returns": _reshape_minibatches(
+            returns_state, minibatch_count, minibatch_size, 0.0
+        ),
+        "advantages": _reshape_minibatches(
+            advantages_state, minibatch_count, minibatch_size, 0.0
+        ),
+    }
+
+    def update_minibatch(carry, minibatch):
+        params, opt_state = carry
+        mb_batch = TurnBatch(
+            planet_features=minibatch["planet_features"],
+            planet_mask=minibatch["planet_mask"],
+            edge_features=minibatch["edge_features"],
+            edge_mask=minibatch["edge_mask"],
+            edge_src_ids=minibatch["edge_src_ids"],
+            edge_tgt_ids=minibatch["edge_tgt_ids"],
+            global_features=minibatch["global_features"],
+            theta_ref=minibatch["theta_ref"],
+        )
+
+        def loss_fn(params):
+            output = policy.apply(
+                params, mb_batch, player_count=minibatch["player_count"]
+            )
+            if not isinstance(output, PlanetFlowPolicyOutput):
+                raise TypeError(
+                    "planet_flow_target_heatmap policy must return "
+                    "PlanetFlowPolicyOutput."
+                )
+            new_log_prob, entropy = planet_flow_action_log_prob_entropy(
+                output,
+                minibatch["target_bucket"],
+                minibatch["target_mask"],
+            )
+            log_ratio_raw = new_log_prob - minibatch["old_log_prob"]
+            approx_kl = masked_mean(
+                minibatch["old_log_prob"] - new_log_prob,
+                minibatch["row_mask"],
+            )
+            ratio_for_kl = jnp.exp(
+                jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
+            )
+            approx_kl_v2 = masked_mean(
+                (ratio_for_kl - 1.0) - log_ratio_raw,
+                minibatch["row_mask"],
+            )
+            log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
+            ratio = jnp.exp(log_ratio)
+            clipped_ratio = jnp.clip(
+                ratio, 1.0 - cfg.training.clip_coef, 1.0 + cfg.training.clip_coef
+            )
+            policy_objective = _clipped_policy_objective(
+                minibatch["advantages"],
+                ratio,
+                clipped_ratio,
+            )
+            value_error = _value_loss_per_state(
+                cfg,
+                output.value,
+                output.value_logits,
+                minibatch["returns"],
+            )
+            policy_loss = -masked_mean(policy_objective, minibatch["row_mask"])
+            value_loss = masked_mean(value_error, minibatch["row_mask"])
+            entropy_loss = masked_mean(entropy, minibatch["row_mask"])
+            loss = (
+                policy_loss
+                + cfg.training.vf_coef * value_loss
+                - cfg.training.ent_coef * entropy_loss
+            )
+            log_ratio_abs_mean = masked_mean(
+                jnp.abs(log_ratio_raw), minibatch["row_mask"]
+            )
+            log_ratio_abs_max = jnp.max(
+                jnp.where(minibatch["row_mask"] > 0.0, jnp.abs(log_ratio_raw), 0.0)
+            )
+            importance_ratio_mean = masked_mean(ratio, minibatch["row_mask"])
+            clip_fraction = masked_mean(
+                (jnp.abs(ratio - 1.0) > cfg.training.clip_coef).astype(jnp.float32),
+                minibatch["row_mask"],
+            )
+            metrics = {
+                "policy_loss": policy_loss,
+                "value_loss": value_loss,
+                "entropy": entropy_loss,
+                "approx_kl": approx_kl,
+                "approx_kl_v2": approx_kl_v2,
+                "log_ratio_abs_mean": log_ratio_abs_mean,
+                "log_ratio_abs_max": log_ratio_abs_max,
+                "importance_ratio_mean": importance_ratio_mean,
+                "clip_fraction": clip_fraction,
+                "loss": loss,
+                "sample_count": minibatch["row_mask"].sum(),
+            }
+            for format_player_count in (2, 4):
+                suffix = f"{format_player_count}p"
+                format_mask = minibatch["row_mask"] * (
+                    minibatch["player_count"] == format_player_count
+                ).astype(jnp.float32)
+                format_policy_loss = -masked_mean(policy_objective, format_mask)
+                format_value_loss = masked_mean(value_error, format_mask)
+                format_entropy = masked_mean(entropy, format_mask)
+                format_approx_kl = masked_mean(
+                    minibatch["old_log_prob"] - new_log_prob,
+                    format_mask,
+                )
+                format_approx_kl_v2 = masked_mean(
+                    (ratio_for_kl - 1.0) - log_ratio_raw,
+                    format_mask,
+                )
+                format_total_loss = (
+                    format_policy_loss
+                    + cfg.training.vf_coef * format_value_loss
+                    - cfg.training.ent_coef * format_entropy
+                )
+                metrics[f"policy_loss_{suffix}"] = format_policy_loss
+                metrics[f"value_loss_{suffix}"] = format_value_loss
+                metrics[f"entropy_{suffix}"] = format_entropy
+                metrics[f"approx_kl_{suffix}"] = format_approx_kl
+                metrics[f"approx_kl_v2_{suffix}"] = format_approx_kl_v2
+                metrics[f"total_loss_{suffix}"] = format_total_loss
+                metrics[f"loss_sample_count_{suffix}"] = format_mask.sum()
+            return loss, metrics
+
+        (_loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
+        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
+        metrics = dict(metrics)
+        metrics["total_loss"] = _loss
+        return (params, opt_state), metrics
+
+    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
+        update_minibatch, (train_state.params, train_state.opt_state), minibatches
+    )
+    metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
+    allowed = frozenset(required_ppo_metric_names(cfg, tuple(metrics.keys())))
+    metrics = prune_scalar_metrics(metrics, allowed)
+    return (
+        JaxTrainState(
+            params=params, opt_state=opt_state, optimizer=train_state.optimizer
+        ),
+        metrics,
+    )
+
+
 def ppo_update_jax(
     train_state: JaxTrainState,
     policy: object,
     batch: JaxTransitionBatch,
     cfg: TrainConfig,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    return _ppo_update_factorized_jax(train_state, policy, batch, cfg)
+    if is_factorized_pointer_decoder(cfg.model):
+        return _ppo_update_factorized_jax(train_state, policy, batch, cfg)
+    if is_planet_flow_pointer_decoder(cfg.model):
+        return _ppo_update_planet_flow_jax(train_state, policy, batch, cfg)
+    raise ValueError(f"Unsupported pointer_decoder={cfg.model.pointer_decoder!r}.")

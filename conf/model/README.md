@@ -9,7 +9,7 @@ architecture: planet_graph_transformer
 pointer_decoder: factorized_topk
 hidden_size: 128
 attention_heads: 4
-max_moves_k: 3
+max_moves_k: 2
 value_head: distributional
 ```
 

@@ -8,6 +8,8 @@ from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
     OPPONENT_SLOT_METRIC_KEYS,
+    PLANET_FLOW_CONTROL_COUNT_KEYS,
+    PLANET_FLOW_COUNT_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
 from src.telemetry.metric_registry import (
@@ -40,6 +42,35 @@ def trajectory_shield_legal_rate(*, legal: jax.Array, original: jax.Array) -> ja
     return _safe_rate(legal, original)
 
 
+def _binary_terminal_only(cfg: TrainConfig) -> bool:
+    """True when terminal reward is pure ±1 binary with no step shaping."""
+
+    reward_cfg = cfg.reward
+    if reward_cfg.terminal_reward_mode.strip().lower() != "binary_win":
+        return False
+    return not (
+        reward_cfg.early_terminal_reward_shaping_enabled
+        or float(reward_cfg.reward_capture_planet) != 0.0
+        or float(reward_cfg.reward_ship_delta) != 0.0
+        or float(reward_cfg.reward_production_delta) != 0.0
+    )
+
+
+def _episode_first_place_sum(
+    data: dict[str, jax.Array], done_float: jax.Array, cfg: TrainConfig
+) -> jax.Array:
+    """Count first-place finishes for overall_win_rate.
+
+    For pure ``binary_win`` (preflight / noop gates), wins follow the terminal
+    reward sign on done steps so ``overall_win_rate`` stays consistent with
+    ``episode_reward_mean``. Other terminal modes keep ``terminal_is_first``.
+    """
+
+    if _binary_terminal_only(cfg):
+        return ((data["reward"] * done_float) > 0.0).astype(jnp.float32).sum()
+    return (data["terminal_is_first"] * done_float).sum()
+
+
 def _base_episode_metrics(
     *,
     data: dict[str, jax.Array],
@@ -49,7 +80,7 @@ def _base_episode_metrics(
     episode_done = done_float.sum()
     episodes_2p = jnp.where(cfg.task.player_count == 2, episode_done, ZERO_F32)
     episodes_4p = jnp.where(cfg.task.player_count == 4, episode_done, ZERO_F32)
-    first_place_sum = (data["terminal_is_first"] * done_float).sum()
+    first_place_sum = _episode_first_place_sum(data, done_float, cfg)
     return {
         "done_float": done_float,
         "reward_mean": data["reward"].mean(),
@@ -115,6 +146,23 @@ def _core_metric_fields(
             }
         )
 
+    if any(key in compute_keys for key in PLANET_FLOW_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+    if any(key in compute_keys for key in PLANET_FLOW_CONTROL_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_CONTROL_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+
     if any(key in compute_keys for key in TRAJECTORY_SHIELD_COUNT_KEYS):
         metrics.update({key: ZERO_F32 for key in TRAJECTORY_SHIELD_COUNT_KEYS if key in compute_keys})
         if "trajectory_shield_legal_non_noop_count" in compute_keys:
@@ -175,6 +223,24 @@ def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax
         metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
 
 
+def _apply_planet_flow_metrics(
+    metrics: dict[str, jax.Array],
+    data: dict[str, jax.Array],
+) -> None:
+    emitted_launches = data.get("planet_flow_emitted_launch_count")
+    if emitted_launches is None:
+        return
+    turn_count = jnp.asarray(
+        emitted_launches.shape[0] * emitted_launches.shape[1], dtype=jnp.float32
+    )
+    if "stop_rate" in metrics:
+        metrics["stop_rate"] = ZERO_F32
+    if "mean_active_launches_per_turn" in metrics:
+        metrics["mean_active_launches_per_turn"] = _safe_rate(
+            emitted_launches.sum(), turn_count
+        )
+
+
 def rollout_metrics(
     *,
     data: dict[str, jax.Array],
@@ -186,7 +252,14 @@ def rollout_metrics(
     compute_keys = rollout_compute_scalar_keys(cfg)
     collection_groups = rollout_collection_enabled_groups(cfg)
     base = _base_episode_metrics(data=data, cfg=cfg)
-    samples = data["target_index"].astype(jnp.float32).size
+    if "planet_flow_target_bucket" in data:
+        samples = jnp.asarray(
+            data["planet_flow_target_bucket"].shape[0]
+            * data["planet_flow_target_bucket"].shape[1],
+            dtype=jnp.float32,
+        )
+    else:
+        samples = jnp.asarray(data["target_index"].size, dtype=jnp.float32)
     metrics = _core_metric_fields(
         base=base,
         cfg=cfg,
@@ -198,5 +271,8 @@ def rollout_metrics(
     if "trajectory_shield_debug" in collection_groups:
         _apply_shield_metrics(metrics, data)
     if "action_decision" in collection_groups:
-        _apply_factorized_metrics(metrics, data)
+        if "planet_flow_target_bucket" in data:
+            _apply_planet_flow_metrics(metrics, data)
+        else:
+            _apply_factorized_metrics(metrics, data)
     return metrics

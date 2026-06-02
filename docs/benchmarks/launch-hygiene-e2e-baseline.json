@@ -1,0 +1,222 @@
+{
+  "gate": "launch_hygiene_e2e_throughput",
+  "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+  "merge_topology_notes": "PR #163 merge commit 96bf882eebb30f2d6c2d4f11a4c7150a8e271c23 (merge, not squash). First parent 79162a2088160b8ed05c3e3a050e064c7f6c9556 is pre-hygiene main; second parent 6e75826949097cd7acd7ea87c0f699175c7b0b92 is PR tip (hygiene bundle + incremental carry). Capture used git worktree at first-parent SHA with U1/U2 benchmark harness copied from current branch (measurement semantics only; training code at pre-hygiene SHA).",
+  "co_landing_commits": [
+    "ce6714b"
+  ],
+  "run_date": "2026-06-01",
+  "device": {
+    "default_backend": "gpu",
+    "devices": [
+      "cuda:0"
+    ],
+    "jax_version": "0.10.0",
+    "gpu_name": "NVIDIA GeForce RTX 5080"
+  },
+  "primary_profile": {
+    "preset": "primary",
+    "overrides": [
+      "task=shield_cheap",
+      "model=transformer_factorized",
+      "opponents=self_play_only",
+      "curriculum=off",
+      "telemetry.wandb.enabled=false",
+      "artifacts.artifact_pipeline.enabled=false",
+      "seed=42"
+    ],
+    "updates": 20,
+    "warmup": 2,
+    "seed": 42
+  },
+  "runs": [
+    {
+      "label": "pre_hygiene_capture_r1",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 261.5024663039949,
+      "seconds_total": 32.52702095998393,
+      "seconds_per_update_mean": 1.6263510479991965,
+      "env_steps": 320000,
+      "samples": 1600000,
+      "env_steps_per_sec": 9837.974414984916,
+      "samples_per_sec": 49189.872074924584,
+      "policy_loss": -0.0058957825414836405,
+      "value_loss": 1.2851007461547852,
+      "approx_kl": 0.002370235381022212,
+      "entropy": 2.5796788811683653,
+      "total_loss": 1.2637269020080566,
+      "mean_active_launches_per_turn": 0.0,
+      "overall_win_rate": 0.0,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": null,
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 32
+        }
+      ],
+      "rollout_microbatch_envs": 32,
+      "gate": "launch_hygiene_e2e_throughput"
+    },
+    {
+      "label": "pre_hygiene_capture_r2",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 126.73237115600205,
+      "seconds_total": 32.33035229200323,
+      "seconds_per_update_mean": 1.6165176146001614,
+      "env_steps": 320000,
+      "samples": 1600000,
+      "env_steps_per_sec": 9897.819767313535,
+      "samples_per_sec": 49489.098836567675,
+      "policy_loss": -0.0058957825414836405,
+      "value_loss": 1.2851007461547852,
+      "approx_kl": 0.002370235381022212,
+      "entropy": 2.5796788811683653,
+      "total_loss": 1.2637269020080566,
+      "mean_active_launches_per_turn": 0.0,
+      "overall_win_rate": 0.0,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": null,
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 32
+        }
+      ],
+      "rollout_microbatch_envs": 32,
+      "gate": "launch_hygiene_e2e_throughput"
+    },
+    {
+      "label": "pre_hygiene_capture_r3",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 125.49443803199392,
+      "seconds_total": 33.357085057054064,
+      "seconds_per_update_mean": 1.6678542528527032,
+      "env_steps": 320000,
+      "samples": 1600000,
+      "env_steps_per_sec": 9593.16437430522,
+      "samples_per_sec": 47965.82187152609,
+      "policy_loss": -0.0058957825414836405,
+      "value_loss": 1.2851007461547852,
+      "approx_kl": 0.002370235381022212,
+      "entropy": 2.5796788811683653,
+      "total_loss": 1.2637269020080566,
+      "mean_active_launches_per_turn": 0.0,
+      "overall_win_rate": 0.0,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": null,
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 32
+        }
+      ],
+      "rollout_microbatch_envs": 32,
+      "gate": "launch_hygiene_e2e_throughput"
+    }
+  ],
+  "aggregate": {
+    "env_steps_per_sec": {
+      "mean": 9776.31951886789,
+      "stddev": 131.7945921593238
+    },
+    "samples_per_sec": {
+      "mean": 48881.59759433945,
+      "stddev": 658.9729607966237
+    },
+    "seconds_per_update_mean": {
+      "mean": 1.6369076384840202,
+      "stddev": 0.022247753575979884
+    }
+  },
+  "pass_band": {
+    "within_pct": 10.0,
+    "floors": {
+      "env_steps_per_sec": 8798.6875669811,
+      "samples_per_sec": 43993.437834905504
+    },
+    "ceilings": {
+      "seconds_per_update_mean": 1.8005984023324224
+    }
+  },
+  "operator_example": "git worktree add ../orbit_wars-pre-hygiene 79162a2088160b8ed05c3e3a050e064c7f6c9556 && cd ../orbit_wars-pre-hygiene && uv sync --group dev && env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pre_hygiene_capture --repeats 3 --updates 20 --warmup 2 --out /tmp/launch_hygiene_e2e_capture_raw.json",
+  "gap_assessment": {
+    "status": "out_of_band",
+    "assessed_commit_sha": "2baa4c0a3138890df331b23f03e46938762b18db",
+    "assessed_date": "2026-06-01",
+    "gate_passed": false,
+    "measured": {
+      "env_steps_per_sec": 975.4188958167518,
+      "samples_per_sec": 4877.094479083759,
+      "seconds_per_update_mean": 16.403208989100676
+    },
+    "delta_vs_baseline_mean_pct": {
+      "env_steps_per_sec": -90.03,
+      "samples_per_sec": -90.02,
+      "seconds_per_update_mean": 902.08
+    },
+    "note": "Current branch (feat/launch-hygiene-bundle) fails all three metrics vs pre-hygiene baseline on same RTX 5080 / cuda:0. Phase B (U7) required.",
+    "artifact": "/tmp/launch_hygiene_e2e_gap.json"
+  },
+  "capture_status": "complete"
+}

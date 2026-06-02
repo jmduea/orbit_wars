@@ -15,6 +15,10 @@ from src.jax.preflight_calibration import (
     load_thresholds,
     run_ow_train,
 )
+from src.jax.preflight_profiles import (
+    default_profiles_path,
+    ppo_overrides_for_model,
+)
 
 Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
 
@@ -38,6 +42,9 @@ class PreflightGateSpec:
     require_curriculum_promotion: bool = False
     max_approx_kl: float = 0.15
     min_entropy: float = 1.0e-4
+    max_post_mask_unreachable_demand_rate: float | None = None
+    needs_calibration_reason: str | None = None
+    require_planet_flow_control_metrics: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,12 +84,90 @@ def _gate_specs(
     model: str,
     *,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
 ) -> dict[str, PreflightGateSpec]:
     learning = _learning_signal_thresholds(thresholds_path)
     window = int(learning.get("window_updates", WINDOW_UPDATES))
     min_delta = float(learning.get("min_win_rate_delta", 0.08))
     max_kl = float(learning.get("max_approx_kl", 0.15))
     min_ent = float(learning.get("min_entropy", 1.0e-4))
+    if model == "planet_flow_target_heatmap":
+        thresholds = load_thresholds(
+            thresholds_path or default_calibration_json_path(_repo_root())
+        )
+        planet_flow_learning = thresholds.get("planet_flow_learning_signal")
+        calibrated = isinstance(planet_flow_learning, dict)
+        max_unreachable: float | None = None
+        if calibrated:
+            window = int(planet_flow_learning.get("window_updates", window))
+            min_delta = float(planet_flow_learning.get("min_win_rate_delta", min_delta))
+            max_kl = float(planet_flow_learning.get("max_approx_kl", max_kl))
+            min_ent = float(planet_flow_learning.get("min_entropy", min_ent))
+            max_unreachable = float(
+                planet_flow_learning.get("max_post_mask_unreachable_demand_rate", 0.05)
+            )
+        planet_flow_base = (
+            "model=planet_flow_target_heatmap",
+            "curriculum=off",
+            "telemetry.metric_groups.action_decision=true",
+            *PREFLIGHT_TRAIN_BASE,
+            "artifacts=planet_flow_proof",
+            "artifacts.artifact_pipeline.enabled=true",
+        )
+        needs_calibration = (
+            None
+            if calibrated
+            else (
+                "needs-calibration: Planet Flow pressure-action thresholds are not "
+                "present in preflight calibration"
+            )
+        )
+
+        def planet_flow_gate(
+            gate_id: str,
+            *,
+            total_updates: int,
+            opponents: str,
+            min_win_rate_delta: float | None = min_delta,
+        ) -> PreflightGateSpec:
+            return PreflightGateSpec(
+                gate_id=gate_id,
+                train_overrides=(
+                    *planet_flow_base,
+                    "training=planet_flow",
+                    f"training.total_updates={total_updates}",
+                    f"opponents={opponents}",
+                ),
+                min_win_rate_delta=min_win_rate_delta,
+                window_updates=window,
+                max_approx_kl=max_kl,
+                min_entropy=min_ent,
+                max_post_mask_unreachable_demand_rate=max_unreachable,
+                needs_calibration_reason=needs_calibration,
+                require_planet_flow_control_metrics=True,
+            )
+
+        return {
+            "beat_noop": planet_flow_gate(
+                "beat_noop", total_updates=200, opponents="noop_only"
+            ),
+            "beat_random": planet_flow_gate(
+                "beat_random", total_updates=300, opponents="random_only"
+            ),
+            "curriculum_staged": planet_flow_gate(
+                "curriculum_staged",
+                total_updates=500,
+                opponents="random_only",
+                min_win_rate_delta=None,
+            ),
+        }
+    
+    profile_path = profiles_path or default_profiles_path(_repo_root())
+    ppo_profile = ppo_overrides_for_model(
+        model,
+        profiles_path=profile_path,
+        repo_root=_repo_root(),
+    )
     return {
         "beat_noop": PreflightGateSpec(
             gate_id="beat_noop",
@@ -94,6 +179,7 @@ def _gate_specs(
                 "opponents=noop_only",
                 "curriculum=off",
                 *PREFLIGHT_TRAIN_BASE,
+                *ppo_profile,
             ),
             min_win_rate_delta=min_delta,
             window_updates=window,
@@ -110,6 +196,7 @@ def _gate_specs(
                 "opponents=random_only",
                 "curriculum=off",
                 *PREFLIGHT_TRAIN_BASE,
+                *ppo_profile,
             ),
             min_win_rate_delta=min_delta,
             window_updates=window,
@@ -306,11 +393,44 @@ def evaluate_gate_records(
     elif entropy < spec.min_entropy:
         reasons.append(f"entropy {entropy:.6f} < {spec.min_entropy:.6f}")
 
+    if spec.require_planet_flow_control_metrics:
+        required_control_keys = (
+            "planet_flow_control_emitted_launch_count",
+            "planet_flow_control_emitted_ship_mass_rate",
+            "planet_flow_emitted_launch_count_delta_vs_control",
+        )
+        for key in required_control_keys:
+            if not any(key in record for record in metric_rows):
+                reasons.append(f"missing Planet Flow compiler-control metric: {key}")
+
+    if spec.max_post_mask_unreachable_demand_rate is not None:
+        unreachable_rate = _window_mean(
+            metric_rows,
+            "planet_flow_unreachable_demand_rate",
+            last_n=effective_window,
+        )
+        if unreachable_rate is None:
+            reasons.append("missing planet_flow_unreachable_demand_rate")
+        elif unreachable_rate > spec.max_post_mask_unreachable_demand_rate:
+            reasons.append(
+                "planet_flow_unreachable_demand_rate "
+                f"{unreachable_rate:.4f} > "
+                f"{spec.max_post_mask_unreachable_demand_rate:.4f} "
+                f"(post-mask ceiling)"
+            )
+
     promotions = _count_curriculum_promotions(records)
     if spec.require_curriculum_promotion and promotions == 0:
         reasons.append("no curriculum_stage_promoted events in training log")
 
+    if spec.needs_calibration_reason is not None:
+        reasons.append(spec.needs_calibration_reason)
+
     if any("missing training jsonl" in reason for reason in reasons):
+        verdict = PreflightVerdict.INCONCLUSIVE
+    elif any("compiler-control metric" in reason for reason in reasons):
+        verdict = PreflightVerdict.INCONCLUSIVE
+    elif spec.needs_calibration_reason is not None:
         verdict = PreflightVerdict.INCONCLUSIVE
     elif reasons:
         verdict = PreflightVerdict.NOT_VERIFIED
@@ -368,17 +488,41 @@ def run_preflight_gate(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> GateEvaluation:
-    specs = _gate_specs(model, thresholds_path=thresholds_path)
+    specs = _gate_specs(
+        model,
+        thresholds_path=thresholds_path,
+        profiles_path=profiles_path,
+    )
     if gate_id not in specs:
         raise ValueError(f"Unknown preflight gate: {gate_id!r}")
     spec = specs[gate_id]
     root = repo_root or _repo_root()
     campaign = preflight_campaign(gate_id)
+    if spec.needs_calibration_reason is not None:
+        return GateEvaluation(
+            gate_id=gate_id,
+            verdict=PreflightVerdict.INCONCLUSIVE,
+            reasons=(spec.needs_calibration_reason,),
+            campaign=campaign,
+            run_dir=None,
+            log_path=None,
+            checkpoint_path=None,
+            window_overall_win_rate=None,
+            window_launches=None,
+            win_rate_first_window=None,
+            win_rate_delta=None,
+            best_rolling_win_rate=None,
+            curriculum_promotions=0,
+            evaluation_mode="needs_calibration",
+        )
     overrides = [
         f"output.campaign={campaign}",
         f"output.root={output_root.as_posix()}",
         *spec.train_overrides,
+        *extra_train_overrides,
     ]
     run_ow_train(
         overrides,
@@ -432,6 +576,8 @@ def run_preflight_ladder(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> tuple[PreflightVerdict, list[GateEvaluation]]:
     if through not in GATE_ORDER:
         raise ValueError(f"--through must be one of {GATE_ORDER}, got {through!r}")
@@ -440,13 +586,20 @@ def run_preflight_ladder(
     evaluations: list[GateEvaluation] = []
     overall = PreflightVerdict.VERIFIED
     for gate_id in selected:
+        gate_model = (
+            "transformer_factorized"
+            if gate_id == "curriculum_staged" and model != "planet_flow_target_heatmap"
+            else model
+        )
         evaluation = run_preflight_gate(
             gate_id,
-            model=model if gate_id != "curriculum_staged" else "transformer_factorized",
+            model=gate_model,
             output_root=output_root,
             repo_root=repo_root,
             dry_run=dry_run,
             thresholds_path=thresholds_path,
+            profiles_path=profiles_path,
+            extra_train_overrides=extra_train_overrides,
         )
         evaluations.append(evaluation)
         if evaluation.verdict != PreflightVerdict.VERIFIED:

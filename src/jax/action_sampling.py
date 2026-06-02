@@ -5,17 +5,23 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import jax
-from src.artifacts.checkpoint_compat import is_factorized_pointer_decoder
+from src.artifacts.checkpoint_compat import (
+    is_factorized_pointer_decoder,
+    is_planet_flow_pointer_decoder,
+)
 from src.config import TrainConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
+    PlanetFlowPolicyOutput,
     _factored_step_log_prob_entropy,
+    sample_planet_flow_pressure_action,
     source_mask_from_bucket_mask_and_ships,
 )
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
+from src.jax.planet_flow import compile_planet_flow_action, planet_flow_sampling_target_mask
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
@@ -37,6 +43,12 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
+
+
+def _policy_variables(params: dict) -> dict:
+    """Accept either Flax variables or a raw params payload."""
+
+    return params if "params" in params else {"params": params}
 
 
 def _noop_bucket_mask(
@@ -65,7 +77,7 @@ def _sample_step_from_logits(
     ship_logits: jax.Array,
     ship_bucket_mask: jax.Array,
     deterministic: bool,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     key_target, key_ship = jax.random.split(key)
     illegal_logit = jnp.finfo(jnp.float32).min
     target_mask = ship_bucket_mask.any(axis=-1)
@@ -258,7 +270,7 @@ def _sample_shielded_factored_sequence_with_params(
         apply_cumulative_forbidden_to_shield,
         apply_launch_to_cumulative_forbidden,
         build_hygiene_lookups,
-        empty_cumulative_forbidden,
+        empty_forbidden_grid,
     )
     from src.jax.policy import factorized_decode
 
@@ -283,7 +295,7 @@ def _sample_shielded_factored_sequence_with_params(
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
     hygiene_lookups = build_hygiene_lookups(batch)
-    cumulative_forbidden = empty_cumulative_forbidden(
+    cumulative_forbidden = empty_forbidden_grid(
         env_count,
         num_planets=MAX_PLANETS,
         max_k=k,
@@ -568,25 +580,30 @@ def _sample_shielded_factored_sequence_with_params(
             include_value=False,
         )
         decoder_hidden_out = final_output.decoder_hidden
-    replay = replay_factored_sequence_logprob(
-        params,
-        policy,
-        batch,
-        cfg,
-        player_count=player_count,
-        source_index=source_sequence,
-        target_slot=slot_sequence,
-        ship_bucket=bucket_sequence,
-        stop_flag=stop_sequence.astype(jnp.float32),
-        step_mask=step_mask_sequence,
-        ship_bucket_mask=bucket_mask_stack,
-        ship_fraction=ship_fraction_sequence if continuous else None,
-        decoder_hidden=decoder_hidden_in if carry_enabled else None,
-        initial_remaining_ships=owned_planet_ships(game),
-        encoder_out=encoder_out,
+    tiered_revalidate = (
+        trajectory_shield_mode(cfg.task) == "tiered"
+        and trajectory_shield_final_validate_selected(cfg.task)
     )
-    log_prob_sequence = replay.log_prob
-    entropy_sequence = replay.entropy
+    if tiered_revalidate:
+        replay = replay_factored_sequence_logprob(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_index=source_sequence,
+            target_slot=slot_sequence,
+            ship_bucket=bucket_sequence,
+            stop_flag=stop_sequence.astype(jnp.float32),
+            step_mask=step_mask_sequence,
+            ship_bucket_mask=bucket_mask_stack,
+            ship_fraction=ship_fraction_sequence if continuous else None,
+            decoder_hidden=decoder_hidden_in if carry_enabled else None,
+            initial_remaining_ships=owned_planet_ships(game),
+            encoder_out=encoder_out,
+        )
+        log_prob_sequence = replay.log_prob
+        entropy_sequence = replay.entropy
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,
@@ -858,6 +875,35 @@ def _sample_policy_action_with_params(
     deterministic: bool,
     decoder_hidden_in: jax.Array | None = None,
 ) -> tuple[JaxAction, jax.Array | None]:
+    if is_planet_flow_pointer_decoder(cfg.model):
+        player_count = jnp.full(
+            (batch.planet_mask.shape[0],), cfg.task.player_count, dtype=jnp.int32
+        )
+        output = policy.apply(
+            _policy_variables(params),
+            batch,
+            player_count=player_count,
+        )
+        if not isinstance(output, PlanetFlowPolicyOutput):
+            raise TypeError(
+                "planet_flow_target_heatmap policy must return "
+                "PlanetFlowPolicyOutput."
+            )
+        pressure_action = sample_planet_flow_pressure_action(
+            key,
+            output,
+            jnp.asarray(cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32),
+            planet_flow_sampling_target_mask(game, batch),
+            deterministic=deterministic,
+        )
+        compile_result = compile_planet_flow_action(
+            game,
+            batch,
+            pressure_action.target_pressure,
+            cfg,
+        )
+        return compile_result.action, decoder_hidden_in
+
     sample = _sample_shielded_sequence_with_params(
         key,
         game,

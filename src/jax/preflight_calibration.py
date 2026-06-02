@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from src.jax.preflight_profiles import (
+    default_profiles_path,
+    ppo_overrides_for_model,
+)
+
 OpponentProfile = Literal["noop_only", "random_only"]
 
 DEFAULT_SEEDS: tuple[int, ...] = (42, 43)
@@ -44,6 +49,14 @@ def _launches_key(records: list[dict[str, object]]) -> str | None:
         if any(key in record for record in records):
             return key
     return None
+
+
+def window_mean_from_metric_rows(
+    records: list[dict[str, object]], key: str, *, last_n: int
+) -> float | None:
+    """Mean of ``key`` over the last ``last_n`` metric rows (shared with preflight gates)."""
+
+    return _window_mean(records, key, last_n=last_n)
 
 
 def _window_mean(
@@ -154,6 +167,7 @@ class CalibrationSummary:
     """Aggregate stats used to derive gate thresholds."""
 
     run_count: int
+    models: tuple[str, ...]
     win_rate_delta_p25: float | None
     win_rate_delta_median: float | None
     best_rolling_win_rate_max: float | None
@@ -188,6 +202,8 @@ def snapshot_from_run_dir(
     if not log_files:
         return None
     records = read_jsonl_records(log_files[0])
+    if not records:
+        return None
     return extract_training_signals(
         records,
         opponent=opponent,
@@ -227,16 +243,19 @@ def discover_calibration_snapshots(
         run_dirs = [path for path in runs_root.iterdir() if path.is_dir()]
         if not run_dirs:
             continue
-        run_dir = max(run_dirs, key=lambda path: path.stat().st_mtime)
-        snapshot = snapshot_from_run_dir(
-            run_dir,
-            opponent=opponent,
-            seed=int(seed_text),
-            total_updates=int(updates_text),
-            model=model,
-        )
-        if snapshot is not None:
-            snapshots.append(snapshot)
+        for run_dir in sorted(
+            run_dirs, key=lambda path: path.stat().st_mtime, reverse=True
+        ):
+            snapshot = snapshot_from_run_dir(
+                run_dir,
+                opponent=opponent,
+                seed=int(seed_text),
+                total_updates=int(updates_text),
+                model=model,
+            )
+            if snapshot is not None:
+                snapshots.append(snapshot)
+                break
     return snapshots
 
 
@@ -246,15 +265,35 @@ def calibration_train_overrides(
     seed: int,
     total_updates: int,
     model: str = DEFAULT_MODEL,
+    profiles_path: Path | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, ...]:
+    path = profiles_path or default_profiles_path(repo_root)
+    ppo_profile = ppo_overrides_for_model(
+        model,
+        profiles_path=path,
+        repo_root=repo_root,
+    )
+    is_planet_flow = model == "planet_flow_target_heatmap"
+    training_profile = "planet_flow" if is_planet_flow else "2p_16"
+    rollout_steps = () if is_planet_flow else ("training.rollout_steps=128",)
     return (
         f"model={model}",
-        "training=2p_16",
-        "training.rollout_steps=128",
+        f"training={training_profile}",
+        *rollout_steps,
         f"training.total_updates={total_updates}",
         f"opponents={opponent}",
         "curriculum=off",
         *PREFLIGHT_TRAIN_BASE,
+        *ppo_profile,
+        *(
+            (
+                "artifacts=planet_flow_proof",
+                "artifacts.artifact_pipeline.enabled=true",
+            )
+            if is_planet_flow
+            else ()
+        ),
         f"seed={seed}",
     )
 
@@ -386,6 +425,7 @@ def summarize_calibration(
     ]
     return CalibrationSummary(
         run_count=len(snapshots),
+        models=tuple(sorted({item.model for item in snapshots})),
         win_rate_delta_p25=_percentile(deltas, 0.25),
         win_rate_delta_median=_percentile(deltas, 0.50),
         best_rolling_win_rate_max=max(rolling) if rolling else None,
@@ -416,14 +456,15 @@ def derive_thresholds(summary: CalibrationSummary) -> dict[str, object]:
     noop_tournament = max(noop_tournament, 0.45)
     random_tournament = max(random_tournament, 0.35)
 
-    return {
+    learning_signal = {
+        "window_updates": WINDOW_UPDATES,
+        "min_win_rate_delta": delta_floor,
+        "max_approx_kl": 0.15,
+        "min_entropy": 1.0e-4,
+    }
+    thresholds = {
         "mode": "trend_plus_tournament" if use_tournament_win_proof else "absolute_jax",
-        "learning_signal": {
-            "window_updates": WINDOW_UPDATES,
-            "min_win_rate_delta": delta_floor,
-            "max_approx_kl": 0.15,
-            "min_entropy": 1.0e-4,
-        },
+        "learning_signal": learning_signal,
         "win_proof_tournament": {
             "noop_min_win_rate": noop_tournament,
             "random_min_win_rate": random_tournament,
@@ -438,6 +479,11 @@ def derive_thresholds(summary: CalibrationSummary) -> dict[str, object]:
             f"max rolling-10 {rolling_max:.3f}.",
         ],
     }
+    if "planet_flow_target_heatmap" in summary.models:
+        planet_flow_learning = dict(learning_signal)
+        planet_flow_learning["max_post_mask_unreachable_demand_rate"] = 0.05
+        thresholds["planet_flow_learning_signal"] = planet_flow_learning
+    return thresholds
 
 
 def default_thresholds(*, reason: str) -> dict[str, object]:
@@ -500,13 +546,19 @@ def run_calibration_train(
     output_root: Path = Path("outputs"),
     repo_root: Path,
     dry_run: bool = False,
+    profiles_path: Path | None = None,
 ) -> TrainingSignalSnapshot:
     campaign = calibration_campaign(opponent, seed=seed, total_updates=total_updates)
     overrides = [
         f"output.campaign={campaign}",
         f"output.root={output_root.as_posix()}",
         *calibration_train_overrides(
-            opponent, seed=seed, total_updates=total_updates, model=model
+            opponent,
+            seed=seed,
+            total_updates=total_updates,
+            model=model,
+            profiles_path=profiles_path,
+            repo_root=repo_root,
         ),
     ]
     run_ow_train(
@@ -548,6 +600,7 @@ def run_calibration_sweep(
     output_root: Path = Path("outputs"),
     repo_root: Path,
     dry_run: bool = False,
+    profiles_path: Path | None = None,
 ) -> list[TrainingSignalSnapshot]:
     snapshots: list[TrainingSignalSnapshot] = []
     for opponent in opponents:
@@ -562,6 +615,7 @@ def run_calibration_sweep(
                         output_root=output_root,
                         repo_root=repo_root,
                         dry_run=dry_run,
+                        profiles_path=profiles_path,
                     )
                 )
     return snapshots

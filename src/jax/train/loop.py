@@ -7,6 +7,7 @@ from pathlib import Path
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
@@ -26,6 +27,7 @@ from src.jax.normalization import (
 )
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
+from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
 from src.jax.rollout.metrics import FINALIZED_ROLLOUT_RATE_KEYS
 from src.jax.rollout.types import JaxTransitionBatch
 from src.jax.train.checkpoint import (
@@ -49,6 +51,12 @@ from src.jax.train.snapshots import (
     snapshot_due,
 )
 from src.jax.train.state import init_train_state, validate_policy_param_shapes
+from src.jax.train.sweep_score import (
+    MetricWindowTracker,
+    WinRateTrendTracker,
+    collect_planet_flow_sweep_metrics,
+    planet_flow_max_post_mask_unreachable_rate,
+)
 from src.jax.train.telemetry import (
     build_per_format_timing_metrics,
     build_update_record,
@@ -180,6 +188,19 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         )
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
+    track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
+    win_rate_trend = WinRateTrendTracker() if track_planet_flow_sweep else None
+    approx_kl_window = MetricWindowTracker() if track_planet_flow_sweep else None
+    entropy_window = MetricWindowTracker() if track_planet_flow_sweep else None
+    planet_flow_unreachable_ceiling = (
+        planet_flow_max_post_mask_unreachable_rate(
+            load_thresholds(
+                default_calibration_json_path(Path(__file__).resolve().parents[3])
+            )
+        )
+        if track_planet_flow_sweep
+        else None
+    )
     artifact_cfg = cfg.artifacts.artifact_pipeline
     artifact_queue_dir = run_context.queue_dir
     checkpoint_pipeline = (
@@ -408,6 +429,23 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
                 update_events.append(snapshot_event)
             phase_events = []
+            planet_flow_sweep_metrics: dict[str, float] = {}
+            if win_rate_trend is not None and "action_decision" in enabled_metric_groups(
+                metric_groups_cfg_from_config(cfg)
+            ):
+                planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
+                    win_rate_trend=win_rate_trend,
+                    approx_kl_window=approx_kl_window,
+                    entropy_window=entropy_window,
+                    overall_win_rate=overall_win_rate,
+                    metrics_host=metrics_host,
+                    rollout_scalars=rollout_scalars,
+                    max_post_mask_unreachable_rate=(
+                        planet_flow_unreachable_ceiling
+                        if planet_flow_unreachable_ceiling is not None
+                        else 0.05
+                    ),
+                )
             record = build_update_record(
                 update=update,
                 total_env_steps=total_env_steps,
@@ -432,6 +470,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
                 plateau_metric=cfg.training.plateau_metric,
                 cfg=cfg,
+                planet_flow_sweep_metrics=planet_flow_sweep_metrics or None,
             )
             write_filtered_update_records(
                 log_path=log_path,
@@ -455,10 +494,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
                     f"{entropy_line}"
                 )
-            if (
-                update % cfg.artifacts.checkpoint_every == 0
-                or update == cfg.training.total_updates
-            ):
+            checkpoint_every = int(cfg.artifacts.checkpoint_every)
+            checkpoint_due = checkpoint_every > 0 and update % checkpoint_every == 0
+            if checkpoint_due or update == cfg.training.total_updates:
                 is_final = update == cfg.training.total_updates
                 if checkpoint_pipeline is None:
                     checkpoint_path = save_jax_checkpoint(

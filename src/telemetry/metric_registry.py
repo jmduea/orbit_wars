@@ -469,6 +469,211 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Mean non-stop launches with a positive ship bucket per env-turn.",
     ),
     _metric(
+        "planet_flow_demanded_mass_sum",
+        "action_decision",
+        "Sum of active target pressure mass sampled by Planet Flow.",
+    ),
+    _metric(
+        "planet_flow_unreachable_demand_mass_sum",
+        "action_decision",
+        "Planet Flow target pressure mass with no feasible candidate edge.",
+    ),
+    _metric(
+        "planet_flow_held_demand_mass_sum",
+        "action_decision",
+        "Planet Flow target pressure mass not represented by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_requested_ship_mass_sum",
+        "action_decision",
+        "Ship mass requested by the Planet Flow compiler before capacity truncation.",
+    ),
+    _metric(
+        "planet_flow_emitted_ship_mass_sum",
+        "action_decision",
+        "Ship mass emitted by the Planet Flow compiler.",
+    ),
+    _metric(
+        "planet_flow_capacity_dropped_launch_count",
+        "action_decision",
+        "Planet Flow launch intents dropped by per-turn action capacity.",
+    ),
+    _metric(
+        "planet_flow_emitted_launch_count",
+        "action_decision",
+        "Valid launches emitted by the Planet Flow compiler.",
+    ),
+    _metric(
+        "planet_flow_small_launch_count",
+        "action_decision",
+        "Planet Flow emitted launches with at most one ship.",
+    ),
+    _metric(
+        "planet_flow_duplicate_source_target_count",
+        "action_decision",
+        "Mergeable same-source/same-target Planet Flow duplicate launches.",
+    ),
+    _metric(
+        "planet_flow_unreachable_demand_rate",
+        "action_decision",
+        "Unreachable Planet Flow demand mass divided by demanded mass.",
+    ),
+    _metric(
+        "planet_flow_held_demand_rate",
+        "action_decision",
+        "Held Planet Flow demand mass divided by demanded mass.",
+    ),
+    _metric(
+        "planet_flow_emitted_ship_mass_rate",
+        "action_decision",
+        "Emitted Planet Flow ship mass divided by requested ship mass.",
+    ),
+    _metric(
+        "planet_flow_capacity_drop_rate",
+        "action_decision",
+        "Planet Flow capacity-dropped launch intents divided by attempted launches.",
+    ),
+    _metric(
+        "planet_flow_small_launch_rate",
+        "action_decision",
+        "Planet Flow one-ship emitted launches divided by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_duplicate_source_target_rate",
+        "action_decision",
+        "Duplicate same-source/same-target Planet Flow launches divided by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_control_demanded_mass_sum",
+        "action_decision",
+        "Seeded-random control target pressure mass run through the Planet Flow compiler.",
+    ),
+    _metric(
+        "planet_flow_control_unreachable_demand_mass_sum",
+        "action_decision",
+        "Seeded-random control demand mass with no feasible candidate edge.",
+    ),
+    _metric(
+        "planet_flow_control_held_demand_mass_sum",
+        "action_decision",
+        "Seeded-random control demand mass not represented by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_control_requested_ship_mass_sum",
+        "action_decision",
+        "Ship mass requested by the seeded-random Planet Flow compiler control.",
+    ),
+    _metric(
+        "planet_flow_control_emitted_ship_mass_sum",
+        "action_decision",
+        "Ship mass emitted by the seeded-random Planet Flow compiler control.",
+    ),
+    _metric(
+        "planet_flow_control_capacity_dropped_launch_count",
+        "action_decision",
+        "Seeded-random control launch intents dropped by per-turn action capacity.",
+    ),
+    _metric(
+        "planet_flow_control_emitted_launch_count",
+        "action_decision",
+        "Valid launches emitted by the seeded-random Planet Flow compiler control.",
+    ),
+    _metric(
+        "planet_flow_control_small_launch_count",
+        "action_decision",
+        "Seeded-random control emitted launches with at most one ship.",
+    ),
+    _metric(
+        "planet_flow_control_duplicate_source_target_count",
+        "action_decision",
+        "Seeded-random control duplicate same-source/same-target launch count.",
+    ),
+    _metric(
+        "planet_flow_control_unreachable_demand_rate",
+        "action_decision",
+        "Seeded-random control unreachable demand mass divided by demanded mass.",
+    ),
+    _metric(
+        "planet_flow_control_held_demand_rate",
+        "action_decision",
+        "Seeded-random control held demand mass divided by demanded mass.",
+    ),
+    _metric(
+        "planet_flow_control_emitted_ship_mass_rate",
+        "action_decision",
+        "Seeded-random control emitted ship mass divided by requested ship mass.",
+    ),
+    _metric(
+        "planet_flow_control_capacity_drop_rate",
+        "action_decision",
+        "Seeded-random control capacity-dropped intents divided by attempted launches.",
+    ),
+    _metric(
+        "planet_flow_control_small_launch_rate",
+        "action_decision",
+        "Seeded-random control one-ship launches divided by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_control_duplicate_source_target_rate",
+        "action_decision",
+        "Seeded-random control duplicate launches divided by emitted launches.",
+    ),
+    _metric(
+        "planet_flow_emitted_launch_count_delta_vs_control",
+        "action_decision",
+        "Learned Planet Flow emitted launch count minus seeded-random control count.",
+    ),
+    _metric(
+        "planet_flow_emitted_ship_mass_delta_vs_control",
+        "action_decision",
+        "Learned Planet Flow emitted ship mass minus seeded-random control mass.",
+    ),
+    _metric(
+        "planet_flow_unreachable_demand_rate_delta_vs_control",
+        "action_decision",
+        "Learned unreachable demand rate minus seeded-random control rate.",
+    ),
+    _metric(
+        "planet_flow_held_demand_rate_delta_vs_control",
+        "action_decision",
+        "Learned held demand rate minus seeded-random control rate.",
+    ),
+    _metric(
+        "planet_flow_emitted_ship_mass_rate_delta_vs_control",
+        "action_decision",
+        "Learned emitted ship mass rate minus seeded-random control rate.",
+    ),
+    _metric(
+        "planet_flow_small_launch_rate_delta_vs_control",
+        "action_decision",
+        "Learned one-ship launch rate minus seeded-random control rate.",
+    ),
+    _metric(
+        "planet_flow_duplicate_source_target_rate_delta_vs_control",
+        "action_decision",
+        "Learned duplicate launch rate minus seeded-random control rate.",
+    ),
+    _metric(
+        "win_rate_delta_10",
+        "action_decision",
+        "Last-window minus first-window overall_win_rate over 10 updates.",
+    ),
+    _metric(
+        "approx_kl_window_mean",
+        "action_decision",
+        "Mean approx_kl over the last 10 training updates (preflight-aligned).",
+    ),
+    _metric(
+        "entropy_window_mean",
+        "action_decision",
+        "Mean policy entropy over the last 10 training updates (preflight-aligned).",
+    ),
+    _metric(
+        "planet_flow_sweep_score",
+        "action_decision",
+        "W&B sweep objective: win_rate_delta_10 when window-mean KL/entropy floors pass, else -1.",
+    ),
+    _metric(
         "stop_utilization_ratio",
         "action_decision",
         "mean_active_launches_per_turn divided by model.max_moves_k (L1 gate).",

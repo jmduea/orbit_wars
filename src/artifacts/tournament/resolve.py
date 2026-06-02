@@ -138,6 +138,8 @@ def validate_agents_feature_compatible(agents: Sequence[AgentEntry]) -> None:
         "global_feature_dim",
         "edge_k",
         "encoder_backbone",
+        "pointer_decoder",
+        "action_layout_version",
     )
     for agent in agents[1:]:
         metadata = feature_metadata_for_agent(agent)
@@ -147,6 +149,15 @@ def validate_agents_feature_compatible(agents: Sequence[AgentEntry]) -> None:
                     f"Agent {agent.agent_id!r} feature metadata {key}="
                     f"{metadata.get(key)!r} differs from reference "
                     f"{reference.get(key)!r} ({agents[0].agent_id!r})."
+                )
+        reference_buckets = reference.get("pressure_bucket_values")
+        metadata_buckets = metadata.get("pressure_bucket_values")
+        if reference_buckets is not None or metadata_buckets is not None:
+            if metadata_buckets != reference_buckets:
+                raise ValueError(
+                    f"Agent {agent.agent_id!r} feature metadata "
+                    f"pressure_bucket_values={metadata_buckets!r} differs from "
+                    f"reference {reference_buckets!r} ({agents[0].agent_id!r})."
                 )
 
 

@@ -328,7 +328,9 @@ def test_inactive_launch_leaves_cumulative_unchanged() -> None:
         slot=jnp.array([2], dtype=jnp.int32),
         active=jnp.array([False]),
     )
-    np.testing.assert_array_equal(np.asarray(unchanged), np.asarray(cumulative))
+    np.testing.assert_array_equal(np.asarray(unchanged.count), np.asarray(cumulative.count))
+    np.testing.assert_array_equal(np.asarray(unchanged.rows), np.asarray(cumulative.rows))
+    np.testing.assert_array_equal(np.asarray(unchanged.slots), np.asarray(cumulative.slots))
 
 
 @pytest.mark.jax
