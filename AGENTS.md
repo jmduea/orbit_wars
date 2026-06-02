@@ -53,6 +53,12 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - Rollout metrics: merge with `_merge_metric_dicts` inside `jax.lax.scan`; finalize rates after the scan.
 - Priorities: human `docs/ROADMAP.md` (no automated validation).
 - **Verification thresholds:** derive pass/fail bars from measured calibration or baseline runs (`docs/benchmarks/preflight-calibration.json`, `make preflight-calibrate`); never invent round numbers or relax a threshold until a run passes — that is not verification.
+
+<!-- preflight-thresholds -->
+- **Calibrated learning signal (Gates 2–4):** `window_updates=10`, `min_win_rate_delta=0.05`, `max_approx_kl=0.15`, `min_entropy=0.0001` — source `docs/benchmarks/preflight-calibration.json` (commit `614cf36e732c`).
+- **Tournament win proof (Gate 5):** `noop_min_win_rate=0.7`, `random_min_win_rate=0.58`.
+<!-- /preflight-thresholds -->
+
 - **Metric gates:** before gating on a training metric, confirm its denominator and what “chance” means for that opponent and reward mode (e.g. `overall_win_rate` vs `noop_only` is not ~50%; `episode_reward_mean` under `binary_win` is not win rate; self-play ~50% is not a learning signal).
 - **Seed scheduler:** default `training.reseed_every_updates=-1` auto-scales to `max(25, total_updates // 10)`; run `ow benchmark calibrate-seed-scheduler` before changing. Reseed resets rollout env state, not just the PRNG key.
 

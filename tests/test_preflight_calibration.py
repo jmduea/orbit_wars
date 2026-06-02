@@ -166,3 +166,50 @@ def test_discover_calibration_snapshots_ignores_newer_empty_runs(tmp_path) -> No
     assert len(snapshots) == 1
     assert snapshots[0].run_dir == str(older_run)
     assert snapshots[0].win_rate_delta is not None
+
+
+def test_refresh_agents_md_thresholds_replaces_block(tmp_path) -> None:
+    from src.jax.preflight_calibration import (
+        PREFLIGHT_THRESHOLDS_END,
+        PREFLIGHT_THRESHOLDS_START,
+        format_agents_md_threshold_block,
+        refresh_agents_md_thresholds,
+    )
+
+    agents_md = tmp_path / "AGENTS.md"
+    agents_md.write_text(
+        "\n".join(
+            [
+                "# Guide",
+                "- **Verification thresholds:** policy line.",
+                PREFLIGHT_THRESHOLDS_START,
+                "- old bullet",
+                PREFLIGHT_THRESHOLDS_END,
+                "- **Metric gates:** next section.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = {
+        "commit_sha": "abc123def456",
+        "thresholds": {
+            "learning_signal": {
+                "window_updates": 10,
+                "min_win_rate_delta": 0.05,
+                "max_approx_kl": 0.15,
+                "min_entropy": 0.0001,
+            },
+            "win_proof_tournament": {
+                "noop_min_win_rate": 0.7,
+                "random_min_win_rate": 0.58,
+            },
+        },
+    }
+    block = format_agents_md_threshold_block(report)
+    assert "min_win_rate_delta=0.05" in block
+    assert refresh_agents_md_thresholds(tmp_path, report, agents_md_path=agents_md)
+    updated = agents_md.read_text(encoding="utf-8")
+    assert "old bullet" not in updated
+    assert "noop_min_win_rate=0.7" in updated
+    assert not refresh_agents_md_thresholds(tmp_path, report, agents_md_path=agents_md)
