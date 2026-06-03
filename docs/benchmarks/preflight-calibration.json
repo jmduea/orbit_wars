@@ -35,10 +35,10 @@
     ]
   },
   "unified_tournament": {
-    "enforcement": false,
-    "noop_min_combined": 0.7,
-    "random_min_combined": 0.58,
-    "games_per_pair": 4,
+    "enforcement": true,
+    "noop_min_combined": 0.76,
+    "random_min_combined": 0.76,
+    "games_per_pair": 2,
     "prerequisite_seeds": [
       0,
       1,
@@ -85,9 +85,10 @@
     ],
     "incumbent_checkpoint_path": "outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl",
     "notes": [
-      "Bootstrap incumbent: post-hygiene preflight_beat_random s42 u300 (20260602T193448Z).",
-      "Non-enforcing until unified calibration campaigns produce measured combined-metric floors.",
-      "Set enforcement=true only after measured combined-metric pass rates."
+      "Floors derived from unified Stage-1 calibration (combined 2p+4p).",
+      "Measured at games_per_pair=2 with 5% margin below observed min.",
+      "noop combined floor 0.76 exceeds legacy 2p-only 0.7.",
+      "random combined floor 0.76 exceeds legacy 2p-only 0.58."
     ]
   },
   "runs": [
