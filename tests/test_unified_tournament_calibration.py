@@ -74,7 +74,7 @@ def test_build_calibrated_section_enables_enforcement_when_verified() -> None:
     snapshots = [_snapshot(games=4, noop=0.90, random=0.70)]
     section, decision = build_calibrated_unified_section(
         snapshots,
-        base_section={"incumbent_checkpoint_path": "/tmp/inc.pkl"},
+        base_section={"incumbent_bootstrap_opponent": "nearest_sniper"},
         enable_enforcement=True,
     )
     assert section["games_per_pair"] == 4

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from src.artifacts.promotion_manifest import promoted_manifest_path
 from src.artifacts.tournament.resolve import (
-    agent_from_checkpoint,
+    agent_from_baseline,
     resolve_promoted_agent,
     run_context_for_agent,
 )
@@ -22,16 +22,14 @@ def resolve_incumbent(
     campaign: str | None,
     output_root: Path,
 ) -> AgentEntry | None:
-    """Resolve incumbent: campaign promoted manifest, then calibration path."""
+    """Resolve incumbent: campaign promoted manifest, then scripted bootstrap."""
 
     if campaign:
         incumbent = resolve_promoted_agent(campaign, str(output_root))
         if incumbent is not None:
             return incumbent
-    if spec.incumbent_checkpoint_path is not None:
-        path = spec.incumbent_checkpoint_path
-        if path.is_file():
-            return agent_from_checkpoint(path.resolve(), agent_id="incumbent")
+    if spec.incumbent_bootstrap_opponent is not None:
+        return agent_from_baseline(spec.incumbent_bootstrap_opponent, agent_id="incumbent")
     return None
 
 

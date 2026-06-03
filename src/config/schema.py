@@ -261,7 +261,7 @@ class UnifiedTournamentConfig:
     )
     noop_min_combined: float = 0.7
     random_min_combined: float = 0.58
-    incumbent_checkpoint_path: str | None = None
+    incumbent_bootstrap_opponent: str = "nearest_sniper"
     max_steps: int = 500
     per_step_seconds: float = 1.0
     overage_budget_seconds: float = 60.0
