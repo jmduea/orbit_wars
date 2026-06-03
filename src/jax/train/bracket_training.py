@@ -99,6 +99,8 @@ def bracket_training_tick(
             checkpoint_path=checkpoint_path,
             payload={
                 "campaign": cfg.output.campaign,
+                "output_root": str(output_root),
+                "agent_id": f"u{update}",
                 "qualifier_mode": True,
                 "qualifier_floors": "1.0",
             },

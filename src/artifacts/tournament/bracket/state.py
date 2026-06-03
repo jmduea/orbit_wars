@@ -51,6 +51,7 @@ class BracketState:
     phase: BracketPhase = "qualifier"
     incumbent_crowned: bool = False
     incumbent_agent_id: str | None = None
+    round_robin_queued: bool = False
     entries: dict[str, BracketEntry] = field(default_factory=dict)
 
     def main_phase_entries(self) -> tuple[BracketEntry, ...]:
@@ -65,6 +66,7 @@ class BracketState:
             "phase": self.phase,
             "incumbent_crowned": self.incumbent_crowned,
             "incumbent_agent_id": self.incumbent_agent_id,
+            "round_robin_queued": self.round_robin_queued,
             "entries": {
                 agent_id: entry.to_dict() for agent_id, entry in self.entries.items()
             },
@@ -89,12 +91,24 @@ class BracketState:
                 if payload.get("incumbent_agent_id") is not None
                 else None
             ),
+            round_robin_queued=bool(payload.get("round_robin_queued", False)),
             entries=entries,
         )
 
 
+def _safe_campaign_slug(campaign: str) -> str:
+    from src.config.runtime import _orbit_slug
+
+    return _orbit_slug(campaign)
+
+
 def bracket_state_path(*, campaign: str, output_root: Path) -> Path:
-    return output_root / "campaigns" / campaign / "bracket" / "state.json"
+    root = output_root.resolve()
+    slug = _safe_campaign_slug(campaign)
+    path = (root / "campaigns" / slug / "bracket" / "state.json").resolve()
+    if not path.is_relative_to(root):
+        raise ValueError(f"campaign path escapes output_root: {campaign!r}")
+    return path
 
 
 def load_bracket_state(path: Path) -> BracketState:

@@ -26,6 +26,32 @@ from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_jo
 from src.config.schema import TournamentConfig
 
 
+def print_eval_help() -> None:
+    print(
+        "ow eval — tournament, artifact worker, Kaggle package/submit\n\n"
+        "Subcommands:\n"
+        "  tournament   Head-to-head eval in Kaggle env\n"
+        "  worker       Process queue/optional_jobs for a run\n"
+        "  status       Summarize queue jobs and promotion for a run\n"
+        "  bracket      Campaign bracket state (status|show)\n"
+        "  results      List or show evaluation manifests under a run\n"
+        "  jobs         Queue job operations (cancel)\n"
+        "  package      Build submission.tar.gz from checkpoint\n"
+        "  submit       Upload package to Kaggle competition\n\n"
+        "Examples:\n"
+        "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch\n"
+        "  uv run ow eval results show --run <path> --result checkpoint_eval_u000010_<id>\n"
+        "  uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl \\\n"
+        "    --output-dir /tmp/kaggle_submit --validate-docker\n"
+        "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
+        "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
+        "  uv run ow eval bracket status --campaign <name>\n"
+        "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
+        "Submit-valid: hybrid poll + results show (validation_ok), or package --validate-docker.\n"
+        "More: uv run ow eval package --help | ow eval tournament --help\n"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Evaluation, artifact jobs, and Kaggle submission (ow eval).",
@@ -40,7 +66,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     worker = subparsers.add_parser(
         "worker",
-        help="Process queued optional artifact jobs for a run.",
+        help=(
+            "Process queued artifact jobs (checkpoint_eval, qualifier_eval, bracket_match, replay). "
+            "Replay local=inspect; replay docker backend is a demoted alias—prefer checkpoint_eval."
+        ),
     )
     worker.add_argument(
         "--run",
@@ -77,6 +106,138 @@ def build_parser() -> argparse.ArgumentParser:
     )
     worker.add_argument("--poll-seconds", type=float, default=5.0)
     worker.add_argument("--idle-exit-seconds", type=float, default=None)
+    worker.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print per-job start/done lines to stdout.",
+    )
+
+    status = subparsers.add_parser(
+        "status",
+        help="Summarize artifact queue and promotion state for a run.",
+    )
+    status.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+    status.add_argument(
+        "--watch",
+        action="store_true",
+        help="Poll and re-print status JSON until the queue is idle.",
+    )
+    status.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=5.0,
+        help="Poll interval for --watch (default: 5).",
+    )
+    status.add_argument(
+        "--idle-exit-seconds",
+        type=float,
+        default=None,
+        help="With --watch, exit after this many seconds with no queued/running jobs.",
+    )
+
+    bracket = subparsers.add_parser(
+        "bracket",
+        help="Inspect campaign-level bracket state (qualifier/main ranking).",
+    )
+    bracket_sub = bracket.add_subparsers(dest="bracket_command", required=True)
+    for sub_name, sub_help in (
+        ("status", "Compact bracket phase and entry summary."),
+        ("show", "Full bracket state.json payload."),
+    ):
+        sub = bracket_sub.add_parser(sub_name, help=sub_help)
+        sub.add_argument(
+            "--campaign",
+            required=True,
+            help="Campaign name (outputs/campaigns/<campaign>/bracket/state.json).",
+        )
+        sub.add_argument(
+            "--output-root",
+            type=Path,
+            default=Path("outputs"),
+            help="Output root containing campaigns/ (default: outputs).",
+        )
+
+    results = subparsers.add_parser(
+        "results",
+        help="List or show evaluation manifests under run/evaluations/.",
+    )
+    results_sub = results.add_subparsers(dest="results_command", required=True)
+
+    results_list = results_sub.add_parser(
+        "list",
+        help="Glob evaluation result directories and manifest paths.",
+    )
+    results_list.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+
+    results_show = results_sub.add_parser(
+        "show",
+        help="Print one evaluation manifest.json payload.",
+    )
+    results_show.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+    results_show.add_argument(
+        "--result",
+        required=True,
+        help="Evaluations-relative path, result dir, or manifest.json path.",
+    )
+
+    jobs = subparsers.add_parser(
+        "jobs",
+        help="Optional artifact queue job operations.",
+    )
+    jobs_sub = jobs.add_subparsers(dest="jobs_command")
+
+    jobs_cancel = jobs_sub.add_parser(
+        "cancel",
+        help="Cancel queued optional jobs under queue/optional_jobs/*.json.",
+    )
+    jobs_cancel.add_argument(
+        "--run",
+        type=Path,
+        required=True,
+        help="Campaign run directory.",
+    )
+    jobs_cancel.add_argument(
+        "--job-id",
+        action="append",
+        default=[],
+        dest="job_ids",
+        help="Cancel a specific job_id (repeatable).",
+    )
+    jobs_cancel.add_argument(
+        "--all-queued",
+        action="store_true",
+        help="Cancel all queued jobs.",
+    )
+    jobs_cancel.add_argument(
+        "--include-running",
+        action="store_true",
+        help="Also cancel jobs currently marked running (use when worker is dead).",
+    )
+    jobs_cancel.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be cancelled without modifying job JSON.",
+    )
+    jobs_cancel.add_argument(
+        "--reason",
+        default="operator_cancel",
+        help="Recorded cancelled_reason on affected jobs.",
+    )
 
     submit = subparsers.add_parser(
         "submit",
@@ -387,6 +548,79 @@ def run_worker_cli(args: argparse.Namespace) -> int:
     )
 
 
+def run_bracket_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.tournament.bracket.status import bracket_show_payload, summarize_bracket
+
+    output_root = args.output_root.resolve()
+    if args.bracket_command == "status":
+        payload = summarize_bracket(campaign=str(args.campaign), output_root=output_root)
+    elif args.bracket_command == "show":
+        payload = bracket_show_payload(campaign=str(args.campaign), output_root=output_root)
+    else:
+        raise SystemExit("Unknown bracket command. Use: ow eval bracket status|show --help")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def run_status_cli(args: argparse.Namespace) -> int:
+    if not args.watch:
+        summary = summarize_run_status(args.run)
+        print(json.dumps(summary, indent=2, sort_keys=True))
+        return 0
+
+    poll_seconds = max(float(args.poll_seconds), 0.1)
+    idle_since: float | None = None
+    while True:
+        summary = summarize_run_status(args.run)
+        print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
+        if not queue_is_active(summary):
+            if args.idle_exit_seconds is None:
+                return 0
+            now = time.monotonic()
+            if idle_since is None:
+                idle_since = now
+            if now - idle_since >= float(args.idle_exit_seconds):
+                return 0
+        else:
+            idle_since = None
+        time.sleep(poll_seconds)
+
+
+def run_results_list_cli(args: argparse.Namespace) -> int:
+    rows = list_evaluation_results(args.run)
+    print(json.dumps({"results": rows}, indent=2, sort_keys=True))
+    return 0
+
+
+def run_results_show_cli(args: argparse.Namespace) -> int:
+    try:
+        payload = load_evaluation_result(args.run, str(args.result))
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
+    queue_dir, _ = resolve_run_worker_dirs(args.run)
+    if not queue_dir.is_dir():
+        raise SystemExit(f"Queue directory does not exist: {queue_dir}")
+    job_ids = {item.strip() for item in args.job_ids if item.strip()}
+    try:
+        result = cancel_optional_jobs(
+            queue_dir,
+            job_ids=job_ids or None,
+            all_queued=bool(args.all_queued),
+            include_running=bool(args.include_running),
+            dry_run=bool(args.dry_run),
+            reason=str(args.reason),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
 def run_package_cli(args: argparse.Namespace) -> int:
     package_path = package_checkpoint_submission(
         args.checkpoint.resolve(),
@@ -440,6 +674,20 @@ def main(argv: list[str] | None = None) -> int:
         return run_tournament_cli(args)
     if args.command == "worker":
         return run_worker_cli(args)
+    if args.command == "status":
+        return run_status_cli(args)
+    if args.command == "bracket":
+        return run_bracket_cli(args)
+    if args.command == "results":
+        if args.results_command == "list":
+            return run_results_list_cli(args)
+        if args.results_command == "show":
+            return run_results_show_cli(args)
+        raise SystemExit("Unknown results command. Use: ow eval results list|show --help")
+    if args.command == "jobs":
+        if args.jobs_command == "cancel":
+            return run_jobs_cancel_cli(args)
+        raise SystemExit("Unknown jobs command. Use: ow eval jobs cancel --help")
     if args.command == "package":
         return run_package_cli(args)
     if args.command == "submit":
