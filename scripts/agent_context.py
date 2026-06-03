@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -10,6 +11,170 @@ from pathlib import Path
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _read_preflight_gate_ids(repo_root: Path) -> dict[str, object]:
+    gates_dir = repo_root / "conf" / "benchmark" / "gates"
+    if not gates_dir.is_dir():
+        return {"present": False, "path": "conf/benchmark/gates", "gate_ids": []}
+    gate_ids = sorted(path.stem for path in gates_dir.glob("*.yaml"))
+    return {
+        "present": True,
+        "path": "conf/benchmark/gates",
+        "gate_ids": gate_ids,
+        "list_command": "uv run ow benchmark gate --list",
+    }
+
+
+def _read_resolved_config_snapshot(
+    repo_root: Path,
+    *,
+    include_snapshot: bool,
+) -> dict[str, object]:
+    smoke_cmd = [
+        "uv",
+        "run",
+        "ow",
+        "train",
+        "print_resolved_config=true",
+        "training=smoke",
+        "training.total_updates=10",
+        "curriculum=off",
+    ]
+    pointer: dict[str, object] = {
+        "present": True,
+        "print_command": "uv run ow train print_resolved_config=true",
+        "smoke_command": " ".join(smoke_cmd),
+        "make_smoke": "make agent-context RESOLVED=smoke",
+    }
+    if not include_snapshot:
+        return pointer
+    try:
+        result = subprocess.run(
+            smoke_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=180,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {**pointer, "snapshot_present": False, "error": str(exc)}
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        return {
+            **pointer,
+            "snapshot_present": False,
+            "error": stderr[:500] or f"exit {result.returncode}",
+        }
+    body = result.stdout
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    payload: dict[str, object] = {
+        **pointer,
+        "snapshot_present": True,
+        "sha256": digest,
+        "sha256_prefix": digest[:16],
+        "snapshot": body[:8000],
+    }
+    if len(body) > 8000:
+        payload["snapshot_truncated"] = True
+    return payload
+
+
+def _read_wandb_sweep_summary(repo_root: Path) -> dict[str, object]:
+    cmd = [
+        "uv",
+        "run",
+        "ow",
+        "sweep",
+        "list",
+        "--backend",
+        "wandb",
+        "--limit",
+        "5",
+    ]
+    pointer: dict[str, object] = {
+        "present": False,
+        "list_command": "uv run ow sweep list --backend wandb --limit 10",
+        "status_command": "uv run ow sweep status --backend wandb --sweep-id <id>",
+        "cancel_command": "uv run ow sweep cancel --backend wandb --sweep-id <id> --dry-run",
+    }
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=45,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {**pointer, "error": str(exc)}
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        return {
+            **pointer,
+            "error": stderr[:500] or f"exit {result.returncode}",
+        }
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {**pointer, "error": f"invalid JSON from sweep list: {exc}"}
+    sweeps = payload.get("sweeps")
+    if not isinstance(sweeps, list):
+        return {**pointer, "error": "sweep list missing sweeps array"}
+    rows: list[dict[str, object]] = []
+    for row in sweeps[:5]:
+        if not isinstance(row, dict):
+            continue
+        rows.append(
+            {
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "state": row.get("state"),
+            }
+        )
+    active = sum(
+        1
+        for row in rows
+        if str(row.get("state", "")).lower() in {"running", "pending"}
+    )
+    return {
+        **pointer,
+        "present": True,
+        "active_count": active,
+        "recent": rows,
+    }
+
+
+def _gpu_contention_hint(repo_root: Path) -> dict[str, object]:
+    patterns = (
+        "ow train",
+        "calibrate-seed-scheduler",
+        "pytest",
+    )
+    active: list[str] = []
+    for pattern in patterns:
+        try:
+            result = subprocess.run(
+                ["pgrep", "-f", pattern],
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=repo_root,
+            )
+        except OSError:
+            continue
+        if result.returncode == 0 and result.stdout.strip():
+            active.append(pattern)
+    return {
+        "single_gpu_note": (
+            "One GPU; check terminals and defer ow train / calibrate-seed-scheduler "
+            "when contention is active."
+        ),
+        "contention": bool(active),
+        "active_patterns": active,
+    }
 
 
 def _read_preflight_excerpt(repo_root: Path) -> dict[str, object]:
@@ -137,13 +302,25 @@ def _read_latest_run_eval_summary(
     }
 
 
-def build_context(*, limit_runs: int = 5) -> dict[str, object]:
+def build_context(
+    *,
+    limit_runs: int = 5,
+    resolved_snapshot: bool = False,
+) -> dict[str, object]:
     repo_root = _repo_root()
     recent_runs = _read_recent_runs(repo_root, limit=limit_runs)
+    preflight = _read_preflight_excerpt(repo_root)
+    preflight["gates"] = _read_preflight_gate_ids(repo_root)
     return {
         "repo_root": str(repo_root),
         "git": _read_git_branch(repo_root),
-        "preflight": _read_preflight_excerpt(repo_root),
+        "preflight": preflight,
+        "resolved_config": _read_resolved_config_snapshot(
+            repo_root,
+            include_snapshot=resolved_snapshot,
+        ),
+        "gpu_contention": _gpu_contention_hint(repo_root),
+        "wandb_sweeps": _read_wandb_sweep_summary(repo_root),
         "roadmap": _read_roadmap_excerpt(repo_root),
         "recent_runs_index": recent_runs,
         "latest_run_eval": _read_latest_run_eval_summary(repo_root, recent_runs),
@@ -170,8 +347,17 @@ def main(argv: list[str] | None = None) -> int:
         default=5,
         help="Max recent runs.jsonl entries to include.",
     )
+    parser.add_argument(
+        "--resolved",
+        choices=("smoke",),
+        default=None,
+        help="Include truncated Hydra resolved-config snapshot (smoke profile).",
+    )
     args = parser.parse_args(argv)
-    payload = build_context(limit_runs=max(int(args.limit_runs), 0))
+    payload = build_context(
+        limit_runs=max(int(args.limit_runs), 0),
+        resolved_snapshot=args.resolved == "smoke",
+    )
     if args.format == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

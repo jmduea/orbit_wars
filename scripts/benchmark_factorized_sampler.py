@@ -49,6 +49,12 @@ def _expected_apply_count(max_moves_k: int, *, decoder_carry: bool) -> int:
 
 
 def main() -> None:
+    import sys
+
+    print(
+        "prefer: uv run ow benchmark factorized-sampler (tier-1 launch hygiene primitive)",
+        file=sys.stderr,
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-moves-k", type=int, default=3)
     parser.add_argument(

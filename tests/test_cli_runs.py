@@ -67,3 +67,84 @@ def test_runs_watch_exits_when_idle(tmp_path: Path, capsys, monkeypatch) -> None
     )
     assert capsys.readouterr().out.count('"run_id": "run-001"') >= 1
     assert sleeps == []
+
+
+def test_runs_archive_dry_run(tmp_path: Path) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "run-001", "campaign": "cap"}),
+        encoding="utf-8",
+    )
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+    outputs_root = tmp_path / "outputs"
+    assert (
+        runs_cli.main(
+            [
+                "archive",
+                "--run",
+                str(run_dir),
+                "--outputs-root",
+                str(outputs_root),
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    assert run_dir.is_dir()
+
+
+def test_runs_archive_moves_tree(tmp_path: Path) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "run-001", "campaign": "cap"}),
+        encoding="utf-8",
+    )
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+    outputs_root = tmp_path / "outputs"
+    assert (
+        runs_cli.main(
+            [
+                "archive",
+                "--run",
+                str(run_dir),
+                "--outputs-root",
+                str(outputs_root),
+                "--confirm",
+            ]
+        )
+        == 0
+    )
+    archived = (
+        outputs_root / "archived" / "campaigns" / "cap" / "runs" / "run-001"
+    )
+    assert archived.is_dir()
+    assert not run_dir.exists()
+
+
+def test_runs_checkpoint_delete(tmp_path: Path) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-001"
+    checkpoints = run_dir / "checkpoints"
+    checkpoints.mkdir(parents=True)
+    ckpt = checkpoints / "jax_ckpt_000010.pkl"
+    ckpt.write_bytes(b"stub")
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "run-001", "campaign": "cap"}),
+        encoding="utf-8",
+    )
+    assert (
+        runs_cli.main(
+            [
+                "checkpoint",
+                "delete",
+                "--run",
+                str(run_dir),
+                "--checkpoint",
+                "jax_ckpt_000010.pkl",
+                "--confirm",
+            ]
+        )
+        == 0
+    )
+    assert not ckpt.exists()

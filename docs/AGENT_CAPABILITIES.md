@@ -5,15 +5,58 @@ Task-oriented guide for coding agents. Canonical policy: `AGENTS.md`. Architectu
 ## Session context
 
 ```bash
-make agent-context          # JSON: git branch, preflight thresholds, roadmap, recent runs, latest eval queue
+make agent-context          # JSON: git branch, preflight thresholds, gate ids, GPU hint, recent runs
+make agent-context RESOLVED=smoke   # also embed truncated Hydra resolved-config snapshot + hash
 uv run ow train print_resolved_config=true
 ```
+
+## Capability map
+
+Operator actions agents should use (same CLI as humans). **Maintain this table when adding `ow` subcommands** — `tests/test_agent_capability_map.py` asserts each `ow` path is registered in `--help`.
+
+| Action | Agent command |
+|--------|---------------|
+| Train (local Hydra) | `ow train` |
+| Print resolved config | `ow train print_resolved_config=true` |
+| Kaggle train lifecycle | `ow train kaggle` |
+| Tournament eval | `ow eval tournament` |
+| Artifact worker | `ow eval worker` |
+| Eval queue status | `ow eval status` |
+| Eval results list | `ow eval results list` |
+| Eval result show | `ow eval results show` |
+| Cancel queued jobs | `ow eval jobs cancel` |
+| Package checkpoint | `ow eval package` |
+| Kaggle submit | `ow eval submit` |
+| List runs | `ow runs list` |
+| Show run | `ow runs show` |
+| Tail run logs | `ow runs logs` |
+| Watch run | `ow runs watch` |
+| Archive run tree | `ow runs archive` |
+| Delete checkpoint file | `ow runs checkpoint delete` |
+| Promotion show | `ow promote show` |
+| Promotion history | `ow promote history` |
+| Promotion demote | `ow promote demote` |
+| Benchmark training throughput | `ow benchmark training` |
+| Preflight sanity | `ow benchmark sanity` |
+| Preflight gate list | `ow benchmark gate list` |
+| Preflight gate run | `ow benchmark gate run` |
+| Gate 5 tournament proof | `ow benchmark tournament-proof` |
+| Preflight calibrate | `ow benchmark calibrate` |
+| Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
+| Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
+| Learn-proof composer | `ow benchmark learn-proof` |
+| W&B/Kaggle sweep create | `ow sweep create` |
+| Sweep status | `ow sweep status` |
+| Sweep list | `ow sweep list` |
+| Sweep cancel | `ow sweep cancel` |
+| Generate sweep YAML | `ow make` |
+| Session context JSON | `make agent-context` |
 
 ## Command tiers
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow runs watch`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow sweep create --backend wandb\|kaggle` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -31,6 +74,10 @@ uv run ow runs list --limit 10
 uv run ow runs show --run outputs/campaigns/<campaign>/runs/<run_id>
 uv run ow runs logs --run outputs/campaigns/<campaign>/runs/<run_id> --tail 5
 uv run ow runs watch --run outputs/campaigns/<campaign>/runs/<run_id> --poll-seconds 5
+uv run ow runs archive --run outputs/campaigns/<campaign>/runs/<run_id> --dry-run
+uv run ow runs archive --run outputs/campaigns/<campaign>/runs/<run_id> --confirm
+uv run ow runs checkpoint delete --run outputs/campaigns/<campaign>/runs/<run_id> --checkpoint jax_ckpt_000100.pkl --dry-run
+uv run ow runs checkpoint delete --run outputs/campaigns/<campaign>/runs/<run_id> --checkpoint jax_ckpt_000100.pkl --confirm
 ```
 
 ## Verify (tests)
@@ -60,7 +107,19 @@ uv run ow benchmark gate run curriculum_staged --dry-run
 uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
 ```
 
-Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`. Full ladder: `ow benchmark learn-proof` (composes primitives above).
+Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`.
+
+**Prefer primitives over `learn-proof` in agent loops:**
+
+```bash
+uv run ow benchmark learn-proof --print-primitives   # JSON command chain, no GPU
+uv run ow benchmark learn-proof --steps beat_noop --dry-run
+uv run ow benchmark gate run beat_noop --dry-run
+uv run ow benchmark gate run beat_random --dry-run
+uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
+```
+
+Full ladder composer (CI/human): `ow benchmark learn-proof` / `make preflight-learn-proof`.
 
 **Sweeps (unified CLI):**
 
@@ -68,6 +127,28 @@ Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curric
 uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/2p_only_throughput.yaml
 uv run ow sweep create --backend kaggle --sweep-yaml conf/wandb_sweep/2p_only_throughput.yaml --dry-run
 uv run ow sweep status --backend wandb --sweep-id <id> --project orbit_wars
+uv run ow sweep cancel --backend wandb --sweep-id <id> --project orbit_wars --dry-run
+```
+
+**CRUD boundaries:** Training runs are append-only until archived — `ow runs archive` moves completed run trees to `outputs/archived/` (blocks active queue; requires `--confirm`). Checkpoint files may be removed with `ow runs checkpoint delete` (blocks current promoted incumbent). Promotion rollback: `ow promote demote`. Sweep teardown: `ow sweep cancel` (W&B active runs).
+
+**Preflight calibrate primitive chain (prefer over monolithic sweep in agent loops):**
+
+```bash
+# Analyze existing campaigns only (no GPU train):
+uv run ow benchmark calibrate --analyze-only --analyze-campaigns
+uv run ow benchmark calibrate --analyze-only --analyze-jsonl path/to/log_jax.jsonl:noop_only:42:500
+
+# Sweep then analyze (GPU; check terminals first):
+uv run ow benchmark calibrate --out docs/benchmarks/preflight-calibration.json
+make preflight-calibrate   # Makefile alias for sweep + refresh AGENTS thresholds
+```
+
+**Launch hygiene tier-1 (not merge throughput authority):**
+
+```bash
+uv run ow benchmark factorized-sampler --max-moves-k 5 --batch-size 32 --warmup 5 --repeats 20 --assert-max-ms 3.22
+make test-launch-hygiene-throughput
 ```
 
 Deprecated with one-release warnings: bare `wandb sweep`, `ow train kaggle launch --create-sweep`.

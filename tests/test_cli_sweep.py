@@ -34,3 +34,22 @@ def test_sweep_create_kaggle_dry_run(capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["backend"] == "kaggle"
     assert payload["dry_run"] is True
+
+
+def test_sweep_cancel_dry_run(capsys) -> None:
+    assert (
+        sweep_cli.main(
+            [
+                "cancel",
+                "--backend",
+                "wandb",
+                "--sweep-id",
+                "abc123",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["dry_run"] is True
+    assert payload["sweep_id"] == "abc123"

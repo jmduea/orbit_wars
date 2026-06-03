@@ -18,7 +18,8 @@ def print_sweep_help() -> None:
         "Subcommands:\n"
         "  create    Register a sweep (--backend wandb|kaggle)\n"
         "  status    Inspect sweep state (W&B API)\n"
-        "  list      List recent sweeps for a project (W&B API)\n\n"
+        "  list      List recent sweeps for a project (W&B API)\n"
+        "  cancel    Cancel active runs in a W&B sweep\n\n"
         "Examples:\n"
         "  uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/2p_only_throughput.yaml\n"
         "  uv run ow make wandb_sweep=shield_cheap_history\n"
@@ -74,6 +75,16 @@ def build_parser() -> argparse.ArgumentParser:
     list_cmd.add_argument("--project", default="orbit_wars")
     list_cmd.add_argument("--entity", default=None)
     list_cmd.add_argument("--limit", type=int, default=10)
+
+    cancel = subparsers.add_parser(
+        "cancel",
+        help="Cancel active/pending runs in a W&B sweep (operator teardown).",
+    )
+    cancel.add_argument("--backend", choices=("wandb",), default="wandb")
+    cancel.add_argument("--sweep-id", required=True)
+    cancel.add_argument("--project", default="orbit_wars")
+    cancel.add_argument("--entity", default=None)
+    cancel.add_argument("--dry-run", action="store_true")
 
     return parser
 
@@ -184,6 +195,59 @@ def run_list_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_cancel_cli(args: argparse.Namespace) -> int:
+    if args.backend != "wandb":
+        print(f"sweep cancel unsupported for backend {args.backend!r}", file=sys.stderr)
+        return 2
+
+    entity = args.entity
+    path = f"{entity}/{args.project}" if entity else args.project
+    sweep_path = f"{path}/{args.sweep_id}"
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "backend": args.backend,
+                    "sweep_id": args.sweep_id,
+                    "project": args.project,
+                    "entity": entity,
+                    "sweep_path": sweep_path,
+                    "dry_run": True,
+                    "action": "would_cancel_active_runs",
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    import wandb  # type: ignore
+
+    api = wandb.Api()
+    sweep = api.sweep(sweep_path)
+    cancelled: list[str] = []
+    skipped: list[str] = []
+    for run in getattr(sweep, "runs", []) or []:
+        state = str(getattr(run, "state", "") or "")
+        run_id = str(getattr(run, "id", "") or "")
+        if state.lower() in {"running", "pending", "queued"}:
+            run.cancel()
+            cancelled.append(run_id)
+        elif run_id:
+            skipped.append(run_id)
+    payload = {
+        "backend": args.backend,
+        "sweep_id": args.sweep_id,
+        "project": args.project,
+        "entity": entity,
+        "sweep_state": getattr(sweep, "state", None),
+        "cancelled_run_ids": cancelled,
+        "skipped_run_ids": skipped[:20],
+        "cancelled_count": len(cancelled),
+    }
+    print(json.dumps(payload, indent=2))
+    return 0 if cancelled or not getattr(sweep, "runs", None) else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     if not argv:
         print_sweep_help()
@@ -200,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_status_cli(args)
         case "list":
             return run_list_cli(args)
+        case "cancel":
+            return run_cancel_cli(args)
         case _:
             parser.error(f"unknown sweep command: {args.command!r}")
             return 2

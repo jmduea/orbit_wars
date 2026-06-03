@@ -1,6 +1,6 @@
 ---
 title: "feat: Complete seed scheduler calibration sweep"
-status: active
+status: completed
 date: 2026-06-01
 origin: docs/benchmarks/seed-scheduler-calibration.md
 deepened: null
@@ -32,6 +32,7 @@ Leaderboard games use unseen seeds. Single-seed training is brittle (validation 
 2. **Stability gate:** run-mean `|approx_kl| ≤ 0.005`, finite losses (same as validation-seed-sweep).
 3. **Do not relax tournament thresholds** to force a pass; derive interval from data only.
 4. **Partial sweep analysis** is allowed for interim docs, but default change requires full 15-arm grid + eval.
+5. **Sweep consistency:** all arms use the same Hydra profile as completed runs (`task=shield_off` via default group stack; do not switch to `shield_cheap` mid-grid).
 
 ## Scope Boundaries
 
@@ -65,7 +66,17 @@ Leaderboard games use unseen seeds. Single-seed training is brittle (validation 
 - `outputs/campaigns/seed_sched_cal_self_play_only_reseed*_u500/` (artifacts)
 - `src/jax/seed_scheduler_calibration.py` (only if sweep discovery bug found)
 
-**Approach:** Run `uv run ow benchmark calibrate-seed-scheduler --opponents self_play_only --reseed-intervals 25,50,100 --no-include-total-fifth --total-updates 500`. Failed partial runs with empty JSONL are skipped by `latest_completed_run_dir()` (PR #165). Terminal progress: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`.
+**Approach:** Confirm no other GPU benchmark is active (see terminals / `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`). Then run:
+
+```bash
+uv run ow benchmark calibrate-seed-scheduler \
+  --opponents self_play_only \
+  --reseed-intervals 25,50,100 \
+  --no-include-total-fifth \
+  --total-updates 500
+```
+
+Failed partial runs with empty JSONL are skipped by `latest_completed_run_dir()` (PR #165). Incomplete arms (e.g. reseed 25 with fewer than 500 JSONL lines) must be re-run to completion.
 
 **Test scenarios:** Test expectation: none — GPU artifact generation.
 
@@ -84,7 +95,15 @@ Leaderboard games use unseen seeds. Single-seed training is brittle (validation 
 - `outputs/campaigns/seed_sched_cal_*/evaluations/`
 - `docs/benchmarks/seed-scheduler-calibration.json`
 
-**Approach:** `uv run ow benchmark calibrate-seed-scheduler --analyze-only --eval-existing`
+**Approach:**
+
+```bash
+uv run ow benchmark calibrate-seed-scheduler \
+  --analyze-only \
+  --eval-existing \
+  --out docs/benchmarks/seed-scheduler-calibration.json \
+  --out-md docs/benchmarks/seed-scheduler-calibration.md
+```
 
 **Test scenarios:** Test expectation: none — long-running eval.
 
@@ -127,3 +146,21 @@ Leaderboard games use unseen seeds. Single-seed training is brittle (validation 
 - `docs/benchmarks/seed-scheduler-calibration.md` — partial sweep status
 - `docs/benchmarks/validation-seed-sweep.md` — seed variance evidence
 - `src/jax/seed_scheduler_calibration.py` — calibration harness
+
+## Open Questions
+
+### From 2026-06-02 doc-review (interactive routing: best judgment)
+
+| # | Finding | Action |
+|---|---------|--------|
+| 1 | U3: if fixed interval wins but equals auto-scale at 500u (50), document whether YAML stays `-1` or pins `50` | Deferred — decide after U2 eval JSON |
+| 2 | GPU serial dependency: learn-proof / preflight calibrate may block U1 | Operator: run U1 when GPU idle |
+| 3 | Partial self_play reseed25 run (24 JSONL lines) — re-run before eval | Apply at U1 execution |
+
+## Doc-review coverage (2026-06-02)
+
+| Persona | Findings (actionable / FYI) | Notes |
+|---------|------------------------------|-------|
+| coherence | 1 / 0 | U2 `--out` paths aligned with benchmark doc |
+| feasibility | 0 / 1 | CLI + `pick_reseed_interval` match plan; subagents unavailable |
+| scope-guardian | 0 / 0 | Scope bounded; deferred items appropriate |
