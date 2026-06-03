@@ -48,6 +48,14 @@ Use `artifacts=hybrid_promotion` for the composite eval profile.
 
 `4p_free_for_all` runs only when at least four unique candidates are present.
 
+`4p_challenger_vs_baselines` schedules one challenger plus three scripted baseline
+slots (default fillers: noop, random, random) for unified Gate 5 / hybrid promotion
+ladders. Win rate for the 4p leg is first-place rate for the challenger. If the 4p
+leg produces zero games, unified scoring fails closed with `missing_4p_games`.
+
+Unified ladder orchestration lives in `src/artifacts/tournament/unified/` and is
+consumed by `ow benchmark tournament-proof` and hybrid `checkpoint_eval` workers.
+
 Shortlist resolution uses local `checkpoint_path` when present, otherwise attempts
 W&B checkpoint artifact download into `outputs/cache/wandb-artifacts/`.
 
