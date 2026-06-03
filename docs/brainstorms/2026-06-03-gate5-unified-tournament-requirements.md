@@ -82,7 +82,7 @@ That split creates three problems: agents and operators cannot treat “tourname
 
 - R13. **Reports expose combined and per-format rates.** Tournament output (leaderboard, proof report, `checkpoint_eval` manifest) must include combined score plus 2p and 4p aggregate win rates per opponent so operators can diagnose format weakness without inferring from a single number.
 
-- R14. **Gate 5 remains distinct from Docker validation.** Unified tournament proof does not replace Kaggle Docker validation in the submit-valid funnel (`docs/AGENT_CAPABILITIES.md`). Tournament pass is necessary for win proof and hybrid promotion; Docker `validation_ok` remains a separate gate.
+- R14. **Docker validation precedes tournament proof.** Submit-valid funnel runs Kaggle Docker packaging validation before any held-out `kaggle_environments` tournament work (`docs/AGENT_CAPABILITIES.md`). `ow benchmark tournament-proof` and hybrid `checkpoint_eval` enforce this order; tournament pass is necessary for win proof and hybrid promotion; Docker `validation_ok` gates whether the ladder runs.
 
 ---
 
