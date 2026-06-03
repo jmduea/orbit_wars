@@ -65,6 +65,7 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - Hydra/config tests: prefer composition and required-key validation over asserting full resolved configs match hardcoded snapshots.
 - After major training-loop or checkpoint refactors, verify with short train smoke then a ~100-update benchmark; unit tests alone may miss regressions.
 - When the user attaches PR diff context or cites a PR number, fetch with `gh pr view` / `gh pr diff` — do not rely on inline diff blobs alone.
+- After requirements/brainstorm doc review, commit the doc locally and defer implementation planning to a separate agent (`/ce-plan` or LFG) unless asked to implement in the same pass.
 - `.audit/` and `.cursor/hooks/state/` are gitignored; keep audit trails and hook state local, not in commits.
 
 ## Learned Workspace Facts
@@ -83,5 +84,11 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - **Train run layout:** `ow train` with `output.campaign=<name>` writes under `outputs/campaigns/<campaign>/runs/<run_id>/` — update metrics in `logs/*_jax.jsonl` (not `metrics.jsonl` at run root), checkpoints in `checkpoints/jax_ckpt_*.pkl`, artifact jobs in `queue/optional_jobs/`, evaluation outputs in `evaluations/`.
 - **Curriculum pre-flight:** `curriculum.enabled=true` requires `opponents.snapshot.pool_size > 0` and `opponents.snapshot.interval_updates > 0`; use `curriculum=off` for isolated train smokes that don't exercise historical opponents.
 - **Parametric edge catalog:** default `intercept_anchors` `[1.0, 3.0, 6.0]`; edge dim `6×N+7` (25 for default). Implemented in `src/features/catalog/edge.py` and `conf/task/base.yaml`; `docs/feature-encoding-v2.md` may still describe the older two-anchor layout.
-- **Preflight gates:** Gates 2–4 read JAX learning-signal trend from `logs/*_jax.jsonl`; Gate 5 is tournament win proof on checkpoints via `kaggle_environments` (not Docker). Source of truth for thresholds: `docs/benchmarks/preflight-calibration.json`.
-- **`ow benchmark` dispatch:** subcommands must be registered in `src/cli/__init__.py` (`case "benchmark"`), not only `build_parser()` in tests — verify with `uv run ow benchmark --help`.
+- **Preflight gates:** Gates 2–4 read JAX learning-signal trend from `logs/*_jax.jsonl`; Gate 5 is held-out unified tournament proof on checkpoints via `kaggle_environments` (not Docker). **Unified ladder** (2p+4p combined score, noop/random prerequisites, incumbent Stage 2 with per-seed 100%): `ow benchmark tournament-proof` and hybrid `checkpoint_eval` when `artifacts.unified_tournament.enabled=true` (`artifacts=hybrid_promotion`). Floors in `docs/benchmarks/preflight-calibration.json` `unified_tournament` section; `enforcement: false` until GPU calibration campaigns complete (`ow benchmark calibrate-unified-tournament`). Train overrides: `conf/benchmark/gates/*.yaml` via `src/jax/preflight_gate_loader.py`. Primitives: `ow benchmark gate run <name>`, `ow benchmark tournament-proof`; composer: `ow benchmark learn-proof`.
+- **Launch hygiene throughput (tier-1 vs tier-2):** `make test-launch-hygiene-throughput` runs `ow benchmark factorized-sampler` (tier-1 microbench; script `scripts/benchmark_factorized_sampler.py` is deprecated) — merge throughput health requires tier-2 `make test-launch-hygiene-e2e-throughput`, which subprocesses `ow benchmark training` on the production path with `--preset primary` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` (`--assert-within-pct`, same GPU machine as baseline capture). Baseline SHA: first parent of PR #163 merge (`79162a2088160b8ed05c3e3a050e064c7f6c9556`, pre-hygiene). Capture: worktree at that SHA, N≥3 runs, `env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0`. Example:
+  ```bash
+  uv run ow benchmark training --preset primary --label capture --repeats 3 \
+    --updates 20 --warmup 2 --out docs/benchmarks/launch-hygiene-e2e-baseline.json
+  uv run ow benchmark training --preset primary --label gate --updates 20 --warmup 2 \
+    --out /tmp/gate.json --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
+  ```
