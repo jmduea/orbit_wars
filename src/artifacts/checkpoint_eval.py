@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -43,12 +44,21 @@ def run_checkpoint_eval_job(
     )
 
     promoted = bool(promotion_attempt and promotion_attempt.promoted)
+    unified_verdict_path = tournament_dir / "unified_verdict.json"
     return {
         "validation_ok": True,
         "docker_manifest_path": str(result_dir / "docker_manifest.json"),
         "docker_output_dir": str(docker_output_dir),
         "tournament_id": tournament.tournament_id,
         "leaderboard_path": str(tournament_dir / "leaderboard.json"),
+        "tournament_unified_verdict_path": str(unified_verdict_path)
+        if unified_verdict_path.is_file()
+        else None,
+        "tournament_unified_passed": (
+            json.loads(unified_verdict_path.read_text(encoding="utf-8")).get("passed")
+            if unified_verdict_path.is_file()
+            else None
+        ),
         "promoted": promoted,
         "promotion_reason": promotion_attempt.reason
         if promotion_attempt
