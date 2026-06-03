@@ -312,6 +312,15 @@ flowchart TD
 
 ---
 
+## Related documentation
+
+- Ideation: `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`
+- Solutions: `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md`
+- Template: `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
+- Metric gates: `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`
+
+---
+
 ## Sources & Research
 
 - Origin: `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`

@@ -127,8 +127,11 @@ Decision artifact (intended shape, mirroring `docs/benchmarks/seed-scheduler-cal
 }
 ```
 
-## Related Issues
+## Related documentation
 
+- Ideation: `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`
+- Requirements: `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`
+- Plan: `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
 - `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md` — same operator pattern, reseed-only axis
 - `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md` — `run_ow_train` during sweeps
 - `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md` — metric denominators and composite scores

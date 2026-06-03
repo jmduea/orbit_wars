@@ -123,3 +123,10 @@ Orbit Wars already implements heavy MDP shaping across Hydra groups (`reward/`, 
 | 13 | Eureka repair brief codegen | Valuable follow-on; depends on catalog + eval manifests (#1) |
 | 14 | Remove long trains entirely | Over-stated; smoke+gates is policy choice, not product requirement |
 | 15 | OpenSpiel portfolio narrative only | Documentation clarity, not new capability |
+
+## Related documentation
+
+- Solutions (operator design): `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md`
+- Requirements: `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`
+- Plan: `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
+- Prior art in-repo: `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`

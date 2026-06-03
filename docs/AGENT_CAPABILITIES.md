@@ -43,6 +43,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Gate 5 tournament proof | `ow benchmark tournament-proof` |
 | Preflight calibrate | `ow benchmark calibrate` |
 | Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
+| Env shaping calibration (planned) | `ow benchmark shape-calibrate` — see `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` |
 | Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
 | Learn-proof composer | `ow benchmark learn-proof` |
 | W&B/Kaggle sweep create | `ow sweep create` |

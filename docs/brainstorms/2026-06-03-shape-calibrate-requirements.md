@@ -118,4 +118,8 @@ That gap blocks **searchable, measurable env shaping**: outer-loop search needs 
 - `docs/benchmarks/seed-scheduler-calibration.json` — artifact shape
 - `docs/benchmarks/preflight-calibration.json` — gate and tournament floors
 - `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md` — idea #6
+- `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md` — implementation plan
+- `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` — compounded operator guidance
+- `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md` — template operator
+- `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md` — metric denominators / gameable objectives
 - External: [ICML 2024 auto environment shaping](https://arxiv.org/html/2407.16186) — bilevel train shaped / eval reference MDP
