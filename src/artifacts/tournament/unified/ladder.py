@@ -116,13 +116,12 @@ def run_unified_ladder(
     output_root: Path | None = None,
     run_match_fn: MatchRunner | None = None,
     dry_run: bool = False,
+    stop_after_stage1: bool = False,
 ) -> UnifiedLadderVerdict:
     """Run prerequisite-first unified ladder with early exit."""
 
     run_match_fn = run_match_fn or _default_run_match
     output_dir.mkdir(parents=True, exist_ok=True)
-    challenger = agent_from_checkpoint(checkpoint_path.resolve())
-    challenger_id = challenger.agent_id
     root = output_root or Path("outputs")
 
     if dry_run:
@@ -136,6 +135,9 @@ def run_unified_ladder(
             challenger_checkpoint=str(checkpoint_path.resolve()),
             enforcement=spec.enforcement,
         )
+
+    challenger = agent_from_checkpoint(checkpoint_path.resolve())
+    challenger_id = challenger.agent_id
 
     stage1_dir = output_dir / "stage1_prerequisites"
     stage1_schedules = schedule_stage1_matches(challenger, spec)
@@ -177,6 +179,17 @@ def run_unified_ladder(
         verdict = UnifiedLadderVerdict(
             passed=False,
             reason=fail_reason or "failed_prerequisite",
+            stages=(stage1_result,),
+            challenger_checkpoint=str(checkpoint_path.resolve()),
+            enforcement=spec.enforcement,
+        )
+        write_unified_verdict(output_dir, verdict)
+        return verdict
+
+    if stop_after_stage1:
+        verdict = UnifiedLadderVerdict(
+            passed=True,
+            reason="stage1_calibration_only",
             stages=(stage1_result,),
             challenger_checkpoint=str(checkpoint_path.resolve()),
             enforcement=spec.enforcement,
