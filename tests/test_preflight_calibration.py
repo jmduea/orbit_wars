@@ -126,9 +126,10 @@ def test_unified_tournament_section_in_committed_calibration_parses() -> None:
     path = Path("docs/benchmarks/preflight-calibration.json")
     spec = load_unified_tournament_spec(path)
     assert not spec.needs_calibration
-    assert spec.stage1.floors["noop"] == 0.7
-    assert spec.stage1.floors["random"] == 0.58
-    assert not spec.enforcement
+    assert spec.stage1.floors["noop"] == 0.76
+    assert spec.stage1.floors["random"] == 0.76
+    assert spec.stage1.games_per_pair == 2
+    assert spec.enforcement
 
 
 def test_refresh_agents_md_thresholds_replaces_block(tmp_path) -> None:
