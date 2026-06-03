@@ -76,6 +76,19 @@ def _schedule_matches(
                 [agent.act_fn for agent in top],
             )
         )
+    if "4p_challenger_vs_baselines" in formats and len(candidates) == 1:
+        candidate = candidates[0]
+        fillers = cfg.baselines[:3] if len(cfg.baselines) >= 3 else ["noop", "random", "random"]
+        filler_agents = [build_baseline_agent(name) for name in fillers]
+        filler_ids = tuple(f"baseline:{name}" for name in fillers)
+        schedules.append(
+            (
+                "4p_challenger_vs_baselines",
+                "mixed",
+                (candidate.agent_id, *filler_ids),
+                [candidate.act_fn, *filler_agents],
+            )
+        )
     return schedules
 
 

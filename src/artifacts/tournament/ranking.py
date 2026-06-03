@@ -82,7 +82,7 @@ def build_leaderboard(
                     vs_incumbent_games += 1
                     if outcome.results.get(candidate.agent_id) == "win":
                         vs_incumbent_wins += 1
-            elif outcome.format_name == "4p_free_for_all":
+            elif outcome.format_name in {"4p_free_for_all", "4p_challenger_vs_baselines"}:
                 four_player_games += 1
                 if outcome.placements.get(candidate.agent_id) == 1:
                     first_places += 1
