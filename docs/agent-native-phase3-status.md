@@ -40,7 +40,6 @@ uv run ow benchmark calibrate-seed-scheduler --analyze-only --dry-run
 
 - **Launch hygiene Phase B** — optional throughput recovery; ROADMAP Later only.
 - **Planet Flow pipeline relaunch (U7)** — operator GPU after reachability mask; see reachability plan U7.
-- **Audit doc refresh** — `docs/audits/agent-native-architecture-2026-06-02.md` still lists pre-#184 gaps; use this status doc and the phase-2 solution learning as current truth.
 
 ## Related
 

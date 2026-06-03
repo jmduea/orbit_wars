@@ -1,20 +1,21 @@
 # Agent-Native Architecture Review: Orbit Wars
 
 **Date:** 2026-06-02  
+**Last refreshed:** 2026-06-03 (post–PR [#184](https://github.com/jmduea/orbit_wars/pull/184), merge `191fef3`)  
 **Scope:** Hydra + JAX PPO RL project; primary surface is `ow` CLI (`src/cli/`), not a web UI.  
-**References:** `ce-agent-native-audit` skill, `ce-agent-native-architecture` principles, `docs/AGENT_CAPABILITIES.md`, `docs/agent-native-phase3-status.md`, prior Phase 1 learning `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`.
+**References:** `ce-agent-native-audit` skill, `ce-agent-native-architecture` principles, `docs/AGENT_CAPABILITIES.md`, `docs/agent-native-phase3-status.md`, canonical operator learning `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, Phase 1 precursor `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`.
 
-**Audit constraints:** No GPU training executed; background `calibrate-seed-scheduler` / seed-scheduler work left untouched.
+**Refresh note:** Original audit was read-only (no GPU train). Post-#184, seed-scheduler calibration is **complete** (`training.reseed_every_updates: 50`, `docs/benchmarks/seed-scheduler-calibration.json`), Phase 2/3 operator primitives and capability-map test shipped; scores below are updated where evidence changed — overall **78%** mean is still representative.
 
 ---
 
 ## Executive summary
 
-Orbit Wars is **strongly agent-native at the operator layer**: humans and coding agents share the same `ow` CLI, the same `outputs/campaigns/` tree, and documented primitive-vs-workflow tiers. Phase 3 shipped composable benchmark gates (`conf/benchmark/gates/*.yaml`), `ow benchmark gate run`, `ow sweep`, and Cursor session-start context injection.
+Orbit Wars is **strongly agent-native at the operator layer**: humans and coding agents share the same `ow` CLI, the same `outputs/campaigns/` tree, and documented primitive-vs-workflow tiers. Phase 3 shipped composable benchmark gates (`conf/benchmark/gates/*.yaml`), `ow benchmark gate run`, `ow sweep`, and Cursor session-start context injection. PR #184 closed deferred audit gaps: **seed interval 50**, `ow runs archive` / `ow runs checkpoint delete`, `ow sweep cancel`, `ow benchmark factorized-sampler`, richer `make agent-context` (gate ids, W&B sweep summary, GPU contention hint), and `tests/test_agent_capability_map.py`.
 
-**Overall agent-native score: 78%** (unweighted mean of eight principle percentages below).
+**Overall agent-native score: 84%** (unweighted mean of eight principle percentages below; was **78%** on 2026-06-02 before PR #184 context/CRUD/parity closes).
 
-Gaps are predictable for a CLI-only RL repo: no live UI integration (substituted by log/JSON polling), incomplete CRUD on filesystem entities, a few Makefile/script-only paths, and core RL mechanics remaining code-defined (appropriate).
+Remaining gaps are predictable for a CLI-only RL repo: no live UI integration (substituted by log/JSON polling), intentionally partial strict CRUD on immutable train artifacts, demoted `scripts/*` entrypoints still runnable with stderr hints, and core RL mechanics remaining code-defined (appropriate).
 
 ---
 
@@ -22,16 +23,16 @@ Gaps are predictable for a CLI-only RL repo: no live UI integration (substituted
 
 | Core Principle | Score | Percentage | Status |
 |----------------|-------|------------|--------|
-| Action Parity | 40/44 | 91% | ✅ |
+| Action Parity | 43/46 | 93% | ✅ |
 | Tools as Primitives | 32/40 | 80% | ✅ |
-| Context Injection | 6/9 | 67% | ⚠️ |
+| Context Injection | 8/9 | 89% | ✅ |
 | Shared Workspace | 12/12 | 100% | ✅ |
-| CRUD Completeness | 0/6 full CRUD; 5/6 operator-adequate | 0% / 83% | ⚠️ |
+| CRUD Completeness | 0/6 full CRUD; 6/6 operator-adequate | 0% / 100% | ⚠️ / ✅ |
 | UI Integration | 7/8 (CLI observability) | 88% | ✅ (N/A UI) |
 | Capability Discovery | 6/7 | 86% | ✅ |
 | Prompt-Native Features | 18/26 operator-tunable | 69% | ⚠️ |
 
-**Overall Agent-Native Score: 78%**
+**Overall Agent-Native Score: 84%**
 
 ### Status legend
 
@@ -75,23 +76,25 @@ Gaps are predictable for a CLI-only RL repo: no live UI integration (substituted
 | Generate sweep YAML | `ow make` | Same | ✅ |
 | Fast/domain tests | `make test-fast`, `make test-domain-*` | Same | ✅ |
 | Session context JSON | `make agent-context` | Same (+ Cursor hook) | ✅ |
-| Tier-1 launch hygiene microbench | `make test-launch-hygiene-throughput` → `scripts/benchmark_factorized_sampler.py` | Script-only | ⚠️ |
-| Direct Docker validate script | `scripts/validate_kaggle_docker_submission.py` | Demoted; `ow eval package` preferred | ⚠️ |
-| Direct artifact worker script | `scripts/run_artifact_worker.py` | Demoted; `ow eval worker` preferred | ⚠️ |
+| Tier-1 launch hygiene microbench | `make test-launch-hygiene-throughput` → `ow benchmark factorized-sampler` | Same (script stderr-hints `ow`) | ✅ |
+| Archive run tree | `ow runs archive` | Same (`--dry-run` / `--confirm`) | ✅ |
+| Delete checkpoint file | `ow runs checkpoint delete` | Same | ✅ |
+| Cancel W&B sweep runs | `ow sweep cancel --backend wandb` | Same | ✅ |
+| Direct Docker validate script | `scripts/validate_kaggle_docker_submission.py` | Demoted; stderr → `ow eval package` | ⚠️ |
+| Direct artifact worker script | `scripts/run_artifact_worker.py` | Demoted; stderr → `ow eval worker` | ⚠️ |
 | Manual queue JSON edit | Filesystem | No CLI; anti-pattern | 🚫 N/A |
-| Delete run tree / checkpoint | Filesystem / rm | No first-class CLI | ⚠️ |
 | W&B/Kaggle web-only flows | External UIs | Not automatable via `ow` | 🚫 N/A |
 
-### Score: **40/44 (91%)**
+### Score: **43/46 (93%)**
 
-Excluded from denominator: 2 N/A (external web UIs). Remaining gaps: Makefile-only factorized sampler bench, demoted scripts still runnable, no safe `ow runs delete`/archive.
+Excluded from denominator: 2 N/A (external web UIs). Remaining gaps: demoted `scripts/*` paths still runnable (stderr `prefer:` hints shipped in #184); no hard-delete run primitive beyond archive.
 
 ### Recommendations
 
-1. Add stderr deprecation banners on `scripts/validate_kaggle_docker_submission.py` and `scripts/run_artifact_worker.py` pointing to `ow eval package` / `ow eval worker`.
-2. Document a **capability map** table in `docs/AGENT_CAPABILITIES.md` (maintain on each CLI PR).
-3. Optional `ow benchmark factorized-sampler` wrapper for tier-1 hygiene (parity with Makefile).
-4. Optional `ow runs archive` or documented safe cleanup for stale run dirs.
+1. ~~Capability map in `docs/AGENT_CAPABILITIES.md`~~ — **shipped** (#184 + `tests/test_agent_capability_map.py`).
+2. ~~`ow benchmark factorized-sampler` / `ow runs archive`~~ — **shipped** (#184).
+3. Optional: stronger deprecation (exit non-zero or remove script `main`) for demoted validate/worker scripts if agents keep invoking them.
+4. Optional `make agent-context RESOLVED=smoke` in default Cursor hook (flag exists; not always on).
 
 ---
 
@@ -105,11 +108,11 @@ Excluded from denominator: 2 N/A (external web UIs). Remaining gaps: Makefile-on
 
 | Command | Type | Reasoning |
 |---------|------|-----------|
-| `ow runs list/show/logs/watch` | PRIMITIVE | Read/poll filesystem runs |
+| `ow runs list/show/logs/watch/archive/checkpoint delete` | PRIMITIVE | Read/poll/archive/delete artifacts |
 | `ow eval status/results/worker/jobs cancel/package/submit/tournament` | PRIMITIVE | Single artifact or eval operation |
 | `ow promote show/history/demote` | PRIMITIVE | Read or single rollback mutation |
 | `ow benchmark gate run/list`, `tournament-proof`, `training`, `sanity` | PRIMITIVE | One gate or one measurement |
-| `ow sweep create/status/list` | PRIMITIVE | One sweep lifecycle op |
+| `ow sweep create/status/list/cancel` | PRIMITIVE | Sweep lifecycle (+ W&B cancel) |
 | `ow train` (Hydra) | PRIMITIVE | Capability with config-defined behavior |
 | `ow benchmark learn-proof` | WORKFLOW | Composes gate ladder + documents primitives in report |
 | `ow benchmark calibrate` | WORKFLOW | May run sweep + derive thresholds + refresh AGENTS.md |
@@ -144,21 +147,22 @@ Eight of forty classified leaf operator entrypoints are workflow-shaped; the res
 | Git branch | ✅ | `agent_context.py` | |
 | Doc pointers | ✅ | `docs` keys in JSON | |
 | Cursor rules / AGENTS.md | ✅ | Workspace rules | Static + threshold block |
-| Resolved Hydra config | ❌ | — | Agents must run `ow train print_resolved_config=true` |
-| Active GPU / terminal contention | ❌ | — | Documented in AGENTS.md only |
+| Preflight gate ids | ✅ | `preflight.gates` in JSON | From `conf/benchmark/gates/*.yaml` |
+| Resolved Hydra config | ⚠️ | `make agent-context --resolved smoke` | Opt-in snapshot; default session omits |
+| Active GPU / terminal contention | ✅ | `gpu_contention` | Heuristic from terminals + recent GPU runs |
 | User test-tier preference | ⚠️ | AGENTS.md learned prefs | Not in `agent-context` JSON |
-| W&B sweep state | ❌ | — | Requires `ow sweep status` |
+| W&B sweep state | ✅ | `wandb_sweeps` | Summary of recent sweep activity |
 | Full session chat history | ⚠️ | Cursor product | Out of repo scope |
 
-### Score: **6/9 (67%)**
+### Score: **8/9 (89%)**
 
-Strong session-start hook (`.cursor/hooks/session-start-agent-context.sh`); missing machine-readable “is GPU busy” and default resolved-config snapshot.
+Strong session-start hook (`.cursor/hooks/session-start-agent-context.sh`); gate ids, sweep summary, and GPU contention ship in `scripts/agent_context.py` (#184). Remaining gap: resolved-config snapshot is opt-in, not default.
 
 ### Recommendations
 
-1. Add optional `make agent-context RESOLVED=smoke` flag (subprocess dry `print_resolved_config`, no train).
-2. Document in `docs/CURSOR.md` that agents should check terminals folder before GPU commands (already in AGENTS.md — surface one line in hook failure message).
-3. Include `ow benchmark gate --list` ids in agent-context for gate discovery.
+1. Enable `make agent-context RESOLVED=smoke` in the default Cursor hook if agents routinely need Hydra defaults without a train subprocess.
+2. Document in `docs/CURSOR.md` that agents should check terminals folder before GPU commands (contention hint is advisory — reinforce in hook failure text).
+3. ~~Gate ids in agent-context~~ — **shipped** (`preflight.gates.gate_ids`).
 
 ---
 
@@ -202,22 +206,22 @@ No isolated agent database; artifacts are filesystem-canonical.
 
 | Entity | Create | Read | Update | Delete | Strict CRUD | Operator-adequate |
 |--------|--------|------|--------|--------|-------------|-------------------|
-| Train run | `ow train` | `ow runs *` | — (immutable) | — (manual FS) | ❌ | ✅ C+R |
-| Checkpoint | training | paths, tournament, package | — | — | ❌ | ✅ R |
+| Train run | `ow train` | `ow runs *` | — (immutable) | `runs archive` | ❌ | ✅ C+R+D(archive) |
+| Checkpoint | training | paths, tournament, package | — | `runs checkpoint delete` | ❌ | ✅ R+D |
 | Eval queue job | training/hybrid | `ow eval status` | cancel | `jobs cancel` | ❌ | ✅ C+R+U/D |
 | Eval result (checkpoint_eval) | worker | `results list/show` | — | — | ❌ | ✅ R |
 | Campaign promotion | metrics/hybrid | `ow promote show/history` | demote | demote | ❌ | ✅ R+U |
-| W&B/Kaggle sweep | `ow sweep create` | status/list | — | — | ❌ | ✅ C+R |
+| W&B/Kaggle sweep | `ow sweep create` | status/list | — | `sweep cancel` (wandb) | ❌ | ✅ C+R+D |
 
 ### Scores
 
 - **Full CRUD:** **0/6 (0%)** — no entity exposes four CLI operations (by design).
-- **Operator-adequate (create + read + targeted mutation where needed):** **5/6 (83%)** — sweep lacks delete/archive.
+- **Operator-adequate (create + read + targeted mutation where needed):** **6/6 (100%)** — archive, checkpoint delete, and W&B sweep cancel shipped in #184.
 
 ### Recommendations
 
-1. Document in `AGENT_CAPABILITIES.md` that **delete** for runs/checkpoints is intentionally filesystem-operator, not agent-automated.
-2. If W&B API supports it, add `ow sweep cancel` or document manual W&B UI for sweep teardown.
+1. Document in `AGENT_CAPABILITIES.md` that **hard delete** for run trees remains archive-first (`ow runs archive`), not blind `rm` — already in capability map.
+2. ~~`ow sweep cancel`~~ — **shipped** (W&B backend; Kaggle may still need UI).
 3. Treat `ow promote demote` as the canonical “delete promotion pointer” (already shipped).
 
 ---
@@ -273,8 +277,8 @@ One gap: W&B/Kaggle dashboards are outside repo control; agents rely on CLI + JS
 ### Recommendations
 
 1. Add `uv run ow runs --help` cross-link to hybrid promotion decision tree (if not already in `print_eval_help`).
-2. Publish capability map (parity table) as a discoverable section in `AGENT_CAPABILITIES.md`.
-3. Keep `ow benchmark gate --list` in operator docs and optionally agent-context.
+2. ~~Capability map in `AGENT_CAPABILITIES.md`~~ — **shipped** with `tests/test_agent_capability_map.py`.
+3. ~~Gate ids in agent-context~~ — **shipped**; keep `ow benchmark gate --list` in operator docs.
 
 ---
 
@@ -315,16 +319,16 @@ Core RL remains code-native (expected). Operator gates and Hydra paths are stron
 
 | Priority | Action | Principle | Effort |
 |----------|--------|-----------|--------|
-| 1 | Maintain a **capability map** (UI action → `ow` command) in `docs/AGENT_CAPABILITIES.md` | Action Parity | Low |
-| 2 | Deprecation stderr on demoted `scripts/*` → canonical `ow eval *` | Action Parity | Low |
-| 3 | Extend `agent-context` with gate ids + optional resolved-config smoke | Context Injection | Medium |
-| 4 | Document GPU/terminal contention in hook failure text | Context Injection | Low |
-| 5 | Agent docs: prefer `gate run` / `tournament-proof` over `learn-proof` in loops | Tools as Primitives | Low |
-| 6 | Optional `ow sweep cancel` or documented W&B teardown | CRUD | Medium |
-| 7 | Optional safe run archive/delete primitive | CRUD | Medium |
-| 8 | Parity regression test: capability map rows ⊆ `ow --help` leaves | Action Parity | Medium |
-| 9 | Finish seed-scheduler calibration plan (GPU) — closes Phase 3 open item | Prompt-Native / Parity | High |
-| 10 | `ow benchmark factorized-sampler` wrapper for tier-1 hygiene Makefile | Action Parity | Low |
+| 1 | Agent docs: prefer `gate run` / `tournament-proof` over `learn-proof` in loops | Tools as Primitives | Low |
+| 2 | Split `ow benchmark calibrate` analyze vs sweep clarity for agents (analyze-only flags exist) | Tools as Primitives | Low |
+| 3 | Default `make agent-context RESOLVED=smoke` in Cursor hook (optional today) | Context Injection | Low |
+| 4 | Document GPU/terminal contention in hook failure text (hint exists in JSON) | Context Injection | Low |
+| 5 | Stronger demoted-script guardrails (non-zero exit) if agents keep calling `scripts/*` | Action Parity | Low |
+| 6 | Extend YAML for any remaining gate overrides only in Python | Prompt-Native | Medium |
+| 7 | Launch hygiene Phase B / tier-2 throughput (ROADMAP Later) | Performance | High |
+| 8 | Planet Flow U7 relaunch after reachability mask | Operator GPU | High |
+| 9 | ~~Seed-scheduler calibration + interval 50~~ | — | **Done** (#184) |
+| 10 | ~~Capability map + factorized-sampler + archive/checkpoint/sweep cancel~~ | — | **Done** (#184) |
 
 ---
 
@@ -351,14 +355,16 @@ Core RL remains code-native (expected). Operator gates and Hydra paths are stron
 
 ## Related artifacts
 
-- Phase 1 solution: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
-- Phase 2: `docs/agent-native-phase2-status.md`
-- Phase 3: `docs/agent-native-phase3-status.md`
-- Plan backlog: `docs/plans/2026-06-02-agent-native-phase3-refactors.md`
+- **Canonical learning (calibration + phase-2 CLI):** `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
+- Phase 1 precursor: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
+- Phase 2 status: `docs/agent-native-phase2-status.md`
+- Phase 3 status: `docs/agent-native-phase3-status.md`
+- Completed plans: `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`, `docs/plans/2026-06-02-015-feat-agent-native-audit-gaps-plan.md`, `docs/plans/2026-06-02-016-feat-agent-native-deferred-crud-plan.md`, `docs/plans/2026-06-02-017-feat-seed-u2-u3-capability-map-plan.md`
+- Plan backlog (items 1–4 shipped): `docs/plans/2026-06-02-agent-native-phase3-refactors.md`
 
 ---
 
 ## Audit metadata
 
-- **Commands run:** `uv run ow --help` (read-only); file/code review of `src/cli/`, `scripts/agent_context.py`, `.cursor/hooks/`, Makefile preflight targets.
-- **Not run:** GPU train, `make preflight-learn-proof`, `ow benchmark calibrate-seed-scheduler`, seed-scheduler U1 calibration.
+- **Original pass (2026-06-02):** `uv run ow --help` (read-only); file/code review of `src/cli/`, `scripts/agent_context.py`, `.cursor/hooks/`, Makefile preflight targets. No GPU train.
+- **Refresh pass (2026-06-03):** Verified PR #184 merge `191fef3` — `reseed_every_updates: 50`, `tests/test_agent_capability_map.py`, `ow runs archive`, `ow runs checkpoint delete`, `ow sweep cancel`, `ow benchmark factorized-sampler`, `agent_context` gate/sweep/GPU fields; read `docs/agent-native-phase3-status.md`.
