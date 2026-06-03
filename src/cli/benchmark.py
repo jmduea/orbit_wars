@@ -954,8 +954,10 @@ def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
     snapshots = []
     if args.write_stub:
         stub = default_unified_tournament_stub(enforcement=False)
-        if base_section and base_section.get("incumbent_checkpoint_path"):
-            stub["incumbent_checkpoint_path"] = base_section["incumbent_checkpoint_path"]
+        if base_section and base_section.get("incumbent_bootstrap_opponent"):
+            stub["incumbent_bootstrap_opponent"] = base_section[
+                "incumbent_bootstrap_opponent"
+            ]
         merged = merge_unified_section_into_calibration(args.out, stub)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")

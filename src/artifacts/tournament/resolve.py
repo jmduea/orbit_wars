@@ -16,10 +16,12 @@ from src.artifacts.checkpoint_compat import (
 )
 from src.artifacts.promotion import resolve_from_promoted
 from src.artifacts.run_paths import RunContext, _cache_path
-from src.artifacts.tournament.runner import build_checkpoint_agent
+from src.artifacts.tournament.runner import build_baseline_agent, build_checkpoint_agent
 from src.config import TrainConfig
 
 from .types import AgentEntry
+
+DEFAULT_BOOTSTRAP_INCUMBENT = "nearest_sniper"
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,22 @@ def load_train_config_from_checkpoint(checkpoint_path: Path) -> TrainConfig:
             f"checkpoint config must be TrainConfig, got {type(cfg)!r}: {checkpoint_path}"
         )
     return cfg
+
+
+def agent_from_baseline(
+    name: str,
+    *,
+    agent_id: str = "incumbent",
+) -> AgentEntry:
+    """Build a scripted baseline agent for unified tournament Stage 2."""
+
+    normalized = name.strip().lower()
+    return AgentEntry(
+        agent_id=agent_id,
+        checkpoint_path=Path(f"scripted:{normalized}"),
+        cfg=TrainConfig(),
+        act_fn=build_baseline_agent(name),
+    )
 
 
 def agent_from_checkpoint(

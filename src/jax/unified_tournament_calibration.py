@@ -63,7 +63,7 @@ def default_unified_tournament_stub(*, enforcement: bool = False) -> dict[str, o
         "prerequisite_seeds": [0, 1, 2, 3, 4],
         "incumbent_seeds": list(range(30)),
         "four_p_baseline_fillers": ["noop", "random", "random"],
-        "incumbent_checkpoint_path": None,
+        "incumbent_bootstrap_opponent": "nearest_sniper",
         "notes": [
             "Floors are initial combined-metric placeholders until U8 calibration campaigns complete.",
             "Set enforcement=true only after measured pass rates justify thresholds.",
@@ -107,7 +107,7 @@ def _spec_for_measurement(
             "prerequisite_seeds",
             "incumbent_seeds",
             "four_p_baseline_fillers",
-            "incumbent_checkpoint_path",
+            "incumbent_bootstrap_opponent",
             "max_steps",
             "per_step_seconds",
             "overage_budget_seconds",
@@ -422,7 +422,7 @@ def build_calibrated_unified_section(
                 {
                     key: base_section[key]
                     for key in (
-                        "incumbent_checkpoint_path",
+                        "incumbent_bootstrap_opponent",
                         "prerequisite_seeds",
                         "incumbent_seeds",
                         "four_p_baseline_fillers",
@@ -457,7 +457,7 @@ def build_calibrated_unified_section(
         "prerequisite_seeds": [0, 1, 2, 3, 4],
         "incumbent_seeds": list(range(30)),
         "four_p_baseline_fillers": ["noop", "random", "random"],
-        "incumbent_checkpoint_path": None,
+        "incumbent_bootstrap_opponent": "nearest_sniper",
         "notes": [
             "Floors derived from unified Stage-1 calibration (combined 2p+4p).",
             f"Measured at games_per_pair={chosen} with {floors.get('margin_fraction', 0.05):.0%} margin below observed min.",
@@ -465,7 +465,7 @@ def build_calibrated_unified_section(
     }
     if base_section:
         for key in (
-            "incumbent_checkpoint_path",
+            "incumbent_bootstrap_opponent",
             "prerequisite_seeds",
             "incumbent_seeds",
             "four_p_baseline_fillers",

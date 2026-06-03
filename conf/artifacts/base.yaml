@@ -75,7 +75,7 @@ unified_tournament:
   four_p_baseline_fillers: [noop, random, random]
   noop_min_combined: 0.7
   random_min_combined: 0.58
-  incumbent_checkpoint_path: null
+  incumbent_bootstrap_opponent: nearest_sniper
   max_steps: 500
   per_step_seconds: 1.0
   overage_budget_seconds: 60.0

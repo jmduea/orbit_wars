@@ -42,14 +42,24 @@ def test_missing_unified_section_returns_needs_calibration() -> None:
     assert spec.blocking_reason == "needs_calibration"
 
 
-def test_stage2_enforcement_without_incumbent_blocks() -> None:
+def test_stage2_enforcement_without_bootstrap_blocks() -> None:
     section = {
         "enforcement": True,
         "four_p_baseline_fillers": ["noop", "random", "random"],
-        "incumbent_checkpoint_path": None,
+        "incumbent_bootstrap_opponent": "",
     }
     spec = parse_unified_tournament_section(section)
     assert spec.blocking_reason == "no_incumbent"
+
+
+def test_enforcement_with_default_bootstrap_not_blocked() -> None:
+    section = {
+        "enforcement": True,
+        "four_p_baseline_fillers": ["noop", "random", "random"],
+    }
+    spec = parse_unified_tournament_section(section)
+    assert spec.blocking_reason is None
+    assert spec.incumbent_bootstrap_opponent == "nearest_sniper"
 
 
 def test_invalid_four_p_fillers_raises() -> None:

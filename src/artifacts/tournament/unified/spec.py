@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.artifacts.tournament.resolve import DEFAULT_BOOTSTRAP_INCUMBENT
 from src.config.schema import UnifiedTournamentConfig
 
 STAGE1_OPPONENTS = ("noop", "random")
@@ -33,7 +34,7 @@ class UnifiedTournamentSpec:
     stage1: StageSpec
     stage2: StageSpec
     four_p_baseline_fillers: tuple[str, ...]
-    incumbent_checkpoint_path: Path | None
+    incumbent_bootstrap_opponent: str | None = DEFAULT_BOOTSTRAP_INCUMBENT
     enforcement: bool = False
     needs_calibration: bool = False
     blocking_reason: str | None = None
@@ -63,10 +64,13 @@ def _parse_fillers(raw: Any, *, fallback: tuple[str, ...]) -> tuple[str, ...]:
     return fallback
 
 
-def _incumbent_path(raw: Any) -> Path | None:
-    if isinstance(raw, str) and raw.strip():
-        return Path(raw.strip())
-    return None
+def _bootstrap_opponent(raw: Any, *, fallback: str | None) -> str | None:
+    if raw is None:
+        return fallback
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        return stripped or None
+    return fallback
 
 
 def _stage1_from_payload(
@@ -135,7 +139,10 @@ def parse_unified_tournament_section(
             four_p_baseline_fillers=_parse_fillers(
                 None, fallback=tuple(hydra.four_p_baseline_fillers)
             ),
-            incumbent_checkpoint_path=_incumbent_path(hydra.incumbent_checkpoint_path),
+            incumbent_bootstrap_opponent=_bootstrap_opponent(
+                hydra.incumbent_bootstrap_opponent,
+                fallback=DEFAULT_BOOTSTRAP_INCUMBENT,
+            ),
             enforcement=False,
             needs_calibration=True,
             blocking_reason="needs_calibration",
@@ -149,8 +156,9 @@ def parse_unified_tournament_section(
         section.get("four_p_baseline_fillers"),
         fallback=tuple(hydra.four_p_baseline_fillers),
     )
-    incumbent_path = _incumbent_path(
-        section.get("incumbent_checkpoint_path", hydra.incumbent_checkpoint_path)
+    bootstrap_opponent = _bootstrap_opponent(
+        section.get("incumbent_bootstrap_opponent", hydra.incumbent_bootstrap_opponent),
+        fallback=DEFAULT_BOOTSTRAP_INCUMBENT,
     )
     enforcement = bool(section.get("enforcement", hydra.enforcement))
     blocking: str | None = None
@@ -158,14 +166,14 @@ def parse_unified_tournament_section(
         raise ValueError(
             "four_p_baseline_fillers requires three baseline slots for 4p leg"
         )
-    if enforcement and incumbent_path is None:
+    if enforcement and bootstrap_opponent is None:
         blocking = "no_incumbent"
 
     return UnifiedTournamentSpec(
         stage1=_stage1_from_payload(section, hydra=hydra),
         stage2=_stage2_from_payload(section, hydra=hydra),
         four_p_baseline_fillers=fillers,
-        incumbent_checkpoint_path=incumbent_path,
+        incumbent_bootstrap_opponent=bootstrap_opponent,
         enforcement=enforcement,
         needs_calibration=False,
         blocking_reason=blocking,
@@ -206,7 +214,7 @@ def load_unified_tournament_spec(
             stage1=spec.stage1,
             stage2=spec.stage2,
             four_p_baseline_fillers=spec.four_p_baseline_fillers,
-            incumbent_checkpoint_path=spec.incumbent_checkpoint_path,
+            incumbent_bootstrap_opponent=spec.incumbent_bootstrap_opponent,
             enforcement=False,
             needs_calibration=True,
             blocking_reason="needs_calibration",
@@ -227,6 +235,6 @@ def validate_spec_for_stage2(
 
     if spec.needs_calibration:
         return "needs_calibration"
-    if not incumbent_resolved and spec.incumbent_checkpoint_path is None:
+    if not incumbent_resolved and spec.incumbent_bootstrap_opponent is None:
         return "no_incumbent"
     return None

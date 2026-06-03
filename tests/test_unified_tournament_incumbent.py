@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,39 +9,66 @@ from src.artifacts.tournament.unified.reporting import (
     UnifiedLadderVerdict,
     UnifiedStageResult,
 )
-from src.artifacts.tournament.unified.scoring import UnifiedOpponentScore
 from src.artifacts.tournament.unified.spec import parse_unified_tournament_section
 from src.config import TrainConfig
 
 
-def _spec(path: Path | None = None):
-    return parse_unified_tournament_section(
-        {
-            "enforcement": False,
-            "four_p_baseline_fillers": ["noop", "random", "random"],
-            "incumbent_checkpoint_path": str(path) if path else None,
-        }
-    )
+def _spec(**overrides: object):
+    base = {
+        "enforcement": False,
+        "four_p_baseline_fillers": ["noop", "random", "random"],
+        "incumbent_bootstrap_opponent": "nearest_sniper",
+    }
+    base.update(overrides)
+    return parse_unified_tournament_section(base)
 
 
-def test_resolve_incumbent_from_calibration_path(tmp_path: Path) -> None:
-    ckpt = tmp_path / "bootstrap.pkl"
+def test_resolve_incumbent_from_scripted_bootstrap(tmp_path: Path) -> None:
+    spec = _spec()
+    incumbent = resolve_incumbent(spec, campaign="missing", output_root=tmp_path)
+    assert incumbent is not None
+    assert incumbent.agent_id == "incumbent"
+    assert str(incumbent.checkpoint_path).startswith("scripted:")
+
+
+def test_bootstrap_incumbent_differs_from_challenger_checkpoint(tmp_path: Path) -> None:
+    ckpt = tmp_path / "challenger.pkl"
     ckpt.write_bytes(b"stub")
-    spec = _spec(ckpt)
+    spec = _spec()
     with patch(
-        "src.artifacts.tournament.unified.incumbent.agent_from_checkpoint"
+        "src.artifacts.tournament.unified.ladder.agent_from_checkpoint"
     ) as mock_agent:
         mock_agent.return_value = AgentEntry(
-            agent_id="incumbent",
+            agent_id="cand",
             checkpoint_path=ckpt,
             cfg=TrainConfig(),
             act_fn=lambda _obs: [],
         )
+        challenger = mock_agent.return_value
         incumbent = resolve_incumbent(
             spec, campaign="missing", output_root=tmp_path
         )
     assert incumbent is not None
-    assert incumbent.agent_id == "incumbent"
+    assert incumbent.checkpoint_path != challenger.checkpoint_path
+    assert incumbent.agent_id != challenger.agent_id
+
+
+def test_resolve_incumbent_prefers_promoted_manifest(tmp_path: Path) -> None:
+    spec = _spec()
+    promoted = AgentEntry(
+        agent_id="incumbent",
+        checkpoint_path=tmp_path / "promoted.pkl",
+        cfg=TrainConfig(),
+        act_fn=lambda _obs: [],
+    )
+    with patch(
+        "src.artifacts.tournament.unified.incumbent.resolve_promoted_agent",
+        return_value=promoted,
+    ):
+        incumbent = resolve_incumbent(
+            spec, campaign="test_campaign", output_root=tmp_path
+        )
+    assert incumbent is promoted
 
 
 def test_swap_denied_when_seed_below_perfect(tmp_path: Path) -> None:

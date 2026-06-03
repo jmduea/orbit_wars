@@ -20,7 +20,7 @@ def _spec(**overrides: object):
         "noop_min_combined": 0.7,
         "random_min_combined": 0.58,
         "four_p_baseline_fillers": ["noop", "random", "random"],
-        "incumbent_checkpoint_path": str(Path("/tmp/incumbent.pkl")),
+        "incumbent_bootstrap_opponent": "nearest_sniper",
     }
     base.update(overrides)
     return parse_unified_tournament_section(base)
@@ -148,7 +148,7 @@ def test_no_incumbent_skips_stage2(mock_incumbent, mock_agent, tmp_path: Path) -
             {"match_seconds": 0.1, "env_steps": 1, "max_action_seconds": 0.01},
         )
 
-    spec = _spec(incumbent_checkpoint_path=None)
+    spec = _spec(incumbent_bootstrap_opponent="")
     verdict = run_unified_ladder(
         tmp_path / "ckpt.pkl",
         spec,

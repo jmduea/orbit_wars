@@ -61,7 +61,7 @@
       "random",
       "random"
     ],
-    "incumbent_checkpoint_path": "outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl",
+    "incumbent_bootstrap_opponent": "nearest_sniper",
     "notes": [
       "Floors derived from unified Stage-1 calibration (combined 2p+4p).",
       "Measured at games_per_pair=2 with 5% margin below observed min.",
