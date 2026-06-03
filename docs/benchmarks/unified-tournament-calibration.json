@@ -1,0 +1,80 @@
+{
+  "gate": "unified_tournament_calibration",
+  "commit_sha": "8346490242661e68628f144fa40be31de55963ce",
+  "seconds_total": 8.746006642468274e-06,
+  "analyze_only": false,
+  "dry_run": true,
+  "checkpoint_paths": [
+    "outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl"
+  ],
+  "games_per_pair_candidates": [
+    2,
+    4,
+    8
+  ],
+  "unified_tournament": {
+    "enforcement": false,
+    "noop_min_combined": 0.7,
+    "random_min_combined": 0.58,
+    "games_per_pair": 4,
+    "prerequisite_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "incumbent_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "four_p_baseline_fillers": [
+      "noop",
+      "random",
+      "random"
+    ],
+    "incumbent_checkpoint_path": null,
+    "notes": [
+      "Floors are initial combined-metric placeholders until U8 calibration campaigns complete.",
+      "Set enforcement=true only after measured pass rates justify thresholds."
+    ]
+  },
+  "spec_validation": {
+    "needs_calibration": false,
+    "stage1_seeds": 5,
+    "stage2_seeds": 30
+  },
+  "notes": [
+    "Run unified ladder campaigns on representative checkpoints before enabling enforcement.",
+    "Recalibrate noop/random floors on combined 2p+4p metric (Q2).",
+    "Operator publishes bootstrap incumbent_checkpoint_path before Stage 2 enforcement (Q4)."
+  ]
+}
