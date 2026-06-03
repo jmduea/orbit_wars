@@ -16,6 +16,7 @@ from src.jax.seed_scheduler_calibration import (
 
 def test_seed_sched_train_base_logs_every_update() -> None:
     assert "training.log_every=1" in SEED_SCHED_TRAIN_BASE
+    assert "task=shield_off" in SEED_SCHED_TRAIN_BASE
 
 
 def test_run_seed_scheduler_sweep_dry_run_prints_arm_plan(capsys) -> None:

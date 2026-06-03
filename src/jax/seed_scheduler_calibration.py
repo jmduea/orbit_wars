@@ -32,6 +32,7 @@ DEFAULT_BASELINE = "noop"
 
 SEED_SCHED_TRAIN_BASE: tuple[str, ...] = (
     "training=workstation",
+    "task=shield_off",
     "curriculum=off",
     f"seed={DEFAULT_TRAIN_SEED}",
     "telemetry.wandb.enabled=false",
