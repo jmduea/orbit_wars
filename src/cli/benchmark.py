@@ -1430,27 +1430,16 @@ def _resolve_gate_id(args: argparse.Namespace) -> str | None:
 
 
 def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
-    script = REPO_ROOT / "scripts" / "benchmark_factorized_sampler.py"
-    cmd = [
-        sys.executable,
-        str(script),
-        "--max-moves-k",
-        str(args.max_moves_k),
-        "--batch-size",
-        str(args.batch_size),
-        "--warmup",
-        str(args.warmup),
-        "--repeats",
-        str(args.repeats),
-    ]
-    if args.decoder_carry:
-        cmd.append("--decoder-carry")
-    else:
-        cmd.append("--no-decoder-carry")
-    if args.assert_max_ms is not None:
-        cmd.extend(["--assert-max-ms", str(args.assert_max_ms)])
-    proc = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-    return int(proc.returncode)
+    from src.jax.factorized_sampler_benchmark import run_factorized_sampler_benchmark
+
+    return run_factorized_sampler_benchmark(
+        max_moves_k=int(args.max_moves_k),
+        decoder_carry=bool(args.decoder_carry),
+        batch_size=int(args.batch_size),
+        warmup=int(args.warmup),
+        repeats=int(args.repeats),
+        assert_max_ms=args.assert_max_ms,
+    )
 
 
 def run_gate_cli(args: argparse.Namespace) -> int:

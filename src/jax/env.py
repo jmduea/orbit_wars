@@ -724,12 +724,6 @@ def step(
     ``opponent_action`` is applied to the other side.
     """
 
-    previous_game = state.game
-    comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
-    planets, initial_planets, comets = _pre_launch_comets(previous_game, comet_speed)
-    previous_game = previous_game._replace(
-        planets=planets, initial_planets=initial_planets, comets=comets
-    )
     actions0 = jax.tree.map(
         lambda learner, opponent: jnp.where(
             state.learner_player == 0, learner, opponent
@@ -744,19 +738,12 @@ def step(
         learner_action,
         opponent_action,
     )
-
-    planets, fleets, next_fleet_id = _launch_fleets(
-        previous_game.planets,
-        previous_game.fleets,
-        previous_game.next_fleet_id,
+    player_actions = jax.tree.map(
+        lambda action0, action1: jnp.stack([action0, action1], axis=0),
         actions0,
-        0,
-        cfg,
+        actions1,
     )
-    planets, fleets, next_fleet_id = _launch_fleets(
-        planets, fleets, next_fleet_id, actions1, 1, cfg
-    )
-    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
+    return step_multi_player(state, player_actions, cfg, reward_cfg)
 
 
 def step_multi_player(
@@ -819,11 +806,15 @@ def _launch_fleets(
 
     def launch_slot(carry, slot):
         planets, next_id, launched_count = carry
-        source_idx = jnp.clip(action.source_id[slot], 0, MAX_PLANETS - 1)
+        raw_source_id = action.source_id[slot]
+        source_idx = jnp.clip(raw_source_id, 0, MAX_PLANETS - 1)
+        planet_id_at = planets.id[source_idx]
         ships = ship_requests[slot]
         remaining = planets.ships[source_idx]
         slot_valid = (
             action.valid[slot]
+            & (raw_source_id >= 0)
+            & (raw_source_id == planet_id_at)
             & planets.active[source_idx]
             & (planets.owner[source_idx] == player)
             & (ships > 0.0)

@@ -6,7 +6,6 @@ versions are not loadable; migrate by retraining.
 
 from __future__ import annotations
 
-import dataclasses
 from pathlib import Path
 from typing import Mapping
 
@@ -169,8 +168,8 @@ def validate_checkpoint_pointer_decoder_compatibility(
         location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
         raise ValueError(
             f"Checkpoint{location} pointer_decoder={stored_decoder!r} is incompatible "
-        f"with current model (expected pointer_decoder={expected!r}). Retrain or "
-        "load a matching checkpoint."
+            f"with current model (expected pointer_decoder={expected!r}). Retrain or "
+            "load a matching checkpoint."
         )
 
     stored_layout = stored.get("action_layout_version")
@@ -226,35 +225,12 @@ def validate_checkpoint_pointer_decoder_compatibility(
     return
 
 
-def _install_dataclass_unpickle_compat() -> None:
-    """Ignore removed fields when unpickling slotted config dataclasses from checkpoints."""
-
-    import src.config.schema as schema_module
-
-    for name in dir(schema_module):
-        candidate = getattr(schema_module, name)
-        if not isinstance(candidate, type) or not dataclasses.is_dataclass(candidate):
-            continue
-        field_names = {field.name for field in dataclasses.fields(candidate)}
-
-        def __setstate__(self, state, *, _field_names=field_names) -> None:
-            if isinstance(state, tuple) and len(state) == 2:
-                state = state[1]
-            if isinstance(state, dict):
-                for field_name, value in state.items():
-                    if field_name in _field_names:
-                        object.__setattr__(self, field_name, value)
-
-        candidate.__setstate__ = __setstate__  # type: ignore[method-assign]
-
-
 def load_checkpoint_payload(checkpoint_path: str | Path) -> object:
     """Load a checkpoint pickle, turning old config pickles into a clear error."""
 
     import pickle
 
     path = Path(checkpoint_path)
-    _install_dataclass_unpickle_compat()
     try:
         with path.open("rb") as file:
             return pickle.load(file)

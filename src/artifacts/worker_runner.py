@@ -45,6 +45,7 @@ def run_optional_job_worker(
         jobs = load_optional_jobs(queue_dir, statuses=statuses)
         if jobs:
             last_work_time = time.monotonic()
+        had_failure = False
         for job in jobs:
             job_file = Path(str(job["job_file"]))
             if result_root is not None:
@@ -59,14 +60,14 @@ def run_optional_job_worker(
                     print(f"artifact_job_done kind={kind} file={job_file.name} status=completed")
             except Exception as exc:
                 write_status(job_file, "failed", error=str(exc))
+                had_failure = True
                 if verbose:
                     print(
                         f"artifact_job_failed kind={kind} file={job_file.name} "
                         f"error={exc}"
                     )
-                return 1
         if once:
-            return 0
+            return 1 if had_failure else 0
         if idle_exit_seconds is not None and time.monotonic() - last_work_time >= max(
             float(idle_exit_seconds), 0.0
         ):
