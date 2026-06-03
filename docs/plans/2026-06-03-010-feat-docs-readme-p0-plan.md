@@ -39,7 +39,7 @@ The `docs/` tree has eight top-level folders and many entry-point files, but no 
 
 **KTD1 — Split ONBOARDING: code tour vs hand nav.** Keep Understand-generated architecture tour, guided tour, hotspots, and verification matrix in `docs/ONBOARDING.md`. Treat § Documentation and the short § “4. Documentation” layer blurb as **hand-maintained**: replace the stale four-row table with pointers to `docs/README.md`, `docs/architecture/README.md`, `docs/operator-runbook.md`, and `docs/hydra_migration.md`. Update § “Regenerating this guide” to state that full `/understand-onboard` refresh may overwrite graph-derived sections and that maintainers must re-apply hand-maintained blocks after regen (or skip full regen when only nav changed). (see origin: Resolve before planning)
 
-**KTD2 — `docs/README.md` shape mirrors `docs/architecture/README.md`.** Use title, one-line scope, lifecycle table from the audit, folder index table, separate human vs agent chains, and a short “root evergreen docs” bullet list (operator-runbook, feature-encoding-v2, hydra_migration) without duplicating `docs/AGENT_CAPABILITIES.md` task prompts.
+**KTD2 — `docs/README.md` shape mirrors `docs/architecture/README.md`.** Use title, one-line scope, lifecycle table from the audit, folder index table, separate human vs agent chains, and a short “root evergreen docs” bullet list (`operator-runbook.md`, `feature-encoding-v2.md`, `hydra_migration.md`, `adding-observation-features.md`) without duplicating `docs/AGENT_CAPABILITIES.md` task prompts.
 
 **KTD3 — `Issues.md` and phase-status files unchanged in P0.** R4 relocations and `docs/Issues.md` disposition stay deferred; README may mention `docs/Issues.md` as a manual snapshot without moving it (see origin A8, Outstanding questions).
 
@@ -64,8 +64,7 @@ flowchart LR
     AC2[docs/AGENT_CAPABILITIES.md]
     SL[docs/solutions/]
     PL[docs/plans/]
-    AG --> DR --> AC2 --> SL
-    DR --> PL
+    AG --> DR --> AC2 --> SL --> PL
   end
   DR -.->|hand-maintained nav| OB
 ```
@@ -170,7 +169,7 @@ Hand-maintained ONBOARDING slices link into `docs/README.md`; the code tour rema
 ### In scope (P0)
 
 - R1–R8 and U1–U4 above
-- Traceability to audit acceptance A1, A3, A5, A6, A7
+- Traceability to audit acceptance A1, A3, A5, A6, A7 and flows F1 (agent chain via R4)
 
 ### Deferred for later (audit P1/P2)
 
@@ -178,7 +177,7 @@ Hand-maintained ONBOARDING slices link into `docs/README.md`; the code tour rema
 - Stub READMEs in `docs/plans/`, `docs/brainstorms/`, `docs/solutions/` (audit A4 P1)
 - `docs/benchmarks/README.md` listing committed calibration artifacts (audit R5, A4)
 - `scripts/agent_context.py` adding `docs/README.md` to session JSON (audit R3 follow-up)
-- R4 relocations: `brain_dump.md`, phase-status consolidation, `Issues.md` rename/archive (audit A8 P2)
+- Audit **R4 relocations** (root clutter): `brain_dump.md`, phase-status consolidation, `Issues.md` rename/archive (audit A8 P2)
 - Auto-generate folder indexes from frontmatter (audit Outstanding questions)
 
 ### Out of scope
@@ -191,7 +190,7 @@ Hand-maintained ONBOARDING slices link into `docs/README.md`; the code tour rema
 
 - **Issues.md:** Remains in place; README describes it as a large manual snapshot until maintainers choose GitHub-only tracking (audit outstanding question).
 - **Understand regen:** No repo-local template controls `/understand-onboard` output today; hand-maintained discipline plus U4 test is sufficient for P0 without plugin changes.
-- **Headless planning:** User did not block on interactive scope confirmation; P0 matches audit P0 rollout items 1–2 only.
+- **Headless planning:** User did not block on interactive scope confirmation; P0 intentionally omits audit rollout item 1’s parallel `docs/benchmarks/README.md` (deferred per KTD5) and all of audit item 3+ (stubs, `agent_context`, R4 relocations).
 
 ## Sources & Research
 
