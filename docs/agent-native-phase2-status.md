@@ -26,17 +26,18 @@ Phase 2 extends Phase 1 (`docs/plans/2026-06-01-agent-native-operator-cli-plan.m
 | Metric promotion terminal line | Mirrors tournament promote UX in training |
 | `manifest.json` `produced_artifacts` | Appends checkpoint records at commit boundaries |
 
-## Deferred → Phase 3 schedule
+## Shipped in Phase 3 (2026-06-03)
 
-Large refactors are **scheduled** in [`docs/plans/2026-06-02-agent-native-phase3-refactors.md`](plans/2026-06-02-agent-native-phase3-refactors.md) (ordered backlog, effort, acceptance criteria).
+Large refactors from [`docs/plans/2026-06-02-agent-native-phase3-refactors.md`](plans/2026-06-02-agent-native-phase3-refactors.md) items 1–4 are on `main`. Seed-scheduler calibration and deferred operator CRUD closed in PR #184. See [`docs/agent-native-phase3-status.md`](agent-native-phase3-status.md) and [`docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`](solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md).
 
-| Item | Why deferred |
-|------|----------------|
-| Full atomic split of `ow benchmark learn-proof` | Large refactor across preflight train/eval paths |
-| Move all `PreflightGateSpec` tuples to YAML | Overrides still in `src/jax/preflight.py`; YAML is metadata only |
-| Cursor session-start hooks | Product-level; out of repo scope |
-| `ow wandb sweep` / Kaggle create-sweep unification | Separate tooling surface |
-| Delete `.audit/` / `.omg/state/` | Local gitignored operator data; docs-only cleanup |
+| Item | Status |
+|------|--------|
+| Full atomic split of `ow benchmark learn-proof` | Shipped — `ow benchmark gate run`, `tournament-proof`; `learn-proof --steps` |
+| Move all `PreflightGateSpec` tuples to YAML | Shipped — `conf/benchmark/gates/*.yaml`, `preflight_gate_loader.py` |
+| Cursor session-start hooks | Shipped — `docs/CURSOR.md`, PR #180 |
+| `ow sweep` unification | Shipped — `src/cli/sweep.py` |
+| Seed-scheduler calibration default | Shipped — `reseed_every_updates: 50` |
+| Delete `.audit/` / `.omg/state/` | Still local gitignored operator data; docs-only cleanup optional |
 
 ## Verification
 
