@@ -44,7 +44,8 @@ def print_benchmark_help() -> None:
         "  gate                     Composable preflight gates (run/list)\n"
         "  tournament-proof         Gate 5 held-out tournament win proof\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
-        "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n\n"
+        "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
+        "  factorized-sampler     Tier-1 launch-hygiene microbenchmark (script wrapper)\n\n"
         "Examples:\n"
         "  make preflight-sanity\n"
         "  make preflight-learn-proof\n"
@@ -305,6 +306,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     noop_smoke.add_argument("--thresholds-path", type=Path, default=None)
     noop_smoke.add_argument("--dry-run", action="store_true")
+
+    factorized_sampler = subparsers.add_parser(
+        "factorized-sampler",
+        help="Tier-1 factorized shield sampler microbenchmark (delegates to scripts/).",
+    )
+    factorized_sampler.add_argument("--max-moves-k", type=int, default=3)
+    factorized_sampler.add_argument(
+        "--decoder-carry",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    factorized_sampler.add_argument("--batch-size", type=int, default=16)
+    factorized_sampler.add_argument("--warmup", type=int, default=3)
+    factorized_sampler.add_argument("--repeats", type=int, default=30)
+    factorized_sampler.add_argument("--assert-max-ms", type=float, default=None)
 
     calibrate = subparsers.add_parser(
         "calibrate",
@@ -1200,6 +1216,30 @@ def _resolve_gate_id(args: argparse.Namespace) -> str | None:
     return tokens[0]
 
 
+def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
+    script = REPO_ROOT / "scripts" / "benchmark_factorized_sampler.py"
+    cmd = [
+        sys.executable,
+        str(script),
+        "--max-moves-k",
+        str(args.max_moves_k),
+        "--batch-size",
+        str(args.batch_size),
+        "--warmup",
+        str(args.warmup),
+        "--repeats",
+        str(args.repeats),
+    ]
+    if args.decoder_carry:
+        cmd.append("--decoder-carry")
+    else:
+        cmd.append("--no-decoder-carry")
+    if args.assert_max_ms is not None:
+        cmd.extend(["--assert-max-ms", str(args.assert_max_ms)])
+    proc = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
+    return int(proc.returncode)
+
+
 def run_gate_cli(args: argparse.Namespace) -> int:
     from src.cli.benchmark_gates import list_gate_recipes, run_gate_cli as run_gate
 
@@ -1250,6 +1290,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":
             return run_planet_flow_noop_smoke_cli(args)
+        case "factorized-sampler":
+            return run_factorized_sampler_cli(args)
         case "gate":
             return run_gate_cli(args)
         case "tournament-proof":

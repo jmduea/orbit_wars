@@ -60,7 +60,7 @@ test-jax-parallel:
 # PERF1 gate: factorized sampler K=5 within 10% of main baseline (isolated process; not under pytest).
 test-launch-hygiene-throughput:
 	env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
-		uv run python scripts/benchmark_factorized_sampler.py \
+		uv run ow benchmark factorized-sampler \
 		--max-moves-k 5 --batch-size 32 --warmup 5 --repeats 20 --assert-max-ms 3.22
 
 # PERF2 tier-2 gate: production-path e2e throughput vs pre-hygiene baseline (GPU; not pytest wall-time).

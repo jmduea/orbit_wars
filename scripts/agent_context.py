@@ -81,6 +81,72 @@ def _read_resolved_config_snapshot(
     return payload
 
 
+def _read_wandb_sweep_summary(repo_root: Path) -> dict[str, object]:
+    cmd = [
+        "uv",
+        "run",
+        "ow",
+        "sweep",
+        "list",
+        "--backend",
+        "wandb",
+        "--limit",
+        "5",
+    ]
+    pointer: dict[str, object] = {
+        "present": False,
+        "list_command": "uv run ow sweep list --backend wandb --limit 10",
+        "status_command": "uv run ow sweep status --backend wandb --sweep-id <id>",
+        "cancel_command": "uv run ow sweep cancel --backend wandb --sweep-id <id> --dry-run",
+    }
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=45,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {**pointer, "error": str(exc)}
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        return {
+            **pointer,
+            "error": stderr[:500] or f"exit {result.returncode}",
+        }
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {**pointer, "error": f"invalid JSON from sweep list: {exc}"}
+    sweeps = payload.get("sweeps")
+    if not isinstance(sweeps, list):
+        return {**pointer, "error": "sweep list missing sweeps array"}
+    rows: list[dict[str, object]] = []
+    for row in sweeps[:5]:
+        if not isinstance(row, dict):
+            continue
+        rows.append(
+            {
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "state": row.get("state"),
+            }
+        )
+    active = sum(
+        1
+        for row in rows
+        if str(row.get("state", "")).lower() in {"running", "pending"}
+    )
+    return {
+        **pointer,
+        "present": True,
+        "active_count": active,
+        "recent": rows,
+    }
+
+
 def _gpu_contention_hint(repo_root: Path) -> dict[str, object]:
     patterns = (
         "ow train",
@@ -254,6 +320,7 @@ def build_context(
             include_snapshot=resolved_snapshot,
         ),
         "gpu_contention": _gpu_contention_hint(repo_root),
+        "wandb_sweeps": _read_wandb_sweep_summary(repo_root),
         "roadmap": _read_roadmap_excerpt(repo_root),
         "recent_runs_index": recent_runs,
         "latest_run_eval": _read_latest_run_eval_summary(repo_root, recent_runs),

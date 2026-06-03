@@ -14,7 +14,7 @@ uv run ow train print_resolved_config=true
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow runs watch`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -32,6 +32,10 @@ uv run ow runs list --limit 10
 uv run ow runs show --run outputs/campaigns/<campaign>/runs/<run_id>
 uv run ow runs logs --run outputs/campaigns/<campaign>/runs/<run_id> --tail 5
 uv run ow runs watch --run outputs/campaigns/<campaign>/runs/<run_id> --poll-seconds 5
+uv run ow runs archive --run outputs/campaigns/<campaign>/runs/<run_id> --dry-run
+uv run ow runs archive --run outputs/campaigns/<campaign>/runs/<run_id> --confirm
+uv run ow runs checkpoint delete --run outputs/campaigns/<campaign>/runs/<run_id> --checkpoint jax_ckpt_000100.pkl --dry-run
+uv run ow runs checkpoint delete --run outputs/campaigns/<campaign>/runs/<run_id> --checkpoint jax_ckpt_000100.pkl --confirm
 ```
 
 ## Verify (tests)
@@ -84,7 +88,26 @@ uv run ow sweep status --backend wandb --sweep-id <id> --project orbit_wars
 uv run ow sweep cancel --backend wandb --sweep-id <id> --project orbit_wars --dry-run
 ```
 
-**CRUD boundaries:** train runs and checkpoints are append-only under `outputs/campaigns/` — no `ow runs delete`; use filesystem cleanup when needed. Promotion rollback: `ow promote demote`. Sweep teardown: `ow sweep cancel` (W&B active runs).
+**CRUD boundaries:** Training runs are append-only until archived — `ow runs archive` moves completed run trees to `outputs/archived/` (blocks active queue; requires `--confirm`). Checkpoint files may be removed with `ow runs checkpoint delete` (blocks current promoted incumbent). Promotion rollback: `ow promote demote`. Sweep teardown: `ow sweep cancel` (W&B active runs).
+
+**Preflight calibrate primitive chain (prefer over monolithic sweep in agent loops):**
+
+```bash
+# Analyze existing campaigns only (no GPU train):
+uv run ow benchmark calibrate --analyze-only --analyze-campaigns
+uv run ow benchmark calibrate --analyze-only --analyze-jsonl path/to/log_jax.jsonl:noop_only:42:500
+
+# Sweep then analyze (GPU; check terminals first):
+uv run ow benchmark calibrate --out docs/benchmarks/preflight-calibration.json
+make preflight-calibrate   # Makefile alias for sweep + refresh AGENTS thresholds
+```
+
+**Launch hygiene tier-1 (not merge throughput authority):**
+
+```bash
+uv run ow benchmark factorized-sampler --max-moves-k 5 --batch-size 32 --warmup 5 --repeats 20 --assert-max-ms 3.22
+make test-launch-hygiene-throughput
+```
 
 Deprecated with one-release warnings: bare `wandb sweep`, `ow train kaggle launch --create-sweep`.
 

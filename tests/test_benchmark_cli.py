@@ -62,6 +62,19 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert seed_sched.command == "calibrate-seed-scheduler"
     assert seed_sched.analyze_only is True
 
+    factorized = parser.parse_args(
+        [
+            "factorized-sampler",
+            "--max-moves-k",
+            "5",
+            "--assert-max-ms",
+            "3.22",
+        ]
+    )
+    assert factorized.command == "factorized-sampler"
+    assert factorized.max_moves_k == 5
+    assert factorized.assert_max_ms == 3.22
+
     held_out = parser.parse_args(
         [
             "learn-proof",
