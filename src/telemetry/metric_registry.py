@@ -761,6 +761,16 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Threshold value attached to a sparse event record.",
         record_kinds=("event",),
     ),
+    _metric(
+        "bracket_training_phase",
+        "events",
+        "Bracket training phase (qualifier, main, weak_config) for bracket_training profile.",
+    ),
+    _metric(
+        "weak_config",
+        "events",
+        "True when 500M env-step qualifier budget exhausted without qualifier clear.",
+    ),
 )
 
 _curriculum_prob_metrics = tuple(
