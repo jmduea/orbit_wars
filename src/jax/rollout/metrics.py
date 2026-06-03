@@ -4,7 +4,6 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
-from src.jax.ship_action import ship_count_for_action
 from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
@@ -13,6 +12,7 @@ from src.jax.rollout.metric_contract import (
     PLANET_FLOW_COUNT_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
+from src.jax.ship_action import ship_count_for_action
 from src.telemetry.metric_registry import (
     prune_scalar_metrics,
     rollout_collection_enabled_groups,
@@ -21,15 +21,11 @@ from src.telemetry.metric_registry import (
 
 ZERO_F32 = jnp.array(0.0, dtype=jnp.float32)
 
-# Backward-compatible alias for train/tests imports.
-_BASE_ROLLOUT_SCALAR_KEYS = BASE_ROLLOUT_SCALAR_KEYS
-
 __all__ = (
     "BASE_ROLLOUT_SCALAR_KEYS",
     "FINALIZED_ROLLOUT_RATE_KEYS",
     "OPPONENT_SLOT_METRIC_KEYS",
     "TRAJECTORY_SHIELD_COUNT_KEYS",
-    "_BASE_ROLLOUT_SCALAR_KEYS",
     "rollout_metrics",
     "trajectory_shield_legal_rate",
 )

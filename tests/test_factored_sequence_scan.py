@@ -113,6 +113,51 @@ def test_rollout_replay_logprob_parity_with_stepwise_scan() -> None:
     assert float(jnp.mean(jnp.abs(delta))) < 1e-4
 
 
+@pytest.mark.jax
+def test_prefix_scan_step_lp_populates_each_active_column() -> None:
+    """Regression: scan body must assign step_lp into log_prob_out per active step."""
+    cfg = _train_cfg(task={"trajectory_shield_mode": "cheap"})
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(11), 1), cfg.task)
+    policy = build_planet_graph_transformer_policy(cfg)
+    params = policy.init(jax.random.PRNGKey(12), batch)
+
+    sample = _sample_shielded_factored_sequence_with_params(
+        jax.random.PRNGKey(13),
+        state.game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=True,
+    )
+    replay = replay_factored_sequence_logprob(
+        params,
+        policy,
+        batch,
+        cfg,
+        player_count=jnp.full((1,), cfg.task.player_count, dtype=jnp.int32),
+        source_index=sample.source_index,
+        target_slot=sample.target_slot,
+        ship_bucket=sample.ship_bucket,
+        stop_flag=sample.stop_flag.astype(jnp.float32),
+        step_mask=sample.step_mask,
+        ship_bucket_mask=sample.ship_bucket_mask,
+        ship_fraction=sample.ship_fraction,
+    )
+    active = sample.step_mask > 0.0
+    inactive = ~active
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob * inactive),
+        0.0,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        np.asarray(replay.log_prob),
+        np.asarray(sample.log_prob),
+        rtol=1e-5,
+        atol=1e-4,
+    )
+    assert float(jnp.sum(jnp.abs(replay.log_prob) * active)) > 0.0
 
 
 @pytest.mark.jax

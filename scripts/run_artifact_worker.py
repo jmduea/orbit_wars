@@ -274,9 +274,9 @@ def _run_checkpoint_eval_job(job: dict[str, object]) -> None:
         "completed",
         result_dir=str(result_dir),
         result_manifest_path=str(manifest_path),
-        validation_ok=True,
-        tournament_id=summary["tournament_id"],
-        promoted=bool(summary["promoted"]),
+        validation_ok=bool(summary.get("validation_ok", False)),
+        tournament_id=summary.get("tournament_id"),
+        promoted=bool(summary.get("promoted", False)),
     )
 
 

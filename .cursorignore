@@ -1,0 +1,8 @@
+# Secrets — never send to models (see docs/CURSOR.md)
+.env
+.env.*
+!.env.example
+
+# Personal scratch (may remain tracked; keep off-model)
+docs/brain_dump.md
+docs/Issues.md
