@@ -245,6 +245,85 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--dry-run", action="store_true")
 
+    seed_sched = subparsers.add_parser(
+        "calibrate-seed-scheduler",
+        help="Sweep reseed intervals and evaluate held-out seed generalization.",
+    )
+    seed_sched.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/seed-scheduler-calibration.json"),
+    )
+    seed_sched.add_argument(
+        "--out-md",
+        type=Path,
+        default=Path("docs/benchmarks/seed-scheduler-calibration.md"),
+    )
+    seed_sched.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    seed_sched.add_argument(
+        "--opponents",
+        default="noop_only,random_only,self_play_only",
+    )
+    seed_sched.add_argument(
+        "--reseed-intervals",
+        default="0,25,50,100",
+        help="Comma-separated training.reseed_every_updates values.",
+    )
+    seed_sched.add_argument(
+        "--no-include-total-fifth",
+        action="store_true",
+        help="Do not append total_updates//5 to the interval grid.",
+    )
+    seed_sched.add_argument("--total-updates", type=int, default=500)
+    seed_sched.add_argument("--train-seed", type=int, default=42)
+    seed_sched.add_argument("--eval-seeds", default="0,1,2,3,4,43,44,45,46")
+    seed_sched.add_argument("--baseline", default="noop")
+    seed_sched.add_argument("--games-per-pair", type=int, default=4)
+    seed_sched.add_argument(
+        "--analyze-only",
+        action="store_true",
+        help="Skip training; analyze existing seed_sched_cal_* campaigns.",
+    )
+    seed_sched.add_argument(
+        "--eval-existing",
+        action="store_true",
+        help="With --analyze-only, run tournament eval on discovered checkpoints.",
+    )
+    seed_sched.add_argument("--dry-run", action="store_true")
+
+    unified_cal = subparsers.add_parser(
+        "calibrate-unified-tournament",
+        help="Scaffold unified tournament calibration artifact (GPU campaigns optional).",
+    )
+    unified_cal.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/preflight-calibration.json"),
+    )
+    unified_cal.add_argument(
+        "--checkpoint",
+        type=Path,
+        action="append",
+        default=[],
+        help="Representative checkpoint for calibration campaign (repeatable).",
+    )
+    unified_cal.add_argument(
+        "--games-per-pair",
+        default="2,4,8",
+        help="Comma-separated games-per-pair values to sweep during calibration.",
+    )
+    unified_cal.add_argument("--analyze-only", action="store_true")
+    unified_cal.add_argument("--dry-run", action="store_true")
+    unified_cal.add_argument(
+        "--write-stub",
+        action="store_true",
+        help="Merge non-enforcing unified_tournament stub into --out JSON.",
+    )
+
     gate = subparsers.add_parser(
         "gate",
         help="Composable preflight gates (YAML in conf/benchmark/gates/).",
@@ -629,114 +708,162 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
     return 0 if verdict == PreflightVerdict.VERIFIED else 1
 
 
-def _run_held_out_eval(args: argparse.Namespace) -> int:
+def run_tournament_proof_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.tournament.unified.ladder import run_unified_ladder
+    from src.artifacts.tournament.unified.spec import load_unified_tournament_spec
     from src.jax.preflight import PreflightVerdict, write_report
     from src.jax.preflight_calibration import (
         default_calibration_json_path,
-        load_thresholds,
     )
 
-    baselines = [part.strip() for part in args.baselines.split(",") if part.strip()]
-    baseline = baselines[0] if baselines else "random"
-    thresholds = load_thresholds(default_calibration_json_path(REPO_ROOT))
-    win_proof = thresholds.get("win_proof_tournament", {})
-    if not isinstance(win_proof, dict):
-        win_proof = {}
-    min_win_rate_key = (
-        "noop_min_win_rate"
-        if baseline in {"noop", "noop_only"}
-        else "random_min_win_rate"
-    )
-    min_win_rate = float(win_proof.get(min_win_rate_key, 0.45))
-    games_per_pair = int(win_proof.get("games_per_pair", args.games_per_pair))
-    seeds = str(win_proof.get("seeds", args.seeds))
+    checkpoint = Path(args.eval_checkpoint)
+    if not checkpoint.is_file():
+        print(f"missing checkpoint: {checkpoint}", file=sys.stderr)
+        return 1
+
+    thresholds_path = args.thresholds_path or default_calibration_json_path(REPO_ROOT)
+    spec = load_unified_tournament_spec(thresholds_path)
+    has_unified_section = False
+    if thresholds_path.is_file():
+        payload = json.loads(thresholds_path.read_text(encoding="utf-8"))
+        has_unified_section = isinstance(payload.get("unified_tournament"), dict)
 
     output_dir = (
         args.output_root
         / "campaigns"
         / args.campaign
         / "evaluations"
-        / f"preflight_win_proof_{baseline}"
+        / "preflight_win_proof_unified"
     )
-    cmd = [
-        "uv",
-        "run",
-        "ow",
-        "eval",
-        "tournament",
-        "--checkpoint",
-        str(args.eval_checkpoint),
-        "--campaign",
-        args.campaign,
-        "--output-root",
-        str(args.output_root),
-        "--output-dir",
-        str(output_dir),
-        "--seeds",
-        seeds,
-        "--games-per-pair",
-        str(games_per_pair),
-        "--formats",
-        "2p_vs_baseline",
-        "--baselines",
-        baseline,
-    ]
+
     if args.dry_run:
-        print(" ".join(cmd), flush=True)
-        report = {
+        stage1_count = (
+            len(spec.stage1.opponents)
+            * len(spec.stage1.seeds)
+            * spec.stage1.games_per_pair
+            * (1 + ("4p_challenger_vs_baselines" in spec.stage1.formats))
+        )
+        if "4p_challenger_vs_baselines" in spec.stage1.formats:
+            stage1_count = (
+                len(spec.stage1.opponents)
+                * len(spec.stage1.seeds)
+                * spec.stage1.games_per_pair
+                + len(spec.stage1.seeds) * spec.stage1.games_per_pair
+            )
+        plan = {
             "gate": "win_proof",
             "verdict": PreflightVerdict.INCONCLUSIVE.value,
-            "baseline": baseline,
-            "min_win_rate": min_win_rate,
             "dry_run": True,
+            "unified": True,
+            "enforcement": spec.enforcement,
+            "needs_calibration": spec.needs_calibration,
+            "stage1": {
+                "opponents": list(spec.stage1.opponents),
+                "seeds": list(spec.stage1.seeds),
+                "games_per_pair": spec.stage1.games_per_pair,
+                "scheduled_matches": stage1_count,
+                "floors": dict(spec.stage1.floors),
+            },
+            "stage2": {
+                "seeds": list(spec.stage2.seeds),
+                "games_per_pair": spec.stage2.games_per_pair,
+                "blocking_reason": spec.blocking_reason,
+            },
+            "output_dir": str(output_dir),
+        }
+        write_report(args.out, plan)
+        print(json.dumps(plan, indent=2))
+        return 0
+
+    if spec.needs_calibration and not has_unified_section:
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.INCONCLUSIVE.value,
+            "reasons": ["missing unified_tournament section in calibration JSON"],
+            "checkpoint": str(checkpoint),
+            "thresholds_path": str(thresholds_path),
+            "evaluation_mode": "unified_tournament",
         }
         write_report(args.out, report)
         print(json.dumps(report, indent=2))
-        return 0
-
-    proc = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-    if proc.returncode != 0:
-        return int(proc.returncode)
-
-    leaderboard_path = output_dir / "leaderboard.json"
-    if not leaderboard_path.is_file():
-        print(f"missing leaderboard: {leaderboard_path}", file=sys.stderr)
         return 1
-    rows = json.loads(leaderboard_path.read_text(encoding="utf-8")).get("rows", [])
-    if not rows:
-        print("leaderboard has no rows", file=sys.stderr)
-        return 1
-    observed = rows[0].get("win_rate_vs_baseline")
-    if observed is None:
-        observed = rows[0].get("win_rate_vs_sniper")
-    baseline_name = rows[0].get("baseline_name") or baseline
-    verdict = PreflightVerdict.VERIFIED
+
+    verdict = run_unified_ladder(
+        checkpoint,
+        spec,
+        output_dir,
+        campaign=args.campaign,
+        output_root=args.output_root,
+    )
+
+    preflight_verdict = PreflightVerdict.VERIFIED
     reasons: list[str] = []
-    if observed is None:
-        verdict = PreflightVerdict.INCONCLUSIVE
-        reasons.append("missing win_rate_vs_baseline in tournament leaderboard")
-    elif float(observed) < min_win_rate:
-        verdict = PreflightVerdict.NOT_VERIFIED
-        reasons.append(
-            f"tournament win rate {float(observed):.3f} < {min_win_rate:.3f} "
-            f"vs {baseline_name}"
-        )
+    if not verdict.passed:
+        if spec.enforcement:
+            preflight_verdict = PreflightVerdict.NOT_VERIFIED
+        else:
+            preflight_verdict = PreflightVerdict.INCONCLUSIVE
+        reasons.append(verdict.reason)
 
     report = {
         "gate": "win_proof",
         "commit_sha": _git_head_sha(),
-        "verdict": verdict.value,
+        "verdict": preflight_verdict.value,
         "reasons": reasons,
-        "baseline_name": baseline_name,
-        "min_win_rate": min_win_rate,
-        "observed_win_rate": observed,
-        "leaderboard_path": str(leaderboard_path),
-        "checkpoint": str(args.eval_checkpoint),
-        "evaluation_mode": "tournament",
+        "unified_verdict": verdict.to_dict(),
+        "unified_verdict_path": str(output_dir / "unified_verdict.json"),
+        "checkpoint": str(checkpoint),
+        "evaluation_mode": "unified_tournament",
+        "enforcement": spec.enforcement,
     }
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
-    return 0 if verdict == PreflightVerdict.VERIFIED else 1
+    return 0 if preflight_verdict == PreflightVerdict.VERIFIED else 1
+
+
+def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
+    from src.jax.unified_tournament_calibration import (
+        UnifiedCalibrationPlan,
+        build_unified_calibration_report,
+        default_unified_tournament_stub,
+        merge_unified_section_into_calibration,
+        write_unified_calibration_artifact,
+    )
+
+    started = __import__("time").perf_counter()
+    games_candidates = tuple(
+        int(part.strip()) for part in args.games_per_pair.split(",") if part.strip()
+    )
+    plan = UnifiedCalibrationPlan(
+        checkpoint_paths=tuple(args.checkpoint),
+        games_per_pair_candidates=games_candidates or (4,),
+        dry_run=bool(args.dry_run),
+    )
+    report = build_unified_calibration_report(
+        repo_root=REPO_ROOT,
+        plan=plan,
+        analyze_only=bool(args.analyze_only),
+        seconds_total=__import__("time").perf_counter() - started,
+    )
+    if args.write_stub:
+        merged = merge_unified_section_into_calibration(
+            args.out,
+            default_unified_tournament_stub(enforcement=False),
+        )
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        report["written_calibration_path"] = str(args.out)
+    else:
+        write_unified_calibration_artifact(args.out, report)
+    print(json.dumps(report, indent=2))
+    if plan.dry_run:
+        print(
+            "Dry run: no GPU calibration campaigns executed. "
+            "Pass checkpoints and omit --dry-run to run campaigns (deferred).",
+            flush=True,
+        )
+    return 0
 
 
 def run_calibrate_cli(args: argparse.Namespace) -> int:
@@ -959,10 +1086,14 @@ def main(argv: list[str] | None = None) -> int:
             return run_learn_proof_cli(args)
         case "calibrate":
             return run_calibrate_cli(args)
-        case "gate":
-            from src.cli.benchmark_gate_cli import run_gate_cli
-
-            return run_gate_cli(args)
+        case "calibrate-seed-scheduler":
+            return run_calibrate_seed_scheduler_cli(args)
+        case "calibrate-unified-tournament":
+            return run_calibrate_unified_tournament_cli(args)
+        case "shortlist-planet-flow-sweep":
+            return run_shortlist_planet_flow_sweep_cli(args)
+        case "planet-flow-noop-smoke":
+            return run_planet_flow_noop_smoke_cli(args)
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
         case "map-pool":
