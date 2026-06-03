@@ -185,6 +185,7 @@ def _read_preflight_excerpt(repo_root: Path) -> dict[str, object]:
     thresholds = payload.get("thresholds") or {}
     learning = thresholds.get("learning_signal") or {}
     tournament = thresholds.get("win_proof_tournament") or {}
+    unified = payload.get("unified_tournament") or {}
     return {
         "path": "docs/benchmarks/preflight-calibration.json",
         "present": True,
@@ -197,6 +198,11 @@ def _read_preflight_excerpt(repo_root: Path) -> dict[str, object]:
         "win_proof_tournament": {
             "noop_min_win_rate": tournament.get("noop_min_win_rate"),
             "random_min_win_rate": tournament.get("random_min_win_rate"),
+        },
+        "unified_tournament": {
+            "enforcement": unified.get("enforcement"),
+            "noop_min_combined": unified.get("noop_min_combined"),
+            "random_min_combined": unified.get("random_min_combined"),
         },
         "notes": thresholds.get("notes"),
     }
