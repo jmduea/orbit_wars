@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -104,6 +105,75 @@ def test_committed_e2e_baseline_artifact_is_valid() -> None:
     assert loaded["gate"] == E2E_THROUGHPUT_GATE
     assert len(loaded["runs"]) >= 3
     assert "pass_band" in loaded
+    gap = loaded.get("gap_assessment")
+    assert gap is not None
+    assert gap.get("ablation_artifact") == "docs/benchmarks/launch-hygiene-ablation.json"
+
+
+_ABLATION_VERDICT_RANK = {"VERIFIED": 2, "NOT_VERIFIED": 1, "INCONCLUSIVE": 0}
+_ABLATION_REQUIRED_ARM_KEYS = (
+    "label",
+    "commit_sha",
+    "launch_hygiene",
+    "learn_proof",
+    "throughput_e2e",
+)
+_LEARN_PROOF_KEYS = ("artifact", "model", "through", "verdict", "stages")
+
+
+def test_committed_launch_hygiene_ablation_artifact() -> None:
+    """Committed learner-ablation snapshot (assessed_date in JSON).
+
+    Re-run arms per docs/operator-runbook.md, then refresh
+    docs/benchmarks/launch-hygiene-ablation.json from captured learn-proof outputs.
+    """
+    path = Path("docs/benchmarks/launch-hygiene-ablation.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["gate"] == "launch_hygiene_learner_ablation"
+    for field in ("hot_path_status", "phase_b_status", "thresholds_source", "tier2_status"):
+        value = payload.get(field)
+        assert isinstance(value, str) and value.strip(), f"missing or empty {field}"
+    assert Path(payload["thresholds_source"]).is_file()
+
+    arms = payload["arms"]
+    assert isinstance(arms, dict) and arms
+    winner = payload["winner"]
+    assert winner in arms
+
+    missing_artifacts: list[str] = []
+    for arm_key, arm in arms.items():
+        assert isinstance(arm, dict)
+        for key in _ABLATION_REQUIRED_ARM_KEYS:
+            assert key in arm, f"{arm_key} missing {key}"
+        learn_proof = arm["learn_proof"]
+        for key in _LEARN_PROOF_KEYS:
+            assert key in learn_proof, f"{arm_key}.learn_proof missing {key}"
+        verdict = learn_proof["verdict"]
+        assert verdict in _ABLATION_VERDICT_RANK
+        artifact_path = Path(learn_proof["artifact"])
+        assert not artifact_path.is_absolute(), (
+            f"{arm_key} learn_proof.artifact must be repo-relative"
+        )
+        if artifact_path.is_file():
+            ref = json.loads(artifact_path.read_text(encoding="utf-8"))
+            assert ref.get("verdict") == verdict
+        else:
+            missing_artifacts.append(f"{arm_key}:{artifact_path}")
+
+    if missing_artifacts:
+        pytest.skip(
+            "learn-proof artifacts missing (capture per docs/operator-runbook.md "
+            f"learner ablation table): {', '.join(missing_artifacts)}"
+        )
+
+    winner_verdict = arms[winner]["learn_proof"]["verdict"]
+    for arm_key, arm in arms.items():
+        if arm_key == winner:
+            continue
+        other = arm["learn_proof"]["verdict"]
+        assert _ABLATION_VERDICT_RANK[winner_verdict] >= _ABLATION_VERDICT_RANK[other]
+
+    assert isinstance(payload.get("decision"), str) and payload["decision"].strip()
 
 
 def test_load_baseline_missing_file(tmp_path: Path) -> None:
@@ -135,7 +205,7 @@ def test_build_baseline_artifact_round_trip(tmp_path: Path) -> None:
         operator_example="make test-launch-hygiene-e2e-throughput",
     )
     path = tmp_path / "baseline.json"
-    path.write_text(__import__("json").dumps(artifact, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(artifact, indent=2) + "\n", encoding="utf-8")
     loaded = load_e2e_baseline(path)
     assert loaded["gate"] == E2E_THROUGHPUT_GATE
     assert len(loaded["runs"]) == 3
