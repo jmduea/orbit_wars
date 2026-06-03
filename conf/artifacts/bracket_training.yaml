@@ -1,0 +1,16 @@
+defaults:
+  - hybrid_promotion
+  - _self_
+
+bracket_training:
+  enabled: true
+  qualifier_max_env_steps: 500000000
+  qualifier_eval_interval_updates: 50
+
+unified_tournament:
+  qualifier_mode: false
+
+opponents:
+  bracket_self_play:
+    enabled: true
+    sample_count: 2

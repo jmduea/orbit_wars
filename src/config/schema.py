@@ -195,11 +195,22 @@ class OpponentModeConfig:
 
 
 @dataclass(slots=True)
+class BracketSelfPlayConfig:
+    """Sample self-play opponents from main tournament bracket entries."""
+
+    enabled: bool = False
+    sample_count: int = 1
+
+
+@dataclass(slots=True)
 class OpponentsConfig:
     self_play: OpponentSelfPlayConfig = field(default_factory=OpponentSelfPlayConfig)
     mode: OpponentModeConfig = field(default_factory=OpponentModeConfig)
     mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
+    bracket_self_play: BracketSelfPlayConfig = field(
+        default_factory=BracketSelfPlayConfig
+    )
 
 
 @dataclass(slots=True)
@@ -248,10 +259,20 @@ class PromotionConfig:
 
 
 @dataclass(slots=True)
+class BracketTrainingConfig:
+    """Training-time qualifier ladder and 500M env-step budget tracking."""
+
+    enabled: bool = False
+    qualifier_max_env_steps: int = 500_000_000
+    qualifier_eval_interval_updates: int = 50
+
+
+@dataclass(slots=True)
 class UnifiedTournamentConfig:
     """Held-out unified ladder settings for Gate 5 and hybrid checkpoint_eval."""
 
     enabled: bool = False
+    qualifier_mode: bool = False
     enforcement: bool = False
     games_per_pair: int = 4
     prerequisite_seeds: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
@@ -324,6 +345,9 @@ class ArtifactsConfig:
     tournament: TournamentConfig = field(default_factory=TournamentConfig)
     unified_tournament: UnifiedTournamentConfig = field(
         default_factory=UnifiedTournamentConfig
+    )
+    bracket_training: BracketTrainingConfig = field(
+        default_factory=BracketTrainingConfig
     )
 
 

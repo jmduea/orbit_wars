@@ -238,3 +238,43 @@ def validate_spec_for_stage2(
     if not incumbent_resolved and spec.incumbent_bootstrap_opponent is None:
         return "no_incumbent"
     return None
+
+
+def with_qualifier_floors(spec: UnifiedTournamentSpec) -> UnifiedTournamentSpec:
+    """Return a copy with 1.0 combined floors for training qualifier mode."""
+
+    stage1_floors = {opponent: 1.0 for opponent in spec.stage1.opponents}
+    stage1 = StageSpec(
+        name=spec.stage1.name,
+        opponents=spec.stage1.opponents,
+        seeds=spec.stage1.seeds,
+        games_per_pair=spec.stage1.games_per_pair,
+        formats=spec.stage1.formats,
+        floors=stage1_floors,
+    )
+    return UnifiedTournamentSpec(
+        stage1=stage1,
+        stage2=spec.stage2,
+        four_p_baseline_fillers=spec.four_p_baseline_fillers,
+        incumbent_bootstrap_opponent=spec.incumbent_bootstrap_opponent,
+        enforcement=spec.enforcement,
+        needs_calibration=spec.needs_calibration,
+        blocking_reason=spec.blocking_reason,
+        max_steps=spec.max_steps,
+        per_step_seconds=spec.per_step_seconds,
+        overage_budget_seconds=spec.overage_budget_seconds,
+        write_replays=spec.write_replays,
+    )
+
+
+def qualifier_sniper_stage(spec: UnifiedTournamentSpec) -> StageSpec:
+    """Stage 1b: nearest_sniper at combined 1.0 before main bracket entry."""
+
+    return StageSpec(
+        name="stage1b_qualifier_sniper",
+        opponents=("nearest_sniper",),
+        seeds=spec.stage1.seeds,
+        games_per_pair=spec.stage1.games_per_pair,
+        formats=spec.stage1.formats,
+        floors={"nearest_sniper": 1.0},
+    )

@@ -28,7 +28,12 @@ from src.artifacts.tournament.unified.scoring import (
     score_opponent,
     stage2_per_seed_summary,
 )
-from src.artifacts.tournament.unified.spec import UnifiedTournamentSpec, validate_spec_for_stage2
+from src.artifacts.tournament.unified.spec import (
+    UnifiedTournamentSpec,
+    qualifier_sniper_stage,
+    validate_spec_for_stage2,
+    with_qualifier_floors,
+)
 
 MatchRunner = Callable[..., tuple[MatchOutcome, Any, dict[str, object]]]
 
@@ -117,8 +122,13 @@ def run_unified_ladder(
     run_match_fn: MatchRunner | None = None,
     dry_run: bool = False,
     stop_after_stage1: bool = False,
+    qualifier_mode: bool = False,
+    skip_stage2: bool = False,
 ) -> UnifiedLadderVerdict:
     """Run prerequisite-first unified ladder with early exit."""
+
+    if qualifier_mode:
+        spec = with_qualifier_floors(spec)
 
     run_match_fn = run_match_fn or _default_run_match
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -193,6 +203,87 @@ def run_unified_ladder(
             stages=(stage1_result,),
             challenger_checkpoint=str(checkpoint_path.resolve()),
             enforcement=spec.enforcement,
+        )
+        write_unified_verdict(output_dir, verdict)
+        return verdict
+
+    stages: list[UnifiedStageResult] = [stage1_result]
+    if qualifier_mode:
+        sniper_stage = qualifier_sniper_stage(spec)
+        sniper_dir = output_dir / "stage1b_qualifier_sniper"
+        sniper_schedules = schedule_stage1_matches(
+            challenger, spec, stage=sniper_stage
+        )
+        try:
+            sniper_outcomes, _ = _execute_schedules(
+                sniper_schedules,
+                output_dir=sniper_dir,
+                spec=spec,
+                run_match_fn=run_match_fn,
+                match_index_start=len(stage1_schedules),
+            )
+        except TournamentTimingError as exc:
+            sniper_result = UnifiedStageResult(
+                name=sniper_stage.name,
+                passed=False,
+                output_dir=str(sniper_dir),
+                skip_reason=f"timing_error:{exc}",
+            )
+            verdict = UnifiedLadderVerdict(
+                passed=False,
+                reason=f"qualifier_sniper_timing_error:{exc}",
+                stages=(*stages, sniper_result),
+                challenger_checkpoint=str(checkpoint_path.resolve()),
+                enforcement=spec.enforcement,
+            )
+            write_unified_verdict(output_dir, verdict)
+            return verdict
+
+        sniper_spec = UnifiedTournamentSpec(
+            stage1=sniper_stage,
+            stage2=spec.stage2,
+            four_p_baseline_fillers=spec.four_p_baseline_fillers,
+            incumbent_bootstrap_opponent=spec.incumbent_bootstrap_opponent,
+            enforcement=spec.enforcement,
+            needs_calibration=spec.needs_calibration,
+            blocking_reason=spec.blocking_reason,
+            max_steps=spec.max_steps,
+            per_step_seconds=spec.per_step_seconds,
+            overage_budget_seconds=spec.overage_budget_seconds,
+            write_replays=spec.write_replays,
+        )
+        sniper_passed, sniper_scores, sniper_fail = _evaluate_stage1(
+            sniper_outcomes,
+            challenger_id=challenger_id,
+            spec=sniper_spec,
+        )
+        sniper_result = UnifiedStageResult(
+            name=sniper_stage.name,
+            passed=sniper_passed,
+            opponents=sniper_scores,
+            output_dir=str(sniper_dir),
+            skip_reason=sniper_fail,
+        )
+        stages.append(sniper_result)
+        if not sniper_passed:
+            verdict = UnifiedLadderVerdict(
+                passed=False,
+                reason=sniper_fail or "failed_qualifier_nearest_sniper",
+                stages=tuple(stages),
+                challenger_checkpoint=str(checkpoint_path.resolve()),
+                enforcement=spec.enforcement,
+            )
+            write_unified_verdict(output_dir, verdict)
+            return verdict
+
+    if skip_stage2 or qualifier_mode:
+        verdict = UnifiedLadderVerdict(
+            passed=True,
+            reason="qualifier_cleared" if qualifier_mode else "stage1_only",
+            stages=tuple(stages),
+            challenger_checkpoint=str(checkpoint_path.resolve()),
+            enforcement=spec.enforcement,
+            incumbent_swap=qualifier_mode,
         )
         write_unified_verdict(output_dir, verdict)
         return verdict

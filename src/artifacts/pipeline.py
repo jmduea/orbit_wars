@@ -15,7 +15,11 @@ from typing import Literal
 
 CheckpointStatus = Literal["committed", "failed", "skipped", "coalesced"]
 OptionalJobKind = Literal[
-    "replay", "docker_validation", "tournament", "checkpoint_eval"
+    "replay",
+    "docker_validation",
+    "tournament",
+    "checkpoint_eval",
+    "qualifier_eval",
 ]
 
 
