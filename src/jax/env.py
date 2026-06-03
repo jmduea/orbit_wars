@@ -28,9 +28,8 @@ from src.jax.rewards import apply_early_terminal_reward_shaping_jax
 from .features import (
     FeatureHistory,
     TurnBatch,
-    append_feature_history,
     empty_feature_history,
-    encode_turn,
+    encode_learner_turn,
 )
 
 BOARD_CENTER = (50.0, 50.0)
@@ -250,12 +249,12 @@ def reset(
         fleets=empty_fleets,
     )
     history = empty_feature_history(cfg)
-    batch = encode_turn(game, cfg, history)
+    batch, feature_history = encode_learner_turn(game, cfg, history)
     env_state = JaxEnvState(
         game=game,
         learner_player=jnp.array(0, dtype=jnp.int32),
         episode_count=jnp.array(0, dtype=jnp.int32),
-        feature_history=append_feature_history(history, game, cfg),
+        feature_history=feature_history,
     )
     return env_state, batch
 
@@ -303,16 +302,14 @@ def assign_learner_players(
         env_state.game, learner_player.astype(jnp.int32)
     )
     histories = jax.vmap(lambda game: empty_feature_history(cfg))(games)
-    turn_batch = jax.vmap(
-        lambda game, history: encode_turn(game, cfg, history)
+    turn_batch, feature_histories = jax.vmap(
+        lambda game, history: encode_learner_turn(game, cfg, history)
     )(games, histories)
     env_state = env_state._replace(
         game=games,
         learner_player=learner_player.astype(jnp.int32),
         episode_count=episode_count.astype(jnp.int32),
-        feature_history=jax.vmap(
-            lambda history, game: append_feature_history(history, game, cfg)
-        )(histories, games),
+        feature_history=feature_histories,
         decoder_hidden=None,
     )
     return env_state, turn_batch
@@ -360,12 +357,12 @@ def _finish_step(
         + shaping[2]
     )
     learner_game = next_game._replace(player=state.learner_player)
-    batch = encode_turn(learner_game, cfg, state.feature_history)
+    batch, feature_history = encode_learner_turn(
+        learner_game, cfg, state.feature_history
+    )
     next_state = state._replace(
         game=next_game,
-        feature_history=append_feature_history(
-            state.feature_history, learner_game, cfg
-        ),
+        feature_history=feature_history,
     )
     result = JaxStepResult(
         batch=batch,
