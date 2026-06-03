@@ -1,6 +1,7 @@
 ---
 title: Planet Flow replay "wrong target" from catalog reachability, not angle bugs
 date: 2026-06-02
+last_updated: 2026-06-03
 category: logic-errors
 module: planet-flow-compiler
 problem_type: logic_error
@@ -53,6 +54,8 @@ Replay `replay_u000150_2p_random.html` (run `20260602T030312Z-s42-232b5bed`, che
 
 `_edge_target_pressure` previously used `jnp.take(target_pressure, planet_id)`, assuming **row index == planet id**. Fixed to gather demand by matching `game_row.planets.id` to each edge target id (same idea as launch-angle lookup). Kaggle/JAX env today keeps id == row, but permuted or duplicate-id layouts misread demand without the fix.
 
+**Comet spawn/expire (JAX env):** Comet groups reuse reserved planet slots; `src/jax/env.py` updates `initial_planets` on spawn and expiry in the same step as `planets`, so id↔row alignment assumed by catalog pressure gather and planet-flow compile stays valid after step 50. Changing comet slot layout or sync order can re-break that invariant — see `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md` and `make test-kaggle-parity`.
+
 ## Design tension (brainstorm input)
 
 | Option | Idea |
@@ -80,5 +83,6 @@ uv run pytest tests/test_planet_flow_compiler.py -q
 
 ## Related
 
+- JAX comet parity + CI: `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`
 - Prior sweep objective issue: `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`
 - Pipeline plan: `docs/plans/2026-06-02-002-fix-planet-flow-angle-verify-relaunch-pipeline-plan.md`
