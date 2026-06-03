@@ -14,6 +14,7 @@ from src.jax.env import (
     JaxGameState,
     JaxPlanetState,
     empty_action,
+    empty_comet_state,
     max_fleets,
     reset,
     step,
@@ -100,9 +101,11 @@ def _state(
         player=jnp.array(learner_player, dtype=jnp.int32),
         angular_velocity=jnp.array(angular_velocity, dtype=jnp.float32),
         next_fleet_id=jnp.array(100, dtype=jnp.int32),
+        episode_seed=jnp.array(0, dtype=jnp.int32),
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,
+        comets=empty_comet_state(),
     )
     return JaxEnvState(
         game=game,
@@ -447,6 +450,20 @@ def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player(
         np.array([21.0, 21.0, 21.0, 21.0]),
     )
     assert int(np.asarray(next_state.game.fleets.active).sum()) == 0
+
+
+def test_comet_spawn_keeps_initial_planets_synced_after_forty_nine_steps():
+    cfg = _cfg()
+    state, _ = reset(jax.random.PRNGKey(0), cfg)
+    baseline_active = int(np.asarray(state.game.planets.active).sum())
+    # Spawn fires when (step + 1) == 50, i.e. on the step that ends at game.step == 50.
+    for _ in range(50):
+        state, _ = _advance(state, cfg)
+    active = np.asarray(state.game.planets.active)
+    init_active = np.asarray(state.game.initial_planets.active)
+    assert int(state.game.comets.group_count) >= 1
+    assert int(active.sum()) == int(init_active.sum())
+    assert int(active.sum()) > baseline_active
 
 
 def test_four_player_step_allows_simultaneous_four_way_combat_from_actions():

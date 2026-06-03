@@ -104,14 +104,18 @@ def _two_planet_game(
         active=active,
     )
 
+    from src.jax.env import empty_comet_state
+
     return JaxGameState(
         step=jnp.asarray(0, dtype=jnp.int32),
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.0, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
+        comets=empty_comet_state(),
     )
 
 
@@ -137,14 +141,18 @@ def _three_planet_sun_cross_game() -> JaxGameState:
         production=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
         active=active,
     )
+    from src.jax.env import empty_comet_state
+
     return JaxGameState(
         step=jnp.asarray(0, dtype=jnp.int32),
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.0, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
+        comets=empty_comet_state(),
     )
 
 
