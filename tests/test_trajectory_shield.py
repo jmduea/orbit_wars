@@ -104,14 +104,18 @@ def _jax_game(
         ships=jnp.zeros((8,), dtype=jnp.float32),
         active=jnp.zeros((8,), dtype=bool),
     )
+    from src.jax.env import empty_comet_state
+
     return JaxGameState(
         step=jnp.asarray(step, dtype=jnp.int32),
         player=jnp.asarray(player, dtype=jnp.int32),
         angular_velocity=jnp.asarray(angular_velocity, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,
+        comets=empty_comet_state(),
     )
 
 

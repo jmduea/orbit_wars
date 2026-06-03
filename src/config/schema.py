@@ -12,6 +12,7 @@ class TaskConfig:
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
+    ship_speed: float = 6.0
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1

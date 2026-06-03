@@ -66,6 +66,32 @@ def encode_turn(
 ) -> TurnBatch:
     """Encode a JAX game state into v2 planet/edge/global tensors."""
 
+    batch, _ = _encode_turn_with_snapshot(game, env_cfg, history)
+    return batch
+
+
+def encode_learner_turn(
+    game, env_cfg: TaskConfig, history: FeatureHistory | None = None
+) -> tuple[TurnBatch, FeatureHistory]:
+    """Encode learner observation and advance feature history in one pass.
+
+    Reuses the observation global frame for history append when
+    ``feature_history_steps <= 1``; otherwise appends the history=None snapshot.
+    """
+
+    batch, snapshot = _encode_turn_with_snapshot(game, env_cfg, history)
+    next_history = append_feature_history(
+        history,
+        game,
+        env_cfg,
+        snapshot_global_frame=snapshot,
+    )
+    return batch, next_history
+
+
+def _encode_turn_with_snapshot(
+    game, env_cfg: TaskConfig, history: FeatureHistory | None
+) -> tuple[TurnBatch, jax.Array]:
     planets = game.planets
     player = game.player
     scale = ship_feature_scale(env_cfg)
@@ -76,7 +102,7 @@ def encode_turn(
     edge_features, edge_mask, edge_tgt_ids = _edge_features(game, env_cfg, scale, theta)
     global_frame = _global_frame(game, env_cfg, scale, history)
     global_features = _stack_global_history(global_frame, history, env_cfg)
-    return TurnBatch(
+    batch = TurnBatch(
         planet_features=planet_features,
         planet_mask=planets.active.astype(jnp.bool_),
         edge_features=edge_features,
@@ -86,6 +112,11 @@ def encode_turn(
         global_features=global_features,
         theta_ref=theta,
     )
+    if feature_history_steps(env_cfg) <= 1:
+        snapshot = global_frame
+    else:
+        snapshot = _global_frame(game, env_cfg, scale, None)
+    return batch, snapshot
 
 
 def empty_feature_history(env_cfg: TaskConfig) -> FeatureHistory:
@@ -111,13 +142,20 @@ def current_feature_snapshot(game, env_cfg: TaskConfig) -> FeatureHistory:
 
 
 def append_feature_history(
-    history: FeatureHistory | None, game, env_cfg: TaskConfig
+    history: FeatureHistory | None,
+    game,
+    env_cfg: TaskConfig,
+    *,
+    snapshot_global_frame: jax.Array | None = None,
 ) -> FeatureHistory:
     steps = max(0, feature_history_steps(env_cfg) - 1)
     if steps == 0:
         return empty_feature_history(env_cfg)
     base = empty_feature_history(env_cfg) if history is None else history
-    global_frame = _global_frame(game, env_cfg, ship_feature_scale(env_cfg), None)
+    if snapshot_global_frame is None:
+        global_frame = _global_frame(game, env_cfg, ship_feature_scale(env_cfg), None)
+    else:
+        global_frame = snapshot_global_frame
     idx = base.cursor % steps
     global_features = base.global_features.at[idx].set(global_frame)
     cursor = (base.cursor + 1).astype(jnp.int32)

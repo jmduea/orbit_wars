@@ -11,11 +11,20 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import jax.numpy as jnp
+import numpy as np
 
 import jax
 from src.config import RewardConfig, TaskConfig
 from src.game.constants import (
     BOARD_SIZE,
+    COMET_OFF_BOARD,
+    COMET_PRODUCTION,
+    COMET_RADIUS,
+    COMET_SPAWN_STEPS,
+    COMET_SPEED,
+    COMETS_PER_GROUP,
+    MAX_COMET_GROUPS,
+    MAX_COMET_PATH_LEN,
     MAX_FLEET_SPEED,
     MAX_PLANETS,
     MAX_STEPS,
@@ -28,9 +37,8 @@ from src.jax.rewards import apply_early_terminal_reward_shaping_jax
 from .features import (
     FeatureHistory,
     TurnBatch,
-    append_feature_history,
     empty_feature_history,
-    encode_turn,
+    encode_learner_turn,
 )
 
 BOARD_CENTER = (50.0, 50.0)
@@ -72,6 +80,18 @@ class JaxFleetState(NamedTuple):
     active: jax.Array
 
 
+class JaxCometState(NamedTuple):
+    """Fixed-shape comet groups spawned at ``COMET_SPAWN_STEPS``."""
+
+    group_count: jax.Array
+    path_index: jax.Array
+    planet_ids: jax.Array
+    paths_x: jax.Array
+    paths_y: jax.Array
+    path_lengths: jax.Array
+    group_active: jax.Array
+
+
 class JaxGameState(NamedTuple):
     """Complete Orbit Wars game state represented as JAX arrays.
 
@@ -84,9 +104,35 @@ class JaxGameState(NamedTuple):
     player: jax.Array
     angular_velocity: jax.Array
     next_fleet_id: jax.Array
+    episode_seed: jax.Array
     planets: JaxPlanetState
     initial_planets: JaxPlanetState
     fleets: JaxFleetState
+    comets: JaxCometState
+
+
+def empty_comet_state() -> JaxCometState:
+    """Return an empty comet schedule for reset and observation replay."""
+
+    return JaxCometState(
+        group_count=jnp.array(0, dtype=jnp.int32),
+        path_index=jnp.full((MAX_COMET_GROUPS,), -1, dtype=jnp.int32),
+        planet_ids=jnp.full(
+            (MAX_COMET_GROUPS, COMETS_PER_GROUP), -1, dtype=jnp.int32
+        ),
+        paths_x=jnp.zeros(
+            (MAX_COMET_GROUPS, COMETS_PER_GROUP, MAX_COMET_PATH_LEN),
+            dtype=jnp.float32,
+        ),
+        paths_y=jnp.zeros(
+            (MAX_COMET_GROUPS, COMETS_PER_GROUP, MAX_COMET_PATH_LEN),
+            dtype=jnp.float32,
+        ),
+        path_lengths=jnp.zeros(
+            (MAX_COMET_GROUPS, COMETS_PER_GROUP), dtype=jnp.int32
+        ),
+        group_active=jnp.zeros((MAX_COMET_GROUPS,), dtype=bool),
+    )
 
 
 class JaxEnvState(NamedTuple):
@@ -158,78 +204,353 @@ def empty_action(cfg: TaskConfig) -> JaxAction:
     )
 
 
+def _reference_planet_tables(
+    seed: np.ndarray, player_count: np.ndarray
+) -> tuple[np.ndarray, ...]:
+    """Build padded planet tables with the Kaggle reference generator."""
+
+    import random
+
+    from src.game.planet_generation import (
+        assign_home_planets,
+        generate_planets,
+        planets_to_padded_rows,
+    )
+
+    rng = random.Random(int(np.asarray(seed).item()))
+    planets = generate_planets(rng)
+    num_groups = max(1, len(planets) // 4)
+    home_group = rng.randint(0, num_groups - 1)
+    assign_home_planets(
+        planets,
+        player_count=int(np.asarray(player_count).item()),
+        home_group=home_group,
+    )
+    rows = planets_to_padded_rows(planets)
+    return tuple(np.asarray(row) for row in rows)
+
+
+def _planet_table_specs() -> tuple[jax.ShapeDtypeStruct, ...]:
+    return (
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.int32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.int32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), np.bool_),
+    )
+
+
+_COMET_SPAWN_STEPS = jnp.array(COMET_SPAWN_STEPS, dtype=jnp.int32)
+
+
+def _active_comet_planet_ids(comets: JaxCometState) -> jax.Array:
+    valid = comets.group_active[:, None] & (comets.planet_ids >= 0)
+    return jnp.where(valid, comets.planet_ids, -1).reshape(
+        (MAX_COMET_GROUPS * COMETS_PER_GROUP,)
+    )
+
+
+def _is_comet_planet(comets: JaxCometState, planet_ids: jax.Array) -> jax.Array:
+    return jnp.isin(planet_ids, _active_comet_planet_ids(comets))
+
+
+def _pack_initial_planets_arrays(
+    planet_id: np.ndarray,
+    owner: np.ndarray,
+    x: np.ndarray,
+    y: np.ndarray,
+    radius: np.ndarray,
+    ships: np.ndarray,
+    production: np.ndarray,
+    active: np.ndarray,
+) -> np.ndarray:
+    packed = np.zeros((MAX_PLANETS, 7), dtype=np.float32)
+    for i in np.flatnonzero(np.asarray(active)):
+        packed[i] = [
+            float(planet_id[i]),
+            float(owner[i]),
+            float(x[i]),
+            float(y[i]),
+            float(radius[i]),
+            float(ships[i]),
+            float(production[i]),
+        ]
+    return packed
+
+
+def _reference_comet_paths(
+    episode_seed: np.ndarray,
+    spawn_step: np.ndarray,
+    angular_velocity: np.ndarray,
+    comet_planet_ids: np.ndarray,
+    comet_speed: np.ndarray,
+    initial_packed: np.ndarray,
+) -> tuple[np.ndarray, ...]:
+    import random
+
+    from src.game.comet_generation import generate_comet_paths
+
+    rows = [
+        [
+            int(row[0]),
+            int(row[1]),
+            float(row[2]),
+            float(row[3]),
+            float(row[4]),
+            float(row[5]),
+            float(row[6]),
+        ]
+        for row in np.asarray(initial_packed).reshape(MAX_PLANETS, 7)
+        if int(row[0]) >= 0
+    ]
+    excluded = [int(x) for x in np.asarray(comet_planet_ids).reshape(-1) if int(x) >= 0]
+    seed = int(np.asarray(episode_seed).item())
+    step = int(np.asarray(spawn_step).item())
+    rng = random.Random(f"orbit_wars-comet-{seed}-{step}")
+    paths = generate_comet_paths(
+        rows,
+        float(np.asarray(angular_velocity).item()),
+        step,
+        excluded,
+        float(np.asarray(comet_speed).item()),
+        rng=rng,
+    )
+    paths_x = np.zeros((COMETS_PER_GROUP, MAX_COMET_PATH_LEN), dtype=np.float32)
+    paths_y = np.zeros((COMETS_PER_GROUP, MAX_COMET_PATH_LEN), dtype=np.float32)
+    path_lengths = np.zeros((COMETS_PER_GROUP,), dtype=np.int32)
+    comet_ships = np.array(1.0, dtype=np.float32)
+    ok = np.array(False, dtype=np.bool_)
+    if paths:
+        ok = np.array(True, dtype=np.bool_)
+        comet_ships = float(
+            min(
+                rng.randint(1, 99),
+                rng.randint(1, 99),
+                rng.randint(1, 99),
+                rng.randint(1, 99),
+            )
+        )
+        for i, path in enumerate(paths[:COMETS_PER_GROUP]):
+            length = min(len(path), MAX_COMET_PATH_LEN)
+            path_lengths[i] = length
+            for j in range(length):
+                paths_x[i, j] = float(path[j][0])
+                paths_y[i, j] = float(path[j][1])
+    return paths_x, paths_y, path_lengths, np.array(comet_ships, dtype=np.float32), ok
+
+
+def _comet_path_specs() -> tuple[jax.ShapeDtypeStruct, ...]:
+    return (
+        jax.ShapeDtypeStruct((COMETS_PER_GROUP, MAX_COMET_PATH_LEN), jnp.float32),
+        jax.ShapeDtypeStruct((COMETS_PER_GROUP, MAX_COMET_PATH_LEN), jnp.float32),
+        jax.ShapeDtypeStruct((COMETS_PER_GROUP,), jnp.int32),
+        jax.ShapeDtypeStruct((), jnp.float32),
+        jax.ShapeDtypeStruct((), np.bool_),
+    )
+
+
+def _deactivate_planets_by_id(
+    planets: JaxPlanetState,
+    remove_ids: jax.Array,
+) -> JaxPlanetState:
+    remove = jnp.isin(planets.id, remove_ids) & (remove_ids >= 0)
+    return planets._replace(
+        active=planets.active & (~remove),
+        owner=jnp.where(remove, -1, planets.owner),
+    )
+
+
+def _expire_comets_pre_launch(
+    planets: JaxPlanetState,
+    initial_planets: JaxPlanetState,
+    comets: JaxCometState,
+) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
+    def group_body(g, carry):
+        planets, initial, comets = carry
+        active = comets.group_active[g]
+        idx = comets.path_index[g]
+
+        def comet_body(i, inner):
+            planets, initial, comets = inner
+            pid = comets.planet_ids[g, i]
+            path_len = comets.path_lengths[g, i]
+            expire = active & (pid >= 0) & (idx >= path_len)
+            planets = _deactivate_planets_by_id(
+                planets, jnp.where(expire, pid, jnp.array(-1, dtype=jnp.int32))
+            )
+            initial = _deactivate_planets_by_id(
+                initial, jnp.where(expire, pid, jnp.array(-1, dtype=jnp.int32))
+            )
+            comets = comets._replace(
+                planet_ids=comets.planet_ids.at[g, i].set(jnp.where(expire, -1, pid))
+            )
+            return planets, initial, comets
+
+        planets, initial, comets = jax.lax.fori_loop(
+            0, COMETS_PER_GROUP, comet_body, (planets, initial, comets)
+        )
+        has_ids = (comets.planet_ids[g] >= 0).any()
+        comets = comets._replace(
+            group_active=comets.group_active.at[g].set(active & has_ids)
+        )
+        return planets, initial, comets
+
+    return jax.lax.fori_loop(
+        0, MAX_COMET_GROUPS, group_body, (planets, initial_planets, comets)
+    )
+
+
+def _spawn_comet_group(
+    game: JaxGameState,
+    planets: JaxPlanetState,
+    initial_planets: JaxPlanetState,
+    comets: JaxCometState,
+    spawn_step: jax.Array,
+    comet_speed: float,
+) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
+    group_slot = comets.group_count
+
+    def try_spawn(_):
+        initial_packed = jax.pure_callback(
+            _pack_initial_planets_arrays,
+            jax.ShapeDtypeStruct((MAX_PLANETS, 7), jnp.float32),
+            initial_planets.id,
+            initial_planets.owner,
+            initial_planets.x,
+            initial_planets.y,
+            initial_planets.radius,
+            initial_planets.ships,
+            initial_planets.production,
+            initial_planets.active,
+            vmap_method="sequential",
+        )
+        paths_x, paths_y, path_lengths, comet_ships, ok = jax.pure_callback(
+            _reference_comet_paths,
+            _comet_path_specs(),
+            game.episode_seed,
+            spawn_step,
+            game.angular_velocity,
+            _active_comet_planet_ids(comets),
+            jnp.array(comet_speed, dtype=jnp.float32),
+            initial_packed,
+            vmap_method="sequential",
+        )
+
+        def place(carry):
+            planets0, initial0, comets0 = carry
+            g = group_slot
+            base_slot = MAX_PLANETS - TOTAL_COMETS + g * COMETS_PER_GROUP
+            next_id = jnp.max(jnp.where(planets0.active, planets0.id, 0)) + 1
+
+            def place_comet(i, inner):
+                p, initial, comets_local = inner
+                slot = base_slot + i
+                pid = next_id + i
+                p = p._replace(
+                    id=p.id.at[slot].set(pid),
+                    owner=p.owner.at[slot].set(-1),
+                    x=p.x.at[slot].set(COMET_OFF_BOARD),
+                    y=p.y.at[slot].set(COMET_OFF_BOARD),
+                    radius=p.radius.at[slot].set(COMET_RADIUS),
+                    ships=p.ships.at[slot].set(comet_ships),
+                    production=p.production.at[slot].set(COMET_PRODUCTION),
+                    active=p.active.at[slot].set(True),
+                )
+                initial = initial._replace(
+                    id=initial.id.at[slot].set(pid),
+                    owner=initial.owner.at[slot].set(-1),
+                    x=initial.x.at[slot].set(COMET_OFF_BOARD),
+                    y=initial.y.at[slot].set(COMET_OFF_BOARD),
+                    radius=initial.radius.at[slot].set(COMET_RADIUS),
+                    ships=initial.ships.at[slot].set(comet_ships),
+                    production=initial.production.at[slot].set(COMET_PRODUCTION),
+                    active=initial.active.at[slot].set(True),
+                )
+                comets_local = comets_local._replace(
+                    planet_ids=comets_local.planet_ids.at[g, i].set(pid),
+                    paths_x=comets_local.paths_x.at[g, i].set(paths_x[i]),
+                    paths_y=comets_local.paths_y.at[g, i].set(paths_y[i]),
+                    path_lengths=comets_local.path_lengths.at[g, i].set(
+                        path_lengths[i]
+                    ),
+                )
+                return p, initial, comets_local
+
+            planets_out, initial_out, comets_out = jax.lax.fori_loop(
+                0, COMETS_PER_GROUP, place_comet, (planets0, initial0, comets0)
+            )
+            comets_out = comets_out._replace(
+                group_count=comets_out.group_count + 1,
+                path_index=comets_out.path_index.at[g].set(-1),
+                group_active=comets_out.group_active.at[g].set(True),
+            )
+            return planets_out, initial_out, comets_out
+
+        return jax.lax.cond(
+            ok,
+            place,
+            lambda carry: carry,
+            (planets, initial_planets, comets),
+        )
+
+    room = group_slot < MAX_COMET_GROUPS
+    return jax.lax.cond(
+        room, try_spawn, lambda _: (planets, initial_planets, comets), None
+    )
+
+
+def _pre_launch_comets(
+    game: JaxGameState,
+    comet_speed: float,
+) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
+    planets = game.planets
+    initial = game.initial_planets
+    comets = game.comets
+    planets, initial, comets = _expire_comets_pre_launch(planets, initial, comets)
+    spawn_step = game.step + jnp.array(1, dtype=jnp.int32)
+    should_spawn = jnp.any(spawn_step == _COMET_SPAWN_STEPS)
+
+    def spawn(_):
+        return _spawn_comet_group(game, planets, initial, comets, spawn_step, comet_speed)
+
+    return jax.lax.cond(
+        should_spawn,
+        spawn,
+        lambda _: (planets, initial, comets),
+        None,
+    )
+
+
 def reset(
     key: jax.Array, cfg: TaskConfig
 ) -> tuple[JaxEnvState, TurnBatch]:
     """Create a deterministic initial board from a JAX PRNG key."""
 
-    initial_planet_count = MAX_PLANETS - TOTAL_COMETS
     fleet_count = max_fleets(cfg)
-    group_count = max(1, initial_planet_count // 4)
-    active_count = group_count * 4
-
-    idx = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
-    group = idx // 4
-    quadrant = idx % 4
-    active = idx < active_count
-
-    key_angle, key_radius, key_prod, key_ships, key_home, key_vel = jax.random.split(
-        key, 6
+    key_seed, key_vel = jax.random.split(key)
+    seed = jax.random.randint(key_seed, (), 0, 2**31 - 1, dtype=jnp.int32)
+    player_count = jnp.array(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)
+    tables = jax.pure_callback(
+        _reference_planet_tables,
+        _planet_table_specs(),
+        seed,
+        player_count,
+        vmap_method="sequential",
     )
-    base_angles = jax.random.uniform(
-        key_angle, (group_count,), minval=0.18, maxval=1.39
+    idx, owner, x, y, radius, ships, production, active = tables
+    planets = JaxPlanetState(
+        jnp.asarray(idx, dtype=jnp.int32),
+        jnp.asarray(owner, dtype=jnp.int32),
+        jnp.asarray(x, dtype=jnp.float32),
+        jnp.asarray(y, dtype=jnp.float32),
+        jnp.asarray(radius, dtype=jnp.float32),
+        jnp.asarray(ships, dtype=jnp.float32),
+        jnp.asarray(production, dtype=jnp.float32),
+        jnp.asarray(active, dtype=bool),
     )
-    # Keep a mix of rotating and static planets while remaining clear of the sun.
-    base_orbit = jax.random.uniform(
-        key_radius, (group_count,), minval=22.0, maxval=62.0
-    )
-    prod_group = jax.random.randint(
-        key_prod, (group_count,), minval=1, maxval=6
-    ).astype(jnp.float32)
-    ships_group = jax.random.randint(
-        key_ships, (group_count,), minval=5, maxval=31
-    ).astype(jnp.float32)
-    radius_group = 1.0 + jnp.log(prod_group)
-
-    safe_group = jnp.minimum(group, group_count - 1)
-    theta = jnp.take(base_angles, safe_group)
-    orbit = jnp.take(base_orbit, safe_group)
-    base_x = 50.0 + orbit * jnp.cos(theta)
-    base_y = 50.0 + orbit * jnp.sin(theta)
-    x = jnp.where(
-        quadrant == 0,
-        base_y,
-        jnp.where(
-            quadrant == 1,
-            100.0 - base_x,
-            jnp.where(quadrant == 2, base_x, 100.0 - base_y),
-        ),
-    )
-    y = jnp.where(
-        quadrant == 0,
-        base_x,
-        jnp.where(
-            quadrant == 1,
-            base_y,
-            jnp.where(quadrant == 2, 100.0 - base_y, 100.0 - base_x),
-        ),
-    )
-    production = jnp.where(active, jnp.take(prod_group, safe_group), 0.0)
-    ships = jnp.where(active, jnp.take(ships_group, safe_group), 0.0)
-    radius = jnp.where(active, jnp.take(radius_group, safe_group), 0.0)
-
-    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
-    home_group = jax.random.randint(key_home, (), minval=0, maxval=group_count)
-    home = (group == home_group) & active
-    if int(getattr(cfg, "player_count", 2)) == 4:
-        owner = jnp.where(home, quadrant, owner)
-        ships = jnp.where(home, 10.0, ships)
-    else:
-        owner = jnp.where(home & (quadrant == 0), 0, owner)
-        owner = jnp.where(home & (quadrant == 3), 1, owner)
-        ships = jnp.where(home & ((quadrant == 0) | (quadrant == 3)), 10.0, ships)
-
-    planets = JaxPlanetState(idx, owner, x, y, radius, ships, production, active)
     empty_fleets = JaxFleetState(
         id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
         owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
@@ -245,17 +566,19 @@ def reset(
         player=jnp.array(0, dtype=jnp.int32),
         angular_velocity=jax.random.uniform(key_vel, (), minval=0.025, maxval=0.05),
         next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        episode_seed=seed,
         planets=planets,
         initial_planets=planets,
         fleets=empty_fleets,
+        comets=empty_comet_state(),
     )
     history = empty_feature_history(cfg)
-    batch = encode_turn(game, cfg, history)
+    batch, feature_history = encode_learner_turn(game, cfg, history)
     env_state = JaxEnvState(
         game=game,
         learner_player=jnp.array(0, dtype=jnp.int32),
         episode_count=jnp.array(0, dtype=jnp.int32),
-        feature_history=append_feature_history(history, game, cfg),
+        feature_history=feature_history,
     )
     return env_state, batch
 
@@ -303,16 +626,14 @@ def assign_learner_players(
         env_state.game, learner_player.astype(jnp.int32)
     )
     histories = jax.vmap(lambda game: empty_feature_history(cfg))(games)
-    turn_batch = jax.vmap(
-        lambda game, history: encode_turn(game, cfg, history)
+    turn_batch, feature_histories = jax.vmap(
+        lambda game, history: encode_learner_turn(game, cfg, history)
     )(games, histories)
     env_state = env_state._replace(
         game=games,
         learner_player=learner_player.astype(jnp.int32),
         episode_count=episode_count.astype(jnp.int32),
-        feature_history=jax.vmap(
-            lambda history, game: append_feature_history(history, game, cfg)
-        )(histories, games),
+        feature_history=feature_histories,
         decoder_hidden=None,
     )
     return env_state, turn_batch
@@ -334,13 +655,14 @@ def _finish_step(
             planets.ships,
         )
     )
-    planets, fleets = _move_and_resolve(previous_game, planets, fleets, cfg)
+    planets, fleets, comets = _move_and_resolve(previous_game, planets, fleets, cfg)
 
     next_game = previous_game._replace(
         step=previous_game.step + jnp.array(1, dtype=jnp.int32),
         next_fleet_id=next_fleet_id,
         planets=planets,
         fleets=fleets,
+        comets=comets,
     )
     (
         done,
@@ -360,12 +682,12 @@ def _finish_step(
         + shaping[2]
     )
     learner_game = next_game._replace(player=state.learner_player)
-    batch = encode_turn(learner_game, cfg, state.feature_history)
+    batch, feature_history = encode_learner_turn(
+        learner_game, cfg, state.feature_history
+    )
     next_state = state._replace(
         game=next_game,
-        feature_history=append_feature_history(
-            state.feature_history, learner_game, cfg
-        ),
+        feature_history=feature_history,
     )
     result = JaxStepResult(
         batch=batch,
@@ -403,6 +725,11 @@ def step(
     """
 
     previous_game = state.game
+    comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
+    planets, initial_planets, comets = _pre_launch_comets(previous_game, comet_speed)
+    previous_game = previous_game._replace(
+        planets=planets, initial_planets=initial_planets, comets=comets
+    )
     actions0 = jax.tree.map(
         lambda learner, opponent: jnp.where(
             state.learner_player == 0, learner, opponent
@@ -448,6 +775,11 @@ def step_multi_player(
     """
 
     previous_game = state.game
+    comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
+    planets, initial_planets, comets = _pre_launch_comets(previous_game, comet_speed)
+    previous_game = previous_game._replace(
+        planets=planets, initial_planets=initial_planets, comets=comets
+    )
     planets = previous_game.planets
     fleets = previous_game.fleets
     next_fleet_id = previous_game.next_fleet_id
@@ -478,46 +810,65 @@ def _launch_fleets(
     player: int,
     cfg: TaskConfig,
 ):
-    source_idx = jnp.clip(action.source_id, 0, MAX_PLANETS - 1)
-    source_owner = jnp.take(planets.owner, source_idx)
-    source_active = jnp.take(planets.active, source_idx)
-    source_ships = jnp.take(planets.ships, source_idx)
-    valid = (
-        action.valid
-        & source_active
-        & (source_owner == player)
-        & (action.ships > 0.0)
-        & (source_ships >= action.ships)
-    )
+    """Launch fleets in slot order, matching Kaggle sequential ``process_moves``."""
 
-    launched_by_planet = jax.nn.one_hot(
-        source_idx, MAX_PLANETS, dtype=jnp.float32
-    ).T @ jnp.where(valid, action.ships, 0.0)
-    planets = planets._replace(
-        ships=jnp.where(
-            planets.active, planets.ships - launched_by_planet, planets.ships
+    fleet_cap = max_fleets(cfg)
+    slot_indices = jnp.arange(fleet_cap, dtype=jnp.int32)
+    ship_requests = jnp.floor(action.ships).astype(jnp.float32)
+    existing_active = fleets.active.astype(jnp.int32).sum()
+
+    def launch_slot(carry, slot):
+        planets, next_id, launched_count = carry
+        source_idx = jnp.clip(action.source_id[slot], 0, MAX_PLANETS - 1)
+        ships = ship_requests[slot]
+        remaining = planets.ships[source_idx]
+        slot_valid = (
+            action.valid[slot]
+            & planets.active[source_idx]
+            & (planets.owner[source_idx] == player)
+            & (ships > 0.0)
+            & (remaining >= ships)
+            & ((existing_active + launched_count) < fleet_cap)
         )
-    )
+        updated_ships = planets.ships.at[source_idx].add(
+            jnp.where(slot_valid, -ships, 0.0)
+        )
+        planets = planets._replace(ships=updated_ships)
+        launched_count = launched_count + slot_valid.astype(jnp.int32)
+        launch = (
+            slot_valid,
+            next_id,
+            planets.x[source_idx]
+            + jnp.cos(action.angle[slot])
+            * (planets.radius[source_idx] + PLANET_LAUNCH_RADIUS_OFFSET),
+            planets.y[source_idx]
+            + jnp.sin(action.angle[slot])
+            * (planets.radius[source_idx] + PLANET_LAUNCH_RADIUS_OFFSET),
+            action.angle[slot],
+            action.source_id[slot],
+            ships,
+        )
+        next_id = next_id + slot_valid.astype(jnp.int32)
+        return (planets, next_id, launched_count), launch
 
-    start_x = jnp.take(planets.x, source_idx) + jnp.cos(action.angle) * (
-        jnp.take(planets.radius, source_idx) + PLANET_LAUNCH_RADIUS_OFFSET
+    (planets, next_fleet_id, _), launches = jax.lax.scan(
+        launch_slot,
+        (planets, next_fleet_id, jnp.array(0, dtype=jnp.int32)),
+        slot_indices,
     )
-    start_y = jnp.take(planets.y, source_idx) + jnp.sin(action.angle) * (
-        jnp.take(planets.radius, source_idx) + PLANET_LAUNCH_RADIUS_OFFSET
-    )
-    slots = jnp.arange(max_fleets(cfg), dtype=jnp.int32)
+    valid, launch_ids, lx, ly, lang, lsource, lships = launches
     launched = JaxFleetState(
-        id=next_fleet_id + slots,
-        owner=jnp.full_like(slots, player),
-        x=start_x,
-        y=start_y,
-        angle=action.angle,
-        from_planet_id=action.source_id,
-        ships=action.ships,
+        id=launch_ids,
+        owner=jnp.full((fleet_cap,), player, dtype=jnp.int32),
+        x=lx,
+        y=ly,
+        angle=lang,
+        from_planet_id=lsource,
+        ships=lships,
         active=valid,
     )
     fleets = _compact_fleets(_concat_fleets(fleets, launched), cfg)
-    return planets, fleets, next_fleet_id + valid.astype(jnp.int32).sum()
+    return planets, fleets, next_fleet_id
 
 
 def _concat_fleets(a: JaxFleetState, b: JaxFleetState) -> JaxFleetState:
@@ -537,23 +888,35 @@ def _move_and_resolve(
     fleets: JaxFleetState,
     cfg: TaskConfig,
 ):
+    comets = previous_game.comets
+    is_comet = _is_comet_planet(comets, planets.id)
     old_px, old_py = planets.x, planets.y
     init_dx = previous_game.initial_planets.x - BOARD_CENTER[0]
     init_dy = previous_game.initial_planets.y - BOARD_CENTER[1]
     orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
-    rotates = (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT) & planets.active
+    rotates = (
+        (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT)
+        & planets.active
+        & (~is_comet)
+    )
     init_angle = jnp.arctan2(init_dy, init_dx)
-    cur_angle = init_angle + previous_game.angular_velocity * (
-        previous_game.step + 1
-    ).astype(jnp.float32)
+    cur_angle = init_angle + previous_game.angular_velocity * previous_game.step.astype(
+        jnp.float32
+    )
     new_px = jnp.where(
         rotates, BOARD_CENTER[0] + orbit_radius * jnp.cos(cur_angle), planets.x
     )
     new_py = jnp.where(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
+    new_px, new_py, comets = _advance_comet_positions(
+        comets, planets, old_px, old_py, new_px, new_py
+    )
+    check_collision = jnp.where(is_comet, old_px >= 0.0, True)
 
-    speed = fleet_speed(fleets.ships, MAX_FLEET_SPEED)
+    speed = fleet_speed(
+        fleets.ships, float(getattr(cfg, "ship_speed", MAX_FLEET_SPEED))
+    )
     old_fx, old_fy = fleets.x, fleets.y
     new_fx = fleets.x + jnp.cos(fleets.angle) * speed
     new_fy = fleets.y + jnp.sin(fleets.angle) * speed
@@ -569,9 +932,15 @@ def _move_and_resolve(
         new_py[None, :],
         planets.radius[None, :],
     )
-    hits = hits & fleets.active[:, None] & planets.active[None, :]
+    hits = (
+        hits
+        & fleets.active[:, None]
+        & planets.active[None, :]
+        & check_collision[None, :]
+    )
     hit_any = hits.any(axis=1)
-    hit_idx = jnp.argmax(hits, axis=1)
+    planet_order = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
+    hit_idx = jnp.min(jnp.where(hits, planet_order[None, :], MAX_PLANETS), axis=1)
     out = (
         (new_fx < 0.0) | (new_fx > BOARD_SIZE) | (new_fy < 0.0) | (new_fy > BOARD_SIZE)
     )
@@ -586,7 +955,48 @@ def _move_and_resolve(
     moved_fleets = fleets._replace(x=new_fx, y=new_fy, active=fleets.active & (~remove))
     moved_planets = planets._replace(x=new_px, y=new_py)
     moved_planets = _resolve_combat(moved_planets, fleets, hit_any, hit_idx, cfg)
-    return moved_planets, moved_fleets
+    moved_planets, initial_planets, comets = _expire_comets_pre_launch(
+        moved_planets, previous_game.initial_planets, comets
+    )
+    return moved_planets, moved_fleets, comets
+
+
+def _advance_comet_positions(
+    comets: JaxCometState,
+    planets: JaxPlanetState,
+    old_px: jax.Array,
+    old_py: jax.Array,
+    new_px: jax.Array,
+    new_py: jax.Array,
+) -> tuple[jax.Array, jax.Array, JaxCometState]:
+    def group_body(g, carry):
+        new_px, new_py, comets = carry
+        active = comets.group_active[g]
+        idx = comets.path_index[g] + jnp.where(active, 1, 0)
+        comets = comets._replace(path_index=comets.path_index.at[g].set(idx))
+
+        def comet_body(i, inner):
+            new_px, new_py, comets = inner
+            pid = comets.planet_ids[g, i]
+            path_len = comets.path_lengths[g, i]
+            on_group = active & (pid >= 0)
+            match = (planets.id == pid) & planets.active
+            slot = jnp.argmax(match.astype(jnp.int32))
+            in_path = on_group & (idx < path_len) & match.any()
+            safe_idx = jnp.clip(idx, 0, jnp.maximum(path_len - 1, 0))
+            cx = comets.paths_x[g, i, safe_idx]
+            cy = comets.paths_y[g, i, safe_idx]
+            new_px = jnp.where(in_path, new_px.at[slot].set(cx), new_px)
+            new_py = jnp.where(in_path, new_py.at[slot].set(cy), new_py)
+            return new_px, new_py, comets
+
+        return jax.lax.fori_loop(
+            0, COMETS_PER_GROUP, comet_body, (new_px, new_py, comets)
+        )
+
+    return jax.lax.fori_loop(
+        0, MAX_COMET_GROUPS, group_body, (new_px, new_py, comets)
+    )
 
 
 def fleet_speed(ships: jax.Array, ship_speed: float = DEFAULT_SHIP_SPEED) -> jax.Array:
