@@ -10,6 +10,48 @@ make agent-context RESOLVED=smoke   # also embed truncated Hydra resolved-config
 uv run ow train print_resolved_config=true
 ```
 
+## Capability map
+
+Operator actions agents should use (same CLI as humans). **Maintain this table when adding `ow` subcommands** — `tests/test_agent_capability_map.py` asserts each `ow` path is registered in `--help`.
+
+| Action | Agent command |
+|--------|---------------|
+| Train (local Hydra) | `ow train` |
+| Print resolved config | `ow train print_resolved_config=true` |
+| Kaggle train lifecycle | `ow train kaggle` |
+| Tournament eval | `ow eval tournament` |
+| Artifact worker | `ow eval worker` |
+| Eval queue status | `ow eval status` |
+| Eval results list | `ow eval results list` |
+| Eval result show | `ow eval results show` |
+| Cancel queued jobs | `ow eval jobs cancel` |
+| Package checkpoint | `ow eval package` |
+| Kaggle submit | `ow eval submit` |
+| List runs | `ow runs list` |
+| Show run | `ow runs show` |
+| Tail run logs | `ow runs logs` |
+| Watch run | `ow runs watch` |
+| Archive run tree | `ow runs archive` |
+| Delete checkpoint file | `ow runs checkpoint delete` |
+| Promotion show | `ow promote show` |
+| Promotion history | `ow promote history` |
+| Promotion demote | `ow promote demote` |
+| Benchmark training throughput | `ow benchmark training` |
+| Preflight sanity | `ow benchmark sanity` |
+| Preflight gate list | `ow benchmark gate list` |
+| Preflight gate run | `ow benchmark gate run` |
+| Gate 5 tournament proof | `ow benchmark tournament-proof` |
+| Preflight calibrate | `ow benchmark calibrate` |
+| Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
+| Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
+| Learn-proof composer | `ow benchmark learn-proof` |
+| W&B/Kaggle sweep create | `ow sweep create` |
+| Sweep status | `ow sweep status` |
+| Sweep list | `ow sweep list` |
+| Sweep cancel | `ow sweep cancel` |
+| Generate sweep YAML | `ow make` |
+| Session context JSON | `make agent-context` |
+
 ## Command tiers
 
 | Tier | Examples | Use when |
