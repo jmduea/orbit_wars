@@ -277,7 +277,7 @@ flowchart LR
 ## Smoke validation (operator, post U7–U8)
 
 1. `make preflight-learn-proof` (Gates 0–3) with `env -u JAX_COMPILATION_CACHE_DIR` if JAX smokes contend.
-2. `uv run ow train artifacts=bracket_training output.campaign=bracket_smoke training.total_updates=50 curriculum=off task=shield_cheap`
+2. `uv run ow train artifacts=bracket_training output.campaign=bracket_smoke training.total_updates=50 curriculum=off task=shield_cheap opponents.bracket_self_play.enabled=true`
 3. Verify `outputs/campaigns/bracket_smoke/bracket/state.json`, `runs/*/queue/optional_jobs/qualifier_eval_*.json`, training metrics `bracket_training_phase`.
 4. `uv run ow eval worker --run <run_dir>` then `uv run ow eval bracket status --campaign bracket_smoke`.
 

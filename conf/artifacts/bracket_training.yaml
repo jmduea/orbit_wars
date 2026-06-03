@@ -9,8 +9,3 @@ bracket_training:
 
 unified_tournament:
   qualifier_mode: false
-
-opponents:
-  bracket_self_play:
-    enabled: true
-    sample_count: 2
