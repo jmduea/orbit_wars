@@ -159,7 +159,7 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 
 #### Seed scheduler — config and observability
 
-Periodic rollout reseeding is **on by default** via auto-scale (`training.reseed_every_updates: -1` → `max(25, total_updates // 10)`). Set `0` to disable. Plateau-triggered reseeding stays off (`training.reseed_on_plateau: false`).
+Periodic rollout reseeding defaults to **50 updates** (`training.reseed_every_updates: 50`, calibrated in `docs/benchmarks/seed-scheduler-calibration.json`). Use `-1` for auto-scale (`max(25, total_updates // 10)`). Set `0` to disable. Plateau-triggered reseeding stays off (`training.reseed_on_plateau: false`).
 
 ```bash
 uv run ow train training.reseed_every_updates=50   # fixed interval

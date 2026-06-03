@@ -1,6 +1,6 @@
 ---
 title: "feat: Complete seed scheduler calibration sweep"
-status: active
+status: completed
 date: 2026-06-01
 origin: docs/benchmarks/seed-scheduler-calibration.md
 deepened: null

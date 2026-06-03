@@ -98,7 +98,7 @@ class TrainingConfig:
     lr: float = 6e-5
     max_grad_norm: float = 1.0
     log_every: int = 1  # TODO: telemetry?
-    reseed_every_updates: int = -1  # 0=off, -1=auto max(25, total_updates//10)
+    reseed_every_updates: int = 50  # 0=off, -1=auto max(25, total_updates//10); default pinned by calibration
     reseed_on_plateau: bool = False
     plateau_metric: str = "episode_reward_mean"
     plateau_window: int = 10

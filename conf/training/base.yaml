@@ -23,7 +23,8 @@ enable_gradient_checkpointing: true
 
 log_every: 1
 
-reseed_every_updates: -1
+# Calibrated 2026-06-03 (seed-scheduler U2): interval 50 maximizes min held-out eval win rate.
+reseed_every_updates: 50
 reseed_on_plateau: false
 plateau_metric: episode_reward_mean
 plateau_window: 10

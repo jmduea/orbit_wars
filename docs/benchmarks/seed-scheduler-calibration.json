@@ -1,7 +1,7 @@
 {
   "gate": "seed_scheduler_calibration",
-  "commit_sha": "736072f7fe536cb58f6225d2f8fd658b5e68a791",
-  "seconds_total": 0.07098151600803249,
+  "commit_sha": "620363b74c7b277ba06e257dcb2023ed6854572b",
+  "seconds_total": 11229.870421864005,
   "analyze_only": true,
   "train_seed": 42,
   "eval_seeds": [
@@ -16,8 +16,12 @@
     46
   ],
   "decision": {
-    "chosen_interval": null,
-    "reason": "no interval passed stability on all opponents with eval data"
+    "chosen_interval": 50,
+    "chosen_effective_interval": 50,
+    "min_eval_win_rate": 0.75,
+    "mean_eval_win_rate_std": 0.07856742013183861,
+    "baseline_min_eval_win_rate": 0.75,
+    "candidate_count": 4
   },
   "runs": [
     {
@@ -41,10 +45,20 @@
         "overall_win_rate_mean": 0.4048749752342701,
         "overall_win_rate_last_window": 0.44624820351600647
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 0.75,
+        "44": 0.75,
+        "45": 0.75,
+        "46": 0.75
+      },
+      "eval_win_rate_mean": 0.8611111111111112,
+      "eval_win_rate_std": 0.12422599874998831,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "noop_only",
@@ -67,10 +81,20 @@
         "overall_win_rate_mean": 0.4091996783316135,
         "overall_win_rate_last_window": 0.31652598083019257
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "noop_only",
@@ -93,10 +117,20 @@
         "overall_win_rate_mean": 0.3299366910159588,
         "overall_win_rate_last_window": 0.34895425140857694
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "noop_only",
@@ -119,10 +153,20 @@
         "overall_win_rate_mean": 0.3679248181581497,
         "overall_win_rate_last_window": 0.39491597265005113
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "random_only",
@@ -145,10 +189,20 @@
         "overall_win_rate_mean": 0.38383980372548104,
         "overall_win_rate_last_window": 0.41888889744877816
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "random_only",
@@ -171,10 +225,20 @@
         "overall_win_rate_mean": 0.38288749545812606,
         "overall_win_rate_last_window": 0.36844017952680586
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "random_only",
@@ -197,10 +261,20 @@
         "overall_win_rate_mean": 0.3442052639424801,
         "overall_win_rate_last_window": 0.3110714375972748
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 0.75
+      },
+      "eval_win_rate_mean": 0.9444444444444444,
+      "eval_win_rate_std": 0.10393492741038726,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "random_only",
@@ -223,10 +297,20 @@
         "overall_win_rate_mean": 0.3875071859508753,
         "overall_win_rate_last_window": 0.47889375388622285
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     },
     {
       "opponent": "self_play_only",
@@ -249,10 +333,128 @@
         "overall_win_rate_mean": 0.652679263651371,
         "overall_win_rate_last_window": 0.606190487742424
       },
-      "eval_win_rates_by_seed": {},
-      "eval_win_rate_mean": null,
-      "eval_win_rate_std": null,
-      "eval_win_rate_min": null
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 0.75,
+        "44": 0.75,
+        "45": 0.75,
+        "46": 0.75
+      },
+      "eval_win_rate_mean": 0.8611111111111112,
+      "eval_win_rate_std": 0.12422599874998831,
+      "eval_win_rate_min": 0.75
+    },
+    {
+      "opponent": "self_play_only",
+      "reseed_interval": 100,
+      "effective_reseed_interval": 100,
+      "total_updates": 500,
+      "train_seed": 42,
+      "run_dir": "outputs/campaigns/seed_sched_cal_self_play_only_reseed100_u500/runs/20260603T014536Z-s42-23314f68",
+      "log_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed100_u500/runs/20260603T014536Z-s42-23314f68/logs/planet_graph_transformer-mix2p4p-selfplay-u500-env32-s42-20260603T014600Z_jax.jsonl",
+      "checkpoint_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed100_u500/runs/20260603T014536Z-s42-23314f68/checkpoints/jax_ckpt_last.pkl",
+      "record_count": 506,
+      "distinct_reseed_seeds": 5,
+      "stability": {
+        "approx_kl_mean": 0.0008770655133512264,
+        "policy_loss_mean": -9.798533128923737e-05,
+        "value_loss_mean": 1.124378668218851,
+        "finite_scalars": true
+      },
+      "training_proxy": {
+        "overall_win_rate_mean": 0.6767747197151184,
+        "overall_win_rate_last_window": 0.789749675989151
+      },
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
+    },
+    {
+      "opponent": "self_play_only",
+      "reseed_interval": 25,
+      "effective_reseed_interval": 25,
+      "total_updates": 500,
+      "train_seed": 42,
+      "run_dir": "outputs/campaigns/seed_sched_cal_self_play_only_reseed25_u500/runs/20260603T002912Z-s42-1318e2e1",
+      "log_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed25_u500/runs/20260603T002912Z-s42-1318e2e1/logs/planet_graph_transformer-mix2p4p-selfplay-u500-env32-s42-20260603T002938Z_jax.jsonl",
+      "checkpoint_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed25_u500/runs/20260603T002912Z-s42-1318e2e1/checkpoints/jax_ckpt_last.pkl",
+      "record_count": 507,
+      "distinct_reseed_seeds": 20,
+      "stability": {
+        "approx_kl_mean": 0.001653728707810842,
+        "policy_loss_mean": -0.0010541908461600541,
+        "value_loss_mean": 1.0434282804355026,
+        "finite_scalars": true
+      },
+      "training_proxy": {
+        "overall_win_rate_mean": 0.36944377756118774,
+        "overall_win_rate_last_window": 0.4200000107288361
+      },
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
+    },
+    {
+      "opponent": "self_play_only",
+      "reseed_interval": 50,
+      "effective_reseed_interval": 50,
+      "total_updates": 500,
+      "train_seed": 42,
+      "run_dir": "outputs/campaigns/seed_sched_cal_self_play_only_reseed50_u500/runs/20260603T010629Z-s42-ec4ed421",
+      "log_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed50_u500/runs/20260603T010629Z-s42-ec4ed421/logs/planet_graph_transformer-mix2p4p-selfplay-u500-env32-s42-20260603T010652Z_jax.jsonl",
+      "checkpoint_path": "outputs/campaigns/seed_sched_cal_self_play_only_reseed50_u500/runs/20260603T010629Z-s42-ec4ed421/checkpoints/jax_ckpt_last.pkl",
+      "record_count": 507,
+      "distinct_reseed_seeds": 10,
+      "stability": {
+        "approx_kl_mean": 0.0011764301186843796,
+        "policy_loss_mean": -0.0007328300413209945,
+        "value_loss_mean": 1.032129326703027,
+        "finite_scalars": true
+      },
+      "training_proxy": {
+        "overall_win_rate_mean": 0.5201343259811402,
+        "overall_win_rate_last_window": 0.06875
+      },
+      "eval_win_rates_by_seed": {
+        "0": 0.75,
+        "1": 1.0,
+        "2": 1.0,
+        "3": 1.0,
+        "4": 1.0,
+        "43": 1.0,
+        "44": 1.0,
+        "45": 1.0,
+        "46": 1.0
+      },
+      "eval_win_rate_mean": 0.9722222222222222,
+      "eval_win_rate_std": 0.07856742013183861,
+      "eval_win_rate_min": 0.75
     }
   ]
 }

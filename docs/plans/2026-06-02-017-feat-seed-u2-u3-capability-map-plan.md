@@ -1,6 +1,6 @@
 ---
 title: "feat: Seed scheduler U2/U3 + capability-map parity test"
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md
 parent_pr: 184

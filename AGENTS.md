@@ -62,7 +62,7 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 <!-- /preflight-thresholds -->
 
 - **Metric gates:** before gating on a training metric, confirm its denominator and what “chance” means for that opponent and reward mode (e.g. `overall_win_rate` vs `noop_only` is not ~50%; `episode_reward_mean` under `binary_win` is not win rate; self-play ~50% is not a learning signal).
-- **Seed scheduler:** default `training.reseed_every_updates=-1` auto-scales to `max(25, total_updates // 10)`; run `ow benchmark calibrate-seed-scheduler` before changing. Reseed resets rollout env state, not just the PRNG key.
+- **Seed scheduler:** default `training.reseed_every_updates=50` (calibrated 2026-06-03, `docs/benchmarks/seed-scheduler-calibration.json`); use `-1` for auto `max(25, total_updates // 10)`. Run `ow benchmark calibrate-seed-scheduler` before changing. Reseed resets rollout env state, not just the PRNG key.
 
 ## Learned User Preferences
 
