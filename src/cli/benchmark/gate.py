@@ -18,19 +18,6 @@ def _resolve_gate_id(args: argparse.Namespace) -> str | None:
     return tokens[0]
 
 
-def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
-    from src.jax.factorized_sampler_benchmark import run_factorized_sampler_benchmark
-
-    return run_factorized_sampler_benchmark(
-        max_moves_k=int(args.max_moves_k),
-        decoder_carry=bool(args.decoder_carry),
-        batch_size=int(args.batch_size),
-        warmup=int(args.warmup),
-        repeats=int(args.repeats),
-        assert_max_ms=args.assert_max_ms,
-    )
-
-
 def run_gate_cli(args: argparse.Namespace) -> int:
     from src.cli.benchmark_gates import list_gate_recipes, run_gate_cli as run_gate
 

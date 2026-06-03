@@ -254,7 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     factorized_sampler = subparsers.add_parser(
         "factorized-sampler",
-        help="Tier-1 factorized shield sampler microbenchmark (delegates to scripts/).",
+        help=(
+            "Tier-1 factorized shield sampler microbenchmark "
+            "(in-process JAX via src/jax/factorized_sampler_benchmark.py)."
+        ),
     )
     factorized_sampler.add_argument("--max-moves-k", type=int, default=3)
     factorized_sampler.add_argument(
