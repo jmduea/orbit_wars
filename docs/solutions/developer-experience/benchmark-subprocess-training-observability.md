@@ -26,7 +26,8 @@ related_components:
   - src/jax/preflight_calibration.py
   - src/jax/seed_scheduler_calibration.py
   - src/jax/train/loop.py
-  - src/cli/benchmark.py
+  - src/cli/benchmark/calibrate_seed.py
+  - src/cli/benchmark/calibrate.py
 ---
 
 # Benchmark calibration subprocesses looked hung with no terminal progress
@@ -136,6 +137,7 @@ wc -l outputs/campaigns/seed_sched_cal_*/runs/*/logs/*_jax.jsonl
 
 ## Related
 
+- Benchmark CLI package layout: `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Planet Flow preflight calibration overrides (`calibration_train_overrides`): `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md`
 - Fix: PR [#165](https://github.com/jmduea/orbit_wars/pull/165) (`aa3686c`)
 - Seed-scheduler calibration (completed; interval 50): `docs/benchmarks/seed-scheduler-calibration.json`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`

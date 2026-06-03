@@ -113,3 +113,4 @@ has logs/*_jax.jsonl and orbit_train_complete on stdout.
 
 - Audit follow-up plan: `docs/plans/2026-06-01-agent-native-operator-cli-plan.md`
 - Phase 2+3 shipped: `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/agent-native-phase3-status.md`
+- Benchmark CLI package split (PR #202): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`

@@ -24,6 +24,8 @@ related_components:
   - src/jax/launch_hygiene.py
   - src/jax/action_sampling.py
   - src/jax/factored_sequence_scan.py
+  - src/jax/factorized_sampler_benchmark.py
+  - src/cli/benchmark/factorized.py
 ---
 
 # Launch hygiene O(K²) prefix recompute regressed factorized sampler throughput
@@ -34,7 +36,7 @@ The launch hygiene bundle (PR #163) correctly masked duplicate launches and frie
 
 ## Symptoms
 
-- `scripts/benchmark_factorized_sampler.py` (batch=32, `trajectory_shield_mode=cheap`):
+- Historical measurement via `scripts/benchmark_factorized_sampler.py` (batch=32, `trajectory_shield_mode=cheap`; canonical path is `src/jax/factorized_sampler_benchmark.py` via `ow benchmark factorized-sampler`):
 
   | K | main (ms) | prefix-recompute hygiene (ms) | Slowdown |
   |---|-----------|-------------------------------|----------|

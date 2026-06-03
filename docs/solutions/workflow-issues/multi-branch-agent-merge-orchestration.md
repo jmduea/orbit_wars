@@ -80,7 +80,7 @@ Merge order:
 |------|-----------------|
 | `docs/benchmarks/preflight-profiles.json` | Preflight branch wins |
 | `docs/benchmarks/preflight-calibration.json` | Merge keys or `make preflight-calibrate` on integration after merge |
-| `src/jax/preflight*.py`, `src/cli/benchmark.py` | Keep profile wiring **and** planet-flow CLI subcommands |
+| `src/jax/preflight*.py`, `src/cli/benchmark/` | Keep profile wiring **and** planet-flow CLI subcommands (`planet_flow.py`, etc.) |
 | `src/jax/rollout/metrics.py`, `src/jax/train/metrics.py` | Keep win-rate fixes; layer planet-flow metrics without reverting binary_win semantics |
 | `AGENTS.md` | Merge both sides; dedupe manually |
 

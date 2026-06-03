@@ -23,7 +23,7 @@ related_components:
   - conf/training/base.yaml
   - src/config/schema.py
   - src/jax/seed_scheduler_calibration.py
-  - src/cli/benchmark.py
+  - src/cli/benchmark/calibrate_seed.py
   - src/cli/runs.py
   - src/cli/sweep.py
   - scripts/agent_context.py
@@ -133,4 +133,5 @@ uv run ow benchmark learn-proof --steps beat_noop,beat_random --eval-checkpoint 
 - Phase 1 CLI: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
 - Calibration subprocess UX: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - Joint env shaping calibration (planned; extends this pattern to reward×opponent×reseed): `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` — ideation `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`, plan `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
+- Benchmark CLI package (calibrate-seed-scheduler runner): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Stash recovery during parallel branches: `docs/solutions/workflow-issues/git-stash-recovery-after-parallel-branch-cleanup.md`
