@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Planet Flow PPO signal sweep"
 date: 2026-06-01
-status: active
+status: completed
 type: feat
 origin: ".cursor/plans/planet-flow-ppo-sweep_fd39918d.plan.md"
 ---

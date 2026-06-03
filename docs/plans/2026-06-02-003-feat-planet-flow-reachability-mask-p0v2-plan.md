@@ -1,7 +1,7 @@
 ---
 title: "feat: Planet Flow reachability-masked PPO contract (P0 v2)"
 type: feat
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/brainstorms/2026-06-02-planet-flow-reachability-contract-requirements.md
 ---

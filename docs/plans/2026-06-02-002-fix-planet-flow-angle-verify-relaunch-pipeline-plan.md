@@ -1,7 +1,7 @@
 ---
 title: "fix: Verify Planet Flow launch angles and relaunch sweep pipeline"
 type: fix
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md
 related:

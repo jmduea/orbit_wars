@@ -1,7 +1,7 @@
 ---
 title: "feat: Observability debug metrics bundle"
 date: 2026-06-02
-status: active
+status: completed
 type: feat
 origin: "docs/ROADMAP.md Now + Next telemetry gating"
 ---

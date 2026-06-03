@@ -1,7 +1,7 @@
 ---
 title: "feat: Operator work — launch hygiene runbook, ROADMAP Later, preflight polish"
 type: feat
-status: active
+status: completed
 date: 2026-06-02
 origin: LFG operator work (ROADMAP empty; tier-2 gate wired but undocumented for operators)
 ---

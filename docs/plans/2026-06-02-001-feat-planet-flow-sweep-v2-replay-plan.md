@@ -1,7 +1,7 @@
 ---
 title: "feat: Planet Flow sweep v2 with replay and proof score"
 type: feat
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/plans/2026-06-01-004-feat-planet-flow-ppo-sweep-plan.md
 ---

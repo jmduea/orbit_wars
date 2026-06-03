@@ -1,7 +1,7 @@
 ---
 title: "feat: Preflight training profile registry (per-model PPO)"
 type: feat
-status: active
+status: completed
 date: 2026-06-02
 origin: user / prior debug session (floating base.yaml PPO caused 0% win rate)
 ---
