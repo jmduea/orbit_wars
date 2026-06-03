@@ -68,6 +68,7 @@ tournament:
 # soft sniper floors are ignored when unified_tournament.enabled is true.
 unified_tournament:
   enabled: false
+  qualifier_mode: false
   enforcement: false
   games_per_pair: 4
   prerequisite_seeds: [0, 1, 2, 3, 4]
@@ -80,3 +81,8 @@ unified_tournament:
   per_step_seconds: 1.0
   overage_budget_seconds: 60.0
   write_replays: false
+
+bracket_training:
+  enabled: false
+  qualifier_max_env_steps: 500000000
+  qualifier_eval_interval_updates: 50

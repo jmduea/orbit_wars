@@ -122,6 +122,9 @@ def checkpoint_payload_builder(
             "total_env_steps": total_env_steps,
             "completed_episodes": completed_episodes,
         }
+        parent = cfg_snapshot.resume_checkpoint or cfg_snapshot.from_promoted
+        if parent:
+            payload["parent_checkpoint_path"] = str(parent)
         if curriculum_state_snapshot is not None:
             payload["curriculum_state"] = deepcopy(curriculum_state_snapshot)
         if historical_pool_snapshot is not None:

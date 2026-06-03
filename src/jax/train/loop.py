@@ -62,6 +62,7 @@ from src.telemetry.metric_registry import (
     required_ppo_metric_names,
     required_rollout_scalar_names,
 )
+from src.jax.train.bracket_training import bracket_training_enabled, bracket_training_tick
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
@@ -378,57 +379,27 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 )
                 update_events.append(snapshot_event)
             phase_events = []
-            record = build_update_record(
-                update=update,
-                total_env_steps=total_env_steps,
-                completed_episodes=completed_episodes,
-                rollout_samples=rollout_samples,
-                rollout_scalars=rollout_scalars,
-                metrics_host=metrics_host,
-                update_seconds=update_seconds,
-                rollout_seconds=rollout_seconds,
-                ppo_seconds=ppo_seconds,
-                train_start_time=train_start_time,
-                per_format_timing_metrics=per_format_timing_metrics,
-                curriculum_telemetry=curriculum_telemetry,
-                reseed_events=reseed_events,
-                update_events=update_events,
-                historical_pool=historical_pool,
-                gpu_update_metrics=(
-                    gpu_tracker.sample_update_metrics()
-                    if gpu_tracker is not None
-                    else {}
-                ),
-                seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
-                plateau_metric=cfg.training.plateau_metric,
-                cfg=cfg,
-            )
-            write_filtered_update_records(
-                log_path=log_path,
-                debug_log_path=debug_log_path,
-                record=record,
-                cfg=cfg,
-                telemetry=telemetry,
-                update=update,
-            )
-            if update % cfg.training.log_every == 0:
-                entropy_line = f"entropy={float(record['entropy']):.4f}"
-                if "entropy_stop" in record and "entropy_move" in record:
-                    entropy_line = (
-                        f"entropy_stop={float(record['entropy_stop']):.4f} "
-                        f"entropy_move={float(record['entropy_move']):.4f} "
-                        f"entropy={float(record['entropy']):.4f}"
-                    )
-                print(
-                    f"update={update} steps={total_env_steps} episodes={completed_episodes} "
-                    f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
-                    f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
-                    f"{entropy_line}"
-                )
-            if (
-                update % cfg.artifacts.checkpoint_every == 0
-                or update == cfg.training.total_updates
+            planet_flow_sweep_metrics: dict[str, float] = {}
+            if win_rate_trend is not None and "action_decision" in enabled_metric_groups(
+                metric_groups_cfg_from_config(cfg)
             ):
+                planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
+                    win_rate_trend=win_rate_trend,
+                    approx_kl_window=approx_kl_window,
+                    entropy_window=entropy_window,
+                    overall_win_rate=overall_win_rate,
+                    metrics_host=metrics_host,
+                    rollout_scalars=rollout_scalars,
+                    max_post_mask_unreachable_rate=(
+                        planet_flow_unreachable_ceiling
+                        if planet_flow_unreachable_ceiling is not None
+                        else 0.05
+                    ),
+                )
+            saved_checkpoint_path: Path | None = None
+            checkpoint_every = int(cfg.artifacts.checkpoint_every)
+            checkpoint_due = checkpoint_every > 0 and update % checkpoint_every == 0
+            if checkpoint_due or update == cfg.training.total_updates:
                 is_final = update == cfg.training.total_updates
                 if checkpoint_pipeline is None:
                     checkpoint_path = save_jax_checkpoint(
@@ -442,6 +413,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         curriculum=curriculum,
                         historical_pool=historical_pool,
                     )
+                    saved_checkpoint_path = checkpoint_path
                     checkpoint_handler.handle_results(
                         [
                             CheckpointResult(
@@ -468,6 +440,73 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     checkpoint_handler.handle_results(
                         checkpoint_pipeline.submit_checkpoint(job)
                     )
+                    candidate = run_dir / f"jax_ckpt_u{update}.pkl"
+                    saved_checkpoint_path = candidate if candidate.is_file() else None
+            bracket_metrics: dict[str, object] = {}
+            if bracket_training_enabled(cfg):
+                tick = bracket_training_tick(
+                    cfg,
+                    update=update,
+                    total_env_steps=total_env_steps,
+                    checkpoint_path=saved_checkpoint_path,
+                    queue_dir=run_context.queue_dir,
+                    output_root=Path(cfg.output.root),
+                    result_root=run_context.evaluations_dir,
+                )
+                bracket_metrics = {
+                    "bracket_training_phase": tick.phase,
+                    "weak_config": tick.weak_config,
+                }
+            record = build_update_record(
+                update=update,
+                total_env_steps=total_env_steps,
+                completed_episodes=completed_episodes,
+                rollout_samples=rollout_samples,
+                rollout_scalars=rollout_scalars,
+                metrics_host=metrics_host,
+                update_seconds=update_seconds,
+                rollout_seconds=rollout_seconds,
+                ppo_seconds=ppo_seconds,
+                train_start_time=train_start_time,
+                per_format_timing_metrics=per_format_timing_metrics,
+                curriculum_telemetry=curriculum_telemetry,
+                reseed_events=reseed_events,
+                update_events=update_events,
+                historical_pool=historical_pool,
+                gpu_update_metrics=(
+                    gpu_tracker.sample_update_metrics()
+                    if gpu_tracker is not None
+                    else {}
+                ),
+                seed_scheduler_policy=seed_scheduler.next_seed_policy(update),
+                plateau_metric=cfg.training.plateau_metric,
+                cfg=cfg,
+                planet_flow_sweep_metrics=planet_flow_sweep_metrics or None,
+            )
+            if bracket_metrics:
+                record.update(bracket_metrics)
+            write_filtered_update_records(
+                log_path=log_path,
+                debug_log_path=debug_log_path,
+                record=record,
+                cfg=cfg,
+                telemetry=telemetry,
+                update=update,
+            )
+            if update % cfg.training.log_every == 0:
+                entropy_line = f"entropy={float(record['entropy']):.4f}"
+                if "entropy_stop" in record and "entropy_move" in record:
+                    entropy_line = (
+                        f"entropy_stop={float(record['entropy_stop']):.4f} "
+                        f"entropy_move={float(record['entropy_move']):.4f} "
+                        f"entropy={float(record['entropy']):.4f}"
+                    )
+                print(
+                    f"update={update} steps={total_env_steps} episodes={completed_episodes} "
+                    f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
+                    f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
+                    f"{entropy_line}"
+                )
 
         completed_training = True
     finally:

@@ -24,3 +24,7 @@ snapshot:
   deterministic: true
   selection: uniform
   fallback: latest
+
+bracket_self_play:
+  enabled: false
+  sample_count: 1
