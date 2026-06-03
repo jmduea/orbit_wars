@@ -10,6 +10,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+LEARN_PROOF_PRIMITIVES: tuple[str, ...] = (
+    "ow benchmark gate run beat_noop",
+    "ow benchmark gate run beat_random",
+    "ow benchmark gate run curriculum_staged",
+    "ow eval package --checkpoint <ckpt> --output-dir <dir> --validate-docker",
+    "ow benchmark tournament-proof --eval-checkpoint <ckpt>",
+)
+
 
 def _git_head_sha() -> str | None:
     try:
@@ -23,6 +31,35 @@ def _git_head_sha() -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     return result.stdout.strip() or None
+
+
+def print_benchmark_help() -> None:
+    print(
+        "ow benchmark — stability runs and preflight gates\n\n"
+        "Subcommands:\n"
+        "  training                 Short timed training benchmark\n"
+        "  sanity                   Gate 1 reproducibility\n"
+        "  learn-proof              Gates 2–5 learning proof ladder\n"
+        "  calibrate                Derive preflight thresholds\n"
+        "  calibrate-seed-scheduler Reseed-interval calibration\n"
+        "  gate                     Composable preflight gates (run/list)\n"
+        "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
+        "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
+        "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
+        "  factorized-sampler     Tier-1 launch-hygiene microbenchmark (script wrapper)\n\n"
+        "Examples:\n"
+        "  make preflight-sanity\n"
+        "  make preflight-learn-proof\n"
+        "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
+        "  uv run ow benchmark gate --list\n"
+        "  uv run ow benchmark gate run beat_noop --dry-run\n"
+        "  uv run ow benchmark gate beat_random --dry-run\n\n"
+        "E2E throughput (launch hygiene):\n"
+        "  make test-launch-hygiene-e2e-throughput\n"
+        "  uv run ow benchmark training --preset primary --label gate --out /tmp/gate.json \\\n"
+        "    --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10\n\n"
+        "More: uv run ow benchmark learn-proof --help\n"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -396,13 +433,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Extra Hydra overrides appended after gate overrides.",
     )
-    gate.add_argument(
-        "--also-throughput",
-        action="store_true",
+
+    tournament_proof = subparsers.add_parser(
+        "tournament-proof",
         help=(
-            "After the learning run, extract throughput from the gate JSONL "
-            "(updates 3–22; 20 measured rows after warmup) and merge into --out JSON. "
-            "Prefer `gate run admission`."
+            "Gate 5: Kaggle Docker packaging validation, then held-out unified "
+            "tournament ladder (submit-valid order)."
         ),
     )
     gate.add_argument(
@@ -721,6 +757,10 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
 
 
 def run_tournament_proof_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.submit_valid_funnel import (
+        docker_gate_passed,
+        run_submit_valid_docker_gate,
+    )
     from src.artifacts.tournament.unified.ladder import run_unified_ladder
     from src.artifacts.tournament.unified.spec import load_unified_tournament_spec
     from src.jax.preflight import PreflightVerdict, write_report
@@ -747,6 +787,7 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
         / "evaluations"
         / "preflight_win_proof_unified"
     )
+    docker_output_dir = output_dir / "docker_validation"
 
     if args.dry_run:
         stage1_count = (
@@ -767,6 +808,8 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
             "verdict": PreflightVerdict.INCONCLUSIVE.value,
             "dry_run": True,
             "unified": True,
+            "submit_valid_order": ["docker_validation", "unified_tournament_ladder"],
+            "docker_output_dir": str(docker_output_dir),
             "enforcement": spec.enforcement,
             "needs_calibration": spec.needs_calibration,
             "stage1": {
@@ -801,6 +844,46 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
         print(json.dumps(report, indent=2))
         return 1
 
+    docker_manifest: dict[str, object] = {}
+    try:
+        docker_manifest = run_submit_valid_docker_gate(
+            checkpoint_path=checkpoint,
+            output_dir=docker_output_dir,
+            repo_root=REPO_ROOT,
+        )
+    except (OSError, RuntimeError) as exc:
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.NOT_VERIFIED.value,
+            "reasons": [f"docker_validation_failed: {exc}"],
+            "checkpoint": str(checkpoint),
+            "evaluation_mode": "submit_valid_docker_gate",
+            "docker_output_dir": str(docker_output_dir),
+            "tournament_skipped": True,
+            "tournament_skipped_reason": "docker_validation_failed",
+        }
+        write_report(args.out, report)
+        print(json.dumps(report, indent=2))
+        return 1
+
+    if not docker_gate_passed(docker_manifest):
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.NOT_VERIFIED.value,
+            "reasons": ["docker_validation_failed"],
+            "checkpoint": str(checkpoint),
+            "evaluation_mode": "submit_valid_docker_gate",
+            "docker_manifest": docker_manifest,
+            "docker_output_dir": str(docker_output_dir),
+            "tournament_skipped": True,
+            "tournament_skipped_reason": "docker_validation_failed",
+        }
+        write_report(args.out, report)
+        print(json.dumps(report, indent=2))
+        return 1
+
     verdict = run_unified_ladder(
         checkpoint,
         spec,
@@ -823,11 +906,15 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
         "commit_sha": _git_head_sha(),
         "verdict": preflight_verdict.value,
         "reasons": reasons,
+        "docker_validation_ok": True,
+        "docker_output_dir": str(docker_output_dir),
+        "docker_manifest": docker_manifest,
         "unified_verdict": verdict.to_dict(),
         "unified_verdict_path": str(output_dir / "unified_verdict.json"),
         "checkpoint": str(checkpoint),
         "evaluation_mode": "unified_tournament",
         "enforcement": spec.enforcement,
+        "submit_valid_order": ["docker_validation", "unified_tournament_ladder"],
     }
     write_report(args.out, report)
     print(json.dumps(report, indent=2))

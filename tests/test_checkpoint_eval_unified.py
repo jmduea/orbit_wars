@@ -11,7 +11,7 @@ from src.artifacts.tournament.unified.reporting import (
 )
 
 
-@patch("src.artifacts.checkpoint_eval.run_docker_validation_subprocess")
+@patch("src.artifacts.checkpoint_eval.run_submit_valid_docker_gate")
 @patch("src.artifacts.tournament.worker.run_unified_ladder")
 @patch("src.artifacts.tournament.worker.load_train_config_from_checkpoint")
 @patch("src.artifacts.tournament.worker.agent_from_checkpoint")
@@ -35,7 +35,7 @@ def test_checkpoint_eval_unified_pass_promotes(
         cfg=cfg,
         act_fn=lambda _obs: [],
     )
-    mock_docker.return_value = {"ok": True}
+    mock_docker.return_value = {"validation_ok": True}
     mock_ladder.return_value = UnifiedLadderVerdict(
         passed=True,
         reason="pass",
@@ -68,7 +68,7 @@ def test_checkpoint_eval_unified_pass_promotes(
     assert result["validation_ok"] is True
 
 
-@patch("src.artifacts.checkpoint_eval.run_docker_validation_subprocess")
+@patch("src.artifacts.checkpoint_eval.run_submit_valid_docker_gate")
 @patch("src.artifacts.tournament.worker.run_unified_ladder")
 @patch("src.artifacts.tournament.worker.load_train_config_from_checkpoint")
 @patch("src.artifacts.tournament.worker.agent_from_checkpoint")
@@ -91,7 +91,7 @@ def test_prerequisite_fail_does_not_promote(
         cfg=cfg,
         act_fn=lambda _obs: [],
     )
-    mock_docker.return_value = {"ok": True}
+    mock_docker.return_value = {"validation_ok": True}
     mock_ladder.return_value = UnifiedLadderVerdict(
         passed=False,
         reason="failed_prerequisite_random",

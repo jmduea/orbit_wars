@@ -6,8 +6,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.artifacts.docker_validation import run_docker_validation_subprocess
 from src.artifacts.run_paths import atomic_write_json
+from src.artifacts.submit_valid_funnel import (
+    docker_gate_passed,
+    run_submit_valid_docker_gate,
+)
 from src.artifacts.tournament.types import TournamentResult
 from src.artifacts.tournament.worker import run_tournament_promotion_job
 
@@ -23,7 +26,7 @@ def run_checkpoint_eval_job(
 
     checkpoint_path = Path(str(job["checkpoint_path"]))
     docker_output_dir = result_dir / "docker_validation"
-    docker_manifest = run_docker_validation_subprocess(
+    docker_manifest = run_submit_valid_docker_gate(
         checkpoint_path=checkpoint_path,
         output_dir=docker_output_dir,
         repo_root=REPO_ROOT,
@@ -37,6 +40,17 @@ def run_checkpoint_eval_job(
         episode_steps=int(job.get("episode_steps", 500)),
     )
     atomic_write_json(result_dir / "docker_manifest.json", docker_manifest)
+    validation_ok = docker_gate_passed(docker_manifest)
+    if not validation_ok:
+        return {
+            "validation_ok": False,
+            "docker_manifest_path": str(result_dir / "docker_manifest.json"),
+            "docker_output_dir": str(docker_output_dir),
+            "tournament_skipped": True,
+            "tournament_skipped_reason": "docker_validation_failed",
+            "promoted": False,
+            "promotion_reason": "docker_validation_failed",
+        }
 
     tournament_dir = result_dir / "tournament"
     tournament, promotion_attempt = run_tournament_promotion_job(
@@ -46,7 +60,7 @@ def run_checkpoint_eval_job(
     promoted = bool(promotion_attempt and promotion_attempt.promoted)
     unified_verdict_path = tournament_dir / "unified_verdict.json"
     return {
-        "validation_ok": True,
+        "validation_ok": validation_ok,
         "docker_manifest_path": str(result_dir / "docker_manifest.json"),
         "docker_output_dir": str(docker_output_dir),
         "tournament_id": tournament.tournament_id,

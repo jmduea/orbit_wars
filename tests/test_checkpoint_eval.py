@@ -91,7 +91,7 @@ def test_checkpoint_eval_worker_runs_docker_then_tournament(
         return fake_tournament, None
 
     monkeypatch.setattr(
-        "src.artifacts.checkpoint_eval.run_docker_validation_subprocess",
+        "src.artifacts.checkpoint_eval.run_submit_valid_docker_gate",
         fake_docker,
     )
     monkeypatch.setattr(
@@ -143,7 +143,7 @@ def test_checkpoint_eval_worker_marks_failed_when_docker_fails(
         raise AssertionError("tournament should not run")
 
     monkeypatch.setattr(
-        "src.artifacts.checkpoint_eval.run_docker_validation_subprocess",
+        "src.artifacts.checkpoint_eval.run_submit_valid_docker_gate",
         fake_docker,
     )
     monkeypatch.setattr(

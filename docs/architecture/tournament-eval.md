@@ -55,6 +55,8 @@ leg produces zero games, unified scoring fails closed with `missing_4p_games`.
 
 Unified ladder orchestration lives in `src/artifacts/tournament/unified/` and is
 consumed by `ow benchmark tournament-proof` and hybrid `checkpoint_eval` workers.
+Both entrypoints run Kaggle Docker packaging validation (`src/artifacts/submit_valid_funnel.py`)
+before scheduling any held-out tournament matches.
 
 Shortlist resolution uses local `checkpoint_path` when present, otherwise attempts
 W&B checkpoint artifact download into `outputs/cache/wandb-artifacts/`.
