@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import jax.numpy as jnp
+import numpy as np
 
 import jax
 from src.config import RewardConfig, TaskConfig
@@ -21,7 +22,6 @@ from src.game.constants import (
     MAX_STEPS,
     PLANET_LAUNCH_RADIUS_OFFSET,
     SUN_RADIUS,
-    TOTAL_COMETS,
 )
 from src.jax.rewards import apply_early_terminal_reward_shaping_jax
 
@@ -157,78 +157,72 @@ def empty_action(cfg: TaskConfig) -> JaxAction:
     )
 
 
+def _reference_planet_tables(
+    seed: np.ndarray, player_count: np.ndarray
+) -> tuple[np.ndarray, ...]:
+    """Build padded planet tables with the Kaggle reference generator."""
+
+    import random
+
+    from src.game.planet_generation import (
+        assign_home_planets,
+        generate_planets,
+        planets_to_padded_rows,
+    )
+
+    rng = random.Random(int(np.asarray(seed).item()))
+    planets = generate_planets(rng)
+    num_groups = max(1, len(planets) // 4)
+    home_group = rng.randint(0, num_groups - 1)
+    assign_home_planets(
+        planets,
+        player_count=int(np.asarray(player_count).item()),
+        home_group=home_group,
+    )
+    rows = planets_to_padded_rows(planets)
+    return tuple(np.asarray(row) for row in rows)
+
+
+def _planet_table_specs() -> tuple[jax.ShapeDtypeStruct, ...]:
+    return (
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.int32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.int32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.float32),
+        jax.ShapeDtypeStruct((MAX_PLANETS,), np.bool_),
+    )
+
+
 def reset(
     key: jax.Array, cfg: TaskConfig
 ) -> tuple[JaxEnvState, TurnBatch]:
     """Create a deterministic initial board from a JAX PRNG key."""
 
-    initial_planet_count = MAX_PLANETS - TOTAL_COMETS
     fleet_count = max_fleets(cfg)
-    group_count = max(1, initial_planet_count // 4)
-    active_count = group_count * 4
-
-    idx = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
-    group = idx // 4
-    quadrant = idx % 4
-    active = idx < active_count
-
-    key_angle, key_radius, key_prod, key_ships, key_home, key_vel = jax.random.split(
-        key, 6
+    key_seed, key_vel = jax.random.split(key)
+    seed = jax.random.randint(key_seed, (), 0, 2**31 - 1, dtype=jnp.int32)
+    player_count = jnp.array(int(getattr(cfg, "player_count", 2)), dtype=jnp.int32)
+    tables = jax.pure_callback(
+        _reference_planet_tables,
+        _planet_table_specs(),
+        seed,
+        player_count,
+        vmap_method="sequential",
     )
-    base_angles = jax.random.uniform(
-        key_angle, (group_count,), minval=0.18, maxval=1.39
+    idx, owner, x, y, radius, ships, production, active = tables
+    planets = JaxPlanetState(
+        jnp.asarray(idx, dtype=jnp.int32),
+        jnp.asarray(owner, dtype=jnp.int32),
+        jnp.asarray(x, dtype=jnp.float32),
+        jnp.asarray(y, dtype=jnp.float32),
+        jnp.asarray(radius, dtype=jnp.float32),
+        jnp.asarray(ships, dtype=jnp.float32),
+        jnp.asarray(production, dtype=jnp.float32),
+        jnp.asarray(active, dtype=bool),
     )
-    # Keep a mix of rotating and static planets while remaining clear of the sun.
-    base_orbit = jax.random.uniform(
-        key_radius, (group_count,), minval=22.0, maxval=62.0
-    )
-    prod_group = jax.random.randint(
-        key_prod, (group_count,), minval=1, maxval=6
-    ).astype(jnp.float32)
-    ships_group = jax.random.randint(
-        key_ships, (group_count,), minval=5, maxval=31
-    ).astype(jnp.float32)
-    radius_group = 1.0 + jnp.log(prod_group)
-
-    safe_group = jnp.minimum(group, group_count - 1)
-    theta = jnp.take(base_angles, safe_group)
-    orbit = jnp.take(base_orbit, safe_group)
-    base_x = 50.0 + orbit * jnp.cos(theta)
-    base_y = 50.0 + orbit * jnp.sin(theta)
-    x = jnp.where(
-        quadrant == 0,
-        base_y,
-        jnp.where(
-            quadrant == 1,
-            100.0 - base_x,
-            jnp.where(quadrant == 2, base_x, 100.0 - base_y),
-        ),
-    )
-    y = jnp.where(
-        quadrant == 0,
-        base_x,
-        jnp.where(
-            quadrant == 1,
-            base_y,
-            jnp.where(quadrant == 2, 100.0 - base_y, 100.0 - base_x),
-        ),
-    )
-    production = jnp.where(active, jnp.take(prod_group, safe_group), 0.0)
-    ships = jnp.where(active, jnp.take(ships_group, safe_group), 0.0)
-    radius = jnp.where(active, jnp.take(radius_group, safe_group), 0.0)
-
-    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
-    home_group = jax.random.randint(key_home, (), minval=0, maxval=group_count)
-    home = (group == home_group) & active
-    if int(getattr(cfg, "player_count", 2)) == 4:
-        owner = jnp.where(home, quadrant, owner)
-        ships = jnp.where(home, 10.0, ships)
-    else:
-        owner = jnp.where(home & (quadrant == 0), 0, owner)
-        owner = jnp.where(home & (quadrant == 3), 1, owner)
-        ships = jnp.where(home & ((quadrant == 0) | (quadrant == 3)), 10.0, ships)
-
-    planets = JaxPlanetState(idx, owner, x, y, radius, ships, production, active)
     empty_fleets = JaxFleetState(
         id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
         owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
@@ -475,46 +469,65 @@ def _launch_fleets(
     player: int,
     cfg: TaskConfig,
 ):
-    source_idx = jnp.clip(action.source_id, 0, MAX_PLANETS - 1)
-    source_owner = jnp.take(planets.owner, source_idx)
-    source_active = jnp.take(planets.active, source_idx)
-    source_ships = jnp.take(planets.ships, source_idx)
-    valid = (
-        action.valid
-        & source_active
-        & (source_owner == player)
-        & (action.ships > 0.0)
-        & (source_ships >= action.ships)
-    )
+    """Launch fleets in slot order, matching Kaggle sequential ``process_moves``."""
 
-    launched_by_planet = jax.nn.one_hot(
-        source_idx, MAX_PLANETS, dtype=jnp.float32
-    ).T @ jnp.where(valid, action.ships, 0.0)
-    planets = planets._replace(
-        ships=jnp.where(
-            planets.active, planets.ships - launched_by_planet, planets.ships
+    fleet_cap = max_fleets(cfg)
+    slot_indices = jnp.arange(fleet_cap, dtype=jnp.int32)
+    ship_requests = jnp.floor(action.ships).astype(jnp.float32)
+    existing_active = fleets.active.astype(jnp.int32).sum()
+
+    def launch_slot(carry, slot):
+        planets, next_id, launched_count = carry
+        source_idx = jnp.clip(action.source_id[slot], 0, MAX_PLANETS - 1)
+        ships = ship_requests[slot]
+        remaining = planets.ships[source_idx]
+        slot_valid = (
+            action.valid[slot]
+            & planets.active[source_idx]
+            & (planets.owner[source_idx] == player)
+            & (ships > 0.0)
+            & (remaining >= ships)
+            & ((existing_active + launched_count) < fleet_cap)
         )
-    )
+        updated_ships = planets.ships.at[source_idx].add(
+            jnp.where(slot_valid, -ships, 0.0)
+        )
+        planets = planets._replace(ships=updated_ships)
+        launched_count = launched_count + slot_valid.astype(jnp.int32)
+        launch = (
+            slot_valid,
+            next_id,
+            planets.x[source_idx]
+            + jnp.cos(action.angle[slot])
+            * (planets.radius[source_idx] + PLANET_LAUNCH_RADIUS_OFFSET),
+            planets.y[source_idx]
+            + jnp.sin(action.angle[slot])
+            * (planets.radius[source_idx] + PLANET_LAUNCH_RADIUS_OFFSET),
+            action.angle[slot],
+            action.source_id[slot],
+            ships,
+        )
+        next_id = next_id + slot_valid.astype(jnp.int32)
+        return (planets, next_id, launched_count), launch
 
-    start_x = jnp.take(planets.x, source_idx) + jnp.cos(action.angle) * (
-        jnp.take(planets.radius, source_idx) + PLANET_LAUNCH_RADIUS_OFFSET
+    (planets, next_fleet_id, _), launches = jax.lax.scan(
+        launch_slot,
+        (planets, next_fleet_id, jnp.array(0, dtype=jnp.int32)),
+        slot_indices,
     )
-    start_y = jnp.take(planets.y, source_idx) + jnp.sin(action.angle) * (
-        jnp.take(planets.radius, source_idx) + PLANET_LAUNCH_RADIUS_OFFSET
-    )
-    slots = jnp.arange(max_fleets(cfg), dtype=jnp.int32)
+    valid, launch_ids, lx, ly, lang, lsource, lships = launches
     launched = JaxFleetState(
-        id=next_fleet_id + slots,
-        owner=jnp.full_like(slots, player),
-        x=start_x,
-        y=start_y,
-        angle=action.angle,
-        from_planet_id=action.source_id,
-        ships=action.ships,
+        id=launch_ids,
+        owner=jnp.full((fleet_cap,), player, dtype=jnp.int32),
+        x=lx,
+        y=ly,
+        angle=lang,
+        from_planet_id=lsource,
+        ships=lships,
         active=valid,
     )
     fleets = _compact_fleets(_concat_fleets(fleets, launched), cfg)
-    return planets, fleets, next_fleet_id + valid.astype(jnp.int32).sum()
+    return planets, fleets, next_fleet_id
 
 
 def _concat_fleets(a: JaxFleetState, b: JaxFleetState) -> JaxFleetState:
@@ -540,9 +553,9 @@ def _move_and_resolve(
     orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
     rotates = (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT) & planets.active
     init_angle = jnp.arctan2(init_dy, init_dx)
-    cur_angle = init_angle + previous_game.angular_velocity * (
-        previous_game.step + 1
-    ).astype(jnp.float32)
+    cur_angle = init_angle + previous_game.angular_velocity * previous_game.step.astype(
+        jnp.float32
+    )
     new_px = jnp.where(
         rotates, BOARD_CENTER[0] + orbit_radius * jnp.cos(cur_angle), planets.x
     )
@@ -550,7 +563,9 @@ def _move_and_resolve(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
 
-    speed = fleet_speed(fleets.ships, MAX_FLEET_SPEED)
+    speed = fleet_speed(
+        fleets.ships, float(getattr(cfg, "ship_speed", MAX_FLEET_SPEED))
+    )
     old_fx, old_fy = fleets.x, fleets.y
     new_fx = fleets.x + jnp.cos(fleets.angle) * speed
     new_fy = fleets.y + jnp.sin(fleets.angle) * speed
@@ -568,7 +583,8 @@ def _move_and_resolve(
     )
     hits = hits & fleets.active[:, None] & planets.active[None, :]
     hit_any = hits.any(axis=1)
-    hit_idx = jnp.argmax(hits, axis=1)
+    planet_order = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
+    hit_idx = jnp.min(jnp.where(hits, planet_order[None, :], MAX_PLANETS), axis=1)
     out = (
         (new_fx < 0.0) | (new_fx > BOARD_SIZE) | (new_fy < 0.0) | (new_fy > BOARD_SIZE)
     )

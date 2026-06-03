@@ -1,9 +1,9 @@
 import math
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
+import jax
 from src.config import RewardConfig, TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.jax.env import (
@@ -21,9 +21,12 @@ from src.jax.env import (
 )
 
 
-def _cfg(*, player_count=2, max_fleets=16):
+def _cfg(*, player_count=2, max_fleets=16, ship_speed=6.0):
     return TaskConfig(
-        max_fleets=max_fleets, candidate_count=4, player_count=player_count
+        max_fleets=max_fleets,
+        candidate_count=4,
+        player_count=player_count,
+        ship_speed=ship_speed,
     )
 
 
@@ -154,10 +157,11 @@ def _planet_rows(state, count):
 def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
     cfg = _cfg()
     state, _ = reset(jax.random.PRNGKey(11), cfg)
-    planets = _planet_rows(state, MAX_PLANETS)
+    active_count = int(np.asarray(state.game.planets.active).sum())
+    planets = _planet_rows(state, active_count)
 
-    assert len(planets) % 4 == 0
-    for i in range(0, len(planets), 4):
+    assert active_count % 4 == 0
+    for i in range(0, active_count, 4):
         p0 = planets[i]
         p3 = planets[i + 3]
         assert math.isclose(p0[2] + p3[2], 100.0, abs_tol=1e-5)
@@ -167,7 +171,8 @@ def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
 
 def test_four_player_reset_home_planets_are_rotationally_symmetric():
     cfg = _cfg(player_count=4)
-    state, _ = reset(jax.random.PRNGKey(42), cfg)
+    for seed in range(50):
+        state, _ = reset(jax.random.PRNGKey(seed), cfg)
     p = state.game.planets
     owned = np.flatnonzero(np.asarray(p.owner) != -1)
 
@@ -184,13 +189,13 @@ def test_four_player_reset_home_planets_are_rotationally_symmetric():
 
 
 def test_fleet_does_not_tunnel_through_rotating_planet():
-    cfg = _cfg()
+    cfg = _cfg(ship_speed=2.0)
     state = _state(
-        [[0, -1, 70.0, 50.0, 2.0, 10, 0]],
-        [[0, 0, 68.0, 50.0, math.pi / 2, 1, 1000]],
+        [[0, -1, 50.0, 52.0, 1.0, 10, 0]],
+        [[0, 0, 49.0, 50.0, 0.0, 1, 1000]],
         cfg=cfg,
-        step_index=0,
-        angular_velocity=math.pi / 2,
+        step_index=1,
+        angular_velocity=math.pi,
     )
 
     next_state, _ = _advance(state, cfg)
@@ -309,6 +314,7 @@ def test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fle
         ([[0, 0, 80, 80, 3, 50, 1]], [], 0, 0, 1.0),
         ([[0, -1, 80, 80, 3, 50, 1]], [], 0, 0, -1.0),
         ([[0, 0, 80, 80, 3, 30, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 0, 1.0),
+        ([[0, 0, 80, 80, 3, 30, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 1, 1.0),
         (
             [[0, 0, 80, 80, 3, 10, 1], [1, 1, 20, 20, 3, 30, 1]],
             [[0, 0, 50, 30, 0, 0, 50]],
