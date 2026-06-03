@@ -23,7 +23,8 @@ related_components:
   - src/jax/benchmark_progress.py
   - src/jax/preflight.py
   - src/jax/preflight_calibration.py
-  - src/cli/benchmark.py
+  - src/cli/benchmark/gate.py
+  - src/cli/benchmark/tournament_proof.py
 ---
 
 # Long ow CLI jobs — stderr progress and no tail/head pipes
@@ -87,6 +88,7 @@ Agents default to `| tail` for long commands; with Python block buffering and pi
 
 ## Related
 
+- Benchmark CLI package layout: `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Train subprocess streaming: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - Gate 5 funnel (uses same operator habits): `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`
 - `tests/test_benchmark_progress.py`

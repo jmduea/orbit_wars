@@ -25,7 +25,7 @@ related_components:
   - src/jax/shaping_calibration.py
   - src/jax/seed_scheduler_calibration.py
   - src/jax/preflight.py
-  - src/cli/benchmark.py
+  - src/cli/benchmark/
   - docs/benchmarks/shaping-calibration.json
   - docs/benchmarks/preflight-calibration.json
 ---
@@ -129,6 +129,7 @@ Decision artifact (intended shape, mirroring `docs/benchmarks/seed-scheduler-cal
 
 ## Related documentation
 
+- Benchmark CLI package (planned `shape-calibrate` subcommand): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Ideation: `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`
 - Requirements: `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`
 - Plan: `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
