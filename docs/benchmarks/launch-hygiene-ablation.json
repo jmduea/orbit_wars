@@ -11,7 +11,8 @@
       "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
       "launch_hygiene": false,
       "learn_proof": {
-        "artifact": "orbit_wars-pre-hygiene/outputs/preflight/ablation_arm_a_pre_hygiene.json",
+        "artifact": "outputs/preflight/ablation_arm_a_pre_hygiene.json",
+        "artifact_capture_note": "Captured at pre-hygiene SHA 79162a in a git worktree; see docs/operator-runbook.md learner ablation table.",
         "model": "transformer_factorized_small",
         "through": "beat_random",
         "verdict": "NOT_VERIFIED",

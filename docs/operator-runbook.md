@@ -57,7 +57,7 @@ Compare arms with the same preflight recipe (`transformer_factorized_small`, `--
 
 | Arm | Checkout | Command |
 |-----|----------|---------|
-| A (pre-hygiene) | `79162a2088160b8ed05c3e3a050e064c7f6c9556` | `uv run ow benchmark learn-proof --model transformer_factorized_small --through beat_random --out outputs/preflight/ablation_arm_a.json` |
+| A (pre-hygiene) | `79162a2088160b8ed05c3e3a050e064c7f6c9556` | `uv run ow benchmark learn-proof --model transformer_factorized_small --through beat_random --out outputs/preflight/ablation_arm_a_pre_hygiene.json` |
 | B (launch-hygiene) | `main` | `make preflight-learn-proof` |
 
 Artifact: `docs/benchmarks/launch-hygiene-ablation.json`. Thresholds: `docs/benchmarks/preflight-calibration.json`.
