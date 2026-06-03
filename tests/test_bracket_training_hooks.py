@@ -53,6 +53,15 @@ def test_below_budget_not_weak_config(tmp_path: Path) -> None:
     assert tick.weak_config is False
 
 
+def test_numbered_checkpoint_path_matches_pipeline(tmp_path: Path) -> None:
+    """Async checkpoint jobs use jax_ckpt_{update:06d}.pkl, not jax_ckpt_u{update}.pkl."""
+    from src.artifacts.pipeline import CheckpointJob
+
+    job = CheckpointJob(update=50, run_dir=tmp_path, build_payload=lambda: {})
+    assert job.numbered_path == tmp_path / "jax_ckpt_000050.pkl"
+    assert not (tmp_path / "jax_ckpt_u50.pkl").exists()
+
+
 def test_interval_queues_qualifier_eval(tmp_path: Path) -> None:
     cfg = _cfg(tmp_path)
     ckpt = tmp_path / "ckpt.pkl"

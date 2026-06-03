@@ -30,9 +30,10 @@ def test_run_seed_scheduler_sweep_dry_run_prints_arm_plan(capsys) -> None:
         repo_root=Path("."),
         dry_run=True,
     )
-    captured = capsys.readouterr().out
-    assert "2 training arm(s)" in captured
-    assert "training.log_every=1" in captured or "ow train" in captured
+    captured = capsys.readouterr()
+    banner = captured.out + captured.err
+    assert "2 training arm(s)" in banner
+    assert "training.log_every=1" in banner or "ow train" in banner
 
 
 def test_expand_reseed_intervals_includes_total_fifth() -> None:
