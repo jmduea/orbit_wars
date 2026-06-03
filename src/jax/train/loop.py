@@ -437,11 +437,17 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         historical_pool=historical_pool,
                         final=is_final,
                     )
-                    checkpoint_handler.handle_results(
-                        checkpoint_pipeline.submit_checkpoint(job)
-                    )
-                    candidate = run_dir / f"jax_ckpt_u{update}.pkl"
-                    saved_checkpoint_path = candidate if candidate.is_file() else None
+                    checkpoint_results = checkpoint_pipeline.submit_checkpoint(job)
+                    checkpoint_handler.handle_results(checkpoint_results)
+                    saved_checkpoint_path = None
+                    for result in checkpoint_results:
+                        if result.committed and result.numbered_path is not None:
+                            saved_checkpoint_path = result.numbered_path
+                            break
+                    if saved_checkpoint_path is None:
+                        candidate = run_dir / f"jax_ckpt_{update:06d}.pkl"
+                        if candidate.is_file():
+                            saved_checkpoint_path = candidate
             bracket_metrics: dict[str, object] = {}
             if bracket_training_enabled(cfg):
                 tick = bracket_training_tick(
