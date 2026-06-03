@@ -77,8 +77,9 @@ Rollout (`src/jax/action_sampling.py`) and PPO replay (`src/jax/factored_sequenc
 ### Verification gate
 
 ```bash
-make test-launch-hygiene-throughput   # isolated subprocess; assert ≤ 3.22 ms at K=5 batch=32
-uv run python scripts/benchmark_factorized_sampler.py --max-moves-k 5 --batch-size 32 --assert-max-ms 3.22
+make test-launch-hygiene-throughput   # delegates to ow benchmark factorized-sampler
+uv run ow benchmark factorized-sampler --max-moves-k 5 --batch-size 32 --assert-max-ms 3.22
+# legacy: scripts/benchmark_factorized_sampler.py (stderr hints prefer ow command above)
 ```
 
 Post-fix measured ~3.01 ms (2026-06-01). Do not relax the threshold until a run passes under the same recipe.
@@ -99,14 +100,14 @@ The oracle path (`compose_hygiene_with_shield_mask` / `hygiene_adjusted_bucket_m
 ## Prevention
 
 - **Profile inside `lax.scan` before merging mask layers.** Any per-step `fori_loop(0, step_idx, …)` nested in a K-step scan is a red flag for O(K²) cost at default K=5+.
-- **Gate throughput with tiered benchmarks**, not pytest JIT timing or ad-hoc train smokes. Tier-1: `make test-launch-hygiene-throughput` or `scripts/benchmark_factorized_sampler.py --assert-max-ms`. Tier-2: `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` — see `docs/operator-runbook.md`. **Tier-1 pass does not imply tier-2 pass** (sampler microbench can be green while full rollout+PPO remains out of band); when tier-2 fails after hot-path exhaustion, see [learner ablation gate](../tooling-decisions/launch-hygiene-learner-ablation-gate.md).
+- **Gate throughput with tiered benchmarks**, not pytest JIT timing or ad-hoc train smokes. Tier-1: `make test-launch-hygiene-throughput` or `uv run ow benchmark factorized-sampler --assert-max-ms`. Tier-2: `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` — see `docs/operator-runbook.md`. **Tier-1 pass does not imply tier-2 pass** (sampler microbench can be green while full rollout+PPO remains out of band); when tier-2 fails after hot-path exhaustion, see [learner ablation gate](../tooling-decisions/launch-hygiene-learner-ablation-gate.md).
 - **Keep shield and hygiene separate.** Shield answers physics/safety; hygiene answers turn rules (dup/reverse). Compose with AND; update carry only on `launch_valid` after optional tiered reject.
 - **Prove carry ≡ oracle** when changing hygiene semantics — do not delete the prefix-recompute path from tests.
 - **When adding scan carry state**, extend rollout and replay scans together (R9); pass pre-composed `hygiene_bucket_mask` into replay logprob helpers to avoid double hygiene.
 
 ## Related Issues
 
-- Actor–critic encode-once replay contract: `docs/solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md`
+- Actor–critic encode-once replay contract: `docs/architecture/jax-policy-encoder.md` (shared trunk, separate policy/value heads)
 - Requirements: `docs/brainstorms/2026-06-01-launch-hygiene-bundle-requirements.md` (R1–R9)
 - Plans: `docs/plans/2026-06-01-launch-hygiene-bundle-plan.md`, `docs/plans/2026-06-01-002-fix-launch-hygiene-throughput-plan.md`
 - Production-path timing follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`

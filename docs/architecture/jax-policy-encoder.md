@@ -4,8 +4,8 @@ Planet-edge policies share a composable shell: a backbone encoder maps `TurnBatc
 to per-edge candidate embeddings, then an autoregressive pointer decoder selects
 up to `max_moves_k` launches per turn. The critic reads pooled graph features from
 the same encoder output (`value_input`); policy and value are separate heads on one
-trunk, not dual independent encoders. See
-[`docs/solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md`](../solutions/architecture-patterns/ppo-shared-vs-separate-actor-critic.md).
+trunk, not dual independent encoders (`ComposableFactorizedPlanetPolicy` in
+`src/jax/policy.py`; replay encodes once in `src/jax/factored_sequence_scan.py`).
 
 ## Encoder dispatch
 
