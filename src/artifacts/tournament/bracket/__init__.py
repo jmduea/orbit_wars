@@ -14,7 +14,13 @@ from src.artifacts.tournament.bracket.qualifier import (
     evaluate_qualifier_scores,
     qualifier_floors,
 )
+from src.artifacts.tournament.bracket.scheduler import (
+    apply_head_to_head_outcome,
+    iter_round_robin_pairs,
+    queue_round_robin_matches,
+)
 from src.artifacts.tournament.bracket.self_play import sample_bracket_checkpoints
+from src.artifacts.tournament.bracket.status import bracket_show_payload, summarize_bracket
 from src.artifacts.tournament.bracket.state import (
     BracketEntry,
     BracketState,
@@ -43,6 +49,11 @@ __all__ = [
     "BracketEntry",
     "BracketState",
     "QualifierVerdict",
+    "apply_head_to_head_outcome",
+    "bracket_show_payload",
+    "iter_round_robin_pairs",
+    "queue_round_robin_matches",
+    "summarize_bracket",
     "Rating",
     "bracket_state_path",
     "evaluate_qualifier_scores",

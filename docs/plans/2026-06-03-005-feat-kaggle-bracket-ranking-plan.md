@@ -231,31 +231,63 @@ flowchart LR
 
 ---
 
-### U7. CLI bracket inspect (deferred)
+### U7. CLI bracket inspect
 
 **Goal:** `ow eval bracket status|show` for agents.
 
 **Requirements:** R16
 
-**Deferred:** Follow-up after U1–U6 land.
+**Files:** `src/cli/eval.py` (bracket subcommand), `src/artifacts/tournament/bracket/status.py`, `tests/test_cli_eval_bracket.py`
+
+**Approach:** `bracket status` prints compact JSON (phase, incumbent, entry count, weak_config). `bracket show` prints full `state.json` payload. Both take `--campaign` and optional `--output-root` (default `outputs`).
+
+**Test scenarios:**
+- Missing state → default qualifier phase, zero entries
+- Populated state round-trips in show output
 
 ---
 
-### U8. Full bracket round-robin scheduler (deferred)
+### U8. Round-robin scheduler + async qualifier_eval worker
 
-**Goal:** Schedule pairwise main-bracket matches and apply μ/σ updates automatically.
+**Goal:** Process `qualifier_eval` queue jobs (Docker → unified qualifier ladder → bracket state) and schedule pairwise main-bracket `bracket_match` jobs with μ/σ updates on outcomes.
 
-**Requirements:** R2, R6
+**Requirements:** R2, R5, R6, R11, R15, R16
 
-**Deferred:** Initial slice updates ratings from explicit match outcomes; auto-scheduling is follow-up.
+**Dependencies:** U2, U3, U5
+
+**Files:**
+- `src/artifacts/qualifier_eval.py` — composite job handler (mirror `checkpoint_eval.py`)
+- `src/artifacts/tournament/bracket/scheduler.py` — pair generation, rating apply, optional job queue
+- `scripts/run_artifact_worker.py` — dispatch `qualifier_eval`, `bracket_match`
+- `src/artifacts/pipeline.py` — `bracket_match` kind
+- `tests/test_bracket_scheduler.py`, `tests/test_qualifier_eval_worker.py`
+
+**Approach:** `run_qualifier_eval_job` runs submit-valid Docker gate, then `run_unified_ladder(..., qualifier_mode=True)`, then `evaluate_qualifier_scores` + `apply_qualifier_verdict_to_state` on campaign `bracket/state.json`. On qualifier clear with ≥2 main entries, `queue_round_robin_matches` enqueues `bracket_match` jobs (2p `run_match`, winner/loser → `update_win`). Follow `checkpoint_eval` manifest layout under `evaluations/qualifier_eval_u<update>_<id>/`.
+
+**Test scenarios:**
+- Round-robin pairs cover all main entries exactly once per opponent pair
+- `apply_head_to_head_outcome` increases winner μ vs loser
+- Worker qualifier_eval skips tournament when Docker fails (manifest `validation_ok: false`)
+- Worker qualifier_eval applies cleared verdict to bracket state (mocked ladder)
+
+**Qualifier seed calibration:** Deferred — reuse unified tournament held-out seeds from `docs/benchmarks/preflight-calibration.json`; no new 1.0-floor calibration campaign in this slice (document only).
+
+---
+
+## Smoke validation (operator, post U7–U8)
+
+1. `make preflight-learn-proof` (Gates 0–3) with `env -u JAX_COMPILATION_CACHE_DIR` if JAX smokes contend.
+2. `uv run ow train artifacts=bracket_training output.campaign=bracket_smoke training.total_updates=50 curriculum=off task=shield_cheap`
+3. Verify `outputs/campaigns/bracket_smoke/bracket/state.json`, `runs/*/queue/optional_jobs/qualifier_eval_*.json`, training metrics `bracket_training_phase`.
+4. `uv run ow eval worker --run <run_dir>` then `uv run ow eval bracket status --campaign bracket_smoke`.
 
 ---
 
 ## Scope Boundaries
 
-**In scope (this LFG foundational slice):** U1–U6
+**In scope (this LFG slice):** U1–U8, smoke workflow above
 
-**Deferred to Follow-Up Work:** U7 CLI, U8 round-robin scheduler, qualifier seed-count calibration campaign, Gate 5 proof threshold changes for 1.0 qualifier
+**Deferred to Follow-Up Work:** Qualifier 1.0 seed-count calibration campaign, Gate 5 proof threshold changes for 1.0 qualifier
 
 **Outside this product's identity:** Replacing Kaggle Docker validation; changing preflight Gates 2–4 thresholds
 
@@ -265,8 +297,8 @@ flowchart LR
 
 | Phase | Units | Outcome |
 |-------|-------|---------|
-| **LFG slice** | U1–U6 | Ranking module, bracket state, qualifier 1.0, lineage skip, training budget hooks, bracket self-play sampling |
-| **Follow-up** | U7–U8 | Agent CLI, automated bracket match scheduling |
+| **LFG slice (cb2a205)** | U1–U6 | Ranking module, bracket state, qualifier 1.0, lineage skip, training budget hooks, bracket self-play sampling |
+| **LFG deferred** | U7–U8 | `ow eval bracket`, qualifier_eval worker, round-robin `bracket_match` scheduling |
 
 ---
 

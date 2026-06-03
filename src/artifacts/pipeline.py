@@ -20,6 +20,7 @@ OptionalJobKind = Literal[
     "tournament",
     "checkpoint_eval",
     "qualifier_eval",
+    "bracket_match",
 ]
 
 

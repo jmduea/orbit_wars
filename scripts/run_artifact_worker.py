@@ -28,6 +28,8 @@ from src.artifacts.checkpoint_compat import (  # noqa: E402
     validate_checkpoint_config_compatibility,
 )
 from src.artifacts.checkpoint_eval import run_checkpoint_eval_job  # noqa: E402
+from src.artifacts.qualifier_eval import run_qualifier_eval_job  # noqa: E402
+from src.artifacts.tournament.bracket.match_worker import run_bracket_match_job  # noqa: E402
 from src.artifacts.docker_validation import (
     run_docker_validation_subprocess,  # noqa: E402
 )
@@ -196,6 +198,61 @@ def _run_docker_validation_job(job: dict[str, object]) -> None:
     )
 
 
+def _run_qualifier_eval_job(job: dict[str, object]) -> None:
+    job_file = Path(str(job["job_file"]))
+    result_dir = _job_result_dir(job, job_file)
+    queue_dir = job_file.parent
+    summary = run_qualifier_eval_job(
+        job,
+        result_dir=result_dir,
+        queue_dir=queue_dir,
+    )
+    manifest_path = _job_manifest_path(job, result_dir)
+    atomic_write_json(
+        manifest_path,
+        {
+            "job_id": job["job_id"],
+            "kind": job.get("kind"),
+            "update": job["update"],
+            "checkpoint_path": str(job["checkpoint_path"]),
+            "status": "completed",
+            **summary,
+        },
+    )
+    _write_status(
+        job_file,
+        "completed",
+        result_dir=str(result_dir),
+        result_manifest_path=str(manifest_path),
+        validation_ok=bool(summary.get("validation_ok")),
+        qualifier_cleared=bool(summary.get("qualifier_cleared")),
+    )
+
+
+def _run_bracket_match_job(job: dict[str, object]) -> None:
+    job_file = Path(str(job["job_file"]))
+    result_dir = _job_result_dir(job, job_file)
+    summary = run_bracket_match_job(job, result_dir=result_dir)
+    manifest_path = _job_manifest_path(job, result_dir)
+    atomic_write_json(
+        manifest_path,
+        {
+            "job_id": job["job_id"],
+            "kind": job.get("kind"),
+            "update": job["update"],
+            "checkpoint_path": str(job["checkpoint_path"]),
+            "status": "completed",
+            **summary,
+        },
+    )
+    _write_status(
+        job_file,
+        "completed",
+        result_dir=str(result_dir),
+        result_manifest_path=str(manifest_path),
+    )
+
+
 def _run_checkpoint_eval_job(job: dict[str, object]) -> None:
     job_file = Path(str(job["job_file"]))
     result_dir = _job_result_dir(job, job_file)
@@ -300,6 +357,10 @@ def _process_job(job: dict[str, object]) -> None:
         _run_tournament_job(job)
     elif kind == "checkpoint_eval":
         _run_checkpoint_eval_job(job)
+    elif kind == "qualifier_eval":
+        _run_qualifier_eval_job(job)
+    elif kind == "bracket_match":
+        _run_bracket_match_job(job)
     else:
         raise ValueError(f"unsupported job kind: {kind!r}")
 
