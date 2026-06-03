@@ -8,6 +8,8 @@ depends_on: agent-native-phase2 (PR)
 
 # Agent-native Phase 3 — large refactors (scheduled)
 
+> **Update 2026-06-02:** Items 1–4 below are shipped on `main`. See `docs/agent-native-phase3-status.md` for evidence and operator entry points. This file remains the historical backlog spec.
+
 Phase 2 shipped composable gate **recipes** and operator **primitives**; Phase 3 decomposes remaining workflow monoliths and externalizes gate specs. **No implementation in Phase 2 PR** — this document is the ordered backlog.
 
 ## Suggested order

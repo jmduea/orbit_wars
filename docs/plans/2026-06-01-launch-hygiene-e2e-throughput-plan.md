@@ -1,7 +1,7 @@
 ---
 title: "feat: Launch hygiene e2e throughput verification and recovery"
 type: feat
-status: active
+status: completed
 date: 2026-06-01
 origin: docs/brainstorms/2026-06-01-launch-hygiene-e2e-throughput-requirements.md
 related_plan: docs/plans/2026-06-01-002-fix-launch-hygiene-throughput-plan.md
