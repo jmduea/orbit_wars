@@ -429,12 +429,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     unified_cal = subparsers.add_parser(
         "calibrate-unified-tournament",
-        help="Scaffold unified tournament calibration artifact (GPU campaigns optional).",
+        help="Unified Stage-1 calibration sweep (games-per-pair + combined floors).",
     )
     unified_cal.add_argument(
         "--out",
         type=Path,
         default=Path("docs/benchmarks/preflight-calibration.json"),
+        help="Preflight calibration JSON to merge unified_tournament section into.",
+    )
+    unified_cal.add_argument(
+        "--artifact-out",
+        type=Path,
+        default=Path("docs/benchmarks/unified-tournament-calibration.json"),
+        help="Full calibration campaign report JSON.",
+    )
+    unified_cal.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
     )
     unified_cal.add_argument(
         "--checkpoint",
@@ -453,7 +465,7 @@ def build_parser() -> argparse.ArgumentParser:
     unified_cal.add_argument(
         "--write-stub",
         action="store_true",
-        help="Merge non-enforcing unified_tournament stub into --out JSON.",
+        help="Merge non-enforcing unified_tournament stub into --out JSON (no GPU sweep).",
     )
 
     gate = subparsers.add_parser(
@@ -903,11 +915,14 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
 
 def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
     from src.jax.unified_tournament_calibration import (
+        DEFAULT_CALIBRATION_CHECKPOINT,
         UnifiedCalibrationPlan,
         build_unified_calibration_report,
         default_unified_tournament_stub,
+        discover_unified_cal_snapshots,
         load_unified_section_from_calibration,
         merge_unified_section_into_calibration,
+        run_unified_calibration_sweep,
         write_unified_calibration_artifact,
     )
 
@@ -915,35 +930,95 @@ def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
     games_candidates = tuple(
         int(part.strip()) for part in args.games_per_pair.split(",") if part.strip()
     )
+    checkpoints = tuple(args.checkpoint) or (DEFAULT_CALIBRATION_CHECKPOINT,)
+    for checkpoint in checkpoints:
+        if not checkpoint.is_file() and not args.dry_run and not args.write_stub:
+            print(f"missing checkpoint: {checkpoint}", file=sys.stderr)
+            return 1
+
+    base_section = load_unified_section_from_calibration(args.out)
     plan = UnifiedCalibrationPlan(
-        checkpoint_paths=tuple(args.checkpoint),
+        checkpoint_paths=checkpoints,
         games_per_pair_candidates=games_candidates or (4,),
         dry_run=bool(args.dry_run),
+        output_root=args.output_root,
     )
-    report = build_unified_calibration_report(
-        repo_root=REPO_ROOT,
-        plan=plan,
-        analyze_only=bool(args.analyze_only),
-        seconds_total=__import__("time").perf_counter() - started,
-    )
+    snapshots = []
     if args.write_stub:
         stub = default_unified_tournament_stub(enforcement=False)
-        existing = load_unified_section_from_calibration(args.out)
-        if existing and existing.get("incumbent_checkpoint_path"):
-            stub["incumbent_checkpoint_path"] = existing["incumbent_checkpoint_path"]
+        if base_section and base_section.get("incumbent_checkpoint_path"):
+            stub["incumbent_checkpoint_path"] = base_section["incumbent_checkpoint_path"]
         merged = merge_unified_section_into_calibration(args.out, stub)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        report = build_unified_calibration_report(
+            repo_root=REPO_ROOT,
+            plan=plan,
+            snapshots=[],
+            analyze_only=True,
+            seconds_total=__import__("time").perf_counter() - started,
+            base_section=base_section,
+            enable_enforcement=False,
+        )
         report["written_calibration_path"] = str(args.out)
-    else:
-        write_unified_calibration_artifact(args.out, report)
+        write_unified_calibration_artifact(args.artifact_out, report)
+        print(json.dumps(report, indent=2))
+        return 0
+
+    if not args.analyze_only:
+        snapshots.extend(
+            run_unified_calibration_sweep(
+                plan=plan,
+                repo_root=REPO_ROOT,
+                base_section=base_section,
+            )
+        )
+    snapshots.extend(
+        discover_unified_cal_snapshots(
+            plan.output_root,
+            games_per_pair_candidates=plan.games_per_pair_candidates,
+            checkpoint_paths=checkpoints,
+        )
+    )
+    seen: set[tuple[str, int]] = set()
+    deduped: list = []
+    for snapshot in snapshots:
+        key = (snapshot.checkpoint_path, snapshot.games_per_pair)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(snapshot)
+
+    report = build_unified_calibration_report(
+        repo_root=REPO_ROOT,
+        plan=plan,
+        snapshots=deduped,
+        analyze_only=bool(args.analyze_only),
+        seconds_total=__import__("time").perf_counter() - started,
+        base_section=base_section,
+        enable_enforcement=True,
+    )
+    write_unified_calibration_artifact(args.artifact_out, report)
+    unified_section = report.get("unified_tournament")
+    if isinstance(unified_section, dict):
+        merged = merge_unified_section_into_calibration(args.out, unified_section)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        report["written_preflight_calibration_path"] = str(args.out)
+    report["written_artifact_path"] = str(args.artifact_out)
     print(json.dumps(report, indent=2))
     if plan.dry_run:
         print(
             "Dry run: no GPU calibration campaigns executed. "
-            "Pass checkpoints and omit --dry-run to run campaigns (deferred).",
+            "Omit --dry-run to run Stage-1 unified ladder sweeps.",
             flush=True,
         )
+    elif not deduped:
+        print(
+            "No calibration snapshots found; run without --analyze-only to execute campaigns.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
