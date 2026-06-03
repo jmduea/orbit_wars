@@ -345,6 +345,7 @@ def run_preflight_gate(
     output_root: Path = Path("outputs"),
     repo_root: Path | None = None,
     dry_run: bool = False,
+    verbose: bool = False,
     thresholds_path: Path | None = None,
     profiles_path: Path | None = None,
     extra_train_overrides: tuple[str, ...] = (),
@@ -382,6 +383,29 @@ def run_preflight_gate(
         *spec.train_overrides,
         *extra_train_overrides,
     ]
+    from src.jax.benchmark_progress import (
+        emit_benchmark_progress,
+        emit_benchmark_progress_ts,
+        total_updates_from_overrides,
+    )
+
+    updates_hint = total_updates_from_overrides(overrides)
+    updates_note = (
+        f", training.total_updates={updates_hint}" if updates_hint is not None else ""
+    )
+    emit_benchmark_progress_ts(
+        f"preflight gate {gate_id!r}: model={model!r}, campaign={campaign!r}"
+        f"{updates_note}, dry_run={dry_run}"
+    )
+    if verbose:
+        emit_benchmark_progress(
+            "Gate train overrides: " + " ".join(overrides)
+        )
+        emit_benchmark_progress(
+            "Progress streams on stderr (child ow train + log_every lines). "
+            "First update may stall during JAX compile. "
+            "Do not pipe this command to tail/head — use --out for JSON."
+        )
     run_ow_train(
         overrides,
         repo_root=root,
@@ -417,13 +441,20 @@ def run_preflight_gate(
             checkpoint=find_latest_checkpoint(run_dir),
         )
     records = read_jsonl_records(log_files[0])
-    return evaluate_gate_records(
+    evaluation = evaluate_gate_records(
         spec,
         records,
         campaign=campaign,
         run_dir=run_dir,
         checkpoint=find_latest_checkpoint(run_dir),
     )
+    emit_benchmark_progress_ts(
+        f"preflight gate {gate_id!r} finished: verdict={evaluation.verdict.value} "
+        f"run_dir={evaluation.run_dir}"
+    )
+    if verbose and evaluation.reasons:
+        emit_benchmark_progress(f"reasons: {', '.join(evaluation.reasons)}")
+    return evaluation
 
 
 def run_preflight_ladder(

@@ -108,6 +108,15 @@ uv run ow benchmark gate run curriculum_staged --dry-run
 uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
 ```
 
+**Anti-pattern:** `... 2>&1 | tail -20` on long gate/calibration/train commands — no output until the process exits (looks hung). Training subprocess lines stream on **stderr**; write reports with `--out` and leave stderr visible. Use `--verbose` for override hints; poll artifacts with `ow runs watch` or `tail -f outputs/campaigns/<campaign>/runs/<run_id>/logs/*_jax.jsonl`.
+
+**Gate 4 example (500 updates, ~GPU time):**
+
+```bash
+env -u JAX_COMPILATION_CACHE_DIR uv run ow benchmark gate run curriculum_staged \
+  --verbose --out /tmp/curriculum_staged.json
+```
+
 Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`.
 
 **Prefer primitives over `learn-proof` in agent loops:**

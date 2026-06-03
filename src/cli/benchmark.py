@@ -52,7 +52,7 @@ def print_benchmark_help() -> None:
         "  make preflight-learn-proof\n"
         "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
         "  uv run ow benchmark gate --list\n"
-        "  uv run ow benchmark gate run beat_noop --dry-run\n"
+        "  uv run ow benchmark gate run beat_noop --dry-run --verbose\n"
         "  uv run ow benchmark gate beat_random --dry-run\n\n"
         "E2E throughput (launch hygiene):\n"
         "  make test-launch-hygiene-e2e-throughput\n"
@@ -501,6 +501,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("outputs"),
     )
     gate.add_argument("--dry-run", action="store_true")
+    gate.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "Extra stderr progress (train overrides, hints). Training subprocess "
+            "output always streams on stderr."
+        ),
+    )
     gate.add_argument("--thresholds-path", type=Path, default=None)
     gate.add_argument("--profile-path", type=Path, default=None)
     gate.add_argument(
@@ -1464,6 +1472,7 @@ def run_gate_cli(args: argparse.Namespace) -> int:
         model=args.model,
         output_root=args.output_root,
         dry_run=bool(args.dry_run),
+        verbose=bool(args.verbose),
         thresholds_path=args.thresholds_path,
         profiles_path=args.profile_path,
         train_overrides=tuple(args.train_overrides),
