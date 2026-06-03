@@ -49,7 +49,18 @@ env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
 
 **Acceptance:** exit code 0; all three metrics (`env_steps_per_sec`, `samples_per_sec`, `seconds_per_update_mean`) within derived band.
 
-If gate fails, see `docs/plans/2026-06-01-launch-hygiene-e2e-throughput-plan.md` Phase B (U7).
+If gate fails after hot-path options are exhausted, run the **learner ablation** (A pre-hygiene SHA vs B launch-hygiene `main`) — winner is learn-proof / gate trends, not throughput. See `docs/benchmarks/launch-hygiene-ablation.json` and `docs/plans/2026-06-01-launch-hygiene-rollout-throughput-design.md`. Phase B (U7) is cancelled unless a new rollout sampling design lands.
+
+## Learner ablation (when tier-2 fails)
+
+Compare arms with the same preflight recipe (`transformer_factorized_small`, `--through beat_random`):
+
+| Arm | Checkout | Command |
+|-----|----------|---------|
+| A (pre-hygiene) | `79162a2088160b8ed05c3e3a050e064c7f6c9556` | `uv run ow benchmark learn-proof --model transformer_factorized_small --through beat_random --out outputs/preflight/ablation_arm_a.json` |
+| B (launch-hygiene) | `main` | `make preflight-learn-proof` |
+
+Artifact: `docs/benchmarks/launch-hygiene-ablation.json`. Thresholds: `docs/benchmarks/preflight-calibration.json`.
 
 ## Preflight learning proof
 

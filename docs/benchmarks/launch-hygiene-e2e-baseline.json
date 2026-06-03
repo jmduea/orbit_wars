@@ -201,22 +201,24 @@
   },
   "operator_example": "git worktree add ../orbit_wars-pre-hygiene 79162a2088160b8ed05c3e3a050e064c7f6c9556 && cd ../orbit_wars-pre-hygiene && uv sync --group dev && env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pre_hygiene_capture --repeats 3 --updates 20 --warmup 2 --out /tmp/launch_hygiene_e2e_capture_raw.json",
   "gap_assessment": {
-    "status": "out_of_band",
-    "assessed_commit_sha": "2baa4c0a3138890df331b23f03e46938762b18db",
-    "assessed_date": "2026-06-01",
+    "status": "out_of_band_unachievable",
+    "assessed_commit_sha": "e1fad57cfc59eaba7ac54a9965b372fcb31499b3",
+    "assessed_date": "2026-06-02",
     "gate_passed": false,
     "measured": {
-      "env_steps_per_sec": 975.4188958167518,
-      "samples_per_sec": 4877.094479083759,
-      "seconds_per_update_mean": 16.403208989100676
+      "env_steps_per_sec": 2399.1501315591954,
+      "samples_per_sec": 4798.300263118391,
+      "seconds_per_update_mean": 6.669028248599716
     },
     "delta_vs_baseline_mean_pct": {
-      "env_steps_per_sec": -90.03,
-      "samples_per_sec": -90.02,
-      "seconds_per_update_mean": 902.08
+      "env_steps_per_sec": -75.5,
+      "samples_per_sec": -90.2,
+      "seconds_per_update_mean": 307.4
     },
-    "note": "Current branch (feat/launch-hygiene-bundle) fails all three metrics vs pre-hygiene baseline on same RTX 5080 / cuda:0. Phase B (U7) required.",
-    "artifact": "/tmp/launch_hygiene_e2e_gap.json"
+    "note": "Tier-2 gate failed on RTX 5080 / cuda:0 at e1fad57. Hot-path recovery exhausted (rollout-throughput design). Learner ablation favors launch-hygiene: see docs/benchmarks/launch-hygiene-ablation.json — keep hygiene despite throughput gap.",
+    "artifact": "/tmp/launch_hygiene_e2e_gate.json",
+    "ablation_artifact": "docs/benchmarks/launch-hygiene-ablation.json",
+    "phase_b_status": "cancelled_hot_path_exhausted"
   },
   "capture_status": "complete"
 }

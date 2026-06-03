@@ -20,19 +20,17 @@
 
 | Item | Acceptance | Link |
 | ---- | ------------ | ---- |
-| Launch hygiene tier-2 e2e gate pass on baseline GPU | `make test-launch-hygiene-e2e-throughput` exit 0 on RTX 5080 / same machine as baseline capture | [runbook](operator-runbook.md) · [plan](plans/2026-06-01-launch-hygiene-e2e-throughput-plan.md) |
-| Launch hygiene Phase B (conditional) | Only if tier-2 fails: hot-path recovery per U7; re-gate until pass; tier-1 still green | [plan U7](plans/2026-06-01-launch-hygiene-e2e-throughput-plan.md#u7-conditional-phase-b--profile-driven-hot-path-recovery) |
-| Preflight learn-proof refresh (post-hygiene) | `make preflight-learn-proof` through `beat_random` vs `preflight-calibration.json` after profile/calibration refresh | [runbook](operator-runbook.md) · [plan](plans/2026-06-02-005-feat-preflight-training-profiles-plan.md) |
+| Launch hygiene tier-2 throughput recovery (optional) | Only if a new rollout sampling design lands: re-gate vs baseline; tier-1 still green | [rollout design](plans/2026-06-01-launch-hygiene-rollout-throughput-design.md) · [ablation](benchmarks/launch-hygiene-ablation.json) |
 
 ## Done (last 5)
 
 | Item | Link |
 | ---- | ---- |
+| Launch hygiene learner ablation + tier-2 assessment | Tier-2 failed (~4× sec/update); hot path exhausted; B (hygiene) wins learn-proof vs A (79162a); artifact [ablation.json](benchmarks/launch-hygiene-ablation.json) | [plan](plans/2026-06-02-013-feat-launch-hygiene-tier2-preflight-plan.md) · [runbook](operator-runbook.md) |
+| Preflight learn-proof refresh (post-hygiene) | VERIFIED through `beat_random` vs `preflight-calibration.json` | [report](../outputs/preflight/factorized_post_hygiene_learn_proof.json) · [runbook](operator-runbook.md) |
 | Cursor session-start hook: `docs/CURSOR.md` + project `.cursor/hooks.json` example | [plan](plans/2026-06-02-011-feat-cursor-session-start-hook-plan.md) · [Phase 3 §4](plans/2026-06-02-agent-native-phase3-refactors.md) |
 | Observability debug bundle: `mean_ships_per_launch`, PPO `_2p`/`_4p` + update-time fractions gated behind `metric_groups.debug` | [plan](plans/2026-06-02-010-feat-observability-debug-metrics-plan.md) |
 | Split decoder replay batch contracts (#167) | [plan](plans/2026-06-02-009-feat-split-decoder-replay-batch-contracts-plan.md) · Closes #167 |
-| Planet Flow queue residuals: shortlist verify, metric descriptors, PPO epoch driver, compiler-control tests (#166, #168–#170) | [plan](plans/2026-06-02-008-feat-planet-flow-queue-residuals-plan.md) · Closes #166, #168, #169, #170 |
-| Submit-valid operator closure: status inlines `checkpoint_evals`, hybrid profile test | [plan](plans/2026-06-02-007-feat-submit-valid-operator-closure-plan.md) |
 
 _Last triaged: 2026-06-02_
 

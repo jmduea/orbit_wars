@@ -104,6 +104,21 @@ def test_committed_e2e_baseline_artifact_is_valid() -> None:
     assert loaded["gate"] == E2E_THROUGHPUT_GATE
     assert len(loaded["runs"]) >= 3
     assert "pass_band" in loaded
+    gap = loaded.get("gap_assessment")
+    assert gap is not None
+    assert gap.get("ablation_artifact") == "docs/benchmarks/launch-hygiene-ablation.json"
+
+
+def test_committed_launch_hygiene_ablation_artifact() -> None:
+    import json
+
+    path = Path("docs/benchmarks/launch-hygiene-ablation.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["gate"] == "launch_hygiene_learner_ablation"
+    assert payload["winner"] == "B_launch_hygiene"
+    assert payload["arms"]["A_pre_hygiene"]["learn_proof"]["verdict"] == "NOT_VERIFIED"
+    assert payload["arms"]["B_launch_hygiene"]["learn_proof"]["verdict"] == "VERIFIED"
+    assert payload["tier2_status"] == "failed_out_of_band"
 
 
 def test_load_baseline_missing_file(tmp_path: Path) -> None:
