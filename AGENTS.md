@@ -1,6 +1,6 @@
 # Orbit Wars Agent Guide
 
-Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architecture depth, `docs/AGENT_CAPABILITIES.md` for task prompts, `docs/CURSOR.md` for plugin setup, and `docs/agent-native-phase3-status.md` for shipped benchmark/sweep primitives.
+Hydra-first Python 3.12 JAX PPO project. See `docs/README.md` for the doc-type map, then `docs/ONBOARDING.md` for architecture depth, `docs/AGENT_CAPABILITIES.md` for task prompts, `docs/CURSOR.md` for plugin setup, and `docs/agent-native-phase3-status.md` for shipped benchmark/sweep primitives.
 
 ## Commands
 
