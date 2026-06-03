@@ -34,6 +34,20 @@
       "Calibration observed max last-window win rate 0.607, max rolling-10 0.826."
     ]
   },
+  "unified_tournament": {
+    "enforcement": false,
+    "noop_min_combined": 0.7,
+    "random_min_combined": 0.58,
+    "games_per_pair": 4,
+    "prerequisite_seeds": [0, 1, 2, 3, 4],
+    "incumbent_seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+    "four_p_baseline_fillers": ["noop", "random", "random"],
+    "incumbent_checkpoint_path": null,
+    "notes": [
+      "Non-enforcing stub until unified calibration campaigns complete.",
+      "Set enforcement=true only after measured combined-metric pass rates."
+    ]
+  },
   "runs": [
     {
       "opponent": "noop_only",

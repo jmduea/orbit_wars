@@ -63,7 +63,12 @@ ACCEPTABLE_SHIP_ACTION_MODES = frozenset({"buckets", "continuous_fraction"})
 ACCEPTABLE_TRAJECTORY_SHIELD_MODES = frozenset({"off", "cheap", "tiered", "exact"})
 ACCEPTABLE_REPLAY_BACKENDS = frozenset({"docker", "local"})
 ACCEPTABLE_TOURNAMENT_FORMATS = frozenset(
-    {"2p_vs_baseline", "2p_head_to_head", "4p_free_for_all"}
+    {
+        "2p_vs_baseline",
+        "2p_head_to_head",
+        "4p_free_for_all",
+        "4p_challenger_vs_baselines",
+    }
 )
 ACCEPTABLE_PROMOTION_STRATEGIES = frozenset({"metric", "tournament", "hybrid"})
 
@@ -112,6 +117,8 @@ def test_hybrid_promotion_artifacts_profile_composes() -> None:
     assert cfg.artifacts.promotion.strategy in ACCEPTABLE_PROMOTION_STRATEGIES
     assert cfg.artifacts.promotion.strategy == "hybrid"
     assert cfg.artifacts.tournament.enabled
+    assert cfg.artifacts.unified_tournament.enabled
+    assert "4p_challenger_vs_baselines" in cfg.artifacts.tournament.formats
     assert cfg.artifacts.artifact_pipeline.checkpoint_eval_async
     assert not cfg.artifacts.artifact_pipeline.docker_validation_async
     assert not cfg.artifacts.artifact_pipeline.replay_async
