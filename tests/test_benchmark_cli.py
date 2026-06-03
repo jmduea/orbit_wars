@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from src.cli import benchmark as benchmark_cli
@@ -95,6 +96,27 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     )
     assert smoke.command == "planet-flow-noop-smoke"
     assert smoke.top_k == 2
+
+
+def test_learn_proof_print_primitives(capsys) -> None:
+    assert benchmark_cli.main(["learn-proof", "--print-primitives"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["prefer_primitives"] is True
+    assert "ow benchmark gate run beat_noop" in payload["primitives"]
+
+
+def test_learn_proof_steps_beat_noop_dry_run(capsys) -> None:
+    assert (
+        benchmark_cli.main(
+            ["learn-proof", "--steps", "beat_noop", "--dry-run"],
+        )
+        == 1
+    )
+    out = capsys.readouterr().out
+    start = out.index('{\n  "gate":')
+    payload = json.loads(out[start:])
+    assert payload["steps"] == ["beat_noop"]
+    assert payload["stages"][0]["gate_id"] == "beat_noop"
 
 
 def test_planet_flow_training_benchmark_requires_control_metrics(

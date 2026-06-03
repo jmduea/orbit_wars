@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if ! context_json="$(make -s -C "$ROOT" agent-context 2>/dev/null)"; then
-  printf '%s\n' '{"additional_context":"make agent-context failed (see docs/CURSOR.md failure modes)"}'
+  printf '%s\n' '{"additional_context":"make agent-context failed — check docs/CURSOR.md; defer GPU commands when terminals show ow train / calibrate-seed-scheduler / pytest"}'
   exit 0
 fi
 

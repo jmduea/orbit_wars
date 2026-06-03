@@ -34,10 +34,11 @@ help:
 	@echo ""
 	@echo "Agents:"
 	@echo "  agent-context            JSON session context for coding agents"
+	@echo "                           RESOLVED=smoke embeds truncated resolved config"
 	@echo "  See docs/AGENT_CAPABILITIES.md and AGENTS.md"
 
 agent-context:
-	uv run python scripts/agent_context.py
+	uv run python scripts/agent_context.py $(if $(filter smoke,$(RESOLVED)),--resolved smoke,)
 
 # Default dev loop: CPU-only, no slow/JAX-compile smokes (safe on WSL2 + NVIDIA).
 test: test-fast

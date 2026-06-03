@@ -5,7 +5,8 @@ Task-oriented guide for coding agents. Canonical policy: `AGENTS.md`. Architectu
 ## Session context
 
 ```bash
-make agent-context          # JSON: git branch, preflight thresholds, roadmap, recent runs, latest eval queue
+make agent-context          # JSON: git branch, preflight thresholds, gate ids, GPU hint, recent runs
+make agent-context RESOLVED=smoke   # also embed truncated Hydra resolved-config snapshot + hash
 uv run ow train print_resolved_config=true
 ```
 
@@ -13,7 +14,7 @@ uv run ow train print_resolved_config=true
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow runs watch`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow sweep create --backend wandb\|kaggle` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
 
 ## Train
@@ -60,7 +61,19 @@ uv run ow benchmark gate run curriculum_staged --dry-run
 uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
 ```
 
-Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`. Full ladder: `ow benchmark learn-proof` (composes primitives above).
+Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`.
+
+**Prefer primitives over `learn-proof` in agent loops:**
+
+```bash
+uv run ow benchmark learn-proof --print-primitives   # JSON command chain, no GPU
+uv run ow benchmark learn-proof --steps beat_noop --dry-run
+uv run ow benchmark gate run beat_noop --dry-run
+uv run ow benchmark gate run beat_random --dry-run
+uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
+```
+
+Full ladder composer (CI/human): `ow benchmark learn-proof` / `make preflight-learn-proof`.
 
 **Sweeps (unified CLI):**
 
@@ -68,7 +81,10 @@ Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curric
 uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/2p_only_throughput.yaml
 uv run ow sweep create --backend kaggle --sweep-yaml conf/wandb_sweep/2p_only_throughput.yaml --dry-run
 uv run ow sweep status --backend wandb --sweep-id <id> --project orbit_wars
+uv run ow sweep cancel --backend wandb --sweep-id <id> --project orbit_wars --dry-run
 ```
+
+**CRUD boundaries:** train runs and checkpoints are append-only under `outputs/campaigns/` — no `ow runs delete`; use filesystem cleanup when needed. Promotion rollback: `ow promote demote`. Sweep teardown: `ow sweep cancel` (W&B active runs).
 
 Deprecated with one-release warnings: bare `wandb sweep`, `ow train kaggle launch --create-sweep`.
 

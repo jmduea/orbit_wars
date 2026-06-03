@@ -10,6 +10,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+LEARN_PROOF_PRIMITIVES: tuple[str, ...] = (
+    "ow benchmark gate run beat_noop",
+    "ow benchmark gate run beat_random",
+    "ow benchmark gate run curriculum_staged",
+    "ow benchmark tournament-proof --eval-checkpoint <ckpt>",
+)
+
 
 def _git_head_sha() -> str | None:
     try:
@@ -183,6 +190,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("beat_noop", "beat_random", "curriculum_staged"),
         default=None,
         help="Run gates in order through this gate id (inclusive).",
+    )
+    learn_proof.add_argument(
+        "--steps",
+        default=None,
+        metavar="GATES",
+        help="Comma-separated gate ids to run in ladder order (e.g. beat_noop,beat_random).",
+    )
+    learn_proof.add_argument(
+        "--print-primitives",
+        action="store_true",
+        help="Print primitive command chain JSON and exit (no training).",
     )
     learn_proof.add_argument(
         "--model",
@@ -1020,6 +1038,44 @@ def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def _learn_proof_primitive_payload() -> dict[str, object]:
+    return {
+        "workflow": "ow benchmark learn-proof",
+        "prefer_primitives": True,
+        "primitives": list(LEARN_PROOF_PRIMITIVES),
+        "gate_list_command": "uv run ow benchmark gate --list",
+    }
+
+
+def _resolve_learn_proof_gates(args: argparse.Namespace) -> tuple[str, ...]:
+    from src.jax.preflight import GATE_ORDER
+
+    if args.steps:
+        if args.gate is not None or args.through is not None:
+            raise SystemExit("Use only one of --steps, --gate, or --through.")
+        requested = tuple(
+            item.strip()
+            for item in str(args.steps).split(",")
+            if item.strip()
+        )
+        if not requested:
+            raise SystemExit("--steps requires at least one gate id.")
+        unknown = [gate_id for gate_id in requested if gate_id not in GATE_ORDER]
+        if unknown:
+            raise SystemExit(
+                f"Unknown learn-proof step(s): {', '.join(unknown)} "
+                f"(expected subset of {', '.join(GATE_ORDER)})"
+            )
+        return tuple(gate_id for gate_id in GATE_ORDER if gate_id in requested)
+    if args.gate is not None and args.through is not None:
+        raise SystemExit("Use only one of --gate or --through.")
+    if args.gate is not None:
+        return (str(args.gate),)
+    through = args.through or "beat_random"
+    stop_index = GATE_ORDER.index(through)
+    return GATE_ORDER[: stop_index + 1]
+
+
 def run_learn_proof_cli(args: argparse.Namespace) -> int:
     """Thin composer over gate-run and tournament-proof primitives."""
 
@@ -1028,22 +1084,31 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
         PreflightVerdict,
         gate_evaluation_to_dict,
         run_preflight_gate,
-        run_preflight_ladder,
         write_report,
     )
+
+    if args.print_primitives:
+        print(json.dumps(_learn_proof_primitive_payload(), indent=2))
+        return 0
 
     if args.eval_checkpoint is not None:
         return run_tournament_proof_cli(args)
 
-    if args.gate is not None and args.through is not None:
-        raise SystemExit("Use only one of --gate or --through.")
+    selected_gates = _resolve_learn_proof_gates(args)
 
     extra_train_overrides = tuple(args.train_overrides)
     started = __import__("time").perf_counter()
-    if args.gate is not None:
+    evaluations = []
+    overall_verdict = PreflightVerdict.VERIFIED
+    for gate_id in selected_gates:
+        gate_model = (
+            "transformer_factorized"
+            if gate_id == "curriculum_staged" and args.model != "planet_flow_target_heatmap"
+            else args.model
+        )
         evaluation = run_preflight_gate(
-            args.gate,
-            model=args.model,
+            gate_id,
+            model=gate_model,
             output_root=args.output_root,
             repo_root=REPO_ROOT,
             dry_run=args.dry_run,
@@ -1051,37 +1116,23 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
             profiles_path=args.profile_path,
             extra_train_overrides=extra_train_overrides,
         )
-        overall_verdict = evaluation.verdict
-        stages = [gate_evaluation_to_dict(evaluation)]
-    else:
-        through = args.through or "beat_random"
-        overall_verdict, stage_evaluations = run_preflight_ladder(
-            through=through,
-            model=args.model,
-            output_root=args.output_root,
-            repo_root=REPO_ROOT,
-            dry_run=args.dry_run,
-            thresholds_path=args.thresholds_path,
-            profiles_path=args.profile_path,
-            extra_train_overrides=extra_train_overrides,
-        )
-        stages = [gate_evaluation_to_dict(item) for item in stage_evaluations]
+        evaluations.append(evaluation)
+        if evaluation.verdict != PreflightVerdict.VERIFIED:
+            overall_verdict = evaluation.verdict
+            break
+    stages = [gate_evaluation_to_dict(item) for item in evaluations]
 
     report: dict[str, object] = {
         "gate": "learn_proof",
         "commit_sha": _git_head_sha(),
         "seconds_total": __import__("time").perf_counter() - started,
         "verdict": overall_verdict.value,
-        "through": args.through or args.gate or "beat_random",
+        "through": args.through or args.gate or ",".join(selected_gates),
+        "steps": list(selected_gates),
         "model": args.model,
         "gate_order": list(GATE_ORDER),
         "stages": stages,
-        "primitives": [
-            "ow benchmark gate run beat_noop",
-            "ow benchmark gate run beat_random",
-            "ow benchmark gate run curriculum_staged",
-            "ow benchmark tournament-proof --eval-checkpoint <ckpt>",
-        ],
+        **_learn_proof_primitive_payload(),
     }
     write_report(args.out, report)
     print(json.dumps(report, indent=2))

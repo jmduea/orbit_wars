@@ -10,6 +10,10 @@ def test_build_context_includes_preflight_and_roadmap() -> None:
     payload = build_context(limit_runs=0)
     assert payload["preflight"]["present"] is True
     assert "min_win_rate_delta" in payload["preflight"]["learning_signal"]
+    assert payload["preflight"]["gates"]["present"] is True
+    assert "beat_noop" in payload["preflight"]["gates"]["gate_ids"]
+    assert payload["resolved_config"]["print_command"]
+    assert "single_gpu_note" in payload["gpu_contention"]
     assert payload["roadmap"]["present"] is True
     assert "docs" in payload
 
