@@ -1,7 +1,7 @@
 ---
 date: 2026-06-03
 topic: jax-comet-subsystem
-status: draft
+status: completed
 origin: AGENTS.md JAX/Kaggle env parity gap; review finding #5
 ---
 
