@@ -94,13 +94,15 @@ def run_ow_train(
     dry_run: bool = False,
     label: str | None = None,
 ) -> None:
+    from src.jax.benchmark_progress import emit_benchmark_progress
+
     cmd = ["uv", "run", "ow", "train", *overrides]
     if dry_run:
-        print(" ".join(cmd), flush=True)
+        emit_benchmark_progress(" ".join(cmd))
         return
     banner = label or "ow train"
-    print(f"\n=== {banner} ===", flush=True)
-    print(" ".join(cmd), flush=True)
+    emit_benchmark_progress(f"\n=== {banner} ===")
+    emit_benchmark_progress(" ".join(cmd))
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     proc = subprocess.Popen(
@@ -114,7 +116,7 @@ def run_ow_train(
     )
     assert proc.stdout is not None
     for line in proc.stdout:
-        print(line, end="", flush=True)
+        emit_benchmark_progress(line.rstrip("\n"))
     return_code = proc.wait()
     if return_code != 0:
         raise RuntimeError(f"ow train failed with exit code {return_code}")

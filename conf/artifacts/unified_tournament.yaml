@@ -1,0 +1,11 @@
+defaults:
+  - base
+  - _self_
+
+unified_tournament:
+  enabled: true
+  enforcement: false
+
+tournament:
+  enabled: true
+  formats: [2p_vs_baseline, 2p_head_to_head, 4p_challenger_vs_baselines]

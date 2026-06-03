@@ -1,0 +1,149 @@
+{
+  "gate": "unified_tournament_calibration",
+  "commit_sha": "2cb7f6e50079dd06df64bee5d79713b6d123747e",
+  "seconds_total": 3284.970161379999,
+  "analyze_only": false,
+  "dry_run": false,
+  "checkpoint_paths": [
+    "outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl"
+  ],
+  "games_per_pair_candidates": [
+    2,
+    4,
+    8
+  ],
+  "unified_tournament": {
+    "enforcement": true,
+    "noop_min_combined": 0.76,
+    "random_min_combined": 0.76,
+    "games_per_pair": 2,
+    "prerequisite_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "incumbent_seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "four_p_baseline_fillers": [
+      "noop",
+      "random",
+      "random"
+    ],
+    "incumbent_bootstrap_opponent": "nearest_sniper",
+    "notes": [
+      "Floors derived from unified Stage-1 calibration (combined 2p+4p).",
+      "Measured at games_per_pair=2 with 5% margin below observed min.",
+      "noop combined floor 0.76 exceeds legacy 2p-only 0.7.",
+      "random combined floor 0.76 exceeds legacy 2p-only 0.58."
+    ]
+  },
+  "decision": {
+    "games_decision": {
+      "chosen_games_per_pair": 2,
+      "min_combined_observed": 0.8,
+      "mean_combined_observed": 0.8,
+      "max_seconds": 487.51630126399687,
+      "candidate_count": 3
+    },
+    "floors": {
+      "noop_min_combined": 0.76,
+      "random_min_combined": 0.76,
+      "noop_combined_observed_min": 0.8,
+      "random_combined_observed_min": 0.8,
+      "margin_fraction": 0.05,
+      "legacy_2p_floors": {
+        "noop": 0.7,
+        "random": 0.58
+      }
+    },
+    "enforcement": true
+  },
+  "spec_validation": {
+    "needs_calibration": false,
+    "stage1_seeds": 5,
+    "stage2_seeds": 30
+  },
+  "runs": [
+    {
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars/outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl",
+      "games_per_pair": 2,
+      "campaign": "unified_tournament_cal_g2",
+      "output_dir": "outputs/campaigns/unified_tournament_cal_g2/evaluations/cal_jax_ckpt_last",
+      "seconds_total": 487.51630126399687,
+      "noop_combined": 0.8,
+      "random_combined": 0.8,
+      "noop_win_rate_2p": 0.8,
+      "noop_win_rate_4p": 0.8,
+      "random_win_rate_2p": 0.8,
+      "random_win_rate_4p": 0.8,
+      "stage1_passed": true,
+      "reason": "stage1_calibration_only"
+    },
+    {
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars/outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl",
+      "games_per_pair": 4,
+      "campaign": "unified_tournament_cal_g4",
+      "output_dir": "outputs/campaigns/unified_tournament_cal_g4/evaluations/cal_jax_ckpt_last",
+      "seconds_total": 919.5698764919944,
+      "noop_combined": 0.8,
+      "random_combined": 0.8,
+      "noop_win_rate_2p": 0.8,
+      "noop_win_rate_4p": 0.8,
+      "random_win_rate_2p": 0.8,
+      "random_win_rate_4p": 0.8,
+      "stage1_passed": true,
+      "reason": "stage1_calibration_only"
+    },
+    {
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars/outputs/campaigns/preflight_beat_random/runs/20260602T193448Z-s42-0422c38a/checkpoints/jax_ckpt_last.pkl",
+      "games_per_pair": 8,
+      "campaign": "unified_tournament_cal_g8",
+      "output_dir": "outputs/campaigns/unified_tournament_cal_g8/evaluations/cal_jax_ckpt_last",
+      "seconds_total": 1877.8822082769912,
+      "noop_combined": 0.8,
+      "random_combined": 0.8,
+      "noop_win_rate_2p": 0.8,
+      "noop_win_rate_4p": 0.8,
+      "random_win_rate_2p": 0.8,
+      "random_win_rate_4p": 0.8,
+      "stage1_passed": true,
+      "reason": "stage1_calibration_only"
+    }
+  ],
+  "notes": [
+    "Stage-1-only calibration sweep; Stage-2 incumbent bar unchanged.",
+    "Set enforcement=true only after measured combined floors verify on calibration checkpoints."
+  ]
+}

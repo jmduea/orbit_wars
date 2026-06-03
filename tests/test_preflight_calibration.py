@@ -168,6 +168,20 @@ def test_discover_calibration_snapshots_ignores_newer_empty_runs(tmp_path) -> No
     assert snapshots[0].win_rate_delta is not None
 
 
+def test_unified_tournament_section_in_committed_calibration_parses() -> None:
+    from pathlib import Path
+
+    from src.artifacts.tournament.unified.spec import load_unified_tournament_spec
+
+    path = Path("docs/benchmarks/preflight-calibration.json")
+    spec = load_unified_tournament_spec(path)
+    assert not spec.needs_calibration
+    assert spec.stage1.floors["noop"] == 0.76
+    assert spec.stage1.floors["random"] == 0.76
+    assert spec.stage1.games_per_pair == 2
+    assert spec.enforcement
+
+
 def test_refresh_agents_md_thresholds_replaces_block(tmp_path) -> None:
     from src.jax.preflight_calibration import (
         PREFLIGHT_THRESHOLDS_END,

@@ -139,6 +139,7 @@ wc -l outputs/campaigns/seed_sched_cal_*/runs/*/logs/*_jax.jsonl
 - Planet Flow preflight calibration overrides (`calibration_train_overrides`): `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md`
 - Fix: PR [#165](https://github.com/jmduea/orbit_wars/pull/165) (`aa3686c`)
 - Seed-scheduler calibration (completed; interval 50): `docs/benchmarks/seed-scheduler-calibration.json`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
+- Env shaping calibration (planned; same `run_ow_train` harness): `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md`
 - Direct `ow train` operator lines (different path): `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md` § Training observability
 - Throughput attribution follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`
 - Related sampler-throughput topic: `docs/solutions/performance-issues/launch-hygiene-incremental-carry-throughput.md`

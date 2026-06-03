@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.artifacts.promotion import PromotionAttempt
 from src.artifacts.promotion_manifest import (
@@ -15,8 +16,11 @@ from src.artifacts.promotion_manifest import (
 )
 from src.artifacts.run_paths import RunContext, _git_identity
 from src.artifacts.tournament.resolve import load_train_config_from_checkpoint
-from src.artifacts.tournament.types import LeaderboardRow, TournamentResult
+from src.artifacts.tournament.types import AgentEntry, LeaderboardRow, TournamentResult
 from src.config import TrainConfig
+
+if TYPE_CHECKING:
+    from src.artifacts.tournament.unified.reporting import UnifiedLadderVerdict
 
 
 def _incumbent_tournament_metrics(campaign_dir: Path) -> dict[str, float | None]:
@@ -182,3 +186,108 @@ def top_passing_row(result: TournamentResult) -> LeaderboardRow | None:
         if row.gates_passed:
             return row
     return None
+
+
+def promote_from_unified_ladder(
+    cfg: TrainConfig,
+    context: RunContext,
+    *,
+    challenger: AgentEntry,
+    verdict: UnifiedLadderVerdict,
+    tournament_output_dir: Path,
+    update: int | None = None,
+) -> PromotionAttempt:
+    """Write promoted manifest when unified Stage 2 R9 passes."""
+
+    promotion = cfg.artifacts.promotion
+    if not promotion.enabled:
+        return PromotionAttempt(promoted=False, reason="disabled", metric_name="")
+    if not verdict.passed or not verdict.incumbent_swap:
+        return PromotionAttempt(
+            promoted=False,
+            reason=verdict.reason or "unified_ladder_not_passed",
+            metric_name="unified_combined",
+        )
+
+    stage1 = verdict.stages[0] if verdict.stages else None
+    noop_score = None
+    random_score = None
+    if stage1 is not None:
+        for row in stage1.opponents:
+            if row.opponent == "noop":
+                noop_score = row.combined
+            elif row.opponent == "random":
+                random_score = row.combined
+
+    metric_name = "unified_combined_noop"
+    metric_value = noop_score
+    now = datetime.now(timezone.utc).isoformat()
+    checkpoint_path = challenger.checkpoint_path.resolve()
+    overrides_path = context.run_dir / ".hydra" / "overrides.yaml"
+    from src.artifacts.checkpoint_compat import feature_metadata
+
+    agent_cfg = load_train_config_from_checkpoint(checkpoint_path)
+
+    promoted_payload: dict[str, object] = {
+        "campaign": context.campaign_slug,
+        "checkpoint_path": str(checkpoint_path),
+        "metric_name": metric_name,
+        "metric_value": metric_value,
+        "metric_mode": "max",
+        "promotion_strategy": promotion.strategy,
+        "source_run_id": context.run_id,
+        "source_update": int(update) if update is not None else None,
+        "hydra_overrides_path": str(overrides_path),
+        "git": _git_identity(),
+        "feature_metadata": feature_metadata(
+            agent_cfg.task, model_cfg=agent_cfg.model
+        ),
+        "updated_at": now,
+        "tournament_output_dir": str(tournament_output_dir),
+        "tournament_gates_passed": True,
+        "unified_ladder_passed": True,
+        "unified_combined_noop": noop_score,
+        "unified_combined_random": random_score,
+        "unified_verdict_reason": verdict.reason,
+    }
+
+    campaign_manifest_path = context.campaign_manifest_path
+    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
+
+    merge_campaign_manifest(
+        campaign_manifest_path,
+        {
+            "campaign": context.campaign_slug,
+            "campaign_dir": str(context.campaign_dir),
+            "promotion_metric_name": metric_name,
+            "promotion_metric_mode": "max",
+            "promotion_strategy": promotion.strategy,
+            "current_best_value": metric_value,
+            "current_best_run_id": context.run_id,
+            "updated_at": now,
+        },
+    )
+
+    append_promotion_index(
+        context.indexes_dir,
+        {
+            "campaign": context.campaign_slug,
+            "run_id": context.run_id,
+            "update": update,
+            "metric_name": metric_name,
+            "metric_value": metric_value,
+            "checkpoint_path": str(checkpoint_path),
+            "promoted_manifest_path": str(manifest_out),
+            "promotion_strategy": promotion.strategy,
+            "updated_at": now,
+        },
+    )
+
+    return PromotionAttempt(
+        promoted=True,
+        reason="unified_ladder_promoted",
+        metric_name=metric_name,
+        metric_value=metric_value,
+        metric_mode="max",
+        promoted_manifest_path=manifest_out,
+    )

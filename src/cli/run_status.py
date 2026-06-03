@@ -15,6 +15,8 @@ _CHECKPOINT_EVAL_MANIFEST_KEYS = (
     "status",
     "promoted",
     "tournament_id",
+    "tournament_unified_passed",
+    "tournament_unified_verdict_path",
 )
 
 

@@ -41,6 +41,7 @@ def print_eval_help() -> None:
         "  tournament   Head-to-head eval in Kaggle env\n"
         "  worker       Process queue/optional_jobs for a run\n"
         "  status       Summarize queue jobs and promotion for a run\n"
+        "  bracket      Campaign bracket state (status|show)\n"
         "  results      List or show evaluation manifests under a run\n"
         "  jobs         Queue job operations (cancel)\n"
         "  package      Build submission.tar.gz from checkpoint\n"
@@ -52,6 +53,7 @@ def print_eval_help() -> None:
         "    --output-dir /tmp/kaggle_submit --validate-docker\n"
         "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
         "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
+        "  uv run ow eval bracket status --campaign <name>\n"
         "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
         "Submit-valid: hybrid poll + results show (validation_ok), or package --validate-docker.\n"
         "More: uv run ow eval package --help | ow eval tournament --help\n"
@@ -73,7 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     worker = subparsers.add_parser(
         "worker",
         help=(
-            "Process queued artifact jobs (checkpoint_eval, replay, docker_validation). "
+            "Process queued artifact jobs (checkpoint_eval, qualifier_eval, bracket_match, replay). "
             "Replay local=inspect; replay docker backend is a demoted alias—prefer checkpoint_eval."
         ),
     )
@@ -145,6 +147,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="With --watch, exit after this many seconds with no queued/running jobs.",
     )
+
+    bracket = subparsers.add_parser(
+        "bracket",
+        help="Inspect campaign-level bracket state (qualifier/main ranking).",
+    )
+    bracket_sub = bracket.add_subparsers(dest="bracket_command", required=True)
+    for sub_name, sub_help in (
+        ("status", "Compact bracket phase and entry summary."),
+        ("show", "Full bracket state.json payload."),
+    ):
+        sub = bracket_sub.add_parser(sub_name, help=sub_help)
+        sub.add_argument(
+            "--campaign",
+            required=True,
+            help="Campaign name (outputs/campaigns/<campaign>/bracket/state.json).",
+        )
+        sub.add_argument(
+            "--output-root",
+            type=Path,
+            default=Path("outputs"),
+            help="Output root containing campaigns/ (default: outputs).",
+        )
 
     results = subparsers.add_parser(
         "results",
@@ -541,6 +565,20 @@ def run_worker_cli(args: argparse.Namespace) -> int:
     )
 
 
+def run_bracket_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.tournament.bracket.status import bracket_show_payload, summarize_bracket
+
+    output_root = args.output_root.resolve()
+    if args.bracket_command == "status":
+        payload = summarize_bracket(campaign=str(args.campaign), output_root=output_root)
+    elif args.bracket_command == "show":
+        payload = bracket_show_payload(campaign=str(args.campaign), output_root=output_root)
+    else:
+        raise SystemExit("Unknown bracket command. Use: ow eval bracket status|show --help")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def run_status_cli(args: argparse.Namespace) -> int:
     if not args.watch:
         summary = summarize_run_status(args.run)
@@ -666,6 +704,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_worker_cli(args)
     if args.command == "status":
         return run_status_cli(args)
+    if args.command == "bracket":
+        return run_bracket_cli(args)
     if args.command == "results":
         if args.results_command == "list":
             return run_results_list_cli(args)

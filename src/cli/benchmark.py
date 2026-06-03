@@ -14,6 +14,7 @@ LEARN_PROOF_PRIMITIVES: tuple[str, ...] = (
     "ow benchmark gate run beat_noop",
     "ow benchmark gate run beat_random",
     "ow benchmark gate run curriculum_staged",
+    "ow eval package --checkpoint <ckpt> --output-dir <dir> --validate-docker",
     "ow benchmark tournament-proof --eval-checkpoint <ckpt>",
 )
 
@@ -42,7 +43,7 @@ def print_benchmark_help() -> None:
         "  calibrate                Derive preflight thresholds\n"
         "  calibrate-seed-scheduler Reseed-interval calibration\n"
         "  gate                     Composable preflight gates (run/list)\n"
-        "  tournament-proof         Gate 5 held-out tournament win proof\n"
+        "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
         "  factorized-sampler     Tier-1 launch-hygiene microbenchmark (script wrapper)\n\n"
@@ -51,7 +52,7 @@ def print_benchmark_help() -> None:
         "  make preflight-learn-proof\n"
         "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
         "  uv run ow benchmark gate --list\n"
-        "  uv run ow benchmark gate run beat_noop --dry-run\n"
+        "  uv run ow benchmark gate run beat_noop --dry-run --verbose\n"
         "  uv run ow benchmark gate beat_random --dry-run\n\n"
         "E2E throughput (launch hygiene):\n"
         "  make test-launch-hygiene-e2e-throughput\n"
@@ -427,6 +428,47 @@ def build_parser() -> argparse.ArgumentParser:
     )
     seed_sched.add_argument("--dry-run", action="store_true")
 
+    unified_cal = subparsers.add_parser(
+        "calibrate-unified-tournament",
+        help="Unified Stage-1 calibration sweep (games-per-pair + combined floors).",
+    )
+    unified_cal.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/preflight-calibration.json"),
+        help="Preflight calibration JSON to merge unified_tournament section into.",
+    )
+    unified_cal.add_argument(
+        "--artifact-out",
+        type=Path,
+        default=Path("docs/benchmarks/unified-tournament-calibration.json"),
+        help="Full calibration campaign report JSON.",
+    )
+    unified_cal.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    unified_cal.add_argument(
+        "--checkpoint",
+        type=Path,
+        action="append",
+        default=[],
+        help="Representative checkpoint for calibration campaign (repeatable).",
+    )
+    unified_cal.add_argument(
+        "--games-per-pair",
+        default="2,4,8",
+        help="Comma-separated games-per-pair values to sweep during calibration.",
+    )
+    unified_cal.add_argument("--analyze-only", action="store_true")
+    unified_cal.add_argument("--dry-run", action="store_true")
+    unified_cal.add_argument(
+        "--write-stub",
+        action="store_true",
+        help="Merge non-enforcing unified_tournament stub into --out JSON (no GPU sweep).",
+    )
+
     gate = subparsers.add_parser(
         "gate",
         help="Composable preflight gates (YAML in conf/benchmark/gates/).",
@@ -459,6 +501,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("outputs"),
     )
     gate.add_argument("--dry-run", action="store_true")
+    gate.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "Extra stderr progress (train overrides, hints). Training subprocess "
+            "output always streams on stderr."
+        ),
+    )
     gate.add_argument("--thresholds-path", type=Path, default=None)
     gate.add_argument("--profile-path", type=Path, default=None)
     gate.add_argument(
@@ -470,7 +520,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     tournament_proof = subparsers.add_parser(
         "tournament-proof",
-        help="Gate 5: held-out tournament win proof for a checkpoint.",
+        help=(
+            "Gate 5: Kaggle Docker packaging validation, then held-out unified "
+            "tournament ladder (submit-valid order)."
+        ),
     )
     tournament_proof.add_argument(
         "--eval-checkpoint",
@@ -759,119 +812,279 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
 
 
 def run_tournament_proof_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.submit_valid_funnel import (
+        docker_gate_passed,
+        run_submit_valid_docker_gate,
+    )
+    from src.artifacts.tournament.unified.ladder import run_unified_ladder
+    from src.artifacts.tournament.unified.spec import load_unified_tournament_spec
     from src.jax.preflight import PreflightVerdict, write_report
     from src.jax.preflight_calibration import (
         default_calibration_json_path,
-        load_thresholds,
     )
 
-    baselines = [part.strip() for part in args.baselines.split(",") if part.strip()]
-    baseline = baselines[0] if baselines else "random"
+    checkpoint = Path(args.eval_checkpoint)
+    if not checkpoint.is_file():
+        print(f"missing checkpoint: {checkpoint}", file=sys.stderr)
+        return 1
+
     thresholds_path = args.thresholds_path or default_calibration_json_path(REPO_ROOT)
-    thresholds = load_thresholds(thresholds_path)
-    win_proof = thresholds.get("win_proof_tournament", {})
-    if not isinstance(win_proof, dict):
-        win_proof = {}
-    min_win_rate_key = (
-        "noop_min_win_rate"
-        if baseline in {"noop", "noop_only"}
-        else "random_min_win_rate"
-    )
-    min_win_rate = float(win_proof.get(min_win_rate_key, 0.45))
-    raw_games_per_pair = win_proof.get("games_per_pair")
-    games_per_pair = (
-        int(raw_games_per_pair)
-        if isinstance(raw_games_per_pair, int | float | str)
-        else int(args.games_per_pair)
-    )
-    seeds = str(win_proof.get("seeds", args.seeds))
+    spec = load_unified_tournament_spec(thresholds_path)
+    has_unified_section = False
+    if thresholds_path.is_file():
+        payload = json.loads(thresholds_path.read_text(encoding="utf-8"))
+        has_unified_section = isinstance(payload.get("unified_tournament"), dict)
 
     output_dir = (
         args.output_root
         / "campaigns"
         / args.campaign
         / "evaluations"
-        / f"preflight_win_proof_{baseline}"
+        / "preflight_win_proof_unified"
     )
-    cmd = [
-        "uv",
-        "run",
-        "ow",
-        "eval",
-        "tournament",
-        "--checkpoint",
-        str(args.eval_checkpoint),
-        "--campaign",
-        args.campaign,
-        "--output-root",
-        str(args.output_root),
-        "--output-dir",
-        str(output_dir),
-        "--seeds",
-        seeds,
-        "--games-per-pair",
-        str(games_per_pair),
-        "--formats",
-        "2p_vs_baseline",
-        "--baselines",
-        baseline,
-    ]
+    docker_output_dir = output_dir / "docker_validation"
+
     if args.dry_run:
-        print(" ".join(cmd), flush=True)
-        report = {
+        stage1_count = (
+            len(spec.stage1.opponents)
+            * len(spec.stage1.seeds)
+            * spec.stage1.games_per_pair
+            * (1 + ("4p_challenger_vs_baselines" in spec.stage1.formats))
+        )
+        if "4p_challenger_vs_baselines" in spec.stage1.formats:
+            stage1_count = (
+                len(spec.stage1.opponents)
+                * len(spec.stage1.seeds)
+                * spec.stage1.games_per_pair
+                + len(spec.stage1.seeds) * spec.stage1.games_per_pair
+            )
+        plan = {
             "gate": "win_proof",
             "verdict": PreflightVerdict.INCONCLUSIVE.value,
-            "baseline": baseline,
-            "min_win_rate": min_win_rate,
             "dry_run": True,
+            "unified": True,
+            "submit_valid_order": ["docker_validation", "unified_tournament_ladder"],
+            "docker_output_dir": str(docker_output_dir),
+            "enforcement": spec.enforcement,
+            "needs_calibration": spec.needs_calibration,
+            "stage1": {
+                "opponents": list(spec.stage1.opponents),
+                "seeds": list(spec.stage1.seeds),
+                "games_per_pair": spec.stage1.games_per_pair,
+                "scheduled_matches": stage1_count,
+                "floors": dict(spec.stage1.floors),
+            },
+            "stage2": {
+                "seeds": list(spec.stage2.seeds),
+                "games_per_pair": spec.stage2.games_per_pair,
+                "blocking_reason": spec.blocking_reason,
+            },
+            "output_dir": str(output_dir),
+        }
+        write_report(args.out, plan)
+        print(json.dumps(plan, indent=2))
+        return 0
+
+    if spec.needs_calibration and not has_unified_section:
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.INCONCLUSIVE.value,
+            "reasons": ["missing unified_tournament section in calibration JSON"],
+            "checkpoint": str(checkpoint),
+            "thresholds_path": str(thresholds_path),
+            "evaluation_mode": "unified_tournament",
         }
         write_report(args.out, report)
         print(json.dumps(report, indent=2))
-        return 0
-
-    proc = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-    if proc.returncode != 0:
-        return int(proc.returncode)
-
-    leaderboard_path = output_dir / "leaderboard.json"
-    if not leaderboard_path.is_file():
-        print(f"missing leaderboard: {leaderboard_path}", file=sys.stderr)
         return 1
-    rows = json.loads(leaderboard_path.read_text(encoding="utf-8")).get("rows", [])
-    if not rows:
-        print("leaderboard has no rows", file=sys.stderr)
-        return 1
-    observed = rows[0].get("win_rate_vs_baseline")
-    if observed is None:
-        observed = rows[0].get("win_rate_vs_sniper")
-    baseline_name = rows[0].get("baseline_name") or baseline
-    verdict = PreflightVerdict.VERIFIED
-    reasons: list[str] = []
-    if observed is None:
-        verdict = PreflightVerdict.INCONCLUSIVE
-        reasons.append("missing win_rate_vs_baseline in tournament leaderboard")
-    elif float(observed) < min_win_rate:
-        verdict = PreflightVerdict.NOT_VERIFIED
-        reasons.append(
-            f"tournament win rate {float(observed):.3f} < {min_win_rate:.3f} "
-            f"vs {baseline_name}"
+
+    docker_manifest: dict[str, object] = {}
+    try:
+        docker_manifest = run_submit_valid_docker_gate(
+            checkpoint_path=checkpoint,
+            output_dir=docker_output_dir,
+            repo_root=REPO_ROOT,
         )
+    except (OSError, RuntimeError) as exc:
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.NOT_VERIFIED.value,
+            "reasons": [f"docker_validation_failed: {exc}"],
+            "checkpoint": str(checkpoint),
+            "evaluation_mode": "submit_valid_docker_gate",
+            "docker_output_dir": str(docker_output_dir),
+            "tournament_skipped": True,
+            "tournament_skipped_reason": "docker_validation_failed",
+        }
+        write_report(args.out, report)
+        print(json.dumps(report, indent=2))
+        return 1
+
+    if not docker_gate_passed(docker_manifest):
+        report = {
+            "gate": "win_proof",
+            "commit_sha": _git_head_sha(),
+            "verdict": PreflightVerdict.NOT_VERIFIED.value,
+            "reasons": ["docker_validation_failed"],
+            "checkpoint": str(checkpoint),
+            "evaluation_mode": "submit_valid_docker_gate",
+            "docker_manifest": docker_manifest,
+            "docker_output_dir": str(docker_output_dir),
+            "tournament_skipped": True,
+            "tournament_skipped_reason": "docker_validation_failed",
+        }
+        write_report(args.out, report)
+        print(json.dumps(report, indent=2))
+        return 1
+
+    verdict = run_unified_ladder(
+        checkpoint,
+        spec,
+        output_dir,
+        campaign=args.campaign,
+        output_root=args.output_root,
+    )
+
+    preflight_verdict = PreflightVerdict.VERIFIED
+    reasons: list[str] = []
+    if not verdict.passed:
+        if spec.enforcement:
+            preflight_verdict = PreflightVerdict.NOT_VERIFIED
+        else:
+            preflight_verdict = PreflightVerdict.INCONCLUSIVE
+        reasons.append(verdict.reason)
 
     report = {
         "gate": "win_proof",
         "commit_sha": _git_head_sha(),
-        "verdict": verdict.value,
+        "verdict": preflight_verdict.value,
         "reasons": reasons,
-        "baseline_name": baseline_name,
-        "min_win_rate": min_win_rate,
-        "observed_win_rate": observed,
-        "leaderboard_path": str(leaderboard_path),
-        "checkpoint": str(args.eval_checkpoint),
-        "evaluation_mode": "tournament",
+        "docker_validation_ok": True,
+        "docker_output_dir": str(docker_output_dir),
+        "docker_manifest": docker_manifest,
+        "unified_verdict": verdict.to_dict(),
+        "unified_verdict_path": str(output_dir / "unified_verdict.json"),
+        "checkpoint": str(checkpoint),
+        "evaluation_mode": "unified_tournament",
+        "enforcement": spec.enforcement,
+        "submit_valid_order": ["docker_validation", "unified_tournament_ladder"],
     }
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
-    return 0 if verdict == PreflightVerdict.VERIFIED else 1
+    return 0 if preflight_verdict == PreflightVerdict.VERIFIED else 1
+
+
+def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
+    from src.jax.unified_tournament_calibration import (
+        DEFAULT_CALIBRATION_CHECKPOINT,
+        UnifiedCalibrationPlan,
+        build_unified_calibration_report,
+        default_unified_tournament_stub,
+        discover_unified_cal_snapshots,
+        load_unified_section_from_calibration,
+        merge_unified_section_into_calibration,
+        run_unified_calibration_sweep,
+        write_unified_calibration_artifact,
+    )
+
+    started = __import__("time").perf_counter()
+    games_candidates = tuple(
+        int(part.strip()) for part in args.games_per_pair.split(",") if part.strip()
+    )
+    checkpoints = tuple(args.checkpoint) or (DEFAULT_CALIBRATION_CHECKPOINT,)
+    for checkpoint in checkpoints:
+        if not checkpoint.is_file() and not args.dry_run and not args.write_stub:
+            print(f"missing checkpoint: {checkpoint}", file=sys.stderr)
+            return 1
+
+    base_section = load_unified_section_from_calibration(args.out)
+    plan = UnifiedCalibrationPlan(
+        checkpoint_paths=checkpoints,
+        games_per_pair_candidates=games_candidates or (4,),
+        dry_run=bool(args.dry_run),
+        output_root=args.output_root,
+    )
+    snapshots = []
+    if args.write_stub:
+        stub = default_unified_tournament_stub(enforcement=False)
+        if base_section and base_section.get("incumbent_bootstrap_opponent"):
+            stub["incumbent_bootstrap_opponent"] = base_section[
+                "incumbent_bootstrap_opponent"
+            ]
+        merged = merge_unified_section_into_calibration(args.out, stub)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        report = build_unified_calibration_report(
+            repo_root=REPO_ROOT,
+            plan=plan,
+            snapshots=[],
+            analyze_only=True,
+            seconds_total=__import__("time").perf_counter() - started,
+            base_section=base_section,
+            enable_enforcement=False,
+        )
+        report["written_calibration_path"] = str(args.out)
+        write_unified_calibration_artifact(args.artifact_out, report)
+        print(json.dumps(report, indent=2))
+        return 0
+
+    if not args.analyze_only:
+        snapshots.extend(
+            run_unified_calibration_sweep(
+                plan=plan,
+                repo_root=REPO_ROOT,
+                base_section=base_section,
+            )
+        )
+    snapshots.extend(
+        discover_unified_cal_snapshots(
+            plan.output_root,
+            games_per_pair_candidates=plan.games_per_pair_candidates,
+            checkpoint_paths=checkpoints,
+        )
+    )
+    seen: set[tuple[str, int]] = set()
+    deduped: list = []
+    for snapshot in snapshots:
+        key = (snapshot.checkpoint_path, snapshot.games_per_pair)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(snapshot)
+
+    report = build_unified_calibration_report(
+        repo_root=REPO_ROOT,
+        plan=plan,
+        snapshots=deduped,
+        analyze_only=bool(args.analyze_only),
+        seconds_total=__import__("time").perf_counter() - started,
+        base_section=base_section,
+        enable_enforcement=True,
+    )
+    write_unified_calibration_artifact(args.artifact_out, report)
+    unified_section = report.get("unified_tournament")
+    if isinstance(unified_section, dict):
+        merged = merge_unified_section_into_calibration(args.out, unified_section)
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        report["written_preflight_calibration_path"] = str(args.out)
+    report["written_artifact_path"] = str(args.artifact_out)
+    print(json.dumps(report, indent=2))
+    if plan.dry_run:
+        print(
+            "Dry run: no GPU calibration campaigns executed. "
+            "Omit --dry-run to run Stage-1 unified ladder sweeps.",
+            flush=True,
+        )
+    elif not deduped:
+        print(
+            "No calibration snapshots found; run without --analyze-only to execute campaigns.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def run_calibrate_cli(args: argparse.Namespace) -> int:
@@ -1259,6 +1472,7 @@ def run_gate_cli(args: argparse.Namespace) -> int:
         model=args.model,
         output_root=args.output_root,
         dry_run=bool(args.dry_run),
+        verbose=bool(args.verbose),
         thresholds_path=args.thresholds_path,
         profiles_path=args.profile_path,
         train_overrides=tuple(args.train_overrides),
@@ -1286,6 +1500,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_cli(args)
         case "calibrate-seed-scheduler":
             return run_calibrate_seed_scheduler_cli(args)
+        case "calibrate-unified-tournament":
+            return run_calibrate_unified_tournament_cli(args)
         case "shortlist-planet-flow-sweep":
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":

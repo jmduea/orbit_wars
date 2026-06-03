@@ -43,6 +43,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Gate 5 tournament proof | `ow benchmark tournament-proof` |
 | Preflight calibrate | `ow benchmark calibrate` |
 | Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
+| Env shaping calibration (planned) | `ow benchmark shape-calibrate` — see `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` |
 | Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
 | Learn-proof composer | `ow benchmark learn-proof` |
 | W&B/Kaggle sweep create | `ow sweep create` |
@@ -105,6 +106,15 @@ uv run ow benchmark gate run beat_noop --out /tmp/beat_noop.json
 uv run ow benchmark gate run beat_random --dry-run
 uv run ow benchmark gate run curriculum_staged --dry-run
 uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
+```
+
+**Anti-pattern:** `... 2>&1 | tail -20` on long gate/calibration/train commands — no output until the process exits (looks hung). Training subprocess lines stream on **stderr**; write reports with `--out` and leave stderr visible. Use `--verbose` for override hints; poll artifacts with `ow runs watch` or `tail -f outputs/campaigns/<campaign>/runs/<run_id>/logs/*_jax.jsonl`.
+
+**Gate 4 example (500 updates, ~GPU time):**
+
+```bash
+env -u JAX_COMPILATION_CACHE_DIR uv run ow benchmark gate run curriculum_staged \
+  --verbose --out /tmp/curriculum_staged.json
 ```
 
 Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`.
@@ -181,9 +191,13 @@ flowchart TB
     T[ow train artifacts=hybrid_promotion]
     T --> P[ow eval status --watch]
     P --> RS[ow eval results show / manifest.json]
-    RS --> CE[checkpoint_eval: validation_ok + tournament]
+    RS --> CE[checkpoint_eval: Docker then tournament]
+    D[Docker package validate]
+    D --> L[unified tournament ladder]
     M[ow eval package --validate-docker]
     M --> OK[JSON ok true]
+    M --> L
+    L --> U[ow eval submit --validate-docker]
   end
   subgraph inspect [Inspect only — not submit-valid]
     R[local replay / replay_backend=local HTML]
@@ -202,10 +216,10 @@ flowchart TB
 |------|---------|-------------|
 | Prove during training | `ow train … artifacts=hybrid_promotion` → poll status → **results show** | `validation_ok` in `checkpoint_eval` manifest |
 | Prove before upload | `ow eval package … --validate-docker` | Final JSON `"ok": true` |
-| Gate 5 win proof (after Docker) | `ow benchmark tournament-proof --eval-checkpoint …` | Calibrated win rates vs noop/random—not a Docker substitute |
+| Gate 5 win proof | `ow benchmark tournament-proof --eval-checkpoint …` | Runs Docker validation first, then unified ladder; report includes `docker_validation_ok` |
 | Debug policy / HTML | Local replay or `ow eval tournament --write-replays` | Inspection only; still run canonical path for submit-valid |
 
-**Manual pre-upload:** `uv run ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker` → confirm stdout JSON `"ok": true`. Optional `ow eval submit … --validate-docker` before upload.
+**Canonical submit-valid order:** Docker/packaging validate → held-out tournament ladder (Gate 5 or hybrid `checkpoint_eval`) → upload. **Manual pre-upload:** `uv run ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker` → confirm stdout JSON `"ok": true` → optional `ow benchmark tournament-proof` if win proof not already recorded → `ow eval submit … --validate-docker`.
 
 **Inspect only (not submit-valid):** sync/async replay with `replay_backend=local`; `ow eval package` without `--validate-docker` (layout-only—stderr prints `docker_validation=skipped`); tournament `--write-replays`. After inspect, still run hybrid poll+results or `--validate-docker` before claiming submit-valid.
 

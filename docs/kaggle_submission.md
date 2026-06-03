@@ -18,9 +18,9 @@ There is no local no-Docker submission validation path. Packaging alone only che
 | Step | Command | Pass signal |
 |------|---------|-------------|
 | During training | `uv run ow train … artifacts=hybrid_promotion` → `ow eval status --watch` → `ow eval results show` | `validation_ok` in `checkpoint_eval` manifest |
-| Before upload | `uv run ow eval package … --validate-docker` | JSON `"ok": true` |
+| Before upload | `uv run ow eval package … --validate-docker` (or Docker embedded in `tournament-proof` / hybrid eval) | JSON `"ok": true` |
 
-Prefer hybrid `checkpoint_eval` jobs over standalone `docker_validation` when using `artifacts=hybrid_promotion`. Do not treat local replay HTML or packaging-only output as submit-valid proof.
+**Order:** validate packaging in Kaggle Docker **before** expensive held-out tournament ladders (`checkpoint_eval`, `ow benchmark tournament-proof`), then upload. Prefer hybrid `checkpoint_eval` jobs over standalone `docker_validation` when using `artifacts=hybrid_promotion`. Do not treat local replay HTML or packaging-only output as submit-valid proof.
 
 ## Package and validate
 
@@ -69,7 +69,7 @@ outputs/campaigns/<campaign>/runs/<run_id>/evaluations/<job_id>/docker_validatio
 Strict promotion runs asynchronously during training when scalar metrics improve the campaign best:
 
 1. Training queues `checkpoint_eval` (not separate docker + tournament jobs).
-2. Artifact worker validates the submission tarball in Kaggle Docker, then runs tournament gates.
+2. Artifact worker validates the submission tarball in Kaggle Docker **first**; on failure, skips the tournament ladder.
 3. Promoted manifest updates only when Docker passes **and** tournament gates pass.
 
 Layout per eligible checkpoint:
