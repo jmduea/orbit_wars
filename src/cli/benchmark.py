@@ -827,6 +827,7 @@ def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
         UnifiedCalibrationPlan,
         build_unified_calibration_report,
         default_unified_tournament_stub,
+        load_unified_section_from_calibration,
         merge_unified_section_into_calibration,
         write_unified_calibration_artifact,
     )
@@ -847,10 +848,11 @@ def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
         seconds_total=__import__("time").perf_counter() - started,
     )
     if args.write_stub:
-        merged = merge_unified_section_into_calibration(
-            args.out,
-            default_unified_tournament_stub(enforcement=False),
-        )
+        stub = default_unified_tournament_stub(enforcement=False)
+        existing = load_unified_section_from_calibration(args.out)
+        if existing and existing.get("incumbent_checkpoint_path"):
+            stub["incumbent_checkpoint_path"] = existing["incumbent_checkpoint_path"]
+        merged = merge_unified_section_into_calibration(args.out, stub)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
         report["written_calibration_path"] = str(args.out)
