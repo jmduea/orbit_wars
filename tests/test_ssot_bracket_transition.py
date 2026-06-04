@@ -18,7 +18,7 @@ def _cfg(tmp_path: Path) -> TrainConfig:
             enabled=True,
             qualifier_max_env_steps=10_000_000,
             qualifier_eval_interval_updates=10,
-            qualifier_games_per_seed=0,
+            qualifier_games_per_seed=2,
         )
     )
     return cfg

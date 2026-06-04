@@ -70,7 +70,7 @@ def ssot_qualifier_tick(
     ssot = _ssot_config(cfg)
     state_path = bracket_state_path(campaign=cfg.output.campaign, output_root=output_root)
     state = load_bracket_state(state_path)
-    stage = max(1, int(getattr(state, "ssot_qualifier_stage", 1) or 1))
+    stage = max(1, int(state.ssot_qualifier_stage or 1))
     events: list[dict[str, object]] = []
     weak_config = False
     promotion_event: dict[str, object] | None = None
@@ -101,13 +101,17 @@ def ssot_qualifier_tick(
             }
         )
 
-    interval = max(1, int(ssot.qualifier_eval_interval_updates))
+    interval = int(ssot.qualifier_eval_interval_updates)
+    games_per_seed = int(ssot.qualifier_games_per_seed)
     should_eval = (
-        checkpoint_path is not None
+        interval > 0
+        and games_per_seed > 0
+        and checkpoint_path is not None
         and checkpoint_path.is_file()
         and update > 0
         and update % interval == 0
         and not weak_config
+        and state.phase == "qualifier"
         and stage < 4
     )
     if should_eval:
@@ -134,10 +138,7 @@ def ssot_qualifier_tick(
             }
             events.append(promotion_event)
             if verdict.enter_main_bracket:
-                for entry in state.entries.values():
-                    if entry.checkpoint_path == str(checkpoint_path):
-                        mark_qualifier_cleared(state, agent_id=entry.agent_id)
-                state.phase = "main"
+                mark_qualifier_cleared(state, agent_id=f"u{update}")
                 events.append(
                     {
                         "event": "ssot_main_bracket_entry",

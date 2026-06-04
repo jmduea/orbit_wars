@@ -71,8 +71,31 @@ def test_ssot_weak_config_at_env_step_budget(tmp_path: Path) -> None:
     assert state.phase == "weak_config"
 
 
-def test_ssot_interval_does_not_promote_without_games(tmp_path: Path) -> None:
+def test_qualifier_eval_interval_zero_disables_tick_eval(tmp_path: Path) -> None:
     cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_eval_interval_updates = 0
+    ckpt = tmp_path / "ckpt.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 10}))
+    tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+    )
+    assert tick.qualifier_stage == 1
+    assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+
+
+def test_unknown_stage_does_not_promote() -> None:
+    verdict = evaluate_stage_promotion(stage=99, leg_wins={"random": (10, 10)})
+    assert not verdict.promoted
+    assert verdict.fail_reason == "unknown_stage"
+
+
+def test_ssot_interval_skips_eval_when_games_per_seed_zero(tmp_path: Path) -> None:
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 0
     ckpt = tmp_path / "ckpt.pkl"
     ckpt.write_bytes(pickle.dumps({"update": 10}))
     tick = ssot_qualifier_tick(
@@ -84,3 +107,28 @@ def test_ssot_interval_does_not_promote_without_games(tmp_path: Path) -> None:
     )
     assert tick.qualifier_stage == 1
     assert tick.promotion_event is None
+    assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+    assert tick.leg_summaries == ()
+
+
+def test_ssot_interval_skips_eval_when_not_qualifier_phase(tmp_path: Path) -> None:
+    import json
+
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 2
+    state_path = tmp_path / "campaigns" / "ssot_demo" / "bracket" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({"phase": "main", "ssot_qualifier_stage": 2, "entries": {}}),
+        encoding="utf-8",
+    )
+    ckpt = tmp_path / "ckpt.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 10}))
+    tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+    )
+    assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
