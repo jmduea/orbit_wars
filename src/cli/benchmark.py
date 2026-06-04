@@ -401,6 +401,25 @@ def build_parser() -> argparse.ArgumentParser:
     qualifier_cal.add_argument("--analyze-only", action="store_true")
     qualifier_cal.add_argument("--dry-run", action="store_true")
 
+    shortlist_ssot = subparsers.add_parser(
+        "shortlist-ssot-preflight-sweep",
+        help="Deterministic SSOT preflight sweep shortlist (Gates 2–3 guardrails).",
+    )
+    shortlist_ssot.add_argument("--sweep-id", required=True)
+    shortlist_ssot.add_argument("--entity", default="jmduea-jdueadev")
+    shortlist_ssot.add_argument("--project", default="orbit-wars")
+    shortlist_ssot.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/preflight/ssot_preflight_sweep_shortlist.json"),
+    )
+    shortlist_ssot.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max eligible entries in ranked output.",
+    )
+
     gate = subparsers.add_parser(
         "gate",
         help="Composable preflight gates (YAML in conf/benchmark/gates/).",
@@ -1296,6 +1315,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_gate_cli(args)
         case "tournament-proof":
             return run_tournament_proof_cli(args)
+        case "shortlist-ssot-preflight-sweep":
+            from src.cli.ssot_preflight import run_shortlist_ssot_preflight_sweep_cli
+
+            return run_shortlist_ssot_preflight_sweep_cli(args)
         case "shortlist-planet-flow-sweep":
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":

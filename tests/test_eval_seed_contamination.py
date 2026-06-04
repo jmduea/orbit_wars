@@ -27,8 +27,9 @@ def test_training_seed_must_not_equal_eval_seed() -> None:
         compose_hydra_train_config(["seed=43"])
 
 
-def test_default_eval_seed_set_disjoint_from_empty_training_pool() -> None:
+def test_default_training_and_eval_seed_sets_are_disjoint() -> None:
     cfg = compose_hydra_train_config([])
-    assert cfg.training_seed_set == []
+    assert cfg.training_seed_set
     assert cfg.eval_seed_set == [43, 44, 45, 46]
+    assert not set(cfg.training_seed_set) & set(cfg.eval_seed_set)
     assert cfg.heldout_eval_seed_set == []

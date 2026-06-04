@@ -179,6 +179,71 @@ def load_shortlist_rows(shortlist_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def parse_wandb_run_ref(wandb_run: str) -> tuple[str, str, str]:
+    """Parse ``entity/project/run_id`` W&B run reference."""
+
+    parts = [part.strip() for part in str(wandb_run).strip().split("/") if part.strip()]
+    if len(parts) != 3:
+        raise ValueError(
+            "wandb_run must be entity/project/run_id "
+            f"(got {wandb_run!r})"
+        )
+    return parts[0], parts[1], parts[2]
+
+
+def resolve_checkpoint_from_wandb_run(
+    wandb_run: str,
+    cache_dir: Path,
+) -> Path:
+    """Download the newest checkpoint artifact logged on a W&B run."""
+
+    try:
+        import wandb  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("wandb is required to resolve --wandb-run") from exc
+
+    entity, project, run_id = parse_wandb_run_ref(wandb_run)
+    api = wandb.Api()
+    run = api.run(f"{entity}/{project}/{run_id}")
+    checkpoint_artifacts = [
+        artifact
+        for artifact in run.logged_artifacts()
+        if str(getattr(artifact, "type", "")) == "checkpoint"
+    ]
+    if not checkpoint_artifacts:
+        raise ValueError(
+            f"No checkpoint artifacts on W&B run {entity}/{project}/{run_id}"
+        )
+
+    def _update_key(artifact: object) -> int:
+        metadata = getattr(artifact, "metadata", None) or {}
+        if isinstance(metadata, dict) and metadata.get("update") is not None:
+            return int(metadata["update"])
+        name = str(getattr(artifact, "name", ""))
+        if name.startswith("checkpoint-u"):
+            try:
+                return int(name.removeprefix("checkpoint-u"))
+            except ValueError:
+                return -1
+        return -1
+
+    chosen = max(checkpoint_artifacts, key=_update_key)
+    artifact_name = str(getattr(chosen, "name", "")).strip()
+    if not artifact_name:
+        raise ValueError(f"Checkpoint artifact missing name on run {run_id}")
+    downloaded = download_wandb_checkpoint_artifact(
+        artifact_name,
+        cache_dir,
+        aliases=("latest",),
+    )
+    if downloaded is None or not downloaded.is_file():
+        raise ValueError(
+            f"Failed to download checkpoint artifact {artifact_name!r} "
+            f"for run {entity}/{project}/{run_id}"
+        )
+    return downloaded
+
+
 def download_wandb_checkpoint_artifact(
     artifact_name: str,
     cache_dir: Path,

@@ -297,7 +297,14 @@ def build_parser() -> argparse.ArgumentParser:
         "package",
         help="Build submission.tar.gz from a checkpoint (optional Docker validation).",
     )
-    package.add_argument("--checkpoint", required=True, type=Path)
+    package_src = package.add_mutually_exclusive_group(required=True)
+    package_src.add_argument("--checkpoint", type=Path, default=None)
+    package_src.add_argument(
+        "--wandb-run",
+        default=None,
+        metavar="ENTITY/PROJECT/RUN_ID",
+        help="Resolve checkpoint from W&B run logged checkpoint artifacts.",
+    )
     package.add_argument(
         "--output-dir",
         type=Path,
@@ -325,6 +332,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Docker validation player count: 2, 4, or both. SSOT packaging validation uses 4."
         ),
+    )
+    package.add_argument(
+        "--packaging-validation-marker",
+        type=Path,
+        default=Path("outputs/ssot/packaging_validation.json"),
+        help=(
+            "When --validate-docker passes, write SSOT packaging gate marker JSON here."
+        ),
+    )
+    package.add_argument(
+        "--wandb-cache-dir",
+        type=Path,
+        default=Path("outputs/cache/wandb-artifacts"),
+        help="Cache directory for --wandb-run checkpoint artifact downloads.",
     )
 
     return parser
@@ -644,19 +665,56 @@ def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
 
 
 def run_package_cli(args: argparse.Namespace) -> int:
+    if args.checkpoint is not None:
+        checkpoint_path = args.checkpoint.resolve()
+    elif args.wandb_run is not None:
+        from src.artifacts.tournament.resolve import resolve_checkpoint_from_wandb_run
+
+        checkpoint_path = resolve_checkpoint_from_wandb_run(
+            str(args.wandb_run),
+            args.wandb_cache_dir.resolve(),
+        )
+        print(f"resolved_checkpoint={checkpoint_path}", file=sys.stderr)
+    else:
+        raise SystemExit("Provide --checkpoint or --wandb-run")
+
+    packaging_seed = 0 if args.packaging_seed is None else int(args.packaging_seed)
+    packaging_player_count = (
+        "4" if args.packaging_player_count is None else str(args.packaging_player_count)
+    )
     package_kwargs: dict[str, object] = {
         "validate_docker": bool(args.validate_docker),
     }
     if args.packaging_seed is not None:
-        package_kwargs["seed"] = int(args.packaging_seed)
+        package_kwargs["seed"] = packaging_seed
     if args.packaging_player_count is not None:
-        package_kwargs["player_count"] = str(args.packaging_player_count)
+        package_kwargs["player_count"] = packaging_player_count
     package_path = _eval_export("package_checkpoint_submission")(
-        args.checkpoint.resolve(),
+        checkpoint_path,
         args.output_dir.resolve(),
         **package_kwargs,
     )
     print(f"package_path={package_path}")
+    if args.validate_docker:
+        from src.ssot.packaging_validation import write_packaging_validation_record
+
+        marker_path = args.packaging_validation_marker.resolve()
+        write_packaging_validation_record(
+            marker_path,
+            checkpoint_path=checkpoint_path,
+            packaging_seed=packaging_seed,
+            packaging_player_count=packaging_player_count,
+            package_path=package_path,
+        )
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "package_path": str(package_path),
+                    "packaging_validation_marker": str(marker_path),
+                }
+            )
+        )
     if not args.validate_docker:
         print(
             "docker_validation=skipped (packaging only; does not prove competition compatibility)",

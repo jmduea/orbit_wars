@@ -22,6 +22,7 @@ ssot_pipeline:
   qualifier_max_env_steps: 500000000
   qualifier_eval_interval_updates: 50
   qualifier_games_per_seed: 0
+  require_packaging_validation: true
 
 artifact_pipeline:
   enabled: true
