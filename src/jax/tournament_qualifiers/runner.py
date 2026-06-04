@@ -17,6 +17,7 @@ from src.artifacts.tournament.bracket.state import (
     upsert_entry,
 )
 from src.config import TrainConfig
+from src.jax.tournament_qualifiers.eval import run_held_out_qualifier_eval
 from src.jax.tournament_qualifiers.promotion import (
     STAGE_NAMES,
     LegWinSummary,
@@ -45,16 +46,26 @@ def _ssot_config(cfg: TrainConfig) -> Any:
 
 
 def evaluate_qualifier_legs(
+    cfg: TrainConfig,
     *,
+    checkpoint_path: Path | None = None,
+    stage: int = 1,
     leg_wins: dict[str, tuple[int, int]] | None = None,
 ) -> dict[str, tuple[int, int]]:
-    """Aggregate wins per opponent leg.
+    """Aggregate wins per opponent leg on ``eval_seed_set`` (R25).
 
-    When ``qualifier_games_per_seed`` is 0 (default), callers supply ``leg_wins``
-    from JAX eval; until wired, ticks pass empty counts and promotion does not advance.
+    When ``qualifier_games_per_seed`` is 0, returns empty counts so promotion does not run.
+    Tests may inject ``leg_wins`` directly.
     """
 
-    return dict(leg_wins or {})
+    if leg_wins is not None:
+        return dict(leg_wins)
+    games_per_seed = int(cfg.artifacts.ssot_pipeline.qualifier_games_per_seed)
+    if games_per_seed <= 0 or checkpoint_path is None:
+        return {}
+    return run_held_out_qualifier_eval(
+        cfg, checkpoint_path=checkpoint_path, stage=stage
+    )
 
 
 def ssot_qualifier_tick(
@@ -115,7 +126,11 @@ def ssot_qualifier_tick(
         and stage < 4
     )
     if should_eval:
-        leg_wins = evaluate_qualifier_legs()
+        leg_wins = evaluate_qualifier_legs(
+            cfg,
+            checkpoint_path=checkpoint_path,
+            stage=stage,
+        )
         verdict = evaluate_stage_promotion(stage=stage, leg_wins=leg_wins)
         leg_summaries = verdict.leg_summaries
         events.append(

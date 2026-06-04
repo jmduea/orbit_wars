@@ -74,6 +74,11 @@ from src.telemetry.metric_registry import (
     required_rollout_scalar_names,
 )
 from src.jax.train.bracket_training import bracket_training_enabled, bracket_training_tick
+from src.artifacts.tournament.bracket.state import (
+    bracket_state_path,
+    load_bracket_state,
+)
+from src.jax.tournament_qualifiers.promotion import ssot_rollout_stage_view
 from src.jax.tournament_qualifiers.runner import (
     ssot_pipeline_enabled,
     ssot_qualifier_tick,
@@ -277,12 +282,28 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         "policy": reseed_event.policy,
                     }
                 )
-            stage_view = curriculum.stage_view(
-                update,
-                snapshot_ids=historical_pool.snapshot_ids,
-                snapshot_valid_mask=historical_pool.valid_mask,
-                snapshot_updates=historical_pool.snapshot_updates,
-            )
+            if ssot_pipeline_enabled(cfg):
+                ssot_bracket = load_bracket_state(
+                    bracket_state_path(
+                        campaign=cfg.output.campaign,
+                        output_root=Path(cfg.output.root),
+                    )
+                )
+                ssot_stage = max(1, int(ssot_bracket.ssot_qualifier_stage or 1))
+                stage_view = ssot_rollout_stage_view(
+                    ssot_stage,
+                    update,
+                    snapshot_ids=historical_pool.snapshot_ids,
+                    snapshot_valid_mask=historical_pool.valid_mask,
+                    snapshot_updates=historical_pool.snapshot_updates,
+                )
+            else:
+                stage_view = curriculum.stage_view(
+                    update,
+                    snapshot_ids=historical_pool.snapshot_ids,
+                    snapshot_valid_mask=historical_pool.valid_mask,
+                    snapshot_updates=historical_pool.snapshot_updates,
+                )
             active_indices = active_group_indices(
                 rollout_groups,
                 curriculum.current_format_weights(),
