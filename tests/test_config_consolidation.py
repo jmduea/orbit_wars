@@ -358,6 +358,22 @@ def test_multitask_smoke_overrides_compose() -> None:
     assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
 
+def test_jax_training_opponent_mode_normalization() -> None:
+    from src.opponents.constants import (
+        is_noop_jax_training_opponent_mode,
+        normalize_jax_training_opponent_mode,
+        validate_jax_training_opponent_mode,
+    )
+
+    for raw in ("no_op", "noop", "NO_OP"):
+        validate_jax_training_opponent_mode(raw)
+        assert normalize_jax_training_opponent_mode(raw) == "noop"
+        assert is_noop_jax_training_opponent_mode(raw)
+    validate_jax_training_opponent_mode("random")
+    with pytest.raises(ValueError, match="JAX training supports"):
+        validate_jax_training_opponent_mode("noop_only")
+
+
 def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(
     tmp_path: Path,
 ) -> None:

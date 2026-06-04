@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
+import jax
 from src.config import TrainConfig
 from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.collect import collect_rollout_jax
 from src.jax.train import init_train_state
+from src.opponents.jax_actions.builders import build_noop_action_from_edge_batch
 
 
 def _noop_rollout_cfg(*, opponent: str) -> TrainConfig:
@@ -41,6 +42,13 @@ def test_collect_rollout_noop_opponent_finite(opponent: str) -> None:
         key, env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert float(metrics["env_steps"]) == cfg.training.rollout_steps * cfg.training.num_envs
+    assert (
+        float(metrics["env_steps"])
+        == cfg.training.rollout_steps * cfg.training.num_envs
+    )
     assert jnp.all(jnp.isfinite(transitions.returns))
     assert jnp.all(jnp.isfinite(transitions.advantages))
+
+    noop_action = build_noop_action_from_edge_batch(env_state.game, turn_batch, cfg)
+    assert not jnp.any(noop_action.valid)
+    assert jnp.all(noop_action.ships == 0)

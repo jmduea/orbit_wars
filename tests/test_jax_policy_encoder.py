@@ -34,7 +34,9 @@ def _task_cfg(**kwargs) -> TaskConfig:
     return TaskConfig(**base)
 
 
-def _train_cfg(*, architecture: str, pointer_decoder: str = "factorized_topk") -> TrainConfig:
+def _train_cfg(
+    *, architecture: str, pointer_decoder: str = "factorized_topk"
+) -> TrainConfig:
     cfg = TrainConfig()
     cfg.model.architecture = architecture
     cfg.model.pointer_decoder = pointer_decoder
@@ -73,7 +75,6 @@ def test_planet_graph_transformer_forward_shapes() -> None:
     )
     assert output.value.shape == (2,)
     assert batch.planet_features.shape[1] == MAX_PLANETS
-
 
 
 def test_transformer_layer_depth_changes_param_tree() -> None:
@@ -123,7 +124,9 @@ def test_spatial_bias_prefers_closer_planets() -> None:
 
 
 def test_build_jax_policy_dispatches_transformer() -> None:
-    cfg = _train_cfg(architecture="planet_graph_transformer", pointer_decoder="factorized_topk")
+    cfg = _train_cfg(
+        architecture="planet_graph_transformer", pointer_decoder="factorized_topk"
+    )
     policy = build_jax_policy(cfg)
     assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
@@ -138,6 +141,59 @@ def test_build_jax_policy_dispatches_planet_graph_transformer_small() -> None:
         encoder_backbone_for_architecture("planet_graph_transformer_small")
         == "planet_self_attention"
     )
+
+
+@pytest.mark.jax
+def test_incremental_factorized_decode_matches_full_teacher_path() -> None:
+    """Rollout incremental decode must match full factorized_decode on teacher prefix."""
+    from src.jax.factored_sequence_scan import forward_factorized_encode
+    from src.jax.policy import (
+        factorized_decode,
+        factorized_decode_advance_carry,
+        factorized_decode_init_carry,
+        factorized_decode_step,
+    )
+
+    cfg = _train_cfg(architecture="planet_graph_transformer")
+    cfg.model.max_moves_k = 3
+    cfg.model.decoder_carry = True
+    policy = build_jax_policy(cfg)
+    batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(0))
+    params = policy.init(jax.random.PRNGKey(1), batch)
+    encoder_out = forward_factorized_encode(params, policy, batch)
+    source_seq = jnp.array([[0, 1, 0], [0, 0, 1]], dtype=jnp.int32)
+    slot_seq = jnp.array([[0, 1, 2], [1, 0, 0]], dtype=jnp.int32)
+
+    full = factorized_decode(
+        params,
+        policy,
+        encoder_out,
+        source_sequence=source_seq,
+        target_slot_sequence=slot_seq,
+        deterministic=True,
+    )
+
+    carry = factorized_decode_init_carry(params, policy, encoder_out)
+    for step_idx in range(cfg.model.max_moves_k):
+        _, carry = factorized_decode_step(
+            params,
+            policy,
+            encoder_out,
+            carry,
+            teacher_source=source_seq[:, step_idx],
+            teacher_target_slot=slot_seq[:, step_idx],
+            deterministic=True,
+        )
+        carry = factorized_decode_advance_carry(
+            params,
+            policy,
+            encoder_out,
+            carry,
+            source=source_seq[:, step_idx],
+            target_slot=slot_seq[:, step_idx],
+        )
+
+    np.testing.assert_allclose(carry.state, full.decoder_hidden, rtol=0.0, atol=1e-5)
 
 
 def test_build_jax_policy_dispatches_factorized_transformer() -> None:

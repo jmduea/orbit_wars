@@ -19,9 +19,13 @@ from src.jax.action_codec import (
     source_mask_from_bucket_mask_and_ships,
 )
 from src.jax.decoder_carry import decoder_carry_enabled
+from src.jax.decoders.factorized_topk_pointer import FactorizedDecodeCarry
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.jax.planet_flow import compile_planet_flow_action, planet_flow_sampling_target_mask
+from src.jax.planet_flow import (
+    compile_planet_flow_action,
+    planet_flow_sampling_target_mask,
+)
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
@@ -43,7 +47,6 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
-from src.jax.decoders.factorized_topk_pointer import FactorizedDecodeCarry
 
 
 def _merge_factorized_decode_carry(
@@ -351,6 +354,7 @@ def _sample_shielded_factored_sequence_with_params(
         empty_forbidden_grid,
     )
     from src.jax.policy import (
+        factorized_decode,
         factorized_decode_advance_carry,
         factorized_decode_init_carry,
         factorized_decode_step,
@@ -551,7 +555,6 @@ def _sample_shielded_factored_sequence_with_params(
         )
         bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(shield_step_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
-        advance_active = sequence_active & jnp.logical_not(stop.astype(bool))
         proposed_decode_carry = factorized_decode_advance_carry(
             params,
             policy,
@@ -561,7 +564,7 @@ def _sample_shielded_factored_sequence_with_params(
             target_slot=target_slot,
         )
         decode_carry = _merge_factorized_decode_carry(
-            decode_carry, proposed_decode_carry, advance_active
+            decode_carry, proposed_decode_carry, sequence_active
         )
         return (
             source_sequence,
@@ -626,11 +629,24 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
-    decoder_hidden_out = decode_carry.state if carry_enabled else None
-    tiered_revalidate = (
-        trajectory_shield_mode(cfg.task) == "tiered"
-        and trajectory_shield_final_validate_selected(cfg.task)
-    )
+    if carry_enabled:
+        final_output = factorized_decode(
+            params,
+            policy,
+            encoder_out,
+            player_count=player_count,
+            source_sequence=source_sequence,
+            target_slot_sequence=slot_sequence,
+            decoder_hidden=decoder_hidden_in,
+            deterministic=deterministic,
+            include_value=False,
+        )
+        decoder_hidden_out = final_output.decoder_hidden
+    else:
+        decoder_hidden_out = None
+    tiered_revalidate = trajectory_shield_mode(
+        cfg.task
+    ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)
     if tiered_revalidate:
         replay = replay_factored_sequence_logprob(
             params,
@@ -873,6 +889,8 @@ def _sample_shielded_sequence_with_params(
         decoder_hidden_out=decoder_hidden_out if carry_enabled else None,
         ship_fraction=ship_fraction_sequence if continuous else None,
     )
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     game,
@@ -895,13 +913,14 @@ def _sample_policy_action_with_params(
         )
         if not isinstance(output, PlanetFlowPolicyOutput):
             raise TypeError(
-                "planet_flow_target_heatmap policy must return "
-                "PlanetFlowPolicyOutput."
+                "planet_flow_target_heatmap policy must return PlanetFlowPolicyOutput."
             )
         pressure_action = sample_planet_flow_pressure_action(
             key,
             output,
-            jnp.asarray(cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32),
+            jnp.asarray(
+                cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32
+            ),
             planet_flow_sampling_target_mask(game, batch),
             deterministic=deterministic,
         )
