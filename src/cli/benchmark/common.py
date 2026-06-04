@@ -43,6 +43,7 @@ def print_benchmark_help() -> None:
         "  calibrate-qualifier-seeds SSOT qualifier per-leg win-rate floor calibration\n"
         "  gate                     Composable preflight gates (run/list)\n"
         "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
+        "  shortlist-ssot-preflight-sweep  Rank finished SSOT preflight W&B sweep runs\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
         "  factorized-sampler     Tier-1 launch-hygiene microbenchmark (in-process JAX)\n\n"

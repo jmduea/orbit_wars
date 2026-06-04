@@ -197,6 +197,25 @@ def build_parser() -> argparse.ArgumentParser:
     learn_proof.add_argument("--seeds", default="0,1,2,3,4")
     learn_proof.add_argument("--games-per-pair", type=int, default=4)
 
+    shortlist_ssot = subparsers.add_parser(
+        "shortlist-ssot-preflight-sweep",
+        help="Deterministic SSOT preflight sweep shortlist (Gates 2–3 guardrails).",
+    )
+    shortlist_ssot.add_argument("--sweep-id", required=True)
+    shortlist_ssot.add_argument("--entity", default="jmduea-jdueadev")
+    shortlist_ssot.add_argument("--project", default="orbit-wars")
+    shortlist_ssot.add_argument(
+        "--out",
+        type=Path,
+        default=Path("outputs/preflight/ssot_preflight_sweep_shortlist.json"),
+    )
+    shortlist_ssot.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max eligible entries in ranked output.",
+    )
+
     shortlist_pf = subparsers.add_parser(
         "shortlist-planet-flow-sweep",
         help="Deterministic Planet Flow sweep shortlist (window-mean KL guardrails).",

@@ -22,6 +22,7 @@ from src.cli.benchmark.planet_flow import (
     run_planet_flow_noop_smoke_cli,
     run_shortlist_planet_flow_sweep_cli,
 )
+from src.cli.benchmark.ssot_preflight import run_shortlist_ssot_preflight_sweep_cli
 from src.cli.benchmark.sanity import run_sanity_cli
 from src.cli.benchmark.tournament_proof import run_tournament_proof_cli
 from src.cli.benchmark.training import run_training_benchmark_cli
@@ -70,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_unified_tournament_cli(args)
         case "calibrate-qualifier-seeds":
             return run_calibrate_qualifier_seeds_cli(args)
+        case "shortlist-ssot-preflight-sweep":
+            return run_shortlist_ssot_preflight_sweep_cli(args)
         case "shortlist-planet-flow-sweep":
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":
