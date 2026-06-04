@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+SsotQualifierPhase = Literal["all", "eval", "record"]
 
 from src.artifacts.tournament.bracket.state import (
     BracketEntry,
-    BracketState,
     bracket_state_path,
     load_bracket_state,
     mark_qualifier_cleared,
@@ -17,6 +18,7 @@ from src.artifacts.tournament.bracket.state import (
     upsert_entry,
 )
 from src.config import TrainConfig
+from src.jax.tournament_qualifiers.eval import run_held_out_qualifier_eval
 from src.jax.tournament_qualifiers.promotion import (
     STAGE_NAMES,
     LegWinSummary,
@@ -44,17 +46,46 @@ def _ssot_config(cfg: TrainConfig) -> Any:
     return cfg.artifacts.ssot_pipeline
 
 
-def evaluate_qualifier_legs(
+def prior_checkpoint_for_qualifier_eval(
+    run_dir: Path,
     *,
+    update: int,
+    interval: int,
+) -> Path | None:
+    """Checkpoint saved before this update for pre-rollout held-out eval."""
+
+    if update <= 0 or interval <= 0 or update % interval != 0:
+        return None
+    prev_numbered = run_dir / f"jax_ckpt_{update - interval:06d}.pkl"
+    if prev_numbered.is_file():
+        return prev_numbered
+    last = run_dir / "jax_ckpt_last.pkl"
+    if last.is_file():
+        return last
+    return None
+
+
+def evaluate_qualifier_legs(
+    cfg: TrainConfig,
+    *,
+    checkpoint_path: Path | None = None,
+    stage: int = 1,
     leg_wins: dict[str, tuple[int, int]] | None = None,
 ) -> dict[str, tuple[int, int]]:
-    """Aggregate wins per opponent leg.
+    """Aggregate wins per opponent leg on ``eval_seed_set`` (R25).
 
-    When ``qualifier_games_per_seed`` is 0 (default), callers supply ``leg_wins``
-    from JAX eval; until wired, ticks pass empty counts and promotion does not advance.
+    When ``qualifier_games_per_seed`` is 0, returns empty counts so promotion does not run.
+    Tests may inject ``leg_wins`` directly.
     """
 
-    return dict(leg_wins or {})
+    if leg_wins is not None:
+        return dict(leg_wins)
+    games_per_seed = int(cfg.artifacts.ssot_pipeline.qualifier_games_per_seed)
+    if games_per_seed <= 0 or checkpoint_path is None:
+        return {}
+    return run_held_out_qualifier_eval(
+        cfg, checkpoint_path=checkpoint_path, stage=stage
+    )
 
 
 def ssot_qualifier_tick(
@@ -64,19 +95,29 @@ def ssot_qualifier_tick(
     total_env_steps: int,
     checkpoint_path: Path | None,
     output_root: Path,
+    phase: SsotQualifierPhase = "all",
 ) -> SsotQualifierTick:
-    """Checkpoint-tick qualifier promotion, weak_config budget, and bracket state."""
+    """SSOT qualifier bracket hooks.
+
+    ``eval`` — held-out promotion before rollout (prior checkpoint).
+    ``record`` — upsert this update's checkpoint and weak_config budget after rollout.
+    ``all`` — both in one call (tests and legacy single-tick callers).
+    """
 
     ssot = _ssot_config(cfg)
-    state_path = bracket_state_path(campaign=cfg.output.campaign, output_root=output_root)
+    state_path = bracket_state_path(
+        campaign=cfg.output.campaign, output_root=output_root
+    )
     state = load_bracket_state(state_path)
     stage = max(1, int(state.ssot_qualifier_stage or 1))
     events: list[dict[str, object]] = []
     weak_config = False
     promotion_event: dict[str, object] | None = None
     leg_summaries: tuple[LegWinSummary, ...] = ()
+    run_eval = phase in ("all", "eval")
+    run_record = phase in ("all", "record")
 
-    if checkpoint_path is not None and checkpoint_path.is_file():
+    if run_record and checkpoint_path is not None and checkpoint_path.is_file():
         agent_id = f"u{update}"
         upsert_entry(
             state,
@@ -86,7 +127,7 @@ def ssot_qualifier_tick(
             ),
         )
 
-    if (
+    if run_record and (
         stage < 4
         and not any(entry.qualifier_cleared for entry in state.entries.values())
         and total_env_steps >= int(ssot.qualifier_max_env_steps)
@@ -104,7 +145,8 @@ def ssot_qualifier_tick(
     interval = int(ssot.qualifier_eval_interval_updates)
     games_per_seed = int(ssot.qualifier_games_per_seed)
     should_eval = (
-        interval > 0
+        run_eval
+        and interval > 0
         and games_per_seed > 0
         and checkpoint_path is not None
         and checkpoint_path.is_file()
@@ -115,7 +157,11 @@ def ssot_qualifier_tick(
         and stage < 4
     )
     if should_eval:
-        leg_wins = evaluate_qualifier_legs()
+        leg_wins = evaluate_qualifier_legs(
+            cfg,
+            checkpoint_path=checkpoint_path,
+            stage=stage,
+        )
         verdict = evaluate_stage_promotion(stage=stage, leg_wins=leg_wins)
         leg_summaries = verdict.leg_summaries
         events.append(
@@ -148,9 +194,9 @@ def ssot_qualifier_tick(
             stage = verdict.next_stage
 
     save_bracket_state(state_path, state)
-    phase = state.phase if weak_config else STAGE_NAMES.get(stage, "qualifier")
+    tick_phase = state.phase if weak_config else STAGE_NAMES.get(stage, "qualifier")
     return SsotQualifierTick(
-        phase=str(phase),
+        phase=str(tick_phase),
         qualifier_stage=stage,
         weak_config=weak_config,
         promotion_event=promotion_event,
@@ -159,7 +205,11 @@ def ssot_qualifier_tick(
     )
 
 
-def ssot_qualifier_telemetry(tick: SsotQualifierTick) -> dict[str, object]:
+def ssot_qualifier_telemetry(
+    tick: SsotQualifierTick,
+    *,
+    eval_tick: SsotQualifierTick | None = None,
+) -> dict[str, object]:
     record: dict[str, object] = {
         "ssot_qualifier_stage": tick.qualifier_stage,
         "ssot_qualifier_phase": tick.phase,
@@ -170,7 +220,10 @@ def ssot_qualifier_telemetry(tick: SsotQualifierTick) -> dict[str, object]:
 
     for name, prob in zip(OPPONENT_FAMILY_NAMES, probs, strict=True):
         record[f"ssot_rollout_family_prob_{name}"] = prob
-    for summary in tick.leg_summaries:
+    leg_sources = (
+        eval_tick.leg_summaries if eval_tick is not None else ()
+    ) + tick.leg_summaries
+    for summary in leg_sources:
         if summary.win_rate is not None:
             record[f"ssot_qualifier_win_rate_{summary.opponent}"] = summary.win_rate
     return record

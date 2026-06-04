@@ -14,6 +14,10 @@ from src.artifacts.pipeline import (
     CheckpointResult,
 )
 from src.artifacts.run_paths import resolve_run_paths, write_run_manifests
+from src.artifacts.tournament.bracket.state import (
+    bracket_state_path,
+    load_bracket_state,
+)
 from src.config import TrainConfig
 from src.config.rollout_allocation import infer_static_format_weights
 from src.jax.device import (
@@ -30,6 +34,17 @@ from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
 from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
 from src.jax.rollout.metrics import FINALIZED_ROLLOUT_RATE_KEYS
 from src.jax.rollout.types import JaxTransitionBatch
+from src.jax.tournament_qualifiers.promotion import ssot_rollout_stage_view
+from src.jax.tournament_qualifiers.runner import (
+    prior_checkpoint_for_qualifier_eval,
+    ssot_pipeline_enabled,
+    ssot_qualifier_telemetry,
+    ssot_qualifier_tick,
+)
+from src.jax.train.bracket_training import (
+    bracket_training_enabled,
+    bracket_training_tick,
+)
 from src.jax.train.checkpoint import (
     CheckpointHandler,
     load_jax_checkpoint,
@@ -72,12 +87,6 @@ from src.telemetry.metric_registry import (
     metric_groups_cfg_from_config,
     required_ppo_metric_names,
     required_rollout_scalar_names,
-)
-from src.jax.train.bracket_training import bracket_training_enabled, bracket_training_tick
-from src.jax.tournament_qualifiers.runner import (
-    ssot_pipeline_enabled,
-    ssot_qualifier_tick,
-    ssot_qualifier_telemetry,
 )
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import (
@@ -258,6 +267,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 checkpoint_handler.handle_results(checkpoint_pipeline.drain_results())
             update_start = time.perf_counter()
             reseed_events: list[dict[str, object]] = []
+            ssot_eval_tick = None
             rollout_start = time.perf_counter()
             transitions_by_group: list[JaxTransitionBatch] = []
             rollout_metrics_by_group: list[dict[str, jax.Array]] = []
@@ -277,12 +287,45 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         "policy": reseed_event.policy,
                     }
                 )
-            stage_view = curriculum.stage_view(
-                update,
-                snapshot_ids=historical_pool.snapshot_ids,
-                snapshot_valid_mask=historical_pool.valid_mask,
-                snapshot_updates=historical_pool.snapshot_updates,
-            )
+            if ssot_pipeline_enabled(cfg):
+                ssot_cfg = cfg.artifacts.ssot_pipeline
+                eval_ckpt = prior_checkpoint_for_qualifier_eval(
+                    run_dir,
+                    update=update,
+                    interval=int(ssot_cfg.qualifier_eval_interval_updates),
+                )
+                if eval_ckpt is not None:
+                    ssot_eval_tick = ssot_qualifier_tick(
+                        cfg,
+                        update=update,
+                        total_env_steps=total_env_steps,
+                        checkpoint_path=eval_ckpt,
+                        output_root=Path(cfg.output.root),
+                        phase="eval",
+                    )
+                    ssot_stage = ssot_eval_tick.qualifier_stage
+                else:
+                    ssot_bracket = load_bracket_state(
+                        bracket_state_path(
+                            campaign=cfg.output.campaign,
+                            output_root=Path(cfg.output.root),
+                        )
+                    )
+                    ssot_stage = max(1, int(ssot_bracket.ssot_qualifier_stage or 1))
+                stage_view = ssot_rollout_stage_view(
+                    ssot_stage,
+                    update,
+                    snapshot_ids=historical_pool.snapshot_ids,
+                    snapshot_valid_mask=historical_pool.valid_mask,
+                    snapshot_updates=historical_pool.snapshot_updates,
+                )
+            else:
+                stage_view = curriculum.stage_view(
+                    update,
+                    snapshot_ids=historical_pool.snapshot_ids,
+                    snapshot_valid_mask=historical_pool.valid_mask,
+                    snapshot_updates=historical_pool.snapshot_updates,
+                )
             active_indices = active_group_indices(
                 rollout_groups,
                 curriculum.current_format_weights(),
@@ -450,8 +493,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         overall_win_rate=overall_win_rate,
                         metrics_host=metrics_host,
                     )
-                elif track_planet_flow_sweep and "action_decision" in enabled_metric_groups(
-                    metric_groups_cfg_from_config(cfg)
+                elif (
+                    track_planet_flow_sweep
+                    and "action_decision"
+                    in enabled_metric_groups(metric_groups_cfg_from_config(cfg))
                 ):
                     planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
                         win_rate_trend=win_rate_trend,
@@ -534,17 +579,25 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     "weak_config": tick.weak_config,
                 }
             elif ssot_pipeline_enabled(cfg):
-                ssot_tick = ssot_qualifier_tick(
+                ssot_post_tick = ssot_qualifier_tick(
                     cfg,
                     update=update,
                     total_env_steps=total_env_steps,
                     checkpoint_path=saved_checkpoint_path,
                     output_root=Path(cfg.output.root),
+                    phase="record",
                 )
-                bracket_metrics = ssot_qualifier_telemetry(ssot_tick)
-                if ssot_tick.events:
+                bracket_metrics = ssot_qualifier_telemetry(
+                    ssot_post_tick,
+                    eval_tick=ssot_eval_tick,
+                )
+                ssot_events: list[dict[str, object]] = []
+                if ssot_eval_tick is not None:
+                    ssot_events.extend(ssot_eval_tick.events)
+                ssot_events.extend(ssot_post_tick.events)
+                if ssot_events:
                     update_events = list(update_events)
-                    update_events.extend(ssot_tick.events)
+                    update_events.extend(ssot_events)
             record = build_update_record(
                 update=update,
                 total_env_steps=total_env_steps,

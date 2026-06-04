@@ -5,14 +5,36 @@ from __future__ import annotations
 import pickle
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
+import pytest
 
+import jax
 from src.artifacts.tournament.bracket.state import load_bracket_state
-from src.config.schema import ArtifactsConfig, OutputConfig, SsotPipelineConfig, TrainConfig
+from src.config.schema import (
+    ArtifactsConfig,
+    OutputConfig,
+    SsotPipelineConfig,
+    TrainConfig,
+)
+from src.game.constants import MAX_PLANETS
+from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, empty_comet_state
 from src.jax.qualifier_calibration import load_qualifier_calibration
-from src.jax.tournament_qualifiers.metrics import learner_won_from_final_scores
-from src.jax.tournament_qualifiers.promotion import evaluate_stage_promotion
-from src.jax.tournament_qualifiers.runner import ssot_qualifier_tick
+from src.jax.tournament_qualifiers.eval import held_out_eval_seeds
+from src.jax.tournament_qualifiers.metrics import (
+    final_ship_scores,
+    learner_won_from_final_scores,
+)
+from src.jax.tournament_qualifiers.promotion import (
+    evaluate_stage_promotion,
+    opponent_family_probs_for_stage,
+    ssot_rollout_stage_view,
+)
+from src.jax.tournament_qualifiers.runner import (
+    evaluate_qualifier_legs,
+    prior_checkpoint_for_qualifier_eval,
+    ssot_qualifier_tick,
+)
 
 
 def test_learner_won_requires_strict_max_not_tie() -> None:
@@ -32,7 +54,9 @@ def test_stage_promotion_uses_final_score_win_rates_not_rollout_metric() -> None
 
 
 def test_missing_games_blocks_promotion() -> None:
-    verdict = evaluate_stage_promotion(stage=2, leg_wins={"noop": (0, 0), "random": (0, 0)})
+    verdict = evaluate_stage_promotion(
+        stage=2, leg_wins={"noop": (0, 0), "random": (0, 0)}
+    )
     assert not verdict.promoted
     assert verdict.fail_reason is not None
 
@@ -111,6 +135,95 @@ def test_ssot_interval_skips_eval_when_games_per_seed_zero(tmp_path: Path) -> No
     assert tick.leg_summaries == ()
 
 
+def test_held_out_eval_seeds_disjoint_from_training_pool() -> None:
+    cfg = TrainConfig()
+    cfg.training_seed_set = [1, 2, 3]
+    cfg.eval_seed_set = [43, 44, 45, 46]
+    cfg.seed = 99
+    assert held_out_eval_seeds(cfg) == (43, 44, 45, 46)
+
+
+def test_evaluate_qualifier_legs_delegates_to_eval_seed_set(
+    tmp_path: Path, monkeypatch
+) -> None:
+    cfg = _ssot_cfg(tmp_path)
+    cfg.eval_seed_set = [43, 44]
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 1
+    captured: dict[str, object] = {}
+
+    def _fake_eval(
+        train_cfg: TrainConfig,
+        *,
+        checkpoint_path: Path,
+        stage: int,
+    ) -> dict[str, tuple[int, int]]:
+        captured["eval_seed_set"] = list(train_cfg.eval_seed_set)
+        captured["stage"] = stage
+        captured["path"] = checkpoint_path
+        return {"random": (2, 4)}
+
+    monkeypatch.setattr(
+        "src.jax.tournament_qualifiers.runner.run_held_out_qualifier_eval",
+        _fake_eval,
+    )
+    ckpt = tmp_path / "ckpt.pkl"
+    ckpt.write_bytes(pickle.dumps({"params": {}}))
+    result = evaluate_qualifier_legs(cfg, checkpoint_path=ckpt, stage=1)
+    assert result == {"random": (2, 4)}
+    assert captured["eval_seed_set"] == [43, 44]
+    assert captured["stage"] == 1
+
+
+def test_ssot_rollout_stage_view_matches_stage_probs() -> None:
+    view = ssot_rollout_stage_view(
+        2,
+        5,
+        snapshot_ids=jnp.zeros((1,), dtype=jnp.int32),
+        snapshot_valid_mask=jnp.zeros((1,), dtype=bool),
+        snapshot_updates=jnp.zeros((1,), dtype=jnp.int32),
+    )
+    expected = opponent_family_probs_for_stage(2)
+    assert [float(x) for x in view.family_probs] == pytest.approx(list(expected))
+
+
+def test_final_ship_scores_strict_max_winner() -> None:
+    fleet_count = 16
+    empty_fleets = JaxFleetState(
+        id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        x=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        y=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        angle=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        from_planet_id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        ships=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        active=jnp.zeros((fleet_count,), dtype=bool),
+    )
+    planets = JaxPlanetState(
+        id=jnp.arange(MAX_PLANETS, dtype=jnp.int32),
+        owner=jnp.array([0, 1] + [-1] * (MAX_PLANETS - 2), dtype=jnp.int32),
+        x=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
+        y=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
+        radius=jnp.ones((MAX_PLANETS,), dtype=jnp.float32),
+        ships=jnp.array([12.0, 8.0] + [0.0] * (MAX_PLANETS - 2), dtype=jnp.float32),
+        production=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
+        active=jnp.array([True, True] + [False] * (MAX_PLANETS - 2), dtype=bool),
+    )
+    game = JaxGameState(
+        step=jnp.array(10, dtype=jnp.int32),
+        player=jnp.array(0, dtype=jnp.int32),
+        angular_velocity=jnp.array(0.03, dtype=jnp.float32),
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        episode_seed=jnp.array(43, dtype=jnp.int32),
+        planets=planets,
+        initial_planets=planets,
+        fleets=empty_fleets,
+        comets=empty_comet_state(),
+    )
+    scores = final_ship_scores(game, 2)
+    assert learner_won_from_final_scores(scores, learner_player=0)
+    assert not learner_won_from_final_scores(scores, learner_player=1)
+
+
 def test_ssot_interval_skips_eval_when_not_qualifier_phase(tmp_path: Path) -> None:
     import json
 
@@ -132,3 +245,75 @@ def test_ssot_interval_skips_eval_when_not_qualifier_phase(tmp_path: Path) -> No
         output_root=tmp_path,
     )
     assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+
+
+def test_prior_checkpoint_for_qualifier_eval_prefers_numbered(tmp_path: Path) -> None:
+    run_dir = tmp_path / "checkpoints"
+    run_dir.mkdir()
+    numbered = run_dir / "jax_ckpt_000040.pkl"
+    numbered.write_bytes(b"x")
+    (run_dir / "jax_ckpt_last.pkl").write_bytes(b"y")
+    path = prior_checkpoint_for_qualifier_eval(run_dir, update=50, interval=10)
+    assert path == numbered
+
+
+def test_record_phase_does_not_run_qualifier_eval(tmp_path: Path) -> None:
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 2
+    ckpt = tmp_path / "ckpt.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 10}))
+    tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+        phase="record",
+    )
+    assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+
+
+def test_eval_phase_promotes_before_rollout_stage_view(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    from src.jax import tournament_qualifiers
+
+    def _fake_legs() -> dict[str, tuple[int, int]]:
+        return {"random": (6, 10)}
+
+    monkeypatch.setattr(
+        tournament_qualifiers.runner,
+        "evaluate_qualifier_legs",
+        lambda *_args, **_kwargs: _fake_legs(),
+    )
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 2
+    state_path = tmp_path / "campaigns" / "ssot_demo" / "bracket" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({"ssot_qualifier_stage": 1, "phase": "qualifier", "entries": {}}),
+        encoding="utf-8",
+    )
+    ckpt = tmp_path / "prior.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 0}))
+    eval_tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+        phase="eval",
+    )
+    assert eval_tick.qualifier_stage == 2
+    view = ssot_rollout_stage_view(
+        eval_tick.qualifier_stage,
+        10,
+        snapshot_ids=jnp.zeros((0,), dtype=jnp.int32),
+        snapshot_valid_mask=jnp.zeros((0,), dtype=bool),
+        snapshot_updates=jnp.zeros((0,), dtype=jnp.int32),
+    )
+    probs = np.asarray(jax.device_get(view.family_probs), dtype=np.float64)
+    expected = np.asarray(opponent_family_probs_for_stage(2), dtype=np.float64)
+    assert np.allclose(probs, expected, rtol=0.0, atol=1e-5)
