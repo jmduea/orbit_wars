@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.config import compose_hydra_train_config
 
 
@@ -19,3 +21,13 @@ def test_ssot_pipeline_artifacts_profile_composes() -> None:
     assert not cfg.artifacts.replay.enabled
     assert cfg.telemetry.wandb.enabled
     assert cfg.eval_seed_set == [43, 44, 45, 46]
+
+
+def test_bracket_training_and_ssot_pipeline_are_mutually_exclusive() -> None:
+    with pytest.raises(ValueError, match="cannot both be true"):
+        compose_hydra_train_config(
+            [
+                "artifacts=ssot_pipeline",
+                "artifacts.bracket_training.enabled=true",
+            ]
+        )

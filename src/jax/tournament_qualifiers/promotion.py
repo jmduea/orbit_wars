@@ -85,6 +85,14 @@ def evaluate_stage_promotion(
 
     cal = calibration or load_qualifier_calibration()
     required_legs = legs_for_stage(stage)
+    if not required_legs:
+        return StagePromotionVerdict(
+            stage=stage,
+            promoted=False,
+            next_stage=stage,
+            leg_summaries=(),
+            fail_reason="unknown_stage",
+        )
     summaries: list[LegWinSummary] = []
     for leg in required_legs:
         wins, games = leg_wins.get(leg, (0, 0))
