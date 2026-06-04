@@ -222,27 +222,27 @@ def run_cancel_cli(args: argparse.Namespace) -> int:
 
     import wandb  # type: ignore
 
-    api = wandb.Api()
-    sweep = api.sweep(sweep_path)
-    cancelled: list[str] = []
-    skipped: list[str] = []
-    for run in getattr(sweep, "runs", []) or []:
-        state = str(getattr(run, "state", "") or "")
-        run_id = str(getattr(run, "id", "") or "")
-        if state.lower() in {"running", "pending", "queued"}:
-            run.cancel()
-            cancelled.append(run_id)
-        elif run_id:
-            skipped.append(run_id)
+    import subprocess
+
+    cmd = [
+        "wandb",
+        "sweep",
+        "--stop",
+        sweep_path,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(proc.stderr or proc.stdout, file=sys.stderr)
+        return proc.returncode or 1
+    sweep = wandb.Api().sweep(sweep_path)
     payload = {
         "backend": args.backend,
         "sweep_id": args.sweep_id,
         "project": args.project,
         "entity": entity,
         "sweep_state": getattr(sweep, "state", None),
-        "cancelled_run_ids": cancelled,
-        "skipped_run_ids": skipped[:20],
-        "cancelled_count": len(cancelled),
+        "action": "wandb_sweep_stop",
+        "wandb_cli_stdout": (proc.stdout or "").strip(),
     }
     print(json.dumps(payload, indent=2))
     return 0 if cancelled or not getattr(sweep, "runs", None) else 1
