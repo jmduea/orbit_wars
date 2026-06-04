@@ -43,6 +43,21 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
+from src.jax.decoders.factorized_topk_pointer import FactorizedDecodeCarry
+
+
+def _merge_factorized_decode_carry(
+    carry: FactorizedDecodeCarry,
+    proposed: FactorizedDecodeCarry,
+    active: jax.Array,
+) -> FactorizedDecodeCarry:
+    """Keep decoder carry fixed for env rows that finished the sub-move sequence."""
+
+    active = active.reshape(active.shape + (1,) * (carry.state.ndim - 1))
+    return FactorizedDecodeCarry(
+        state=jnp.where(active, proposed.state, carry.state),
+        input_emb=jnp.where(active, proposed.input_emb, carry.input_emb),
+    )
 
 
 def _policy_variables(params: dict) -> dict:
@@ -335,7 +350,11 @@ def _sample_shielded_factored_sequence_with_params(
         build_hygiene_lookups,
         empty_forbidden_grid,
     )
-    from src.jax.policy import factorized_decode
+    from src.jax.policy import (
+        factorized_decode_advance_carry,
+        factorized_decode_init_carry,
+        factorized_decode_step,
+    )
 
     env_count = batch.planet_features.shape[0]
     player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
@@ -356,6 +375,12 @@ def _sample_shielded_factored_sequence_with_params(
     entropy_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
+    decode_carry = factorized_decode_init_carry(
+        params,
+        policy,
+        encoder_out,
+        decoder_hidden=decoder_hidden_carry,
+    )
     remaining_ships = owned_planet_ships(game)
     hygiene_lookups = build_hygiene_lookups(batch)
     cumulative_forbidden = empty_forbidden_grid(
@@ -386,24 +411,21 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ) = carry
-        step_kwargs = {
-            "player_count": player_count,
-            "source_sequence": source_sequence,
-            "target_slot_sequence": slot_sequence,
-            "rng": jax.random.fold_in(key, step_idx),
-            "deterministic": deterministic,
-        }
-        if carry_enabled:
-            step_kwargs["decoder_hidden"] = decoder_hidden_carry
-        step_output = factorized_decode(
+        step_logits, proposed_decode_carry = factorized_decode_step(
             params,
             policy,
             encoder_out,
-            include_value=False,
-            **step_kwargs,
+            decode_carry,
+            teacher_source=source_sequence[:, step_idx],
+            teacher_target_slot=slot_sequence[:, step_idx],
+            rng=jax.random.fold_in(key, step_idx),
+            deterministic=deterministic,
+        )
+        decode_carry = _merge_factorized_decode_carry(
+            decode_carry, proposed_decode_carry, sequence_active
         )
         shielded = jax.vmap(
             lambda game_row, batch_row, ships: (
@@ -430,10 +452,10 @@ def _sample_shielded_factored_sequence_with_params(
             in_axes=(0, 0, 0, 0, 0, 0, 0, None),
         )(
             jax.random.split(jax.random.fold_in(key, 10_000 + step_idx), env_count),
-            step_output.source_logits[:, step_idx, :],
-            step_output.target_logits[:, step_idx, :],
-            step_output.stop_logits[:, step_idx],
-            step_output.ship_logits[:, step_idx, :, :],
+            step_logits.source_logits,
+            step_logits.target_logits,
+            step_logits.stop_logits,
+            step_logits.ship_logits,
             source_mask,
             step_bucket_mask,
             deterministic,
@@ -529,6 +551,18 @@ def _sample_shielded_factored_sequence_with_params(
         )
         bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(shield_step_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
+        advance_active = sequence_active & jnp.logical_not(stop.astype(bool))
+        proposed_decode_carry = factorized_decode_advance_carry(
+            params,
+            policy,
+            encoder_out,
+            decode_carry,
+            source=source,
+            target_slot=target_slot,
+        )
+        decode_carry = _merge_factorized_decode_carry(
+            decode_carry, proposed_decode_carry, advance_active
+        )
         return (
             source_sequence,
             slot_sequence,
@@ -542,7 +576,7 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ), None
 
@@ -560,7 +594,7 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             _sequence_active,
-            decoder_hidden_out,
+            decode_carry,
             _cumulative_forbidden,
         ),
         _,
@@ -579,7 +613,7 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
@@ -592,19 +626,7 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
-    if carry_enabled:
-        final_output = factorized_decode(
-            params,
-            policy,
-            encoder_out,
-            player_count=player_count,
-            source_sequence=source_sequence,
-            target_slot_sequence=slot_sequence,
-            decoder_hidden=decoder_hidden_in,
-            deterministic=deterministic,
-            include_value=False,
-        )
-        decoder_hidden_out = final_output.decoder_hidden
+    decoder_hidden_out = decode_carry.state if carry_enabled else None
     tiered_revalidate = (
         trajectory_shield_mode(cfg.task) == "tiered"
         and trajectory_shield_final_validate_selected(cfg.task)

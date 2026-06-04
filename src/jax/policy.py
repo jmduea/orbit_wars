@@ -22,7 +22,11 @@ from src.jax.action_codec import (
     ensure_policy_sequence,
 )
 from src.jax.decoders.planet_flow import PlanetFlowTargetDemandHead
-from src.jax.decoders.factorized_topk_pointer import FactorizedTopKPointerDecoder
+from src.jax.decoders.factorized_topk_pointer import (
+    FactorizedDecodeCarry,
+    FactorizedStepLogits,
+    FactorizedTopKPointerDecoder,
+)
 from src.jax.distributional_value import (
     expected_value_from_logits,
     value_support,
@@ -297,6 +301,54 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
             decoder_hidden=decoder_hidden_out if self.decoder_carry else None,
         )
 
+    def decode_init_carry(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        *,
+        decoder_hidden: jax.Array | None = None,
+    ) -> FactorizedDecodeCarry:
+        """Initial GRU carry for incremental factorized decode in rollout scans."""
+
+        return self.decoder_module.init_carry(
+            encoder_out, decoder_hidden_in=decoder_hidden
+        )
+
+    def decode_step(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        carry: FactorizedDecodeCarry,
+        *,
+        teacher_source: jax.Array | None = None,
+        teacher_target_slot: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> tuple[FactorizedStepLogits, FactorizedDecodeCarry]:
+        """One autoregressive decoder step on cached encoder output."""
+
+        step_logits, new_carry, _, _, _ = self.decoder_module.step(
+            encoder_out,
+            carry,
+            teacher_source=teacher_source,
+            teacher_target_slot=teacher_target_slot,
+            rng=rng,
+            deterministic=deterministic,
+        )
+        return step_logits, new_carry
+
+    def decode_advance_carry(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        carry: FactorizedDecodeCarry,
+        *,
+        source: jax.Array,
+        target_slot: jax.Array,
+    ) -> FactorizedDecodeCarry:
+        """Advance decoder input embedding after a committed launch."""
+
+        return self.decoder_module.advance_carry_input(
+            encoder_out, carry, source=source, target_slot=target_slot
+        )
+
     @nn.compact
     def __call__(
         self,
@@ -445,6 +497,69 @@ def factorized_decode(
         deterministic=deterministic,
         include_value=include_value,
         method=ComposableFactorizedPlanetPolicy.decode,
+    )
+
+
+def factorized_decode_init_carry(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    *,
+    decoder_hidden: jax.Array | None = None,
+) -> FactorizedDecodeCarry:
+    """Initial decoder carry for incremental rollout sequence scans."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        decoder_hidden=decoder_hidden,
+        method=ComposableFactorizedPlanetPolicy.decode_init_carry,
+    )
+
+
+def factorized_decode_step(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    carry: FactorizedDecodeCarry,
+    *,
+    teacher_source: jax.Array | None = None,
+    teacher_target_slot: jax.Array | None = None,
+    rng: jax.Array | None = None,
+    deterministic: bool = False,
+) -> tuple[FactorizedStepLogits, FactorizedDecodeCarry]:
+    """Single decoder step on cached encoder output (no full K-step replay)."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        carry,
+        teacher_source=teacher_source,
+        teacher_target_slot=teacher_target_slot,
+        rng=rng,
+        deterministic=deterministic,
+        method=ComposableFactorizedPlanetPolicy.decode_step,
+    )
+
+
+def factorized_decode_advance_carry(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    carry: FactorizedDecodeCarry,
+    *,
+    source: jax.Array,
+    target_slot: jax.Array,
+) -> FactorizedDecodeCarry:
+    """Update decoder input embedding after sampling a launch."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        carry,
+        source=source,
+        target_slot=target_slot,
+        method=ComposableFactorizedPlanetPolicy.decode_advance_carry,
     )
 
 

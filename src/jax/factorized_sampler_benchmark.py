@@ -33,9 +33,8 @@ def _train_cfg(*, max_moves_k: int, decoder_carry: bool) -> TrainConfig:
 
 
 def _expected_apply_count(max_moves_k: int, *, decoder_carry: bool) -> int:
-    count = 2 + max_moves_k + max_moves_k
-    if decoder_carry:
-        count += 1
+    # encode + critic + per-step decode_step + advance_carry (+ tiered replay decode)
+    count = 2 + (2 * max_moves_k) + max_moves_k
     return count
 
 
@@ -92,11 +91,9 @@ def run_factorized_sampler_benchmark(
     print(f"max_moves_k={max_moves_k} decoder_carry={decoder_carry} batch={batch_size}")
     print(f"structural module applies per sample (sampler): ~{expected}")
     print(
-        f"  breakdown: 1 encode + 1 critic + {max_moves_k} shield decode + "
-        f"{replay_applies} replay decode"
+        f"  breakdown: 1 encode + 1 critic + {max_moves_k} decode_step + "
+        f"{max_moves_k} advance_carry + {replay_applies} replay decode"
     )
-    if decoder_carry:
-        print("  + 1 carry-out decode")
     print("encoder passes (target 1): 1 encode + 0 redundant full policy.apply")
     mean_ms = mean_s * 1000.0
     print(f"mean wall time per sample (JIT): {mean_ms:.2f} ms")
