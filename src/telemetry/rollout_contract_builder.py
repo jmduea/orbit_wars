@@ -1,4 +1,10 @@
-"""Build and validate JAX rollout metric key contracts against the telemetry registry."""
+"""Build and validate JAX rollout metric key contracts against the telemetry registry.
+
+Canonical ``BASE_*`` / ``LOGGED_*`` tuples preserve stable rollout merge order.
+Membership for registry-backed keys is validated via ``rollout_scalar_role`` on
+``MetricDefinition``; call ``validate_rollout_contract_registry_alignment()`` from
+tests (not at import time).
+"""
 
 from __future__ import annotations
 
@@ -177,26 +183,50 @@ ROLLOUT_ALLOWED_SCALAR_KEYS: frozenset[str] = frozenset(
 )
 
 
+def registry_names_for_role(
+    definitions: tuple[MetricDefinition, ...],
+    role: str,
+) -> frozenset[str]:
+    return frozenset(
+        definition.name
+        for definition in definitions
+        if definition.rollout_scalar_role == role
+    )
+
+
 def _registry_names_for_role(role: str) -> frozenset[str]:
     from src.telemetry.metric_registry import METRIC_DEFINITIONS
 
-    return frozenset(
-        definition.name
-        for definition in METRIC_DEFINITIONS
-        if definition.rollout_scalar_role == role
-    )
+    return registry_names_for_role(METRIC_DEFINITIONS, role)
+
+
+def _check(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
 
 
 def validate_rollout_contract_registry_alignment() -> None:
     """Fail fast when registry rollout roles drift from the canonical contract tuples."""
 
-    from src.telemetry.metric_registry import METRIC_DEFINITIONS, METRIC_DEFINITIONS_BY_NAME
+    from src.telemetry.metric_registry import (
+        METRIC_DEFINITIONS,
+        METRIC_DEFINITIONS_BY_NAME,
+    )
 
-    assert _registry_names_for_role("chunk_only") == frozenset(ROLLOUT_CHUNK_ONLY_SCALAR_KEYS)
+    _check(
+        _registry_names_for_role("chunk_only")
+        == frozenset(ROLLOUT_CHUNK_ONLY_SCALAR_KEYS),
+        "chunk_only rollout_scalar_role keys drifted from ROLLOUT_CHUNK_ONLY_SCALAR_KEYS",
+    )
 
     internal_registry = _registry_names_for_role("internal")
-    assert internal_registry == frozenset()
-    assert frozenset(ROLLOUT_INTERNAL_SCALAR_KEYS) == _ROLLOUT_ONLY_INTERNAL_KEYS
+    _check(
+        internal_registry == frozenset(), "internal rollout_scalar_role must stay empty"
+    )
+    _check(
+        frozenset(ROLLOUT_INTERNAL_SCALAR_KEYS) == _ROLLOUT_ONLY_INTERNAL_KEYS,
+        "ROLLOUT_INTERNAL_SCALAR_KEYS drifted from _ROLLOUT_ONLY_INTERNAL_KEYS",
+    )
 
     base_registry = _registry_names_for_role("base_sum")
     planet_flow_keys = frozenset(
@@ -214,13 +244,25 @@ def validate_rollout_contract_registry_alignment() -> None:
         - frozenset(ROLLOUT_CHUNK_ONLY_SCALAR_KEYS)
         - planet_flow_keys
     )
-    assert base_registry == expected_base_registry
-    assert base_registry <= frozenset(BASE_ROLLOUT_SCALAR_KEYS)
+    _check(
+        base_registry == expected_base_registry,
+        "base_sum rollout_scalar_role keys drifted from BASE_ROLLOUT_SCALAR_KEYS",
+    )
+    _check(
+        base_registry <= frozenset(BASE_ROLLOUT_SCALAR_KEYS),
+        "base_sum registry keys must be a subset of BASE_ROLLOUT_SCALAR_KEYS",
+    )
 
     finalized_registry = _registry_names_for_role("finalized_rate")
     expected_finalized_registry = frozenset(FINALIZED_ROLLOUT_RATE_KEYS) - planet_flow_keys
-    assert finalized_registry == expected_finalized_registry
-    assert finalized_registry <= frozenset(FINALIZED_ROLLOUT_RATE_KEYS)
+    _check(
+        finalized_registry == expected_finalized_registry,
+        "finalized_rate rollout_scalar_role keys drifted from FINALIZED_ROLLOUT_RATE_KEYS",
+    )
+    _check(
+        finalized_registry <= frozenset(FINALIZED_ROLLOUT_RATE_KEYS),
+        "finalized_rate registry keys must be a subset of FINALIZED_ROLLOUT_SCALAR_KEYS",
+    )
 
     for definition in METRIC_DEFINITIONS:
         role = definition.rollout_scalar_role
@@ -242,12 +284,19 @@ def validate_rollout_contract_registry_alignment() -> None:
         for definition in METRIC_DEFINITIONS
         if definition.rollout_scalar_role is not None
     )
-    assert registry_rollout_names <= contract_registry_names
-    assert registry_rollout_names == (
-        _registry_names_for_role("base_sum")
-        | _registry_names_for_role("finalized_rate")
-        | _registry_names_for_role("chunk_only")
-        | _registry_names_for_role("internal")
+    _check(
+        registry_rollout_names <= contract_registry_names,
+        "rollout_scalar_role registry names must be registered contract keys",
+    )
+    _check(
+        registry_rollout_names
+        == (
+            _registry_names_for_role("base_sum")
+            | _registry_names_for_role("finalized_rate")
+            | _registry_names_for_role("chunk_only")
+            | _registry_names_for_role("internal")
+        ),
+        "rollout_scalar_role registry names must match role partitions",
     )
 
     for name in LOGGED_ROLLOUT_SCALAR_KEYS:

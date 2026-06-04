@@ -93,10 +93,7 @@ from src.telemetry.rollout_contract_builder import (  # noqa: E402
     LOGGED_ROLLOUT_SCALAR_KEYS,
     ROLLOUT_CHUNK_ONLY_SCALAR_KEYS,
     ROLLOUT_INTERNAL_SCALAR_KEYS,
-    validate_rollout_contract_registry_alignment,
 )
-
-validate_rollout_contract_registry_alignment()
 
 ROLLOUT_SCALAR_ORDER: tuple[str, ...] = LOGGED_ROLLOUT_SCALAR_KEYS
 

@@ -303,17 +303,13 @@ def test_per_format_timing_metrics_are_registered_as_debug():
 def test_rollout_contract_registry_roles_align_with_canonical_tuples() -> None:
     from src.telemetry.rollout_contract_builder import (
         ROLLOUT_CHUNK_ONLY_SCALAR_KEYS,
-        _registry_names_for_role,
+        registry_names_for_role,
         validate_rollout_contract_registry_alignment,
     )
 
     validate_rollout_contract_registry_alignment()
-    assert _registry_names_for_role("chunk_only") == frozenset(ROLLOUT_CHUNK_ONLY_SCALAR_KEYS)
-    assert all(
-        name in METRIC_DEFINITIONS_BY_NAME
-        for name in LOGGED_ROLLOUT_SCALAR_KEYS
-        if name in METRIC_DEFINITIONS_BY_NAME
-        and not name.startswith("planet_flow")
+    assert registry_names_for_role(METRIC_DEFINITIONS, "chunk_only") == frozenset(
+        ROLLOUT_CHUNK_ONLY_SCALAR_KEYS
     )
 
 
