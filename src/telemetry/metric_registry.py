@@ -5,6 +5,7 @@ from typing import Any
 
 from src.telemetry.metric_definition import MetricDefinition, metric
 from src.telemetry.metrics.assembly import assemble_non_planet_flow_metrics
+from src.telemetry.metrics.ssot import ssot_metric_definitions
 
 METRIC_GROUPS: tuple[str, ...] = (
     "core_progress",
@@ -83,7 +84,11 @@ _curriculum_prob_metrics = tuple(
     )
 )
 
-METRIC_DEFINITIONS: tuple[MetricDefinition, ...] = _METRICS + _curriculum_prob_metrics
+_ssot_metrics = ssot_metric_definitions()
+
+METRIC_DEFINITIONS: tuple[MetricDefinition, ...] = (
+    _METRICS + _curriculum_prob_metrics + _ssot_metrics
+)
 METRIC_DEFINITIONS_BY_NAME: dict[str, MetricDefinition] = {
     definition.name: definition for definition in METRIC_DEFINITIONS
 }
