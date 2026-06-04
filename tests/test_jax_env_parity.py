@@ -22,12 +22,19 @@ from src.jax.env import (
 )
 
 
-def _cfg(*, player_count=2, max_fleets=16, ship_speed=6.0):
+def _cfg(
+    *,
+    player_count=2,
+    max_fleets=16,
+    ship_speed=6.0,
+    env_parity_mode: str = "train",
+):
     return TaskConfig(
         max_fleets=max_fleets,
         candidate_count=4,
         player_count=player_count,
         ship_speed=ship_speed,
+        env_parity_mode=env_parity_mode,
     )
 
 
@@ -453,7 +460,7 @@ def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player(
 
 
 def test_comet_spawn_keeps_initial_planets_synced_after_forty_nine_steps():
-    cfg = _cfg()
+    cfg = _cfg(env_parity_mode="kaggle")
     state, _ = reset(jax.random.PRNGKey(0), cfg)
     baseline_active = int(np.asarray(state.game.planets.active).sum())
     # Spawn fires when (step + 1) == 50, i.e. on the step that ends at game.step == 50.

@@ -31,6 +31,8 @@ class TaskConfig:
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
+    # train: JAX-native reset/step (no pure_callback); kaggle: reference planet/comet paths
+    env_parity_mode: str = "train"
 
 
 @dataclass(slots=True)

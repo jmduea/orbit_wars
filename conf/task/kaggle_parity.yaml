@@ -1,0 +1,6 @@
+defaults:
+  - base
+  - _self_
+
+# Kaggle reference planet/comet generation (pure_callback when env is jitted).
+env_parity_mode: kaggle
