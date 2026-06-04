@@ -318,6 +318,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run Kaggle Docker validation after packaging (submit-valid proof; requires Docker).",
     )
+    package.add_argument(
+        "--packaging-seed",
+        type=int,
+        default=None,
+        help=(
+            "Docker validation env seed (SSOT packaging validation uses 0; default when "
+            "omitted follows packager default)."
+        ),
+    )
+    package.add_argument(
+        "--packaging-player-count",
+        choices=("2", "4", "both"),
+        default=None,
+        help=(
+            "Docker validation player count: 2, 4, or both. SSOT packaging validation uses 4."
+        ),
+    )
 
     return parser
 
@@ -651,10 +668,17 @@ def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
 
 
 def run_package_cli(args: argparse.Namespace) -> int:
+    package_kwargs: dict[str, object] = {
+        "validate_docker": bool(args.validate_docker),
+    }
+    if args.packaging_seed is not None:
+        package_kwargs["seed"] = int(args.packaging_seed)
+    if args.packaging_player_count is not None:
+        package_kwargs["player_count"] = str(args.packaging_player_count)
     package_path = _eval_export("package_checkpoint_submission")(
         args.checkpoint.resolve(),
         args.output_dir.resolve(),
-        validate_docker=bool(args.validate_docker),
+        **package_kwargs,
     )
     print(f"package_path={package_path}")
     if args.validate_docker:

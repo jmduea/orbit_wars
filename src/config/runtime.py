@@ -231,12 +231,15 @@ def train_config_from_omegaconf(
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    cfg.training_seed_set = _parse_seed_set(cfg.training_seed_set)
+    cfg.eval_seed_set = _parse_seed_set(cfg.eval_seed_set)
     _apply_from_promoted(cfg)
     _validate_train_config(cfg)
     return cfg
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:
+    _validate_seed_partition(cfg)
     _validate_registered_update_metric_name(
         cfg.artifacts.checkpoint_retention.best_metric_name,
         field_name="artifacts.checkpoint_retention.best_metric_name",
@@ -391,6 +394,27 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
             )
+
+
+def _validate_seed_partition(cfg: TrainConfig) -> None:
+    if cfg.heldout_eval_seed_set:
+        raise ValueError(
+            "heldout_eval_seed_set is removed (SSOT R29). Use training_seed_set for "
+            "rollout reseeds and eval_seed_set for tournament qualifiers only."
+        )
+    training = set(cfg.training_seed_set)
+    eval_seeds = set(cfg.eval_seed_set)
+    overlap = training & eval_seeds
+    if overlap:
+        raise ValueError(
+            "training_seed_set and eval_seed_set must be disjoint; overlap: "
+            f"{sorted(overlap)}"
+        )
+    if int(cfg.seed) in eval_seeds:
+        raise ValueError(
+            "training.seed must not appear in eval_seed_set (AE6); "
+            f"seed={cfg.seed}, eval_seed_set={sorted(eval_seeds)}"
+        )
 
 
 def _validate_planet_flow_profile(cfg: TrainConfig) -> None:

@@ -379,6 +379,10 @@ class TrainConfig:
     artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
+    training_seed_set: list[int] = field(default_factory=list)
+    eval_seed_set: list[int] = field(
+        default_factory=lambda: [43, 44, 45, 46]
+    )
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None
     from_promoted: str | None = None

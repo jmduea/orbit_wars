@@ -1,0 +1,29 @@
+defaults:
+  - base
+  - _self_
+
+# SSOT long-train profile (plan 013 U4). Tournament qualifiers and rollout curriculum
+# hooks land in U5; legacy hybrid/bracket funnels stay off until U8 teardown.
+
+promotion:
+  enabled: false
+
+tournament:
+  enabled: false
+
+unified_tournament:
+  enabled: false
+
+bracket_training:
+  enabled: false
+
+artifact_pipeline:
+  enabled: true
+  checkpoint_eval_async: false
+  docker_validation_async: false
+  replay_async: false
+
+replay:
+  enabled: false
+
+checkpoint_every: 100

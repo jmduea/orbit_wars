@@ -1,0 +1,5 @@
+# @package _global_
+
+metric:
+  name: ssot_preflight_sweep_score
+  goal: maximize

@@ -111,6 +111,14 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert resolve_rollout_group_specs(cfg)
 
 
+def test_ssot_pipeline_artifacts_profile_composes() -> None:
+    cfg = compose_hydra_train_config(["artifacts=ssot_pipeline"])
+
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert not cfg.artifacts.bracket_training.enabled
+
+
 def test_hybrid_promotion_artifacts_profile_composes() -> None:
     cfg = compose_hydra_train_config(["artifacts=hybrid_promotion"])
 
