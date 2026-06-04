@@ -122,4 +122,5 @@ if "(planned)" in cells[0].lower():
 - GitHub: [#194](https://github.com/jmduea/orbit_wars/issues/194), [#202](https://github.com/jmduea/orbit_wars/pull/202)
 - Agent-native operator phases: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
 - Benchmark subprocess UX (separate concern; update stale `src/cli/benchmark.py` refs when refreshing): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
-- Gate 5 / unified tournament (commands live in package): `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`
+- **Canonical training spine (SSOT):** `docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`
+- Gate 5 / unified tournament (legacy commands in package): `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`

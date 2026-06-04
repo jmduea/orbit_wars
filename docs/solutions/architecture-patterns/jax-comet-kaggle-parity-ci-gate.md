@@ -80,7 +80,7 @@ Runs `tests/test_jax_env_parity.py`, `tests/test_jax_env.py`, `tests/test_jax_en
 
 ## Why This Matters
 
-Comets change mid-game capture and planet counts; wrong physics after step 50 poisons training metrics and tournament replay. A narrow CI job catches regressions in spawn timing, RNG seeds, collision rules, and `initial_planets` sync without running full `test-premerge` or GPU tiers. This slice is **env stepping parity** — distinct from Gate 5 Docker/tournament proof (`docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`) and bracket μ/σ training (`docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md`).
+Comets change mid-game capture and planet counts; wrong physics after step 50 poisons training metrics and tournament replay. A narrow CI job catches regressions in spawn timing, RNG seeds, collision rules, and `initial_planets` sync without running full `test-premerge` or GPU tiers. This slice is **env stepping parity** — distinct from the SSOT submit-valid spine (`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`) and legacy Gate 5 / bracket docs (`gate5-unified-tournament-submit-valid-funnel.md`, `kaggle-bracket-ranking-foundational-slice.md`).
 
 ## When to Apply
 
@@ -108,5 +108,6 @@ Same file set as CI also runs via `make test-domain-jax-env` (alias for the pari
 
 - Plans (implementation history): `docs/plans/2026-06-03-008-feat-jax-comet-subsystem-plan.md`, `docs/plans/2026-06-03-009-feat-ci-kaggle-jax-parity-plan.md`
 - PR [#188](https://github.com/jmduea/orbit_wars/pull/188) — squash merge on `main`
+- **Canonical training spine (SSOT):** `docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`
 - Env invariant note (id↔row): `docs/solutions/logic-errors/planet-flow-catalog-reachability-mismatch.md` — comet spawn/expire should preserve the same invariant; refresh that doc if comet slot layout changes
 - Operator pointers: `AGENTS.md` (Kaggle reference path, comet RNG, `make test-kaggle-parity`), `docs/ONBOARDING.md`

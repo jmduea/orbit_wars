@@ -55,6 +55,8 @@ from src.jax.train.sweep_score import (
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_planet_flow_sweep_metrics,
+    collect_ssot_preflight_sweep_metrics,
+    is_ssot_preflight_sweep,
     planet_flow_max_post_mask_unreachable_rate,
 )
 from src.jax.train.telemetry import (
@@ -172,7 +174,8 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             plateau_metric=cfg.training.plateau_metric,
             plateau_window=cfg.training.plateau_window,
             plateau_delta=cfg.training.plateau_delta,
-            heldout_eval_seed_set=cfg.heldout_eval_seed_set,
+            training_seed_set=cfg.training_seed_set,
+            eval_seed_set=cfg.eval_seed_set,
         ),
     )
     curriculum = CurriculumController(
@@ -190,9 +193,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
     track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
-    win_rate_trend = WinRateTrendTracker() if track_planet_flow_sweep else None
-    approx_kl_window = MetricWindowTracker() if track_planet_flow_sweep else None
-    entropy_window = MetricWindowTracker() if track_planet_flow_sweep else None
+    track_ssot_preflight_sweep = is_ssot_preflight_sweep(cfg)
+    track_learning_signal_sweep = track_planet_flow_sweep or track_ssot_preflight_sweep
+    win_rate_trend = WinRateTrendTracker() if track_learning_signal_sweep else None
+    approx_kl_window = MetricWindowTracker() if track_learning_signal_sweep else None
+    entropy_window = MetricWindowTracker() if track_learning_signal_sweep else None
     planet_flow_unreachable_ceiling = (
         planet_flow_max_post_mask_unreachable_rate(
             load_thresholds(
@@ -431,22 +436,31 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 update_events.append(snapshot_event)
             phase_events = []
             planet_flow_sweep_metrics: dict[str, float] = {}
-            if win_rate_trend is not None and "action_decision" in enabled_metric_groups(
-                metric_groups_cfg_from_config(cfg)
-            ):
-                planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
-                    win_rate_trend=win_rate_trend,
-                    approx_kl_window=approx_kl_window,
-                    entropy_window=entropy_window,
-                    overall_win_rate=overall_win_rate,
-                    metrics_host=metrics_host,
-                    rollout_scalars=rollout_scalars,
-                    max_post_mask_unreachable_rate=(
-                        planet_flow_unreachable_ceiling
-                        if planet_flow_unreachable_ceiling is not None
-                        else 0.05
-                    ),
-                )
+            if win_rate_trend is not None:
+                if track_ssot_preflight_sweep:
+                    planet_flow_sweep_metrics = collect_ssot_preflight_sweep_metrics(
+                        win_rate_trend=win_rate_trend,
+                        approx_kl_window=approx_kl_window,
+                        entropy_window=entropy_window,
+                        overall_win_rate=overall_win_rate,
+                        metrics_host=metrics_host,
+                    )
+                elif track_planet_flow_sweep and "action_decision" in enabled_metric_groups(
+                    metric_groups_cfg_from_config(cfg)
+                ):
+                    planet_flow_sweep_metrics = collect_planet_flow_sweep_metrics(
+                        win_rate_trend=win_rate_trend,
+                        approx_kl_window=approx_kl_window,
+                        entropy_window=entropy_window,
+                        overall_win_rate=overall_win_rate,
+                        metrics_host=metrics_host,
+                        rollout_scalars=rollout_scalars,
+                        max_post_mask_unreachable_rate=(
+                            planet_flow_unreachable_ceiling
+                            if planet_flow_unreachable_ceiling is not None
+                            else 0.05
+                        ),
+                    )
             saved_checkpoint_path: Path | None = None
             checkpoint_every = int(cfg.artifacts.checkpoint_every)
             checkpoint_due = checkpoint_every > 0 and update % checkpoint_every == 0

@@ -90,5 +90,6 @@ Agents default to `| tail` for long commands; with Python block buffering and pi
 
 - Benchmark CLI package layout: `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Train subprocess streaming: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
-- Gate 5 funnel (uses same operator habits): `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`
+- **Canonical training spine (SSOT):** `docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`
+- Gate 5 funnel (legacy; same stderr habits): `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`
 - `tests/test_benchmark_progress.py`

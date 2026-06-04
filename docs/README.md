@@ -18,6 +18,16 @@ Update this index when adding a new top-level folder or changing doc-type policy
 4. [solutions/](solutions/) — resolved bugs and patterns (search by category frontmatter)
 5. [plans/](plans/) — active and completed implementation plans
 
+## Config → Kaggle pipeline (SSOT)
+
+Canonical requirements (supersedes parallel preflight / hybrid / bracket doc paths pending implementation):
+
+- [brainstorms/2026-06-03-training-pipeline-ssot-requirements.md](brainstorms/2026-06-03-training-pipeline-ssot-requirements.md) — single pipeline spine, teardown policy
+- [competition/COMPETITION_OVERVIEW.md](competition/COMPETITION_OVERVIEW.md) — game rules and scoring
+- [competition/COMPETITION_SUBMISSION.md](competition/COMPETITION_SUBMISSION.md) — agent packaging and submission
+
+Tracker: GitHub [#205](https://github.com/jmduea/orbit_wars/issues/205).
+
 ## Doc-type lifecycle
 
 | Type | Folder | When to write | Typical next step |
@@ -39,6 +49,7 @@ Update this index when adding a new top-level folder or changing doc-type policy
 | [audits/](audits/) | Point-in-time architecture and agent-native reviews |
 | [benchmarks/](benchmarks/) | Committed calibration JSON and benchmark runbooks; derive thresholds from these artifacts |
 | [brainstorms/](brainstorms/) | Requirements-style docs before planning |
+| [competition/](competition/) | Kaggle competition rules and submission packaging (SSOT for lane A/C) |
 | [ideation/](ideation/) | Early exploration before scoped requirements |
 | [plans/](plans/) | Dated feat/fix implementation plans with units |
 | [solutions/](solutions/) | Documented learnings organized by category |
