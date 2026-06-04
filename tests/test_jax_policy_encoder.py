@@ -196,6 +196,43 @@ def test_incremental_factorized_decode_matches_full_teacher_path() -> None:
     np.testing.assert_allclose(carry.state, full.decoder_hidden, rtol=0.0, atol=1e-5)
 
 
+@pytest.mark.jax
+def test_teacher_carry_replay_matches_full_factorized_decode() -> None:
+    """Lightweight carry replay must match full decode decoder_hidden export."""
+    from src.jax.action_sampling import _factorized_decoder_hidden_from_teacher_sequence
+    from src.jax.factored_sequence_scan import forward_factorized_encode
+    from src.jax.policy import factorized_decode
+
+    cfg = _train_cfg(architecture="planet_graph_transformer")
+    cfg.model.max_moves_k = 3
+    cfg.model.decoder_carry = True
+    policy = build_jax_policy(cfg)
+    batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(3))
+    params = policy.init(jax.random.PRNGKey(4), batch)
+    encoder_out = forward_factorized_encode(params, policy, batch)
+    source_seq = jnp.array([[0, 1, 0], [0, 0, 1]], dtype=jnp.int32)
+    slot_seq = jnp.array([[0, 1, 2], [1, 0, 0]], dtype=jnp.int32)
+
+    full = factorized_decode(
+        params,
+        policy,
+        encoder_out,
+        source_sequence=source_seq,
+        target_slot_sequence=slot_seq,
+        deterministic=True,
+    )
+    replay_hidden = _factorized_decoder_hidden_from_teacher_sequence(
+        params,
+        policy,
+        encoder_out,
+        source_sequence=source_seq,
+        target_slot_sequence=slot_seq,
+        decoder_hidden_in=None,
+        deterministic=True,
+    )
+    np.testing.assert_allclose(replay_hidden, full.decoder_hidden, rtol=0.0, atol=1e-5)
+
+
 def test_build_jax_policy_dispatches_factorized_transformer() -> None:
     cfg = _train_cfg(
         architecture="planet_graph_transformer", pointer_decoder="factorized_topk"

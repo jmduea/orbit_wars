@@ -63,6 +63,60 @@ def _merge_factorized_decode_carry(
     )
 
 
+def _factorized_decoder_hidden_from_teacher_sequence(
+    params: dict,
+    policy: object,
+    encoder_out,
+    *,
+    source_sequence: jax.Array,
+    target_slot_sequence: jax.Array,
+    decoder_hidden_in: jax.Array | None,
+    deterministic: bool,
+) -> jax.Array:
+    """Replay K decoder steps on committed teachers (no logits stacks)."""
+
+    from src.jax.policy import (
+        factorized_decode_advance_carry,
+        factorized_decode_init_carry,
+        factorized_decode_step,
+    )
+
+    sequence_k = source_sequence.shape[1]
+    carry = factorized_decode_init_carry(
+        params,
+        policy,
+        encoder_out,
+        decoder_hidden=decoder_hidden_in,
+    )
+
+    def replay_body(carry_in, step_idx):
+        _, step_carry = factorized_decode_step(
+            params,
+            policy,
+            encoder_out,
+            carry_in,
+            teacher_source=source_sequence[:, step_idx],
+            teacher_target_slot=target_slot_sequence[:, step_idx],
+            deterministic=deterministic,
+        )
+        next_carry = factorized_decode_advance_carry(
+            params,
+            policy,
+            encoder_out,
+            step_carry,
+            source=source_sequence[:, step_idx],
+            target_slot=target_slot_sequence[:, step_idx],
+        )
+        return next_carry, None
+
+    carry_out, _ = jax.lax.scan(
+        replay_body,
+        carry,
+        jnp.arange(sequence_k, dtype=jnp.int32),
+    )
+    return carry_out.state
+
+
 def _policy_variables(params: dict) -> dict:
     """Accept either Flax variables or a raw params payload."""
 
@@ -354,7 +408,6 @@ def _sample_shielded_factored_sequence_with_params(
         empty_forbidden_grid,
     )
     from src.jax.policy import (
-        factorized_decode,
         factorized_decode_advance_carry,
         factorized_decode_init_carry,
         factorized_decode_step,
@@ -394,6 +447,7 @@ def _sample_shielded_factored_sequence_with_params(
         buckets=cfg.task.ship_bucket_count,
     )
     diagnostic_zero = _shield_diagnostic_zeros(env_count)
+    track_shield_diagnostics = cfg.telemetry.metric_groups.trajectory_shield_debug
     diagnostics = _empty_shield_diagnostics(env_count)
     bucket_mask_stack = jnp.zeros(
         (env_count, sequence_k, MAX_PLANETS, k, cfg.task.ship_bucket_count),
@@ -438,11 +492,12 @@ def _sample_shielded_factored_sequence_with_params(
                 )
             )
         )(game, batch, remaining_ships)
-        diagnostics = _merge_shield_step_diagnostics(
-            diagnostics,
-            shielded.diagnostics,
-            rate_placeholder=diagnostic_zero,
-        )
+        if track_shield_diagnostics:
+            diagnostics = _merge_shield_step_diagnostics(
+                diagnostics,
+                shielded.diagnostics,
+                rate_placeholder=diagnostic_zero,
+            )
         shield_step_mask = shielded.ship_bucket_mask
         step_bucket_mask = apply_cumulative_forbidden_to_shield(
             shield_step_mask,
@@ -621,7 +676,8 @@ def _sample_shielded_factored_sequence_with_params(
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-    diagnostics = _finalize_shield_diagnostics(diagnostics)
+    if track_shield_diagnostics:
+        diagnostics = _finalize_shield_diagnostics(diagnostics)
     noop_idx = noop_edge_index(cfg.task)
     target_sequence = source_sequence * k + slot_sequence
     target_sequence = jnp.where(
@@ -629,24 +685,24 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
-    if carry_enabled:
-        final_output = factorized_decode(
-            params,
-            policy,
-            encoder_out,
-            player_count=player_count,
-            source_sequence=source_sequence,
-            target_slot_sequence=slot_sequence,
-            decoder_hidden=decoder_hidden_in,
-            deterministic=deterministic,
-            include_value=False,
-        )
-        decoder_hidden_out = final_output.decoder_hidden
-    else:
-        decoder_hidden_out = None
     tiered_revalidate = trajectory_shield_mode(
         cfg.task
     ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)
+    if carry_enabled:
+        if tiered_revalidate:
+            decoder_hidden_out = _factorized_decoder_hidden_from_teacher_sequence(
+                params,
+                policy,
+                encoder_out,
+                source_sequence=source_sequence,
+                target_slot_sequence=slot_sequence,
+                decoder_hidden_in=decoder_hidden_in,
+                deterministic=deterministic,
+            )
+        else:
+            decoder_hidden_out = decode_carry.state
+    else:
+        decoder_hidden_out = None
     if tiered_revalidate:
         replay = replay_factored_sequence_logprob(
             params,
