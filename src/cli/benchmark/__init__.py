@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from src.cli.benchmark.calibrate import run_calibrate_cli
 from src.cli.benchmark.calibrate_seed import run_calibrate_seed_scheduler_cli
+from src.cli.benchmark.calibrate_qualifier_seeds import (
+    run_calibrate_qualifier_seeds_cli,
+)
 from src.cli.benchmark.calibrate_unified import run_calibrate_unified_tournament_cli
 from src.cli.benchmark.common import (
     LEARN_PROOF_PRIMITIVES,
@@ -65,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_seed_scheduler_cli(args)
         case "calibrate-unified-tournament":
             return run_calibrate_unified_tournament_cli(args)
+        case "calibrate-qualifier-seeds":
+            return run_calibrate_qualifier_seeds_cli(args)
         case "shortlist-planet-flow-sweep":
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":

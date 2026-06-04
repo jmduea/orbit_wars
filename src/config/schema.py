@@ -269,6 +269,16 @@ class BracketTrainingConfig:
 
 
 @dataclass(slots=True)
+class SsotPipelineConfig:
+    """SSOT long-train profile: JAX qualifiers, rollout curriculum stages, W&B on."""
+
+    enabled: bool = False
+    qualifier_max_env_steps: int = 500_000_000
+    qualifier_eval_interval_updates: int = 50
+    qualifier_games_per_seed: int = 0
+
+
+@dataclass(slots=True)
 class UnifiedTournamentConfig:
     """Held-out unified ladder settings for Gate 5 and hybrid checkpoint_eval."""
 
@@ -350,6 +360,7 @@ class ArtifactsConfig:
     bracket_training: BracketTrainingConfig = field(
         default_factory=BracketTrainingConfig
     )
+    ssot_pipeline: SsotPipelineConfig = field(default_factory=SsotPipelineConfig)
 
 
 @dataclass(slots=True)

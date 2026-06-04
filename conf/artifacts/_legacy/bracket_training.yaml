@@ -1,6 +1,5 @@
-# Legacy bracket training (R29). Canonical copy: conf/artifacts/_legacy/bracket_training.yaml
 defaults:
-  - hybrid_promotion
+  - /artifacts@artifacts: _legacy/hybrid_promotion
   - _self_
 
 bracket_training:

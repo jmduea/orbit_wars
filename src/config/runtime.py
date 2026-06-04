@@ -366,6 +366,7 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     _validate_output_config(cfg)
     _apply_telemetry_defaults(cfg)
 
+    _validate_artifact_pipeline_modes(cfg)
     _validate_curriculum_config(cfg)
     validate_curriculum_format_weights(cfg)
     validate_rollout_allocation(cfg)
@@ -586,6 +587,18 @@ def _validate_relative_path_fragment(value: str, *, field_name: str) -> None:
         raise ValueError(f"{field_name} must be relative to the run directory.")
     if ".." in path.parts:
         raise ValueError(f"{field_name} must not contain '..'.")
+
+
+def _validate_artifact_pipeline_modes(cfg: TrainConfig) -> None:
+    """Reject mutually exclusive training-time bracket hooks."""
+
+    artifacts = cfg.artifacts
+    if artifacts.bracket_training.enabled and artifacts.ssot_pipeline.enabled:
+        raise ValueError(
+            "artifacts.bracket_training.enabled and artifacts.ssot_pipeline.enabled "
+            "cannot both be true; use artifacts=ssot_pipeline (SSOT) or legacy "
+            "artifacts=bracket_training, not both."
+        )
 
 
 def _validate_curriculum_config(cfg: TrainConfig) -> None:

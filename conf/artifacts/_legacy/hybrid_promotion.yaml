@@ -1,6 +1,5 @@
-# Legacy submit-valid funnel (R29). Canonical copy: conf/artifacts/_legacy/hybrid_promotion.yaml
 defaults:
-  - base
+  - /artifacts@artifacts: base
   - _self_
 
 promotion:

@@ -86,3 +86,9 @@ bracket_training:
   enabled: false
   qualifier_max_env_steps: 500000000
   qualifier_eval_interval_updates: 50
+
+ssot_pipeline:
+  enabled: false
+  qualifier_max_env_steps: 500000000
+  qualifier_eval_interval_updates: 50
+  qualifier_games_per_seed: 0
