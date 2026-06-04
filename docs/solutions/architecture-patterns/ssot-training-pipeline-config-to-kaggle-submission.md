@@ -17,7 +17,8 @@ tags:
   - training-pipeline
   - packaging-validation
   - tournament-qualifiers
-  - preflight
+  - wandb
+  - sweep-preflight
   - teardown-legacy
   - operator-docs
   - github-211
@@ -49,9 +50,9 @@ The fix in this session was **documentation and planning**: requirements SSOT, p
 
 1. **Config setup** — resolved Hydra config, feature compatibility declared
 2. **Preliminary tests** — wiring tier (`make test-fast`); failure blocks everything downstream
-3. **Short preflight** — learning-stability gate (trend/KL/entropy from committed calibration JSON); saves a checkpoint for step 4
-4. **Packaging validation** — Docker + `kaggle_environments` smoke on the **preflight checkpoint** (seed 0, 4-player, all agents = packaged agent); config registry can skip re-smoke for known-good fingerprints when invalidation dimensions are unchanged
-5. **Long train** — ≤500M env steps; rollout curriculum (random → noop-heavy → sniper-heavy) advanced by **tournament qualifiers** (fast JAX held-out eval on `eval_seed_set` only); then **main bracket** (μ/σ)
+3. **W&B sweep · short preflight** — coordinate ablations via `ow make wandb_sweep`, `ow sweep create`, `wandb agent`; Gates 2–3 per run; checkpoint **artifacts** in W&B (no local config registry or bad-config cache)
+4. **Packaging validation** — Docker + `kaggle_environments` smoke on the **sweep winner checkpoint** (seed 0, 4-player, all agents = packaged agent)
+5. **Long train** — ≤500M env steps with **W&B observability**; rollout curriculum (random → noop-heavy → sniper-heavy) advanced by **tournament qualifiers** (fast JAX held-out eval on `eval_seed_set` only); then **main bracket** (μ/σ)
 6. **Submission** — Docker packaging smoke with **trained weights**, held-out noop/random legs, then upload
 
 **Three runtime modes on the spine** (not parallel products):
@@ -71,7 +72,7 @@ The fix in this session was **documentation and planning**: requirements SSOT, p
 | Gate 5 / `tournament-proof` / 0.76 as parallel submit-valid spine | Absorbed into **submission** path after bracket clearance |
 | `artifacts=hybrid_promotion`, `artifacts=bracket_training` as production defaults | Future `artifacts=ssot_pipeline` (plan [#211](https://github.com/jmduea/orbit_wars/issues/211)) |
 
-**W&B / Hydra sweeps (research track).** Sweeps may **exit after short preflight passes**. Packaging validation, long train, tournament qualifiers, and submission are **not required** in sweep mode.
+**W&B on the SSOT spine.** Step 3 **is** the W&B sweep — short preflight runs, metrics, and checkpoint artifacts. Failed runs stay in W&B; operator selects a **winner** for packaging validation. Long train (step 5) runs with `telemetry.wandb` for observability and artifact lineage. **Sweep-only ablations** may stop after preflight pass without packaging or long train.
 
 **Implementation tracker.** Requirements → plan [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) → [#211](https://github.com/jmduea/orbit_wars/issues/211). Teardown policy (R29): remove or relocate legacy spines; no “demoted but still default” paths in `AGENTS.md` / `docs/AGENT_CAPABILITIES.md`.
 
@@ -81,7 +82,7 @@ The fix in this session was **documentation and planning**: requirements SSOT, p
 
 Parallel submit-valid paths waste GPU time and agent turns on the wrong funnel. Agents trained on `hybrid_promotion` poll contracts may never run packaging validation on the preflight checkpoint; agents following Gate 5 may treat 0.76 proof floors as production promotion gates while bracket docs demand 1.0 qualifier floors — same words, different semantics. Without one spine, “submit-valid” means different things depending on which doc was indexed last.
 
-The SSOT doc separates concerns cleanly: preflight proves **learning stability**, packaging validation proves **Kaggle loader survival**, tournament qualifiers prove **held-out stage promotion on final score**, submission proves **trained-weight packaging + upload legs**. Registry skips save wall clock on repeated configs; submission always re-validates trained weights. Until [#211](https://github.com/jmduea/orbit_wars/issues/211) lands in code, legacy paths remain in the repo but should be labeled **legacy** in operator guidance — not cited as competing defaults.
+The SSOT doc separates concerns cleanly: W&B sweep preflight proves **learning stability** and ranks config candidates, packaging validation proves **Kaggle loader survival**, tournament qualifiers prove **held-out stage promotion on final score**, submission proves **trained-weight packaging + upload legs**. W&B holds sweep history and artifacts — no local fingerprint cache. Submission always re-validates trained weights. Until [#211](https://github.com/jmduea/orbit_wars/issues/211) lands in code, legacy paths remain in the repo but should be labeled **legacy** in operator guidance — not cited as competing defaults.
 
 ## When to Apply
 
@@ -89,7 +90,7 @@ The SSOT doc separates concerns cleanly: preflight proves **learning stability**
 - Documentation work, runbooks, or `AGENT_CAPABILITIES.md` edits touch submit-valid, preflight, promotion, or bracket flows
 - A session proposes `artifacts=hybrid_promotion`, Gate 5 `tournament-proof`, or `artifacts=bracket_training` as the **canonical** production path
 - Planning teardown of hybrid/Gate-5-first/bracket-first narratives (R29)
-- Scoping W&B sweeps — confirm sweep exit point is **after short preflight**, not full spine
+- Scoping W&B sweeps — step 3 **is** the sweep on SSOT spine; confirm artifact handoff winner → packaging → long train
 - Before inventing thresholds: floors come from committed calibration JSON (`preflight-calibration.json`, future `qualifier-seed-calibration.json`), never operator-time round numbers
 
 **Do not apply this as “already implemented”** until [#211](https://github.com/jmduea/orbit_wars/issues/211) units land; until then, point to the SSOT requirements + plan and mark existing hybrid/bracket/Gate-5 docs as legacy.
@@ -123,14 +124,17 @@ Three “canonical” orders, three threshold regimes (0.76 vs 1.0 vs hybrid pol
 
 ```
 # Steps 1–2: config + make test-fast
-# Step 3: short preflight (learning stability)
-# Step 4: ow eval package --validate-docker on preflight checkpoint
-# Step 5: long train (future: artifacts=ssot_pipeline)
+# Step 3: W&B sweep short preflight (Gates 2–3 per agent)
+uv run ow make wandb_sweep=ssot_preflight
+uv run ow sweep create --config conf/wandb_sweep/ssot_preflight.yaml
+wandb agent <entity>/<project>/<sweep_id>
+# Step 4: ow eval package --validate-docker on W&B winner checkpoint
+# Step 5: long train (future: artifacts=ssot_pipeline, telemetry.wandb.enabled=true)
 #   tournament qualifiers (JAX, eval_seed_set) drive rollout curriculum
 # Step 6: submission — trained weights + noop/random legs → ow eval submit
 ```
 
-**W&B sweep — exit after short preflight:**
+**Sweep-only ablation — stop after preflight pass:**
 
 ```
 ow sweep / wandb agent ...

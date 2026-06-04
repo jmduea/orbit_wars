@@ -12,13 +12,13 @@ origin: docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
 
 Implement the single canonical pipeline from the SSOT requirements doc:
 
-**config setup → preliminary tests → config registry → short preflight → packaging validation (preflight checkpoint) → long train → tournament qualifiers (JAX) → main bracket → submission**
+**config setup → preliminary tests → W&B sweep (short preflight / ablations) → packaging validation (sweep winner checkpoint) → long train (W&B observability) → tournament qualifiers (JAX) → main bracket → submission**
 
-Adds a config registry, disjoint train/eval seeds, a new Hydra train profile, and tears down legacy `hybrid_promotion` / `bracket_training` / Gate-5-first spines from operator docs.
+Uses **Weights & Biases** for sweep coordination, run observability, and checkpoint artifact handoff — **no custom config registry or bad-config cache**. Disjoint train/eval seeds, `artifacts=ssot_pipeline`, and teardown of legacy `hybrid_promotion` / `bracket_training` / Gate-5-first spines.
 
-**Operator map:** [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) — clickable spine with commands, wall-clock estimates, and short-circuit rules.
+**Operator map:** [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) (interactive; gates and side paths match plan mermaid below)
 
-Tracker: GitHub #205. Perf dependency: #204.
+Tracker: GitHub #205 (epic). Implementation: #211. Perf dependency: #204.
 
 ---
 
@@ -34,9 +34,9 @@ Traceability to origin R-IDs (subset — full list in origin doc):
 
 | ID | Plan coverage |
 |----|----------------|
-| R1–R2 | U1, U8 — six-step spine + operator docs |
+| R1–R2 | U1, U8 — spine + operator docs |
 | R3–R8 | U3 — packaging validation |
-| R5–R6, R9–R11 | U1, U3, U4 — registry + short preflight (Gates 2–3 family) + packaging ordering |
+| R5–R6, R9–R11 | U1 — W&B sweep + artifacts replace local registry; Gates 2–3 in sweep runs |
 | R12–R20 | U4, U5, U6, U7 — long train, tournament qualifiers, bracket MVP |
 | R21–R22 | U7 — submission |
 | R23–R25 | U2, U5 — seed partition + JAX parity for qualifiers |
@@ -49,15 +49,15 @@ Traceability to origin R-IDs (subset — full list in origin doc):
 
 **KTD1 — Terminology in code and docs.** User-facing spine: **packaging validation**, **long train**, **tournament qualifiers**, **submission**. Internal module names may retain legacy tokens during migration but CLI/help and operator docs use SSOT names only.
 
-**KTD2 — Config registry as local JSON + CLI.** Store under `outputs/config_registry/registry.json` (gitignored) with optional seed copy in `docs/benchmarks/config-registry-dogfood.json` for tests. Fingerprint hashes resolved config inference surface + invalidation dimensions (R5). Top-level primitive: `ow registry list|show|record` (matches `ow eval`, `ow runs` pattern).
+**KTD2 — W&B replaces custom config registry.** Use existing `telemetry.wandb`, `ow sweep`, `ow make wandb_sweep=…`, and W&B **artifacts** for sweep runs, metrics, and checkpoint handoff — not `outputs/config_registry/` or `ow registry`. Sweep metric + Gates 2–3 trends filter preflight candidates; operator promotes **winning run artifact** to packaging validation. Reuse `src/cli/sweep.py`, `scripts/make_wandb_sweep.py`, `conf/wandb_sweep/`.
 
-**KTD3 — Preflight checkpoint drives packaging validation.** Extend `ow eval package --validate-docker` to accept `--checkpoint` from short preflight output (existing path) with seed-0 / 4p-only mode matching R7. No random-weight packaging path.
+**KTD3 — Preflight checkpoint drives packaging validation.** Extend `ow eval package --validate-docker` to accept `--checkpoint` from the **W&B sweep winner** (or local path synced from W&B artifact) with seed-0 / 4p-only mode matching R7. No random-weight packaging path.
 
 **KTD4 — Seed partition replaces `heldout_eval_seed_set` for training.** Add `training_seed_set` and `eval_seed_set` to `src/config/schema.py`; `SeedScheduler` draws reseeds only from `training_seed_set`; tournament qualifiers consume `eval_seed_set` exclusively. Remove training use of `heldout_eval_seed_set` (R29).
 
-**KTD5 — Tournament qualifiers = new JAX harness, not async Docker `qualifier_eval`.** Fast held-out match runner in `src/jax/eval/` (or `src/jax/tournament_qualifiers/`) invoked from training loop on checkpoint ticks. Promotion metric: final-score win fraction (R18), wired to `_terminal` in `src/jax/env.py`. No Docker per tick.
+**KTD5 — Tournament qualifiers = new JAX harness, not async Docker `qualifier_eval`.** Fast held-out match runner invoked from training loop on checkpoint ticks. Promotion metric: final-score win fraction (R18), wired to `_terminal` in `src/jax/env.py`. No Docker per tick.
 
-**KTD6 — Hydra profile `artifacts=ssot_pipeline`.** Single composition replacing production use of `default` / `hybrid_promotion` / `bracket_training` for the canonical path. Long train enables rollout curriculum stages R15–R17 and tournament qualifier ticks.
+**KTD6 — Hydra profile `artifacts=ssot_pipeline`.** Single composition replacing production use of `default` / `hybrid_promotion` / `bracket_training` for the canonical path. Long train enables rollout curriculum stages R15–R17, tournament qualifier ticks, and **W&B logging enabled**.
 
 **KTD7 — Qualifier calibration before enforcement.** Ship `docs/benchmarks/qualifier-seed-calibration.json` via `ow benchmark calibrate-qualifier-seeds` before R19 floors are enforced in production profile. Until committed, profile uses conservative interim rules (R19).
 
@@ -65,9 +65,9 @@ Traceability to origin R-IDs (subset — full list in origin doc):
 
 **KTD9 — Bracket MVP reuses plan 005 artifacts where possible.** `src/artifacts/tournament/bracket/` state + μ/σ updates from plan 005 U1–U5; SSOT changes *when* entrants qualify (tournament qualifiers during long train, not Docker noop-first async ladder). Plan 005 superseded for qualifier order and eval runtime (origin KD6).
 
-**KTD10 — Preliminary tests gate all GPU/Docker work.** `make test-fast` (step 2) blocks registry lookup, preflight, packaging, and long train on failure. No new pytest tier — document in operator spine and U8.
+**KTD10 — Preliminary tests gate all GPU/Docker work.** `make test-fast` (step 2) blocks W&B sweeps, packaging, and long train on failure. No new pytest tier — document in operator spine and U8.
 
-**KTD11 — W&B / Hydra sweeps exit after short preflight.** Research track stops at step 3 pass (learning-stability gate). Steps 4–6 are not required in sweep mode (origin KD1). U4 exposes a sweep-friendly profile or CLI flag that records preflight pass without enqueueing packaging/long train.
+**KTD11 — Short preflight runs inside W&B sweeps.** Step 3 is not a separate ad-hoc train — coordinate config search and short ablations via W&B sweep recipes (`conf/wandb_sweep/`) with Gates 2–3 metrics as sweep objective / early-terminate filters. Failed sweep runs stay in W&B history; no local bad-config cache.
 
 ---
 
@@ -75,21 +75,21 @@ Traceability to origin R-IDs (subset — full list in origin doc):
 
 Interactive reference: [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html).
 
-| Step | Stage | Typical wall clock | Short-circuit |
-|------|--------|-------------------|---------------|
+| Step | Stage | Typical wall clock | Outcome if not met |
+|------|--------|-------------------|---------------------|
 | 1 | Config setup — `uv run ow train print_resolved_config=true` | seconds | — |
-| 2 | Preliminary tests — `make test-fast` | ~3–8 min CPU | **Fail → stop** (no GPU/Docker) |
-| — | Config registry lookup | instant | **Known good → skip 3–4, jump to 5** (AE1). **Known fail → bad config** (AE2) |
-| 3 | Short preflight — Gates 2–3; saves checkpoint | ~15–45 min GPU | **Fail → bad config** (R10). **W&B sweep → stop** after pass (KD1) |
-| 4 | Packaging validation — Docker, preflight ckpt, seed 0, 4p | ~3–8 min | **Fail → bad config**. Registry skip if fingerprint already passed (R6) |
-| 5 | Long train — `artifacts=ssot_pipeline`, ≤500M env steps | hours–days (#204) | **500M without stage 3 → bad config** (AE4). Qualifier **retry loop** inside step 5 |
-| — | Tournament qualifiers (JAX, during step 5) | minutes/tick | **Not cleared → continue train**. **Stage 3 clear → main bracket** |
+| 2 | Preliminary tests — `make test-fast` | ~3–8 min CPU | **Stop** (no GPU/Docker) |
+| 3 | **W&B sweep · short preflight ablations** — `ow make wandb_sweep=…` + `ow sweep create --backend wandb` | varies (parallel agents) | Failed runs ranked in W&B; pick next candidate |
+| — | Select sweep **winner** (Gates 2–3 pass + sweep metric) | operator / W&B UI | Packaging uses winner checkpoint artifact |
+| 4 | Packaging validation — Docker, **winner ckpt**, seed 0, 4p | ~3–8 min | **Stop** — pick another sweep run |
+| 5 | Long train — `artifacts=ssot_pipeline`, W&B on, ≤500M env steps | hours–days (#204) | **500M without stage 3 → `weak_config` in W&B** (AE4). Qualifier **retry loop** |
+| — | Tournament qualifiers (JAX, during step 5) | minutes/tick | Not cleared → continue train. Stage 3 clear → main bracket |
 | — | Main bracket μ/σ | ongoing | Does not substitute for submission (R22) |
 | 6 | Submission — trained weights + noop/random legs + upload | ~5–15 min | Packaging-only pass insufficient (R21) |
 
-**Terminal outcomes:** submit-valid complete · bad config cache · W&B sweep stop (research).
+**Terminal outcomes:** submit-valid complete · stop and fix / pick next sweep run · `weak_config` tagged in W&B (budget exhaust).
 
-**Runtime vs implementation order:** Steps 1–6 are operator/runtime order. Units U1–U8 may land in dependency order (e.g. U3 packaging primitive before U4 orchestration); U4 must wire step 3 → step 4 → step 5 entry before U8 teardown.
+**Runtime vs implementation order:** U3 packaging primitive can land before U1 sweep recipes; U4 wires winner handoff → packaging → long train before U8 teardown.
 
 ---
 
@@ -101,29 +101,34 @@ Interactive reference: [`docs/tools/ssot-training-pipeline-flowchart.html`](../t
 flowchart TD
   C["1 Config setup"]
   T["2 Preliminary tests"]
-  REG["Config registry"]
-  PF["3 Short preflight"]
+  GT{"Tests pass?"}
+  WB["3 W&B sweep short preflight"]
+  GW{"Gates 2–3 + winner?"}
   PV["4 Packaging validation"]
-  LT["5 Long train"]
+  GP{"Smoke ok?"}
+  LT["5 Long train W&B logged"]
   TQ["Tournament qualifiers JAX"]
+  GTQ{"Stage 3 clear?"}
   MB["Main bracket"]
   SUB["6 Submission"]
-  BAD["Bad config cache"]
-  SW["W&B sweep stop"]
-  C --> T --> REG
-  REG -->|known good| LT
-  REG -->|known fail| BAD
-  REG -->|unknown| PF
-  PF -->|pass| PV
-  PF -->|fail| BAD
-  PF -->|sweep mode| SW
-  PV -->|pass| LT
-  PV -->|fail| BAD
-  LT --> TQ
-  TQ -->|retry| LT
-  TQ -->|stage 3 clear| MB
-  TQ -->|500M exhaust| BAD
-  MB --> SUB
+  DONE["Submit-valid complete"]
+  STOP["Stop · fix locally"]
+  WEAK["weak_config stop"]
+
+  C --> T --> GT
+  GT -->|yes| WB
+  GT -->|fail| STOP
+  WB --> GW
+  GW -->|yes| PV
+  GW -->|fail run| WB
+  PV --> GP
+  GP -->|yes| LT
+  GP -->|fail| WB
+  LT --> TQ --> GTQ
+  GTQ -->|retry| LT
+  GTQ -->|stage 3 clear| MB
+  GTQ -->|weak_config| WEAK
+  MB --> SUB --> DONE
 ```
 
 ### Training loop integration
@@ -131,25 +136,18 @@ flowchart TD
 ```mermaid
 sequenceDiagram
   participant Op as operator / agent
-  participant Reg as config registry
-  participant PF as short preflight
+  participant WB as W&B sweep
   participant PV as packaging validation
   participant Train as long train loop
   participant TQ as tournament qualifiers
   participant Br as bracket state
 
   Op->>Op: config setup + make test-fast
-  Op->>Reg: fingerprint lookup
-  alt known good
-    Reg-->>Train: skip preflight + packaging
-  else known fail
-    Reg-->>Op: reject bad config
-  else unknown
-    Op->>PF: Gates 2-3 train
-    PF->>PV: preflight checkpoint
-    PV->>Reg: record pass/fail
-    PV-->>Train: enter long train
-  end
+  Op->>WB: ow sweep create + agent runs
+  Note over WB: each run = short preflight Gates 2-3 metrics + artifacts
+  Op->>WB: select winning run
+  WB->>PV: winner checkpoint artifact
+  PV-->>Train: packaging pass → long train
   loop until stage 3 or 500M exhaust
     Train->>TQ: on tick eval_seed_set only
     TQ-->>Train: promote stage or retry
@@ -165,10 +163,10 @@ Spine-step mapping (runtime order):
 
 | Unit | Spine steps | Notes |
 |------|-------------|-------|
-| U1 | registry (between 2 and 3) | Lookup + record; AE1/AE2 |
+| U1 | step 3 | W&B sweep recipes, metrics, artifact handoff |
 | U2 | step 5 (train seeds) | Contamination guard AE6 |
-| U3 | step 4 | Docker primitive; consumes preflight ckpt from U4 |
-| U4 | steps 3, 5 entry | Short preflight orchestration + `ssot_pipeline` long train |
+| U3 | step 4 | Docker primitive; winner ckpt from W&B |
+| U4 | step 5 | `ssot_pipeline` long train + W&B observability |
 | U5 | step 5 (qualifier ticks) | JAX harness; retry loop |
 | U6 | step 5 (floors) | Calibration JSON before enforcement |
 | U7 | bracket + step 6 | Submission trained-weight smoke |
@@ -176,28 +174,33 @@ Spine-step mapping (runtime order):
 
 Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 operator docs.
 
-### U1. Config registry
+### U1. W&B sweep preflight pipeline
 
-**Goal.** Persistent fingerprint → preflight/packaging pass-fail with invalidation dimensions (origin R5–R6, R10–R11).
+**Goal.** Runtime **step 3**: coordinate short preflight ablations and config search via W&B sweeps; artifact + metric registry for winner handoff to packaging (origin R5–R6, R9–R11 — **W&B replaces local registry**).
 
-**Requirements.** R5, R6, R10, R11; AE1, AE2.
+**Requirements.** R5, R6, R9, R10, R11.
 
 **Dependencies.** None.
 
 **Files.**
-- Create `src/config_registry/` (`fingerprint.py`, `store.py`, `schema.py`)
-- Create `src/cli/registry.py`; wire in `src/cli/__init__.py` as `ow registry`
-- Tests: `tests/test_config_registry.py`
+- Create `conf/wandb_sweep/ssot_preflight.yaml` (and `conf/wandb_sweep/metric/` objective aligned with Gates 2–3 + `preflight-calibration.json`)
+- Modify `scripts/make_wandb_sweep.py` / `src/cli/sweep.py` if SSOT-specific flags needed
+- Enable `telemetry.wandb.log_artifacts` path for preflight checkpoint upload on passing runs
+- Tests: extend `tests/test_config_consolidation.py` sweep smoke; new `tests/test_ssot_wandb_sweep_compose.py`
 
-**Approach.** Hash inference/runtime surface from resolved Hydra config + model schema version. Record pass/fail, timestamps, code SHA, competition doc revision. Lookup before step 3/4.
+**Approach.**
+1. Each sweep agent run executes **short preflight** (Gates 2–3 family, `preflight-calibration.json` thresholds) with swept Hydra params.
+2. W&B logs win-rate delta, KL, entropy, and **checkpoint artifact** on runs that pass gates.
+3. Operator (or scripted `ow sweep status` + metric filter) selects **winner**; no `ow registry` or bad-config JSON cache — failed runs remain in W&B for comparison.
+4. Document promotion flow: W&B run → download/link artifact → U3 packaging validation.
 
 **Test scenarios.**
-- Covers AE1. Known good fingerprint + valid invalidation → skip steps 3–4.
-- Covers AE2. Known fail fingerprint → reject before long train.
-- Invalidation drift (code SHA change) → re-smoke required.
-- Test expectation: none for pure schema module if covered by integration tests above.
+- SSOT sweep YAML composes via `ow make wandb_sweep=ssot_preflight`.
+- Sweep metric references calibrated preflight floors (not invented round numbers).
+- Passing run produces artifact retrievable for packaging step.
+- Failed gate run does not block other sweep agents (no global bad-config reject).
 
-**Verification.** `ow registry` CRUD works; unit tests pass; dogfood one pass + one fail entry (origin success criteria).
+**Verification.** `ow sweep create --backend wandb --make wandb_sweep=ssot_preflight --dry-run`; one dogfood sweep with ≥2 agents on operator GPU.
 
 ---
 
@@ -226,64 +229,62 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 
 ---
 
-### U3. Packaging validation (preflight checkpoint)
+### U3. Packaging validation (sweep winner checkpoint)
 
-**Goal.** Runtime **step 4**: Docker smoke after preflight using saved checkpoint, seed 0, 4p identical agents (origin R4, R7–R8).
+**Goal.** Runtime **step 4**: Docker smoke using **W&B sweep winner** checkpoint, seed 0, 4p identical agents (origin R4, R7–R8).
 
-**Requirements.** R3, R4, R7, R8, R11 (ordering after step 3).
+**Requirements.** R3, R4, R7, R8, R11 (ordering after step 3 winner selected).
 
-**Dependencies.** U1 (record results). **Runtime:** requires step 3 checkpoint from U4 orchestration (implement U3 primitive first; wire in U4).
+**Dependencies.** U1 (artifact source).
 
 **Files.**
 - Modify `src/artifacts/kaggle_submission.py`, `src/cli/eval.py`
-- Modify `scripts/validate_kaggle_docker_submission.py` or fold into `ow eval package` only
+- Optional: `ow eval package --wandb-run <entity/project/run_id>` helper to resolve artifact
 - Tests: `tests/test_eval_package_validate_docker.py` (extend or create)
 
-**Approach.** After short preflight, invoke `ow eval package --checkpoint <preflight_ckpt> --validate-docker` with 4p/seed-0-only defaults per R7. Integrate registry record on pass/fail.
+**Approach.** After sweep winner selected, invoke `ow eval package --checkpoint <path> --validate-docker` (path from W&B artifact sync). Record pass/fail in W&B run summary tags optional — not a separate registry file.
 
 **Test scenarios.**
-- Packaging validation runs only after preflight pass (ordering).
-- Pass records registry; fail blocks long train.
+- Packaging validation runs only after sweep winner selected (ordering).
+- Fail blocks long train; operator picks alternate W&B run.
 - Checkpoint load exercises trained weights from preflight (not random init).
 
-**Verification.** One local Docker smoke succeeds on dogfood config (operator machine with Docker).
+**Verification.** One local Docker smoke succeeds on dogfood sweep winner (operator machine with Docker).
 
 ---
 
-### U4. SSOT Hydra profile, short preflight, and long train entry
+### U4. SSOT Hydra profile and long train (W&B observability)
 
-**Goal.** Runtime **steps 3 and 5**: short preflight (Gates 2–3, saves checkpoint, records registry pass/fail) then long train with rollout curriculum stages (origin R9–R13, R15–R17). Optional **W&B sweep exit** after step 3 pass without enqueueing steps 4–6 (KTD11).
+**Goal.** Runtime **step 5**: long train with rollout curriculum stages (origin R12–R13, R15–R17) and **W&B logging** for metrics, artifacts, and run lineage from sweep winner.
 
-**Requirements.** R9, R10, R12, R13, R15, R16, R17.
+**Requirements.** R12, R13, R15, R16, R17.
 
-**Dependencies.** U2, U3 (packaging validation invoked between preflight pass and long train start).
+**Dependencies.** U2, U3 (packaging pass before long train start).
 
 **Files.**
 - Create `conf/artifacts/ssot_pipeline.yaml`
 - Modify `src/jax/train/loop.py`, `src/jax/train/bracket_training.py` (refactor or replace curriculum hooks)
-- Modify `conf/config.yaml` defaults documentation
+- Ensure `telemetry.wandb.enabled=true` default for SSOT profile; group/tags link to sweep parent run
 - Tests: `tests/test_ssot_pipeline_config.py`
 
 **Approach.**
-1. **Step 3 — Short preflight:** Reuse Gates 2–3 infrastructure (`src/jax/preflight_gate_loader.py`, `docs/benchmarks/preflight-calibration.json`); save checkpoint path for U3. On fail → registry bad config (R10). On pass → invoke U3 packaging validation unless registry skip applies.
-2. **Step 5 — Long train:** Single `artifacts=ssot_pipeline` composition. Rollout opponent mix follows random → noop-heavy → sniper-heavy based on current qualifier stage. Env-step budget 500M with exhaustion → bad config + registry (R12).
-3. **Sweep mode:** Profile or flag stops after step 3 pass; no packaging/long train enqueue (KD1).
+1. **Entry:** Only after U3 packaging pass on sweep winner config/checkpoint.
+2. **Long train:** `artifacts=ssot_pipeline`. Rollout opponent mix follows random → noop-heavy → sniper-heavy based on qualifier stage. Env-step budget 500M; exhaustion without stage 3 → log **`weak_config`** to W&B (AE4) — no local bad-config cache.
+3. **Observability:** Full W&B metrics JSONL mirror, periodic checkpoint artifacts, campaign group continuity from U1 sweep.
 
 **Test scenarios.**
-- Resolved config selects ssot_pipeline composition.
-- Preflight fail blocks packaging and long train.
-- Preflight pass → packaging validation called before long train (ordering).
+- Resolved config selects ssot_pipeline composition with wandb enabled.
+- Packaging fail blocks long train start.
 - Stage 1 opponents predominantly random at train start.
-- 500M exhaustion marks bad config when stage 3 uncleared (AE4 shape).
-- Sweep mode exits after preflight without starting long train.
+- 500M exhaustion emits `weak_config` in W&B when stage 3 uncleared.
 
-**Verification.** `uv run ow train artifacts=ssot_pipeline training.total_updates=5` smoke starts without legacy hybrid hooks; preflight→packaging ordering test in CI (mock Docker).
+**Verification.** `uv run ow train artifacts=ssot_pipeline training.total_updates=5 telemetry.wandb.enabled=true` smoke starts without legacy hybrid hooks.
 
 ---
 
 ### U5. Tournament qualifiers (JAX)
 
-**Goal.** Runtime **step 5 sub-loop**: checkpoint-tick held-out JAX eval for stage promotion using final-score wins (origin R18–R19, KD3). **Retry** continues long train when stage not cleared; **500M exhaust** → bad config.
+**Goal.** Runtime **step 5 sub-loop**: checkpoint-tick held-out JAX eval for stage promotion using final-score wins (origin R18–R19, KD5). **Retry** continues long train when stage not cleared; **500M exhaust** → `weak_config` in W&B.
 
 **Requirements.** R18, R19, R23, R24; AE3 (illustrative).
 
@@ -295,14 +296,14 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 - Modify `src/jax/env.py` (expose terminal final score for eval aggregation if needed)
 - Tests: `tests/test_tournament_qualifiers.py`, golden parity with `tests/test_jax_env_parity.py`
 
-**Approach.** On interval, run N games per leg on `eval_seed_set` only. Aggregate win fraction from `_terminal` final score. Compare to calibration JSON floors (interim conservative rules until U6). Emit promotion events to shift rollout stage.
+**Approach.** On interval, run N games per leg on `eval_seed_set` only. Aggregate win fraction from `_terminal` final score. Compare to calibration JSON floors (interim conservative rules until U6). Emit promotion events to shift rollout stage; log qualifier metrics to W&B.
 
 **Test scenarios.**
 - Promotion uses final-score wins, not rollout JSONL `overall_win_rate`.
 - Eval seeds never appear in rollout batch (integration with U2).
 - Block promotion when calibration JSON missing (R19 interim rules).
 
-**Verification.** Unit tests with fixed seeds; promotion event logged in metrics JSONL.
+**Verification.** Unit tests with fixed seeds; promotion event logged in metrics JSONL and W&B.
 
 ---
 
@@ -342,7 +343,7 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 - Modify `src/cli/eval.py` (`ow eval submit`, package paths)
 - Tests: `tests/test_submission_requirements.py`, bracket transition tests
 
-**Approach.** Stage 3 clear → write bracket state, enable self-play hook (MVP). Submission: trained checkpoint Docker smoke + noop/random legs at trained weights (R21). Separate from packaging validation (preflight ckpt).
+**Approach.** Stage 3 clear → write bracket state, enable self-play hook (MVP). Submission: trained checkpoint Docker smoke + noop/random legs at trained weights (R21). Separate from packaging validation (preflight/sweep winner ckpt).
 
 **Test scenarios.**
 - Covers AE5. Bracket-qualified checkpoint → submission path allowed after Docker pass.
@@ -366,10 +367,10 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 - Modify agent capability tests if present
 - Update GitHub #205 epic body via `gh issue edit` (manual step in verification)
 
-**Approach.** Hard teardown: `uv run ow train` without profile targets `ssot_pipeline` or errors with pointer to SSOT doc. Demote `learn-proof` composer from primary workflow. Link [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) from `docs/README.md`, `AGENTS.md`, and `docs/AGENT_CAPABILITIES.md`. Annotate superseded plans in `docs/plans/2026-06-03-005-*.md` headers only (do not delete plan files).
+**Approach.** Hard teardown: `uv run ow train` without profile targets `ssot_pipeline` or errors with pointer to SSOT doc. Demote `learn-proof` composer from primary workflow. Link [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html). Remove any `ow registry` / config-registry references from operator docs. Annotate superseded plans in `docs/plans/2026-06-03-005-*.md` headers only.
 
 **Test scenarios.**
-- Agent capability map lists SSOT primitives only (origin success criteria).
+- Agent capability map lists SSOT + W&B sweep primitives only (origin success criteria).
 - Import/hydra smoke: default train does not enable hybrid_promotion funnel.
 
 **Verification.** `make test-fast` green; docs link to SSOT requirements; #204 referenced as long-train dependency.
@@ -385,24 +386,26 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 
 **Deferred to Follow-Up Work**
 - Launch hygiene tier-2 recovery as hard gate on long train (#204 implementation)
-- Planet Flow track relocation (origin R30)
+- Planet Flow track relocation (origin R30) — may share W&B sweep infra with U1
 
 **Outside this product's identity** (from origin)
 - Replacing Kaggle Docker
 - Planet Flow as default competition path
+- Building a parallel local config-registry service (explicitly out of scope per KTD2)
 
 ---
 
 ## Open Questions
 
 **Resolved in this plan (assumptions)**
-- Preflight length: inherit `docs/benchmarks/preflight-calibration.json` Gates 2–3 window unless dogfood shows need for shorter recipe.
+- Preflight length: inherit `docs/benchmarks/preflight-calibration.json` Gates 2–3 window in sweep objective.
 - Hydra profile name: `ssot_pipeline`.
-- Registry staleness: R5 invalidation dimensions; full TTL policy deferred.
+- W&B artifact is the checkpoint handoff between steps 3→4→5; no local registry JSON.
 
 **Deferred to implementation**
 - Exact tournament qualifier tick interval vs checkpoint save frequency
 - Whether submission opponent legs reuse unified ladder executor or slim Docker matrix
+- Automated vs manual sweep winner promotion (`ow sweep status` filter vs W&B UI)
 
 ---
 
@@ -411,10 +414,11 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 | Risk | Mitigation |
 |------|------------|
 | Shipping teardown before SSOT profile works | U8 last; smoke test in U4 before doc flip |
+| W&B artifact drift vs local checkpoint path | U3 documents sync path; test with `log_artifacts=true` |
 | Tournament qualifiers diverge from Docker submission | R23–R24 parity tests; submission opponent legs at trained weights (R21) |
 | Long train wall clock (#204) | Document before enforcing R12 in production; not blocking U1–U5 merge |
 | Plan 005 code assumes Docker qualifiers | Reuse bracket state, replace qualifier *trigger* with U5 |
-| Wrong Hydra profile during short preflight | U4 must use SSOT profile + `preflight-calibration.json`; see `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md` |
+| Wrong Hydra profile during sweep preflight | U1 sweep recipe pins SSOT-relevant groups + `preflight-calibration.json` |
 
 ---
 
@@ -422,6 +426,7 @@ Steps 1–2 use existing Hydra + `make test-fast` — no new unit; verify in U8 
 
 - Origin: `docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`
 - Operator flowchart: `docs/tools/ssot-training-pipeline-flowchart.html`
+- W&B sweep CLI: `src/cli/sweep.py`, `scripts/make_wandb_sweep.py`, `conf/wandb_sweep/`
 - Superseded qualifier flow: `docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md`
 - Existing packaging: `src/cli/eval.py`, `src/artifacts/kaggle_submission.py`
 - Seed scheduler: `src/training/seed_scheduler.py`, `src/config/schema.py`
