@@ -1,6 +1,7 @@
 ---
 title: SSOT training pipeline from config to Kaggle submission
 date: 2026-06-03
+last_updated: 2026-06-04
 category: architecture-patterns
 module: training-pipeline
 problem_type: architecture_pattern
@@ -22,9 +23,12 @@ tags:
   - teardown-legacy
   - operator-docs
   - github-211
+  - interactive-flowchart
+  - svg-layout
 related_components:
   - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
   - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/tools/ssot-training-pipeline-flowchart.html
   - docs/competition/COMPETITION_OVERVIEW.md
   - docs/competition/COMPETITION_SUBMISSION.md
   - AGENTS.md
@@ -40,7 +44,9 @@ Operators and coding agents hit the same wall: several **co-equal submit-valid n
 
 Submit-valid closure stalled partly because Gate 4 wall clock and naming overlap obscured which path was authoritative. (session history) Prior tracker work (#206–#210 for PR #187 residuals) was superseded when the team chose a single SSOT requirements doc instead of patching parallel spines.
 
-The fix in this session was **documentation and planning**: requirements SSOT, plain spine terminology, implementation plan, and tracker issue [#211](https://github.com/jmduea/orbit_wars/issues/211) under epic [#205](https://github.com/jmduea/orbit_wars/issues/205). **No implementation code shipped yet.**
+The fix in this session was **documentation and planning**: requirements SSOT, plain spine terminology, implementation plan, interactive operator flowchart, and tracker issue [#211](https://github.com/jmduea/orbit_wars/issues/211) under epic [#205](https://github.com/jmduea/orbit_wars/issues/205). **No implementation code shipped yet.**
+
+**Operator map (interactive).** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) is the click-through spine: R# labels on nodes, aside panel with requirement text, and side paths for fail/retry/terminal outcomes. The plan mermaid in [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) must stay in sync with this chart (gates, loops, terminals).
 
 ## Guidance
 
@@ -74,7 +80,33 @@ The fix in this session was **documentation and planning**: requirements SSOT, p
 
 **W&B on the SSOT spine.** Step 3 **is** the W&B sweep — short preflight runs, metrics, and checkpoint artifacts. Failed runs stay in W&B; operator selects a **winner** for packaging validation. Long train (step 5) runs with `telemetry.wandb` for observability and artifact lineage. **Sweep-only ablations** may stop after preflight pass without packaging or long train.
 
-**Implementation tracker.** Requirements → plan [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) → [#211](https://github.com/jmduea/orbit_wars/issues/211). Teardown policy (R29): remove or relocate legacy spines; no “demoted but still default” paths in `AGENTS.md` / `docs/AGENT_CAPABILITIES.md`.
+**Implementation tracker.** Requirements → plan [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) → interactive flowchart → [#211](https://github.com/jmduea/orbit_wars/issues/211). Teardown policy (R29): remove or relocate legacy spines; no “demoted but still default” paths in `AGENTS.md` / `docs/AGENT_CAPABILITIES.md`.
+
+**Flowchart control-flow invariants** (plan mermaid + HTML must match):
+
+| Path | From | To | Meaning |
+|------|------|-----|---------|
+| fail → stop | Tests pass? | Stop · fix locally (left attach) | Step 2 CPU gate |
+| fail run | Gates 2–3 + winner? | W&B sweep | Pick next sweep agent / candidate |
+| fail → pick next run | Smoke ok? | W&B sweep (right rail) | Packaging fail on winner ckpt |
+| retry | Stage 3 clear? | Long train (left rail) | Qualifier not cleared; keep training |
+| weak_config stop | Stage 3 clear? | Terminal (left attach) | 500M exhaust — **no return to sweep** |
+| yes | Stage 3 clear? | Main bracket | All three legs cleared |
+
+**SVG layout conventions** for dense operator flowcharts (learned building the SSOT chart):
+
+1. **Wider canvas** — `viewBox` ~720×900; spine centered (~x=360); nodes need ~18px vertical gaps minimum.
+2. **Outer side rails** — left x≈8, right x≈712; route loops through gaps, never through node columns (x≈160–560).
+3. **Terminal attach** — stop nodes connect on the **left** edge from their gate (short horizontal), not a loop around to the right.
+4. **Opaque layers** — draw edges first, then white `masks` rects per node bbox, then styled nodes (semi-transparent fills let edges bleed through).
+5. **Label alignment** — use plan **KTD#** on flowchart nodes (not origin KD#); gate names must match plan (`Gates 2–3 + winner?`, `Stage 3 clear?`).
+
+**What didn't work (layout iteration).**
+
+- Narrow viewBox with side paths at x=40/x=400 → paths crossed wide W&B and packaging boxes.
+- Semi-transparent node fills (`rgba(...)`) → edges visible “under” nodes even with correct z-order.
+- Vertical segments at x=282 inside the node column → retry path cut through Tournament qualifiers.
+- Plan mermaid `weak_config → W&B` contradicted flowchart terminal and R12/AE4 — doc-review caught it.
 
 **Competition rules SSOT.** Game rules and packaging expectations live in [`docs/competition/COMPETITION_OVERVIEW.md`](../../competition/COMPETITION_OVERVIEW.md) and [`docs/competition/COMPETITION_SUBMISSION.md`](../../competition/COMPETITION_SUBMISSION.md); pipeline docs link there first.
 
@@ -142,8 +174,18 @@ ow sweep / wandb agent ...
   → STOP (no packaging validation or long train required)
 ```
 
+Open the operator map: [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) — click nodes for R# text and CLI snippets.
+
+**Plan ↔ flowchart sync** (verify after editing either file):
+
+- Step 2 fail → **Stop · fix locally** (not GPU)
+- Packaging fail → **W&B sweep** (pick next winner)
+- `weak_config` → **terminal stop** (not back to W&B)
+- **Stage 3 clear?** yes → bracket; retry → long train
+
 ## Related
 
+- Interactive operator map: [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - Requirements: [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md)
 - Plan: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md)
 - Epic [#205](https://github.com/jmduea/orbit_wars/issues/205), implementation [#211](https://github.com/jmduea/orbit_wars/issues/211), perf [#204](https://github.com/jmduea/orbit_wars/issues/204)
