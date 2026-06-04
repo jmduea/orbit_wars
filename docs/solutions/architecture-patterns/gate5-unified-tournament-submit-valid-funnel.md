@@ -1,6 +1,7 @@
 ---
 title: Gate 5 unified tournament proof with Docker-first submit-valid funnel
 date: 2026-06-03
+last_updated: 2026-06-03
 category: architecture-patterns
 module: artifacts-tournament
 problem_type: architecture_pattern
@@ -18,7 +19,11 @@ tags:
   - nearest-sniper
   - preflight-calibration
   - hybrid-promotion
+  - legacy
+  - ssot-superseded
 related_components:
+  - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
+  - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
   - src/artifacts/submit_valid_funnel.py
   - src/artifacts/checkpoint_eval.py
   - src/artifacts/tournament/unified/
@@ -29,9 +34,11 @@ related_components:
 
 # Gate 5 unified tournament proof with Docker-first submit-valid funnel
 
+> **Legacy (operational until teardown).** For the canonical config→submission spine, use [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md) and requirements [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Gate 5 / `hybrid_promotion` / `tournament-proof` remain in the repo but are **not** the production spine — packaging validation runs on the preflight checkpoint **before** long train; submission absorbs held-out proof after bracket clearance ([#211](https://github.com/jmduea/orbit_wars/issues/211)).
+
 ## Context
 
-Kaggle submission requires packaging that runs in the competition Docker image **and** held-out win rates against baseline opponents. Earlier Gate 5 used separate 2p-only floors and could treat the challenger checkpoint as its own Stage 2 incumbent. PR [#186](https://github.com/jmduea/orbit_wars/pull/186) ships a **unified 2p+4p combined ladder**, **calibrated Stage-1 floors** in `docs/benchmarks/preflight-calibration.json`, and a **submit-valid order** that never spends tournament compute on checkpoints that fail Docker validation.
+Kaggle submission requires packaging that runs in the competition Docker image **and** held-out win rates against baseline opponents. Earlier Gate 5 used separate 2p-only floors and could treat the challenger checkpoint as its own Stage 2 incumbent. PR [#186](https://github.com/jmduea/orbit_wars/pull/186) ships a **unified 2p+4p combined ladder**, **calibrated Stage-1 floors** in `docs/benchmarks/preflight-calibration.json`, and a **submit-valid order** that never spends tournament compute on checkpoints that fail Docker validation. That funnel is still accurate for **debugging existing hybrid/Gate-5 code paths** until SSOT teardown (R29).
 
 ## Guidance
 
@@ -97,9 +104,11 @@ Running tournaments before Docker validation wastes GPU/time on unpublishable ch
 
 ## When to Apply
 
-- Configuring `artifacts=hybrid_promotion` or `conf/benchmark/gates/win_proof_tournament.yaml`
-- Debugging `checkpoint_eval` jobs under `evaluations/checkpoint_eval_u*/`
-- Interpreting `unified_verdict.json` and `validation_ok` in eval status JSON
+- **Legacy only:** debugging existing `artifacts=hybrid_promotion`, `ow benchmark tournament-proof`, or `checkpoint_eval` jobs until [#211](https://github.com/jmduea/orbit_wars/issues/211) teardown
+- Configuring `conf/benchmark/gates/win_proof_tournament.yaml` for preflight Gate 5 proof (distinct from SSOT packaging validation + submission)
+- Interpreting `unified_verdict.json` and `validation_ok` in eval status JSON under `evaluations/checkpoint_eval_u*/`
+
+**Do not cite as the canonical production spine** — see SSOT doc for packaging validation → long train → tournament qualifiers → submission order.
 
 ## Examples
 
@@ -113,7 +122,8 @@ Running tournaments before Docker validation wastes GPU/time on unpublishable ch
 
 ## Related
 
-- Bracket training qualifier slice (1.0 floors, separate from Gate 5 0.76 proof): `docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md`
+- **Canonical spine (SSOT):** [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md)
+- Bracket training qualifier slice (legacy; 1.0 floors, separate from Gate 5 0.76 proof): [`kaggle-bracket-ranking-foundational-slice.md`](kaggle-bracket-ranking-foundational-slice.md)
 - Long CLI progress (stderr, no tail pipe): `docs/solutions/developer-experience/ow-long-cli-stderr-progress-no-tail-pipe.md`
 - Subprocess train streaming (calibration arms): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - Operator prompts: `docs/AGENT_CAPABILITIES.md`
