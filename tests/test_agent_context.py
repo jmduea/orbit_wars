@@ -17,6 +17,7 @@ def test_build_context_includes_preflight_and_roadmap() -> None:
     assert "list_command" in payload["wandb_sweeps"]
     assert payload["roadmap"]["present"] is True
     assert "docs" in payload
+    assert payload["docs"]["readme"] == "docs/README.md"
 
 
 def test_build_context_recent_runs_from_fixture(tmp_path: Path, monkeypatch) -> None:

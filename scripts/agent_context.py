@@ -331,6 +331,7 @@ def build_context(
         "recent_runs_index": recent_runs,
         "latest_run_eval": _read_latest_run_eval_summary(repo_root, recent_runs),
         "docs": {
+            "readme": "docs/README.md",
             "agent_capabilities": "docs/AGENT_CAPABILITIES.md",
             "agents": "AGENTS.md",
             "onboarding": "docs/ONBOARDING.md",
