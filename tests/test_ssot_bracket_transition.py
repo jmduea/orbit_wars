@@ -33,7 +33,7 @@ def test_stage_three_promotion_enters_main_bracket(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(
         tournament_qualifiers.runner,
         "evaluate_qualifier_legs",
-        lambda **_: _fake_legs(),
+        lambda *_args, **_kwargs: _fake_legs(),
     )
     cfg = _cfg(tmp_path)
     state_path = (
