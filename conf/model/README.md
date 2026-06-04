@@ -18,4 +18,5 @@ Examples:
 ```bash
 uv run ow train model=transformer_factorized
 uv run ow train model=transformer_factorized_small
+uv run ow train model=planet_graph_transformer_small
 ```

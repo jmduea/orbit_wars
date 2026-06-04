@@ -128,6 +128,18 @@ def test_build_jax_policy_dispatches_transformer() -> None:
     assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
 
+def test_build_jax_policy_dispatches_planet_graph_transformer_small() -> None:
+    cfg = _train_cfg(
+        architecture="planet_graph_transformer_small", pointer_decoder="factorized_topk"
+    )
+    policy = build_jax_policy(cfg)
+    assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
+    assert (
+        encoder_backbone_for_architecture("planet_graph_transformer_small")
+        == "planet_self_attention"
+    )
+
+
 def test_build_jax_policy_dispatches_factorized_transformer() -> None:
     cfg = _train_cfg(
         architecture="planet_graph_transformer", pointer_decoder="factorized_topk"

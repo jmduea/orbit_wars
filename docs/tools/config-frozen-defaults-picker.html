@@ -1461,6 +1461,30 @@ const CONFIG = {
           "value": "outputs/"
         },
         {
+          "desc": "Resolved default (bool).",
+          "key": "artifacts.ssot_pipeline.enabled",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "desc": "Resolved default (int).",
+          "key": "artifacts.ssot_pipeline.qualifier_eval_interval_updates",
+          "type": "int",
+          "value": 50
+        },
+        {
+          "desc": "Resolved default (int).",
+          "key": "artifacts.ssot_pipeline.qualifier_games_per_seed",
+          "type": "int",
+          "value": 0
+        },
+        {
+          "desc": "Resolved default (int).",
+          "key": "artifacts.ssot_pipeline.qualifier_max_env_steps",
+          "type": "int",
+          "value": 500000000
+        },
+        {
           "desc": "Structured list (edit as JSON).",
           "key": "artifacts.tournament.baselines",
           "type": "list",
@@ -1695,12 +1719,6 @@ const CONFIG = {
           "key": "output.root",
           "type": "str",
           "value": "outputs"
-        },
-        {
-          "desc": "Resolved default (str).",
-          "key": "output.run_id",
-          "type": "str",
-          "value": "20260604T032233Z-s42-8817a0d2"
         },
         {
           "desc": "Resolved default (str).",

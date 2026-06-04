@@ -70,6 +70,14 @@ CHOICES: dict[str, list[str]] = {
     "output.retention_class": ["compact", "full"],
 }
 
+# Leaves omitted from the operator picker (still valid via Hydra overrides / tests).
+EXCLUDE_PATHS: frozenset[str] = frozenset(
+    {
+        "task.env_parity_mode",  # opt-in task=kaggle_parity only; not a frozen train default
+        "output.run_id",  # ${orbit_run_id:${seed}} — changes every compose/build
+    }
+)
+
 WARN_RULES: list[dict[str, Any]] = [
     {
         "target": "opponents.snapshot.pool_size",
@@ -186,6 +194,8 @@ def build_groups() -> list[dict[str, Any]]:
     }
 
     for path, value in _flatten_leaves(payload):
+        if path in EXCLUDE_PATHS:
+            continue
         group_id = _group_id_for_path(path)
         if group_id not in grouped:
             grouped[group_id] = []

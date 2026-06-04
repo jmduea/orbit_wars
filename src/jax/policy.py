@@ -479,14 +479,24 @@ def build_pointer_decoder(cfg: TrainConfig) -> FactorizedTopKPointerDecoder:
     )
 
 
+_PLANET_GRAPH_TRANSFORMER_ARCHITECTURES = frozenset(
+    {
+        "planet_graph_transformer",
+        "planet_graph_transformer_small",
+    }
+)
+
+
 def build_jax_policy(cfg: TrainConfig) -> nn.Module:
     """Construct the planet-edge policy for the configured architecture."""
     normalized_architecture = cfg.model.architecture.strip().lower()
-    if normalized_architecture == "planet_graph_transformer":
+    if normalized_architecture in _PLANET_GRAPH_TRANSFORMER_ARCHITECTURES:
         return build_planet_graph_transformer_policy(cfg)
     raise ValueError(
         f"Unsupported JAX model architecture '{cfg.model.architecture}'. "
-        "Expected 'planet_graph_transformer'."
+        "Expected one of: "
+        + ", ".join(sorted(_PLANET_GRAPH_TRANSFORMER_ARCHITECTURES))
+        + "."
     )
 
 

@@ -37,7 +37,12 @@ from src.jax.rollout.types import (
     PlanetFlowActionReplay,
 )
 from src.jax.ship_action import is_continuous_ship_mode
-from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
+from src.opponents.constants import (
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+    is_noop_jax_training_opponent_mode,
+    validate_jax_training_opponent_mode,
+)
 from src.opponents.jax_actions.builders import (
     build_action_from_factored_batch,
     owned_planet_ships,
@@ -86,11 +91,11 @@ def collect_rollout_jax(
             "v2 rollout supports env.player_count of 2 or 4; "
             f"got {cfg.task.player_count}."
         )
-    if cfg.opponents.mode.opponent not in {"self", "random"}:
-        raise ValueError(
-            "JAX training supports opponent='self' or opponent='random', "
-            f"got {cfg.opponents.mode.opponent!r}."
-        )
+    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    # Opponent noop actions ignore edge features; skip per-step opponent re-encode.
+    skip_opp_batch_refresh = cfg.task.player_count == 2 and is_noop_jax_training_opponent_mode(
+        cfg.opponents.mode.opponent
+    )
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
@@ -365,12 +370,15 @@ def collect_rollout_jax(
             operand=None,
         )
         if cfg.task.player_count == 2:
-            next_opp_game = next_state.game._replace(
-                player=(1 - next_state.learner_player).astype(jnp.int32)
-            )
-            next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-                next_opp_game
-            )
+            if skip_opp_batch_refresh:
+                next_opp_batch_cache = opp_batch_cache
+            else:
+                next_opp_game = next_state.game._replace(
+                    player=(1 - next_state.learner_player).astype(jnp.int32)
+                )
+                next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                    next_opp_game
+                )
         else:
             next_opp_batch_cache = opp_batch_cache
 
@@ -507,12 +515,16 @@ def collect_rollout_jax(
         ), transition
 
     if cfg.task.player_count == 2:
-        initial_opp_game = env_state.game._replace(
-            player=(1 - env_state.learner_player).astype(jnp.int32)
-        )
-        initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-            initial_opp_game
-        )
+        if skip_opp_batch_refresh:
+            # Noop opponents ignore edge features; learner batch has the right shape.
+            initial_opp_batch_cache = turn_batch
+        else:
+            initial_opp_game = env_state.game._replace(
+                player=(1 - env_state.learner_player).astype(jnp.int32)
+            )
+            initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                initial_opp_game
+            )
     else:
         initial_opp_batch_cache = turn_batch
 
