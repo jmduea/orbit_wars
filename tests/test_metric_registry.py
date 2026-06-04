@@ -300,6 +300,19 @@ def test_per_format_timing_metrics_are_registered_as_debug():
         assert name not in timing_group_names
 
 
+def test_rollout_contract_registry_roles_align_with_canonical_tuples() -> None:
+    from src.telemetry.rollout_contract_builder import (
+        ROLLOUT_CHUNK_ONLY_SCALAR_KEYS,
+        registry_names_for_role,
+        validate_rollout_contract_registry_alignment,
+    )
+
+    validate_rollout_contract_registry_alignment()
+    assert registry_names_for_role(METRIC_DEFINITIONS, "chunk_only") == frozenset(
+        ROLLOUT_CHUNK_ONLY_SCALAR_KEYS
+    )
+
+
 def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:
     assert ROLLOUT_SCALAR_ORDER == LOGGED_ROLLOUT_SCALAR_KEYS
 
