@@ -55,7 +55,12 @@ Cursor respects `.gitignore` by default; this repo also ships explicit ignore fi
 
 Agents cold-start faster when session context is loaded automatically. Cursor session-start is product-level; the repo ships an optional project hook (no user secrets).
 
-**Project hook (copy as-is):** `.cursor/hooks.json` runs `.cursor/hooks/session-start-agent-context.sh`, which calls `make agent-context` and returns `additional_context` per [Cursor hooks docs](https://cursor.com/docs/hooks). Enable by keeping those files in the repo root — Cursor reloads on save.
+**Project hooks (copy as-is):** `.cursor/hooks.json` per [Cursor hooks docs](https://cursor.com/docs/hooks). Cursor reloads on save.
+
+| Hook | Script | Behavior |
+|------|--------|----------|
+| `sessionStart` | `.cursor/hooks/session-start-agent-context.sh` | Runs `make agent-context` → `additional_context` |
+| `beforeShellExecution` | `.cursor/hooks/before-shell-terminal-contention.sh` | **Denies GPU-heavy shell** when another agent has a terminal whose `cwd` is under this repo and the terminal file still has `running_for_ms:` (no `exit_code:` footer). Matches `ow train`, `make test*`, `pytest`, `wandb agent`, calibration, tier-2 launch-hygiene e2e, etc. Light commands (`git status`, `make agent-context`) still run. |
 
 Manual alternative — **Cursor Settings → Hooks → Session Start**:
 

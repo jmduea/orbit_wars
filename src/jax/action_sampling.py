@@ -58,6 +58,69 @@ def _noop_bucket_mask(
     return mask.at[:, 0, 0].set(True)
 
 
+def _shield_diagnostic_zeros(env_count: int) -> jax.Array:
+    return jnp.zeros((env_count,), dtype=jnp.float32)
+
+
+def _empty_shield_diagnostics(env_count: int) -> ShieldDiagnostics:
+    zeros = _shield_diagnostic_zeros(env_count)
+    return ShieldDiagnostics(
+        blocked_count=zeros,
+        blocked_sun_count=zeros,
+        blocked_bounds_count=zeros,
+        blocked_unintended_hit_count=zeros,
+        blocked_horizon_count=zeros,
+        fallback_noop_count=zeros,
+        legal_non_noop_count=zeros,
+        original_non_noop_count=zeros,
+        legal_non_noop_rate=zeros,
+    )
+
+
+def _merge_shield_step_diagnostics(
+    diagnostics: ShieldDiagnostics,
+    step_diagnostics: ShieldDiagnostics,
+    *,
+    rate_placeholder: jax.Array,
+) -> ShieldDiagnostics:
+    return ShieldDiagnostics(
+        blocked_count=diagnostics.blocked_count + step_diagnostics.blocked_count,
+        blocked_sun_count=diagnostics.blocked_sun_count
+        + step_diagnostics.blocked_sun_count,
+        blocked_bounds_count=diagnostics.blocked_bounds_count
+        + step_diagnostics.blocked_bounds_count,
+        blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count
+        + step_diagnostics.blocked_unintended_hit_count,
+        blocked_horizon_count=diagnostics.blocked_horizon_count
+        + step_diagnostics.blocked_horizon_count,
+        fallback_noop_count=diagnostics.fallback_noop_count
+        + step_diagnostics.fallback_noop_count,
+        legal_non_noop_count=diagnostics.legal_non_noop_count
+        + step_diagnostics.legal_non_noop_count,
+        original_non_noop_count=diagnostics.original_non_noop_count
+        + step_diagnostics.original_non_noop_count,
+        legal_non_noop_rate=rate_placeholder,
+    )
+
+
+def _finalize_shield_diagnostics(diagnostics: ShieldDiagnostics) -> ShieldDiagnostics:
+    return ShieldDiagnostics(
+        blocked_count=diagnostics.blocked_count,
+        blocked_sun_count=diagnostics.blocked_sun_count,
+        blocked_bounds_count=diagnostics.blocked_bounds_count,
+        blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count,
+        blocked_horizon_count=diagnostics.blocked_horizon_count,
+        fallback_noop_count=diagnostics.fallback_noop_count,
+        legal_non_noop_count=diagnostics.legal_non_noop_count,
+        original_non_noop_count=diagnostics.original_non_noop_count,
+        legal_non_noop_rate=jnp.where(
+            diagnostics.original_non_noop_count > 0.0,
+            diagnostics.legal_non_noop_count / diagnostics.original_non_noop_count,
+            0.0,
+        ),
+    )
+
+
 def _ensure_bucket_mask_has_choice(
     ship_bucket_mask: jax.Array,
     flat_decision: jax.Array,
@@ -301,18 +364,8 @@ def _sample_shielded_factored_sequence_with_params(
         max_k=k,
         buckets=cfg.task.ship_bucket_count,
     )
-    diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
-    diagnostics = ShieldDiagnostics(
-        blocked_count=diagnostic_zero,
-        blocked_sun_count=diagnostic_zero,
-        blocked_bounds_count=diagnostic_zero,
-        blocked_unintended_hit_count=diagnostic_zero,
-        blocked_horizon_count=diagnostic_zero,
-        fallback_noop_count=diagnostic_zero,
-        legal_non_noop_count=diagnostic_zero,
-        original_non_noop_count=diagnostic_zero,
-        legal_non_noop_rate=diagnostic_zero,
-    )
+    diagnostic_zero = _shield_diagnostic_zeros(env_count)
+    diagnostics = _empty_shield_diagnostics(env_count)
     bucket_mask_stack = jnp.zeros(
         (env_count, sequence_k, MAX_PLANETS, k, cfg.task.ship_bucket_count),
         dtype=jnp.bool_,
@@ -359,24 +412,10 @@ def _sample_shielded_factored_sequence_with_params(
                 )
             )
         )(game, batch, remaining_ships)
-        step_diagnostics = shielded.diagnostics
-        diagnostics = ShieldDiagnostics(
-            blocked_count=diagnostics.blocked_count + step_diagnostics.blocked_count,
-            blocked_sun_count=diagnostics.blocked_sun_count
-            + step_diagnostics.blocked_sun_count,
-            blocked_bounds_count=diagnostics.blocked_bounds_count
-            + step_diagnostics.blocked_bounds_count,
-            blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count
-            + step_diagnostics.blocked_unintended_hit_count,
-            blocked_horizon_count=diagnostics.blocked_horizon_count
-            + step_diagnostics.blocked_horizon_count,
-            fallback_noop_count=diagnostics.fallback_noop_count
-            + step_diagnostics.fallback_noop_count,
-            legal_non_noop_count=diagnostics.legal_non_noop_count
-            + step_diagnostics.legal_non_noop_count,
-            original_non_noop_count=diagnostics.original_non_noop_count
-            + step_diagnostics.original_non_noop_count,
-            legal_non_noop_rate=diagnostic_zero,
+        diagnostics = _merge_shield_step_diagnostics(
+            diagnostics,
+            shielded.diagnostics,
+            rate_placeholder=diagnostic_zero,
         )
         shield_step_mask = shielded.ship_bucket_mask
         step_bucket_mask = apply_cumulative_forbidden_to_shield(
@@ -545,21 +584,7 @@ def _sample_shielded_factored_sequence_with_params(
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-    diagnostics = ShieldDiagnostics(
-        blocked_count=diagnostics.blocked_count,
-        blocked_sun_count=diagnostics.blocked_sun_count,
-        blocked_bounds_count=diagnostics.blocked_bounds_count,
-        blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count,
-        blocked_horizon_count=diagnostics.blocked_horizon_count,
-        fallback_noop_count=diagnostics.fallback_noop_count,
-        legal_non_noop_count=diagnostics.legal_non_noop_count,
-        original_non_noop_count=diagnostics.original_non_noop_count,
-        legal_non_noop_rate=jnp.where(
-            diagnostics.original_non_noop_count > 0.0,
-            diagnostics.legal_non_noop_count / diagnostics.original_non_noop_count,
-            0.0,
-        ),
-    )
+    diagnostics = _finalize_shield_diagnostics(diagnostics)
     noop_idx = noop_edge_index(cfg.task)
     target_sequence = source_sequence * k + slot_sequence
     target_sequence = jnp.where(
@@ -666,18 +691,8 @@ def _sample_shielded_sequence_with_params(
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
     remaining_ships = owned_planet_ships(game)
-    diagnostic_zero = jnp.zeros((env_count,), dtype=jnp.float32)
-    diagnostics = ShieldDiagnostics(
-        blocked_count=diagnostic_zero,
-        blocked_sun_count=diagnostic_zero,
-        blocked_bounds_count=diagnostic_zero,
-        blocked_unintended_hit_count=diagnostic_zero,
-        blocked_horizon_count=diagnostic_zero,
-        fallback_noop_count=diagnostic_zero,
-        legal_non_noop_count=diagnostic_zero,
-        original_non_noop_count=diagnostic_zero,
-        legal_non_noop_rate=diagnostic_zero,
-    )
+    diagnostic_zero = _shield_diagnostic_zeros(env_count)
+    diagnostics = _empty_shield_diagnostics(env_count)
     bucket_mask_stack = jnp.zeros(
         (env_count, sequence_k, edge_count, cfg.task.ship_bucket_count),
         dtype=jnp.bool_,
@@ -709,24 +724,10 @@ def _sample_shielded_sequence_with_params(
                 game_row, batch_row, cfg.task, remaining_planet_ships=ships
             )
         )(game, batch, remaining_ships)
-        step_diagnostics = shielded.diagnostics
-        diagnostics = ShieldDiagnostics(
-            blocked_count=diagnostics.blocked_count + step_diagnostics.blocked_count,
-            blocked_sun_count=diagnostics.blocked_sun_count
-            + step_diagnostics.blocked_sun_count,
-            blocked_bounds_count=diagnostics.blocked_bounds_count
-            + step_diagnostics.blocked_bounds_count,
-            blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count
-            + step_diagnostics.blocked_unintended_hit_count,
-            blocked_horizon_count=diagnostics.blocked_horizon_count
-            + step_diagnostics.blocked_horizon_count,
-            fallback_noop_count=diagnostics.fallback_noop_count
-            + step_diagnostics.fallback_noop_count,
-            legal_non_noop_count=diagnostics.legal_non_noop_count
-            + step_diagnostics.legal_non_noop_count,
-            original_non_noop_count=diagnostics.original_non_noop_count
-            + step_diagnostics.original_non_noop_count,
-            legal_non_noop_rate=diagnostic_zero,
+        diagnostics = _merge_shield_step_diagnostics(
+            diagnostics,
+            shielded.diagnostics,
+            rate_placeholder=diagnostic_zero,
         )
         edge_action_mask = jnp.concatenate(
             [
@@ -823,21 +824,7 @@ def _sample_shielded_sequence_with_params(
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-    diagnostics = ShieldDiagnostics(
-        blocked_count=diagnostics.blocked_count,
-        blocked_sun_count=diagnostics.blocked_sun_count,
-        blocked_bounds_count=diagnostics.blocked_bounds_count,
-        blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count,
-        blocked_horizon_count=diagnostics.blocked_horizon_count,
-        fallback_noop_count=diagnostics.fallback_noop_count,
-        legal_non_noop_count=diagnostics.legal_non_noop_count,
-        original_non_noop_count=diagnostics.original_non_noop_count,
-        legal_non_noop_rate=jnp.where(
-            diagnostics.original_non_noop_count > 0.0,
-            diagnostics.legal_non_noop_count / diagnostics.original_non_noop_count,
-            0.0,
-        ),
-    )
+    diagnostics = _finalize_shield_diagnostics(diagnostics)
     k = edge_k(cfg.task)
     if carry_enabled:
         final_output = policy.apply(

@@ -6,6 +6,12 @@
         "command": ".cursor/hooks/session-start-agent-context.sh",
         "timeout": 30
       }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/before-shell-terminal-contention.sh",
+        "timeout": 5
+      }
     ]
   }
 }
