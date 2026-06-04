@@ -71,6 +71,11 @@ from src.telemetry.metric_registry import (
     required_rollout_scalar_names,
 )
 from src.jax.train.bracket_training import bracket_training_enabled, bracket_training_tick
+from src.jax.tournament_qualifiers.runner import (
+    ssot_pipeline_enabled,
+    ssot_qualifier_tick,
+    ssot_qualifier_telemetry,
+)
 from src.training.curriculum import CurriculumController
 from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
 
@@ -496,6 +501,18 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                     "bracket_training_phase": tick.phase,
                     "weak_config": tick.weak_config,
                 }
+            elif ssot_pipeline_enabled(cfg):
+                ssot_tick = ssot_qualifier_tick(
+                    cfg,
+                    update=update,
+                    total_env_steps=total_env_steps,
+                    checkpoint_path=saved_checkpoint_path,
+                    output_root=Path(cfg.output.root),
+                )
+                bracket_metrics = ssot_qualifier_telemetry(ssot_tick)
+                if ssot_tick.events:
+                    update_events = list(update_events)
+                    update_events.extend(ssot_tick.events)
             record = build_update_record(
                 update=update,
                 total_env_steps=total_env_steps,

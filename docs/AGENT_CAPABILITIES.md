@@ -43,6 +43,11 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Gate 5 tournament proof | `ow benchmark tournament-proof` |
 | Preflight calibrate | `ow benchmark calibrate` |
 | Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
+| Unified tournament calibration | `ow benchmark calibrate-unified-tournament` |
+| SSOT qualifier calibration | `ow benchmark calibrate-qualifier-seeds` |
+| Planet Flow sweep shortlist | `ow benchmark shortlist-planet-flow-sweep` |
+| Planet Flow noop smoke | `ow benchmark planet-flow-noop-smoke` |
+| Env shaping calibration (planned) | `ow benchmark shape-calibrate` |
 | Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
 | Learn-proof composer | `ow benchmark learn-proof` |
 | W&B/Kaggle sweep create | `ow sweep create` |

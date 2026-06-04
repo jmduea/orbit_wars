@@ -17,6 +17,12 @@ unified_tournament:
 bracket_training:
   enabled: false
 
+ssot_pipeline:
+  enabled: true
+  qualifier_max_env_steps: 500000000
+  qualifier_eval_interval_updates: 50
+  qualifier_games_per_seed: 0
+
 artifact_pipeline:
   enabled: true
   checkpoint_eval_async: false

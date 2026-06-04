@@ -241,7 +241,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     submit = subparsers.add_parser(
         "submit",
-        help="Package a checkpoint and submit submission.tar.gz to Kaggle.",
+        help=(
+            "Package and upload submission.tar.gz with trained checkpoint weights (SSOT R21). "
+            "Add --validate-docker for submit-valid Docker proof before upload; tournament "
+            "qualifier clearance alone is insufficient (R22). Without --validate-docker, "
+            "packaging is layout-only."
+        ),
     )
     submit.add_argument(
         "--checkpoint",

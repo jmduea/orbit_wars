@@ -42,6 +42,7 @@ def print_benchmark_help() -> None:
         "  learn-proof              Gates 2–5 learning proof ladder\n"
         "  calibrate                Derive preflight thresholds\n"
         "  calibrate-seed-scheduler Reseed-interval calibration\n"
+        "  calibrate-qualifier-seeds SSOT qualifier floor calibration\n"
         "  gate                     Composable preflight gates (run/list)\n"
         "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
@@ -372,6 +373,33 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Merge non-enforcing unified_tournament stub into --out JSON (no GPU sweep).",
     )
+
+    qualifier_cal = subparsers.add_parser(
+        "calibrate-qualifier-seeds",
+        help="Calibrate SSOT tournament qualifier per-leg win-rate floors.",
+    )
+    qualifier_cal.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/qualifier-seed-calibration.json"),
+    )
+    qualifier_cal.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    qualifier_cal.add_argument(
+        "--write-stub",
+        action="store_true",
+        help="Write interim conservative floors JSON without GPU campaign.",
+    )
+    qualifier_cal.add_argument(
+        "--enforcement",
+        action="store_true",
+        help="Set enforcement: true in written stub (after campaign evidence).",
+    )
+    qualifier_cal.add_argument("--analyze-only", action="store_true")
+    qualifier_cal.add_argument("--dry-run", action="store_true")
 
     gate = subparsers.add_parser(
         "gate",
@@ -1256,6 +1284,18 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_seed_scheduler_cli(args)
         case "calibrate-unified-tournament":
             return run_calibrate_unified_tournament_cli(args)
+        case "calibrate-qualifier-seeds":
+            from src.cli.calibrate_qualifier_seeds import (
+                run_calibrate_qualifier_seeds_cli,
+            )
+
+            return run_calibrate_qualifier_seeds_cli(args)
+        case "gate":
+            from src.cli.benchmark_gate_cli import run_gate_cli
+
+            return run_gate_cli(args)
+        case "tournament-proof":
+            return run_tournament_proof_cli(args)
         case "shortlist-planet-flow-sweep":
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":
