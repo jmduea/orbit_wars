@@ -5,11 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import jax.numpy as jnp
 import pytest
 
 import jax
-import jax.numpy as jnp
-
 from src.config import RewardConfig, TrainConfig
 from src.game.constants import MAX_PLANETS
 from src.jax.env import batched_reset, batched_step, empty_action
