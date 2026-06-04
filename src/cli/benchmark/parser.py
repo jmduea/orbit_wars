@@ -416,6 +416,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="Merge non-enforcing unified_tournament stub into --out JSON (no GPU sweep).",
     )
 
+    qualifier_cal = subparsers.add_parser(
+        "calibrate-qualifier-seeds",
+        help="Calibrate SSOT tournament qualifier per-leg win-rate floors.",
+    )
+    qualifier_cal.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/benchmarks/qualifier-seed-calibration.json"),
+    )
+    qualifier_cal.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    qualifier_cal.add_argument(
+        "--write-stub",
+        action="store_true",
+        help="Write interim conservative floors JSON without GPU campaign.",
+    )
+    qualifier_cal.add_argument(
+        "--enforcement",
+        action="store_true",
+        help="Set enforcement: true in written stub (after campaign evidence).",
+    )
+    qualifier_cal.add_argument("--analyze-only", action="store_true")
+    qualifier_cal.add_argument("--dry-run", action="store_true")
+
     gate = subparsers.add_parser(
         "gate",
         help="Composable preflight gates (YAML in conf/benchmark/gates/).",

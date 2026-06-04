@@ -40,6 +40,7 @@ def print_benchmark_help() -> None:
         "  calibrate                Derive preflight thresholds\n"
         "  calibrate-seed-scheduler Reseed-interval calibration\n"
         "  calibrate-unified-tournament Unified Stage-1 tournament floor calibration\n"
+        "  calibrate-qualifier-seeds SSOT qualifier per-leg win-rate floor calibration\n"
         "  gate                     Composable preflight gates (run/list)\n"
         "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"

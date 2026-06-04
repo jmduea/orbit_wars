@@ -44,6 +44,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Preflight calibrate | `ow benchmark calibrate` |
 | Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
 | Unified tournament calibration | `ow benchmark calibrate-unified-tournament` |
+| SSOT qualifier calibration | `ow benchmark calibrate-qualifier-seeds` |
 | Planet Flow sweep shortlist | `ow benchmark shortlist-planet-flow-sweep` |
 | Planet Flow noop smoke | `ow benchmark planet-flow-noop-smoke` |
 | Env shaping calibration (planned) | `ow benchmark shape-calibrate` |

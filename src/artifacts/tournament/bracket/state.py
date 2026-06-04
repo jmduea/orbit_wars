@@ -52,6 +52,7 @@ class BracketState:
     incumbent_crowned: bool = False
     incumbent_agent_id: str | None = None
     round_robin_queued: bool = False
+    ssot_qualifier_stage: int = 1
     entries: dict[str, BracketEntry] = field(default_factory=dict)
 
     def main_phase_entries(self) -> tuple[BracketEntry, ...]:
@@ -67,6 +68,7 @@ class BracketState:
             "incumbent_crowned": self.incumbent_crowned,
             "incumbent_agent_id": self.incumbent_agent_id,
             "round_robin_queued": self.round_robin_queued,
+            "ssot_qualifier_stage": self.ssot_qualifier_stage,
             "entries": {
                 agent_id: entry.to_dict() for agent_id, entry in self.entries.items()
             },
@@ -92,6 +94,7 @@ class BracketState:
                 else None
             ),
             round_robin_queued=bool(payload.get("round_robin_queued", False)),
+            ssot_qualifier_stage=int(payload.get("ssot_qualifier_stage", 1) or 1),
             entries=entries,
         )
 

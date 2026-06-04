@@ -1,0 +1,18 @@
+{
+  "enforcement": false,
+  "stages": {
+    "1": {
+      "random": 0.55
+    },
+    "2": {
+      "noop": 0.55,
+      "random": 0.5
+    },
+    "3": {
+      "noop": 0.55,
+      "random": 0.5,
+      "nearest_sniper": 0.45
+    }
+  },
+  "notes": "Interim conservative floors until ow benchmark calibrate-qualifier-seeds campaign recalibrates with evidence."
+}
