@@ -1,7 +1,7 @@
 ---
 title: Kaggle bracket ranking foundational slice (qualifier vs main μ/σ)
 date: 2026-06-03
-last_updated: 2026-06-03
+last_updated: 2026-06-04
 category: architecture-patterns
 module: artifacts-tournament-bracket
 problem_type: architecture_pattern
@@ -11,6 +11,7 @@ applies_when:
   - "Training with artifacts=bracket_training after preflight gates 0-3"
   - "Separating Gate 5 proof floors (0.76) from qualifier training floors (1.0)"
   - "Crowning incumbent or skipping qualifier via lineage"
+  - "Debugging legacy bracket_training — not the SSOT spine"
 tags:
   - bracket-ranking
   - trueskill
@@ -23,6 +24,8 @@ tags:
 related_components:
   - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
+  - docs/tools/ssot-training-pipeline-flowchart.html
+  - docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md
   - src/artifacts/tournament/bracket/
   - src/jax/train/bracket_training.py
   - conf/artifacts/bracket_training.yaml
@@ -31,7 +34,7 @@ related_components:
 
 # Kaggle bracket ranking foundational slice (qualifier vs main μ/σ)
 
-> **Legacy (operational until teardown).** Canonical pipeline: [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md). SSOT replaces async Docker `qualifier_eval` + noop-first training spine with **rollout curriculum** (random → noop-heavy → sniper-heavy) driven by **fast JAX tournament qualifiers** during long train; main bracket (μ/σ) remains post–stage-3 ([#211](https://github.com/jmduea/orbit_wars/issues/211)).
+> **Legacy (operational until teardown).** Canonical pipeline: interactive map [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) and learning [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md). SSOT replaces async Docker `qualifier_eval` + noop-first training spine with **rollout curriculum** (random → noop-heavy → sniper-heavy) driven by **fast JAX tournament qualifiers** during long train; main bracket (μ/σ) remains post–stage-3 ([#211](https://github.com/jmduea/orbit_wars/issues/211)).
 
 ## Context
 
@@ -92,10 +95,11 @@ Treating Gate 5 proof as qualifier training mis-calibrates expectations (0.76 vs
 
 **Incumbent lineage path:** Train from promoted parent → lineage skip → main bracket without re-running 1.0 qualifiers.
 
-**Budget exhaust:** 500M env steps without qualifier clear → `weak_config` metric for next shaping iteration (not submit-valid).
+**Budget exhaust:** 500M env steps without stage-3 qualifier clear → tag **`weak_config`** in W&B and **stop** (SSOT terminal on flowchart) — not submit-valid, not a silent retry into sweep.
 
 ## Related
 
+- **Interactive operator map (SSOT):** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - **Canonical spine (SSOT):** [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md)
 - Unified Gate 5 proof (legacy; 0.76, Docker-first): [`gate5-unified-tournament-submit-valid-funnel.md`](gate5-unified-tournament-submit-valid-funnel.md)
 - Plan U7–U8 deferred + PR #186 remaining work: `docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md`

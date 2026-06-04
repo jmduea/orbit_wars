@@ -5,6 +5,8 @@ topic: gate5-unified-tournament
 
 # Requirements: Unified Held-Out Tournament (Gate 5 + Hybrid Promotion)
 
+> **Legacy scope.** These requirements govern the **Gate 5 / hybrid_promotion** path still in the repo until SSOT teardown ([#211](https://github.com/jmduea/orbit_wars/issues/211)). For the canonical production spine (W&B sweep → packaging → long train → qualifiers → submission), use [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](2026-06-03-training-pipeline-ssot-requirements.md) and the interactive map [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html).
+
 ## Summary
 
 Define one held-out tournament specification shared by Gate 5 (`ow benchmark tournament-proof` / `ow benchmark learn-proof`) and hybrid promotion (`checkpoint_eval` under `artifacts=hybrid_promotion`). The spec tests both 2-player and 4-player formats, scores every opponent with the same combined 2p/4p metric, gates promotion on noop/random prerequisites then a strict nearest_sniper incumbent ladder, and runs stages in prerequisite-first order for efficiency.

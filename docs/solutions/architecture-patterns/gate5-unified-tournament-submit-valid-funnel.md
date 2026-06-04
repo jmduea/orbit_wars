@@ -1,7 +1,7 @@
 ---
 title: Gate 5 unified tournament proof with Docker-first submit-valid funnel
 date: 2026-06-03
-last_updated: 2026-06-03
+last_updated: 2026-06-04
 category: architecture-patterns
 module: artifacts-tournament
 problem_type: architecture_pattern
@@ -11,6 +11,7 @@ applies_when:
   - "Proving a checkpoint is submit-valid before Kaggle upload or hybrid promotion"
   - "Running Gate 5 or ow benchmark tournament-proof on a held-out ladder"
   - "Configuring Stage 2 incumbent for unified 2p+4p combined scoring"
+  - "Debugging legacy hybrid_promotion / checkpoint_eval — not the SSOT spine"
 tags:
   - gate5
   - unified-tournament
@@ -24,6 +25,8 @@ tags:
 related_components:
   - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
+  - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/tools/ssot-training-pipeline-flowchart.html
   - src/artifacts/submit_valid_funnel.py
   - src/artifacts/checkpoint_eval.py
   - src/artifacts/tournament/unified/
@@ -34,7 +37,17 @@ related_components:
 
 # Gate 5 unified tournament proof with Docker-first submit-valid funnel
 
-> **Legacy (operational until teardown).** For the canonical config→submission spine, use [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md) and requirements [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Gate 5 / `hybrid_promotion` / `tournament-proof` remain in the repo but are **not** the production spine — packaging validation runs on the preflight checkpoint **before** long train; submission absorbs held-out proof after bracket clearance ([#211](https://github.com/jmduea/orbit_wars/issues/211)).
+> **Legacy (operational until teardown).** For the canonical config→submission spine, use the interactive operator map [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html), learning [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md), and requirements [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Gate 5 / `hybrid_promotion` / `tournament-proof` remain in the repo but are **not** the production spine — SSOT runs **W&B sweep preflight → packaging validation on sweep winner → long train → JAX tournament qualifiers → submission** ([#211](https://github.com/jmduea/orbit_wars/issues/211)).
+
+### Legacy Gate 5 funnel vs SSOT spine
+
+| Concern | This doc (Gate 5 / hybrid) | SSOT spine (flowchart + plan #013) |
+|--------|----------------------------|-------------------------------------|
+| Preflight / config search | Gates 0–5, `learn-proof`, ad-hoc trains | **W&B sweep** step 3; Gates 2–3 per agent run |
+| Packaging Docker smoke | After training checkpoint (hybrid poll) | **Before long train** on **sweep winner** ckpt |
+| Held-out win proof | Unified ladder at **0.76** (Gate 5) | **Tournament qualifiers** (JAX) during long train; submission legs after bracket |
+| Budget exhaust | Various legacy metrics | **`weak_config` terminal** in W&B — no return to sweep |
+| Operator map | This learning + hybrid docs | [`ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) |
 
 ## Context
 
@@ -122,7 +135,9 @@ Running tournaments before Docker validation wastes GPU/time on unpublishable ch
 
 ## Related
 
+- **Interactive operator map (SSOT):** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - **Canonical spine (SSOT):** [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md)
+- Plan #013: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md)
 - Bracket training qualifier slice (legacy; 1.0 floors, separate from Gate 5 0.76 proof): [`kaggle-bracket-ranking-foundational-slice.md`](kaggle-bracket-ranking-foundational-slice.md)
 - Long CLI progress (stderr, no tail pipe): `docs/solutions/developer-experience/ow-long-cli-stderr-progress-no-tail-pipe.md`
 - Subprocess train streaming (calibration arms): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`

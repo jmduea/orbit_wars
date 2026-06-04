@@ -5,6 +5,9 @@ status: draft
 date: 2026-06-03
 origin: operator/agent confusion across preflight gates, hybrid promotion, bracket qualifiers, and legacy artifact profiles
 related:
+  - docs/tools/ssot-training-pipeline-flowchart.html
+  - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/competition/COMPETITION_OVERVIEW.md
   - docs/competition/COMPETITION_SUBMISSION.md
   - docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md  # superseded-by-SSOT — qualifier order and async eval replaced by tournament qualifiers
@@ -16,6 +19,8 @@ related:
 ## Summary
 
 Replace parallel, overlapping training/eval paths with **one canonical pipeline**: config setup → preliminary tests → **W&B sweep short preflight** (learning stability, ablations, artifact handoff) → **packaging validation** (Docker, **sweep winner checkpoint**) → **long train** (≤500M env steps, **W&B observability**) with rollout curriculum (random → noop-heavy → sniper-heavy) advanced by **tournament qualifiers** (fast JAX held-out eval, calibrated statistical floors) → main bracket (μ/σ) → **submission** (Docker packaging + upload with trained weights). **Sweep-only ablations** may stop after step 3 preflight pass; configs **destined for Kaggle submission** must complete steps 4–6. **Teardown** legacy spine components rather than deprecating them in place. **No custom config registry or bad-config cache** — W&B holds sweep history, metrics, and checkpoint artifacts.
+
+**Operator map:** interactive flowchart [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) (click steps for R# requirements, CLI snippets, and side paths). Implementation plan: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) · [#211](https://github.com/jmduea/orbit_wars/issues/211).
 
 ## Problem Frame
 
