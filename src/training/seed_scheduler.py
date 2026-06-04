@@ -86,6 +86,8 @@ class SeedScheduler:
             self._pool_index = (self._pool_index + 1) % len(self._pool)
         else:
             self._next_seed += 1
+            while self._next_seed in self._eval_reserved:
+                self._next_seed += 1
             chosen_policy = "incremental"
         return SeedEvent(
             update=int(update),
@@ -106,7 +108,10 @@ class SeedScheduler:
         )
 
     def advance(self, count: int = 1) -> int:
-        self._next_seed += int(count)
+        for _ in range(int(count)):
+            self._next_seed += 1
+            while self._next_seed in self._eval_reserved:
+                self._next_seed += 1
         return self._next_seed
 
     @staticmethod

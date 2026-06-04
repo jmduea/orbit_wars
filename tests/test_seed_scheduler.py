@@ -110,6 +110,24 @@ def test_random_jump_avoids_eval_seed_set() -> None:
         assert event.new_seed not in {101, 102}
 
 
+def test_incremental_reseed_skips_eval_seed_set() -> None:
+    scheduler = SeedScheduler(
+        base_seed=42,
+        cfg=SeedScheduleConfig(eval_seed_set=[43, 44, 45, 46]),
+    )
+    event = scheduler.reseed(update=1, reason="forced", policy="incremental")
+    assert event.new_seed == 47
+    assert event.new_seed not in {43, 44, 45, 46}
+
+
+def test_advance_skips_eval_seed_set() -> None:
+    scheduler = SeedScheduler(
+        base_seed=42,
+        cfg=SeedScheduleConfig(eval_seed_set=[43, 44, 45, 46]),
+    )
+    assert scheduler.advance(1) == 47
+
+
 def test_resolve_reseed_every_updates_auto_scale() -> None:
     assert resolve_reseed_every_updates(configured=-1, total_updates=500) == 50
     assert resolve_reseed_every_updates(configured=-1, total_updates=100) == 25

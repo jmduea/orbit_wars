@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
 
 
@@ -20,6 +22,12 @@ def test_ssot_preflight_wandb_sweep_compose() -> None:
     ]
     assert params["telemetry.wandb.log_artifacts"]["value"] is True
     assert params["training.total_updates"]["value"] == 50
+    assert cfg["method"] == "bayes"
+    assert params["opponents"]["value"] == "self_play_only"
+    assert params["curriculum"]["value"] == "off"
+    assert params["training.lr"]["distribution"] == "log_uniform_values"
+    assert params["training.lr"]["min"] == pytest.approx(5e-5)
+    assert params["training.lr"]["max"] == pytest.approx(3e-4)
 
 
 def test_ssot_preflight_wandb_sweep_writes_yaml(tmp_path: Path) -> None:

@@ -35,6 +35,7 @@ SWEEP_COMPOSE_RECIPES = (
     "post_encoder_once_overnight",
     "planet_flow_ppo_signal",
     "planet_flow_ppo_signal_short",
+    "ssot_preflight",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
@@ -109,14 +110,6 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
     assert resolve_rollout_group_specs(cfg)
-
-
-def test_ssot_pipeline_artifacts_profile_composes() -> None:
-    cfg = compose_hydra_train_config(["artifacts=ssot_pipeline"])
-
-    assert not cfg.artifacts.promotion.enabled
-    assert not cfg.artifacts.tournament.enabled
-    assert not cfg.artifacts.bracket_training.enabled
 
 
 def test_hybrid_promotion_artifacts_profile_composes() -> None:

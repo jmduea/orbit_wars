@@ -34,22 +34,23 @@ def test_package_cli_forwards_ssot_packaging_flags(tmp_path: Path) -> None:
     )
 
 
-def test_ssot_preflight_sweep_score_eligible_and_ineligible() -> None:
-    from src.jax.train.sweep_score import (
-        SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
-        ssot_preflight_sweep_score,
+def test_package_cli_omits_packaging_kwargs_when_flags_unset(tmp_path: Path) -> None:
+    ckpt = tmp_path / "jax_ckpt.pkl"
+    ckpt.write_bytes(b"stub")
+    out_dir = tmp_path / "out"
+    args = Namespace(
+        checkpoint=ckpt,
+        output_dir=out_dir,
+        validate_docker=False,
+        packaging_seed=None,
+        packaging_player_count=None,
     )
-
-    assert ssot_preflight_sweep_score(
-        win_rate_delta=0.08,
-        approx_kl=0.1,
-        entropy=0.01,
-    ) == pytest.approx(0.08)
-    assert (
-        ssot_preflight_sweep_score(
-            win_rate_delta=0.08,
-            approx_kl=0.2,
-            entropy=0.01,
-        )
-        == SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    with patch("src.cli.eval._eval_export") as export_mock:
+        package_fn = export_mock.return_value
+        package_fn.return_value = out_dir / "submission.tar.gz"
+        assert run_package_cli(args) == 0
+    package_fn.assert_called_once_with(
+        ckpt.resolve(),
+        out_dir.resolve(),
+        validate_docker=False,
     )

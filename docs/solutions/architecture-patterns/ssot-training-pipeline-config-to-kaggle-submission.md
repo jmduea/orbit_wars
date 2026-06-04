@@ -44,7 +44,7 @@ Operators and coding agents hit the same wall: several **co-equal submit-valid n
 
 Submit-valid closure stalled partly because Gate 4 wall clock and naming overlap obscured which path was authoritative. (session history) Prior tracker work (#206–#210 for PR #187 residuals) was superseded when the team chose a single SSOT requirements doc instead of patching parallel spines.
 
-The fix in this session was **documentation and planning**: requirements SSOT, plain spine terminology, implementation plan, interactive operator flowchart, and tracker issue [#211](https://github.com/jmduea/orbit_wars/issues/211) under epic [#205](https://github.com/jmduea/orbit_wars/issues/205). **No implementation code shipped yet.**
+The fix started as **documentation and planning** (requirements SSOT, plan, flowchart, [#211](https://github.com/jmduea/orbit_wars/issues/211) under epic [#205](https://github.com/jmduea/orbit_wars/issues/205)). **Foundation slice (PR [#212](https://github.com/jmduea/orbit_wars/pull/212))** implements U1–U4: seed partition, W&B preflight sweep recipe + scoring, packaging CLI flags, `artifacts=ssot_pipeline` stub. U5–U8 (JAX qualifiers, calibration, bracket/submission, legacy teardown) remain open on #211.
 
 **Operator map (interactive).** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) is the click-through spine: R# labels on nodes, aside panel with requirement text, and side paths for fail/retry/terminal outcomes. The plan mermaid in [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) must stay in sync with this chart (gates, loops, terminals).
 
@@ -114,7 +114,7 @@ The fix in this session was **documentation and planning**: requirements SSOT, p
 
 Parallel submit-valid paths waste GPU time and agent turns on the wrong funnel. Agents trained on `hybrid_promotion` poll contracts may never run packaging validation on the preflight checkpoint; agents following Gate 5 may treat 0.76 proof floors as production promotion gates while bracket docs demand 1.0 qualifier floors — same words, different semantics. Without one spine, “submit-valid” means different things depending on which doc was indexed last.
 
-The SSOT doc separates concerns cleanly: W&B sweep preflight proves **learning stability** and ranks config candidates, packaging validation proves **Kaggle loader survival**, tournament qualifiers prove **held-out stage promotion on final score**, submission proves **trained-weight packaging + upload legs**. W&B holds sweep history and artifacts — no local fingerprint cache. Submission always re-validates trained weights. Until [#211](https://github.com/jmduea/orbit_wars/issues/211) lands in code, legacy paths remain in the repo but should be labeled **legacy** in operator guidance — not cited as competing defaults.
+The SSOT doc separates concerns cleanly: W&B sweep preflight proves **learning stability** and ranks config candidates, packaging validation proves **Kaggle loader survival**, tournament qualifiers prove **held-out stage promotion on final score**, submission proves **trained-weight packaging + upload legs**. W&B holds sweep history and artifacts — no local fingerprint cache. Submission always re-validates trained weights. Legacy paths remain in the repo until U8 teardown — label **legacy** in operator guidance, not competing defaults. Full spine completion tracks [#211](https://github.com/jmduea/orbit_wars/issues/211).
 
 ## When to Apply
 
