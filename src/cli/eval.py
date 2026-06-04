@@ -7,24 +7,8 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from src.artifacts.kaggle_submission import (
-    DEFAULT_COMPETITION,
-    package_checkpoint_submission,
-    submit_competition_package,
-)
-from src.artifacts.tournament.eval import run_tournament
-from src.artifacts.tournament.promotion import promote_from_tournament, top_passing_row
-from src.artifacts.tournament.resolve import (
-    ShortlistResolveResult,
-    agent_from_checkpoint,
-    resolve_promoted_agent,
-    resolve_shortlist_agents,
-    run_context_for_agent,
-    validate_agents_feature_compatible,
-)
-from src.artifacts.pipeline import cancel_optional_jobs
-from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_job_worker
 from src.cli.run_status import (
     list_evaluation_results,
     load_evaluation_result,
@@ -32,6 +16,20 @@ from src.cli.run_status import (
     summarize_run_status,
 )
 from src.config.schema import TournamentConfig
+
+if TYPE_CHECKING:
+    from src.artifacts.tournament.resolve import ShortlistResolveResult
+
+
+def _eval_export(name: str):
+    """Resolve a lazily exported CLI dependency (patchable on ``src.cli.eval``)."""
+
+    exported = globals().get(name)
+    if exported is not None:
+        return exported
+    value = __getattr__(name)
+    globals()[name] = value
+    return value
 
 
 def print_eval_help() -> None:
@@ -61,6 +59,8 @@ def print_eval_help() -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from src.artifacts.kaggle_submission import DEFAULT_COMPETITION
+
     parser = argparse.ArgumentParser(
         description="Evaluation, artifact jobs, and Kaggle submission (ow eval).",
     )
@@ -318,6 +318,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run Kaggle Docker validation after packaging (submit-valid proof; requires Docker).",
     )
+    package.add_argument(
+        "--packaging-seed",
+        type=int,
+        default=None,
+        help=(
+            "Docker validation env seed (SSOT packaging validation uses 0; default when "
+            "omitted follows packager default)."
+        ),
+    )
+    package.add_argument(
+        "--packaging-player-count",
+        choices=("2", "4", "both"),
+        default=None,
+        help=(
+            "Docker validation player count: 2, 4, or both. SSOT packaging validation uses 4."
+        ),
+    )
 
     return parser
 
@@ -429,8 +446,10 @@ def _collect_candidates(args: argparse.Namespace) -> tuple[list, ShortlistResolv
     candidates: list = []
     shortlist_result: ShortlistResolveResult | None = None
     for checkpoint in args.checkpoints:
-        candidates.append(agent_from_checkpoint(checkpoint))
+        candidates.append(_eval_export("agent_from_checkpoint")(checkpoint))
     if args.shortlist is not None:
+        from src.artifacts.tournament.resolve import resolve_shortlist_agents
+
         cache_dir = Path(args.output_root) / "cache" / "wandb-artifacts"
         shortlist_result = resolve_shortlist_agents(
             args.shortlist,
@@ -454,7 +473,7 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
             )
         raise SystemExit("Provide --checkpoint and/or --shortlist with resolvable paths.")
 
-    validate_agents_feature_compatible(candidates)
+    _eval_export("validate_agents_feature_compatible")(candidates)
 
     cfg = candidates[0].cfg
     cfg.output.campaign = str(args.campaign)
@@ -473,7 +492,9 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
 
     incumbent = None
     if args.vs_promoted:
-        incumbent = resolve_promoted_agent(str(args.campaign), str(args.output_root))
+        incumbent = _eval_export("resolve_promoted_agent")(
+            str(args.campaign), str(args.output_root)
+        )
 
     if args.dry_run:
         payload = {
@@ -489,7 +510,7 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         return 0
 
     output_dir = args.output_dir or _default_output_dir(str(args.campaign), str(args.output_root))
-    result = run_tournament(
+    result = _eval_export("run_tournament")(
         tuple(candidates),
         cfg=cfg.artifacts.tournament,
         output_dir=output_dir,
@@ -503,7 +524,7 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
     )
 
     if args.promote:
-        passing = top_passing_row(result)
+        passing = _eval_export("top_passing_row")(result)
         if passing is None:
             print("No candidate passed tournament gates; promotion skipped.", file=sys.stderr)
             return 1
@@ -512,12 +533,12 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         )
         cfg.artifacts.promotion.enabled = True
         cfg.artifacts.promotion.strategy = "tournament"
-        context = run_context_for_agent(
+        context = _eval_export("run_context_for_agent")(
             promoted_agent,
             campaign=str(args.campaign),
             output_root=str(args.output_root),
         )
-        attempt = promote_from_tournament(
+        attempt = _eval_export("promote_from_tournament")(
             cfg,
             context,
             row=passing,
@@ -539,6 +560,8 @@ def _resolve_worker_dirs(args: argparse.Namespace) -> tuple[Path, Path | None]:
         return queue_dir, result_root
     if args.run is None:
         raise SystemExit("Provide --run or --queue-dir.")
+    from src.artifacts.worker_runner import resolve_run_worker_dirs
+
     queue_dir, evaluations_dir = resolve_run_worker_dirs(args.run)
     if args.result_root is not None:
         evaluations_dir = args.result_root.resolve()
@@ -551,7 +574,7 @@ def run_worker_cli(args: argparse.Namespace) -> int:
     queue_dir, result_root = _resolve_worker_dirs(args)
     if not queue_dir.is_dir():
         raise SystemExit(f"Queue directory does not exist: {queue_dir}")
-    return run_optional_job_worker(
+    return _eval_export("run_optional_job_worker")(
         queue_dir,
         run_artifact_worker._process_job,
         run_artifact_worker._write_status,
@@ -566,7 +589,10 @@ def run_worker_cli(args: argparse.Namespace) -> int:
 
 
 def run_bracket_cli(args: argparse.Namespace) -> int:
-    from src.artifacts.tournament.bracket.status import bracket_show_payload, summarize_bracket
+    from src.artifacts.tournament.bracket.status import (
+        bracket_show_payload,
+        summarize_bracket,
+    )
 
     output_root = args.output_root.resolve()
     if args.bracket_command == "status":
@@ -619,6 +645,9 @@ def run_results_show_cli(args: argparse.Namespace) -> int:
 
 
 def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
+    from src.artifacts.pipeline import cancel_optional_jobs
+    from src.artifacts.worker_runner import resolve_run_worker_dirs
+
     queue_dir, _ = resolve_run_worker_dirs(args.run)
     if not queue_dir.is_dir():
         raise SystemExit(f"Queue directory does not exist: {queue_dir}")
@@ -639,12 +668,21 @@ def run_jobs_cancel_cli(args: argparse.Namespace) -> int:
 
 
 def run_package_cli(args: argparse.Namespace) -> int:
-    package_path = package_checkpoint_submission(
+    package_kwargs: dict[str, object] = {
+        "validate_docker": bool(args.validate_docker),
+    }
+    if args.packaging_seed is not None:
+        package_kwargs["seed"] = int(args.packaging_seed)
+    if args.packaging_player_count is not None:
+        package_kwargs["player_count"] = str(args.packaging_player_count)
+    package_path = _eval_export("package_checkpoint_submission")(
         args.checkpoint.resolve(),
         args.output_dir.resolve(),
-        validate_docker=bool(args.validate_docker),
+        **package_kwargs,
     )
     print(f"package_path={package_path}")
+    if args.validate_docker:
+        print(json.dumps({"ok": True, "package_path": str(package_path)}))
     if not args.validate_docker:
         print(
             "docker_validation=skipped (packaging only; does not prove competition compatibility)",
@@ -660,7 +698,7 @@ def run_submit_cli(args: argparse.Namespace) -> int:
     elif args.checkpoint is not None:
         checkpoint_path = args.checkpoint.resolve()
         default_message = checkpoint_path.name
-        package_path = package_checkpoint_submission(
+        package_path = _eval_export("package_checkpoint_submission")(
             checkpoint_path,
             args.output_dir.resolve(),
             validate_docker=bool(args.validate_docker),
@@ -677,7 +715,7 @@ def run_submit_cli(args: argparse.Namespace) -> int:
         )
 
     message = args.message or f"ow eval submit {default_message}"
-    submit_competition_package(
+    _eval_export("submit_competition_package")(
         package_path,
         message,
         competition=str(args.competition),
@@ -721,3 +759,49 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "submit":
         return run_submit_cli(args)
     raise SystemExit(f"Unknown eval command: {args.command!r}")
+
+
+def __getattr__(name: str):
+    """Lazy exports for unittest.mock.patch targets (avoid eager JAX imports)."""
+
+    if name == "package_checkpoint_submission":
+        from src.artifacts.kaggle_submission import package_checkpoint_submission
+
+        return package_checkpoint_submission
+    if name == "submit_competition_package":
+        from src.artifacts.kaggle_submission import submit_competition_package
+
+        return submit_competition_package
+    if name == "agent_from_checkpoint":
+        from src.artifacts.tournament.resolve import agent_from_checkpoint
+
+        return agent_from_checkpoint
+    if name == "run_optional_job_worker":
+        from src.artifacts.worker_runner import run_optional_job_worker
+
+        return run_optional_job_worker
+    if name == "run_tournament":
+        from src.artifacts.tournament.eval import run_tournament
+
+        return run_tournament
+    if name == "promote_from_tournament":
+        from src.artifacts.tournament.promotion import promote_from_tournament
+
+        return promote_from_tournament
+    if name == "top_passing_row":
+        from src.artifacts.tournament.promotion import top_passing_row
+
+        return top_passing_row
+    if name == "resolve_promoted_agent":
+        from src.artifacts.tournament.resolve import resolve_promoted_agent
+
+        return resolve_promoted_agent
+    if name == "run_context_for_agent":
+        from src.artifacts.tournament.resolve import run_context_for_agent
+
+        return run_context_for_agent
+    if name == "validate_agents_feature_compatible":
+        from src.artifacts.tournament.resolve import validate_agents_feature_compatible
+
+        return validate_agents_feature_compatible
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

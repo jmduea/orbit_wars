@@ -25,6 +25,25 @@ Do **not** run `scripts/install_understand_anything_cursor.sh` — use native pl
 | `.cursor/rules/python-standards.mdc` | Python/Hydra coding standards (file-scoped) |
 | `.cursor/rules/hydra-config.mdc` | Config editing (file-scoped) |
 | `docs/ROADMAP.md` | Human priority index (not an agent gate) |
+| `.cursorignore` | Hard block: secrets + personal scratch (no `@` / search) |
+| `.cursorindexingignore` | Soft block: `outputs/`, caches, archive; keeps `src/`, `conf/`, `tests/`, active `docs/` |
+
+## Codebase indexing
+
+Cursor respects `.gitignore` by default; this repo also ships explicit ignore files so local **`outputs/`** (~GB) and **`.venv/`** do not crowd semantic search while implementation paths stay indexed.
+
+| File | Use |
+|------|-----|
+| [`.cursorindexingignore`](../.cursorindexingignore) | Training artifacts, caches, `docs/archive/`, `.understand-anything/` graph JSON — still readable via `Read` / `@file` |
+| [`.cursorignore`](../.cursorignore) | `.env*`, `docs/Issues.md`, `docs/brain_dump.md` — do not reference in chat |
+
+**Kept in search:** `src/`, `tests/`, `conf/`, `scripts/`, `AGENTS.md`, `docs/plans/`, `docs/solutions/`, `docs/benchmarks/`, `.cursor/rules/`.
+
+**Kept discoverable under `outputs/`:** `outputs/indexes/` (e.g. `runs.jsonl` for `make agent-context`), `outputs/_meta/`.
+
+**Kaggle parity:** `.venv/lib/python3.12/site-packages/kaggle_environments/` is re-included (negation under `.venv/`) so agents can compare `orbit_wars.py` with `src/jax/env.py` without indexing the full 4GB venv. After `uv sync`, re-index if the path is missing.
+
+**Verify:** Cursor Settings → Features → Codebase indexing (file count should be hundreds, not thousands). `make agent-context` should still list `recent_runs` when `outputs/indexes/runs.jsonl` exists.
 
 ## Governance
 

@@ -32,15 +32,21 @@ def load_gate_recipe(gate_id: str) -> dict[str, object]:
 def list_gate_recipes() -> list[dict[str, object]]:
     recipes: list[dict[str, object]] = []
     for path in gate_yaml_paths():
-        payload = load_gate_yaml(path.stem)
+        gate_id = path.stem
+        payload = load_gate_yaml(gate_id)
+        recipe_gate_id = payload.get("gate_id") or payload.get("gate") or gate_id
+        primitive = payload.get("primitive")
+        if gate_id == "win_proof_tournament":
+            recipe_gate_id = "win_proof"
+            primitive = "uv run ow benchmark tournament-proof"
         recipes.append(
             {
-                "gate_id": payload.get("gate_id"),
-                "title": payload.get("title"),
+                "gate_id": recipe_gate_id,
+                "title": payload.get("title") or payload.get("description"),
                 "default_model": payload.get("default_model"),
                 "path": payload.get("path"),
                 "workflow": payload.get("workflow"),
-                "primitive": payload.get("primitive"),
+                "primitive": primitive,
             }
         )
     return recipes

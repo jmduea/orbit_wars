@@ -1,0 +1,31 @@
+name: Kaggle JAX parity
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: kaggle-parity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kaggle-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Kaggle/JAX env parity
+        run: make test-kaggle-parity
+        env:
+          JAX_PLATFORMS: cpu

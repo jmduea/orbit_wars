@@ -9,6 +9,7 @@ import jax.numpy as jnp
 
 import jax
 from src.game.constants import MAX_PLANETS
+from src.jax.array_ops import masked_mean
 from src.jax.features import TurnBatch
 
 
@@ -32,15 +33,6 @@ def mlp(x: jax.Array, hidden_size: int, output_size: int, name: str) -> jax.Arra
     x = nn.relu(x)
     x = nn.Dense(output_size, name=f"{name}_1")(x)
     return nn.relu(x)
-
-
-def masked_mean(values: jax.Array, mask: jax.Array) -> jax.Array:
-    """Average candidate embeddings while ignoring masked candidate slots."""
-
-    weights = mask.astype(values.dtype)[..., None]
-    total = (values * weights).sum(axis=1)
-    count = jnp.maximum(weights.sum(axis=1), 1.0)
-    return total / count
 
 
 def planet_orbit_coords(planet_features: jax.Array) -> jax.Array:
@@ -149,8 +141,8 @@ def finalize_planet_edge_encoder_output(
         attended_edges = jnp.zeros((batch_size, 0, hidden_size), dtype=jnp.float32)
         edge_action_mask = jnp.zeros((batch_size, 0), dtype=bool)
 
-    pooled_planets = masked_mean(current_planet_states, planet_mask)
-    pooled_edges = masked_mean(attended_edges, edge_action_mask)
+    pooled_planets = masked_mean(current_planet_states, planet_mask, axis=1)
+    pooled_edges = masked_mean(attended_edges, edge_action_mask, axis=1)
     context_query = mlp(
         jnp.concatenate([global_hidden, pooled_planets], axis=-1),
         hidden_size,

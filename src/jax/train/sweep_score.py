@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from collections import deque
 
-from src.jax.preflight_calibration import WINDOW_UPDATES
+from pathlib import Path
+
+from src.jax.preflight_calibration import (
+    WINDOW_UPDATES,
+    default_calibration_json_path,
+    load_thresholds,
+)
 
 PLANET_FLOW_MIN_DEMAND_MASS = 100.0
+SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE = -1.0
 PLANET_FLOW_MIN_EMITTED_LAUNCHES = 50.0
 PLANET_FLOW_MIN_MEAN_LAUNCHES = 0.05
 PLANET_FLOW_MIN_ENTROPY = 1.0e-3
@@ -239,3 +246,96 @@ def collect_planet_flow_sweep_metrics(
         max_post_mask_unreachable_rate=max_post_mask_unreachable_rate,
     )
     return metrics
+
+
+def ssot_preflight_learning_signal_thresholds(
+    thresholds: dict[str, object] | None = None,
+) -> tuple[float, float, float]:
+    """Gates 2–3 floors from committed preflight calibration (min delta, max KL, min entropy)."""
+
+    if thresholds is None:
+        repo_root = Path(__file__).resolve().parents[3]
+        thresholds = load_thresholds(default_calibration_json_path(repo_root))
+    learning = thresholds.get("learning_signal")
+    if not isinstance(learning, dict):
+        return 0.05, 0.15, 0.0001
+    return (
+        float(learning.get("min_win_rate_delta", 0.05)),
+        float(learning.get("max_approx_kl", 0.15)),
+        float(learning.get("min_entropy", 0.0001)),
+    )
+
+
+def ssot_preflight_sweep_score(
+    *,
+    win_rate_delta: float | None,
+    approx_kl: float | None,
+    entropy: float | None,
+    min_win_rate_delta: float = 0.05,
+    max_approx_kl: float = 0.15,
+    min_entropy: float = 0.0001,
+) -> float:
+    """W&B sweep objective for SSOT short preflight (Gates 2–3 trend, not raw win rate)."""
+
+    if win_rate_delta is None or approx_kl is None or entropy is None:
+        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    if (
+        float(win_rate_delta) < float(min_win_rate_delta)
+        or float(approx_kl) > float(max_approx_kl)
+        or float(entropy) < float(min_entropy)
+    ):
+        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    return float(win_rate_delta)
+
+
+def collect_ssot_preflight_sweep_metrics(
+    *,
+    win_rate_trend: WinRateTrendTracker,
+    approx_kl_window: MetricWindowTracker | None,
+    entropy_window: MetricWindowTracker | None,
+    overall_win_rate: float,
+    metrics_host: dict[str, object],
+    thresholds: dict[str, object] | None = None,
+) -> dict[str, float]:
+    """Build SSOT preflight sweep metrics from live training-loop trackers."""
+
+    win_rate_trend.observe(overall_win_rate)
+    metrics: dict[str, float] = {}
+    win_rate_delta_10 = win_rate_trend.win_rate_delta()
+    if win_rate_delta_10 is not None:
+        metrics["win_rate_delta_10"] = float(win_rate_delta_10)
+
+    approx_kl_wm: float | None = None
+    entropy_wm: float | None = None
+    if approx_kl_window is not None and "approx_kl" in metrics_host:
+        approx_kl_window.observe(float(metrics_host["approx_kl"]))
+        approx_kl_wm = approx_kl_window.window_mean()
+        if approx_kl_wm is not None:
+            metrics["approx_kl_window_mean"] = float(approx_kl_wm)
+    if entropy_window is not None and "entropy" in metrics_host:
+        entropy_window.observe(float(metrics_host["entropy"]))
+        entropy_wm = entropy_window.window_mean()
+        if entropy_wm is not None:
+            metrics["entropy_window_mean"] = float(entropy_wm)
+
+    min_delta, max_kl, min_ent = ssot_preflight_learning_signal_thresholds(thresholds)
+    metrics["ssot_preflight_sweep_score"] = ssot_preflight_sweep_score(
+        win_rate_delta=win_rate_delta_10,
+        approx_kl=approx_kl_wm,
+        entropy=entropy_wm,
+        min_win_rate_delta=min_delta,
+        max_approx_kl=max_kl,
+        min_entropy=min_ent,
+    )
+    return metrics
+
+
+def is_ssot_preflight_sweep(cfg: object) -> bool:
+    """True when W&B tags mark a short SSOT preflight sweep agent run."""
+
+    telemetry = getattr(cfg, "telemetry", None)
+    wandb_cfg = getattr(telemetry, "wandb", None) if telemetry is not None else None
+    tags = getattr(wandb_cfg, "tags", None) if wandb_cfg is not None else None
+    if not tags:
+        return False
+    return "ssot_preflight" in {str(tag).strip() for tag in tags}

@@ -12,6 +12,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPABILITIES_DOC = REPO_ROOT / "docs" / "AGENT_CAPABILITIES.md"
 CAPABILITY_MAP_HEADER = "## Capability map"
 
+_TOP_LEVEL_OW_COMMANDS: frozenset[str] = frozenset(
+    {"train", "eval", "runs", "promote", "benchmark", "sweep", "make"}
+)
+
+# Token-style subcommands not expressed as argparse ``{choices}`` in --help.
+_EXTRA_NESTED_TOKENS: dict[tuple[str, ...], frozenset[str]] = {
+    ("ow", "benchmark", "gate"): frozenset({"list", "run"}),
+    ("ow", "train"): frozenset({"kaggle", "local"}),
+}
+
 
 def _read_capability_map_section() -> str:
     text = CAPABILITIES_DOC.read_text(encoding="utf-8")
@@ -22,6 +32,13 @@ def _read_capability_map_section() -> str:
     return rest[:end] if end >= 0 else rest
 
 
+def _normalize_command_cell(cell: str) -> str:
+    match = re.search(r"`(ow [^`]+)`", cell)
+    if match:
+        return match.group(1)
+    return cell.strip("`").split(" — ", 1)[0].strip("`").strip()
+
+
 def _parse_ow_commands_from_table(section: str) -> list[tuple[str, ...]]:
     commands: list[tuple[str, ...]] = []
     for line in section.splitlines():
@@ -30,7 +47,9 @@ def _parse_ow_commands_from_table(section: str) -> list[tuple[str, ...]]:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) < 2:
             continue
-        raw = cells[1].strip("`").strip()
+        if "(planned)" in cells[0].lower():
+            continue
+        raw = _normalize_command_cell(cells[1])
         if not raw.startswith("ow "):
             continue
         parts = tuple(raw.split())
@@ -61,13 +80,19 @@ def _choices_from_help(help_text: str) -> set[str]:
     return choices
 
 
+def _nested_tokens(prefix: tuple[str, ...], help_text: str) -> set[str]:
+    choices = _choices_from_help(help_text)
+    if choices:
+        return choices
+    return set(_EXTRA_NESTED_TOKENS.get(prefix, ()))
+
+
 def _collect_help_registry() -> dict[tuple[str, ...], str]:
     """Map command path prefixes to concatenated --help text for that node."""
 
     registry: dict[tuple[str, ...], str] = {}
-    top = _ow_help([])
-    registry[("ow",)] = top
-    for command in _choices_from_help(top):
+    registry[("ow",)] = _ow_help([])
+    for command in sorted(_TOP_LEVEL_OW_COMMANDS):
         if command == "train":
             registry[("ow", "train")] = _ow_help(["train"])
             continue
@@ -87,24 +112,38 @@ def _command_registered(
     path: tuple[str, ...], registry: dict[tuple[str, ...], str]
 ) -> bool:
     assert path[0] == "ow"
-    for depth in range(len(path), 0, -1):
-        prefix = path[:depth]
-        if prefix not in registry:
-            continue
-        help_text = registry[prefix]
-        if depth == len(path):
-            return True
-        next_token = path[depth]
-        if next_token in _choices_from_help(help_text):
-            return True
-        if next_token in help_text:
-            return True
-    return False
+    if len(path) == 1:
+        return True
+    if path[1] not in _TOP_LEVEL_OW_COMMANDS:
+        return False
+    prefix: tuple[str, ...] = ("ow", path[1])
+    if prefix not in registry:
+        return False
+    for index in range(2, len(path)):
+        token = path[index]
+        if prefix == ("ow", "train") and "=" in token:
+            return index == len(path) - 1
+        nested = _nested_tokens(prefix, registry[prefix])
+        if not nested:
+            return False
+        if token not in nested:
+            return False
+        prefix = (*prefix, token)
+        if prefix not in registry and index < len(path) - 1:
+            return False
+    return True
 
 
 @pytest.fixture(scope="module")
 def help_registry() -> dict[tuple[str, ...], str]:
     return _collect_help_registry()
+
+
+def test_shape_calibrate_not_registered_in_benchmark_help(
+    help_registry: dict[tuple[str, ...], str],
+) -> None:
+    path = ("ow", "benchmark", "shape-calibrate")
+    assert not _command_registered(path, help_registry)
 
 
 def test_capability_map_ow_commands_in_help(help_registry: dict[tuple[str, ...], str]) -> None:

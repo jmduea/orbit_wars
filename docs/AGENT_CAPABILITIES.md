@@ -43,7 +43,10 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Gate 5 tournament proof | `ow benchmark tournament-proof` |
 | Preflight calibrate | `ow benchmark calibrate` |
 | Seed-scheduler calibration | `ow benchmark calibrate-seed-scheduler` |
-| Env shaping calibration (planned) | `ow benchmark shape-calibrate` — see `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` |
+| Unified tournament calibration | `ow benchmark calibrate-unified-tournament` |
+| Planet Flow sweep shortlist | `ow benchmark shortlist-planet-flow-sweep` |
+| Planet Flow noop smoke | `ow benchmark planet-flow-noop-smoke` |
+| Env shaping calibration (planned) | `ow benchmark shape-calibrate` |
 | Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
 | Learn-proof composer | `ow benchmark learn-proof` |
 | W&B/Kaggle sweep create | `ow sweep create` |
@@ -51,14 +54,17 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Sweep list | `ow sweep list` |
 | Sweep cancel | `ow sweep cancel` |
 | Generate sweep YAML | `ow make` |
+| SSOT preflight sweep YAML | `ow make` |
+| SSOT long train profile | `ow train` |
+| Bracket state inspect | `ow eval bracket status` |
 | Session context JSON | `make agent-context` |
 
 ## Command tiers
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb` | Inspect or mutate one artifact; compose in agent scripts |
-| **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; prefer primitives for targeted agent loops |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb`, `ow make wandb_sweep=ssot_preflight`, `ow eval package --packaging-seed 0 --packaging-player-count 4` | Inspect or mutate one artifact; compose in agent scripts |
+| **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; **legacy** until SSOT U8 teardown — prefer SSOT spine + primitives for agent loops |
 
 ## Train
 
@@ -178,12 +184,52 @@ uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --all-queued --
 uv run ow eval jobs cancel --run outputs/campaigns/<c>/runs/<id> --job-id <uuid>
 uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose
 uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl --baselines noop
-uv run ow train ... artifacts=hybrid_promotion   # submit-valid: checkpoint_eval composite
+uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoint_eval composite
 ```
 
-### Submit-valid decision tree
+## Canonical production spine (SSOT)
 
-Use this when the user asks whether a checkpoint is **submit-valid** (Kaggle Docker + promotion gates). Success signals are **manifest- or JSON-backed**—never local replay HTML alone.
+**Default for new Kaggle-bound work** ([#211](https://github.com/jmduea/orbit_wars/issues/211)). Foundation slice (U1–U4) is merged; U5–U8 (JAX qualifiers, calibration, bracket/submission, legacy teardown) remain. Do **not** cite `hybrid_promotion`, Gate-5-first `tournament-proof`, or `bracket_training` as the production default — use this spine unless debugging legacy code paths.
+
+**Operator map:** [Interactive SSOT flowchart](tools/ssot-training-pipeline-flowchart.html) — click steps for R# requirements, CLI snippets, and side paths (fail/retry/`weak_config` terminals). Requirements: [`brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Plan: [`plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md).
+
+| Step | Stage | Agent commands |
+|------|--------|----------------|
+| 1 | Config setup | `uv run ow train print_resolved_config=true` |
+| 2 | Preliminary tests | `make test-fast` (blocks GPU/Docker on failure) |
+| 3 | W&B short preflight | `uv run ow make wandb_sweep=ssot_preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml` → `wandb agent …`; objective `ssot_preflight_sweep_score` (Gates 2–3 floors from calibration JSON) |
+| 4 | Packaging validation | `uv run ow eval package --checkpoint <sweep_winner.pkl> --output-dir <dir> --validate-docker --packaging-seed 0 --packaging-player-count 4` → stdout JSON `"ok": true` |
+| 5 | Long train | `uv run ow train artifacts=ssot_pipeline telemetry.wandb.enabled=true …` (≤500M env steps; W&B on) |
+| — | Tournament qualifiers (JAX) | *U5 planned* — checkpoint-tick held-out eval on `eval_seed_set` only |
+| — | Main bracket (μ/σ) | *U7 planned* — `ow eval bracket status` after stage 3 clear |
+| 6 | Submission | Trained-weight Docker smoke + opponent legs + `ow eval submit --validate-docker` (*U7*) |
+
+**Seed partition (AE6):** `training_seed_set` / `eval_seed_set` must be disjoint; `heldout_eval_seed_set` is rejected. Default `eval_seed_set` is `[43, 44, 45, 46]`; base `seed` must not appear in it.
+
+**SSOT preflight sweep (step 3) — copy-paste:**
+
+```bash
+uv run ow make wandb_sweep=ssot_preflight
+uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml
+# Agent: uv run wandb agent <entity>/<project>/<sweep_id>
+# Pick winner from W&B (Gates 2–3 pass + ssot_preflight_sweep_score); no local config registry.
+```
+
+**Packaging on sweep winner (step 4) — copy-paste:**
+
+```bash
+uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl \
+  --output-dir /tmp/ssot_packaging --validate-docker \
+  --packaging-seed 0 --packaging-player-count 4
+```
+
+---
+
+### Submit-valid decision tree (legacy hybrid / Gate 5)
+
+> **Legacy until SSOT U8 teardown.** Use for debugging existing `artifacts=hybrid_promotion`, Gate 5 `tournament-proof`, and async `checkpoint_eval` — not the canonical production spine above.
+
+Use this when the user asks whether a checkpoint is **submit-valid** under the **legacy** hybrid funnel (Kaggle Docker + promotion gates). Success signals are **manifest- or JSON-backed**—never local replay HTML alone.
 
 ```mermaid
 flowchart TB
@@ -272,9 +318,9 @@ make help
 
 > Run `uv run ow train training=smoke training.total_updates=5 curriculum=off task=shield_off` and confirm `orbit_train_start` / `orbit_train_complete` lines and `logs/*_jax.jsonl` under the run dir.
 
-**Validate checkpoint for submission**
+**Validate checkpoint for submission (SSOT spine when #211-bound)**
 
-> If training: use `artifacts=hybrid_promotion`, poll `ow eval status --run <run_dir> --watch`, then `ow eval results show --run <run_dir> --result <checkpoint_eval_id>` for `validation_ok`. If one-off: `ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker` and confirm JSON `"ok": true`. Do not use local replay HTML or packaging-only as proof.
+> Prefer SSOT order: after W&B preflight winner, `ow eval package --checkpoint <pkl> --output-dir <dir> --validate-docker --packaging-seed 0 --packaging-player-count 4` (JSON `"ok": true`) → long train `artifacts=ssot_pipeline` → (*U5–U7*) bracket/submission. For **legacy** hybrid only: `artifacts=hybrid_promotion`, poll `ow eval status --run <run_dir> --watch`, then `ow eval results show` for `validation_ok`. Never use local replay HTML or packaging-only as proof.
 
 **Inspect hybrid promotion queue**
 

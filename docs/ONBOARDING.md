@@ -69,7 +69,9 @@ Pytest guards Hydra wiring, JAX env/policy/PPO behavior, feature dimensions, cur
 
 ### 4. Documentation (`docs/`)
 
-Experiment guides, baseline sweep notes, Hydra/config migration history, and this onboarding doc.
+<!-- hand-maintained:documentation -->
+Doc-type map at [docs/README.md](README.md), stage design index at [docs/architecture/README.md](architecture/README.md), and operator workflows in [docs/operator-runbook.md](operator-runbook.md).
+<!-- /hand-maintained -->
 
 ### 5. Scripts (`scripts/`)
 
@@ -235,11 +237,14 @@ These fields land in the run JSONL (`campaigns/*/runs/*/logs/*_jax.jsonl`) and i
 
 ### Documentation
 
+<!-- hand-maintained:documentation -->
 | Doc | Topic |
-|-----|--------|
-| `docs/experiments.md` | Experiment conventions |
-| `docs/baseline_sweep.md` | Baseline sweep methodology |
-| `docs/config_migration.md`, `docs/hydra_migration.md` | Config history |
+| --- | --- |
+| [docs/README.md](README.md) | Doc-type map, folder index, navigation chains |
+| [docs/architecture/README.md](architecture/README.md) | Stage-level architecture index |
+| [docs/operator-runbook.md](operator-runbook.md) | Operator workflows and run commands |
+| [docs/hydra_migration.md](hydra_migration.md) | Hydra/config migration history |
+<!-- /hand-maintained -->
 
 ---
 
@@ -278,7 +283,7 @@ Canonical **agent** test-selection rules live in `AGENTS.md` § *Test Selection 
 |-------------|---------------|---------------|
 | Config / schema | `make test-domain-config` | `test_config_consolidation.py`, `test_telemetry.py`, `test_metric_registry.py`, `test_run_paths.py` |
 | Env / features | `make test-domain-features` | Python feature tests; add `make test-domain-jax-env` when JAX env mirrors change |
-| JAX env / Kaggle parity | `make test-kaggle-parity` or `make test-domain-jax-env` | `-m "jax and not slow"`; `test_jax_env_parity.py` is no longer slow-tier |
+| JAX env / Kaggle parity | `make test-kaggle-parity` or `make test-domain-jax-env` | `-m "jax and not slow"`; `test_jax_env_parity.py` is no longer slow-tier; **CI:** `.github/workflows/kaggle-jax-parity.yml` on every PR |
 | Policy / PPO | `make test-domain-policy` | serial `-m "jax and not slow"` |
 | Curriculum | `make test-domain-curriculum` | CPU subset of `test_curriculum.py`, `test_jax_train_timing.py` |
 | Artifacts | `make test-domain-artifacts` | `test_artifact_pipeline.py`, `test_replay.py`, `test_kaggle_submission_packager.py` |
@@ -296,5 +301,7 @@ IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.
 1. Run `/understand` to refresh `.understand-anything/knowledge-graph.json`.
 2. Run `/understand-onboard` to regenerate this document.
 3. Commit `docs/ONBOARDING.md` so the team shares the same map.
+
+**Hand-maintained sections:** Full `/understand-onboard` refresh may overwrite graph-derived sections (architecture tour, guided tour, hotspots, verification matrix). After regen, re-apply the hand-maintained blocks marked `<!-- hand-maintained:documentation -->` in § Documentation and § 4. Documentation, verifying links against [docs/README.md](README.md). Skip full regen when only navigation changed.
 
 Graph stats at generation time: **691 nodes**, **1408 edges**, **115 files** analyzed, **239 paths** excluded by `.understandignore`.

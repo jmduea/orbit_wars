@@ -13,7 +13,7 @@ from src.jax.rollout.planet_flow_metric_descriptors import (
     PLANET_FLOW_RATE_DESCRIPTORS,
     PlanetFlowMetricDescriptor,
 )
-from src.telemetry.metric_registry import MetricDefinition
+from src.telemetry.metric_definition import MetricDefinition
 
 
 def _registry_entry(

@@ -1,0 +1,31 @@
+---
+description: "Orbit Wars errors: typed failures, Hydra/CLI boundaries, no silent except"
+globs:
+  - "src/**/*.py"
+alwaysApply: false
+---
+
+# Error handling (Orbit Wars)
+
+Adapted from [cursorrules-collection `practices/error-handling.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/practices/error-handling.mdc).
+
+## Classify failures
+
+- **Operational:** invalid Hydra override, missing checkpoint, Docker validation failed, gate threshold miss — clear messages and non-zero CLI exit.
+- **Programmer:** shape mismatch in JAX, wrong `TurnBatch` dims, broken import layer — fix the code; do not mask with broad `except Exception`.
+
+## Python rules
+
+- No bare `except:`; catch specific types (`ValueError`, `FileNotFoundError`, `subprocess.CalledProcessError`).
+- Wrap low-level errors at boundaries: tournament subprocess → `RuntimeError` with checkpoint path and job id.
+- Never catch-and-ignore; log or re-raise with context.
+
+## Hydra / config
+
+- Validate in `src/config/runtime.py` / schema — fail at compose time with which group/key failed.
+- Resolved config is truth: `uv run ow train print_resolved_config=true` when debugging default vs YAML mismatches.
+
+## CLI / agents
+
+- Prefer `ow benchmark gate run <id> --verbose --out /tmp/gate.json` (JSON on stdout) over parsing unstructured logs.
+- Do not relax calibrated thresholds in `docs/benchmarks/preflight-calibration.json` to force green gates.

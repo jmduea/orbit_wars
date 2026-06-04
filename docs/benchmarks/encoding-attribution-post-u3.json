@@ -1,0 +1,16 @@
+{
+  "gate": "encoding_throughput_attribution",
+  "note": "Post U3 Phase A; pre-Phase-A capture not taken on this branch. Hygiene on.",
+  "commit_sha": "544f2ac0191443d7babca8b5fcff781bb5d8aa30",
+  "device": {
+    "default_backend": "gpu",
+    "devices": ["cuda:0"],
+    "gpu_name": "NVIDIA GeForce RTX 5080"
+  },
+  "command": "uv run ow benchmark training --preset primary --updates 2 --warmup 3 --detailed-timing",
+  "rollout_collect_seconds_per_update_mean": 5.382010238499788,
+  "ppo_seconds_per_update_mean": 0.40198198599682655,
+  "host_overhead_seconds_per_update_mean": 0.005398507499194238,
+  "seconds_per_update_mean": 5.789390731995809,
+  "env_steps_per_sec": 2763.6759618890383
+}

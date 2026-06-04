@@ -7,7 +7,7 @@ Phase 3 backlog items from `docs/plans/2026-06-02-agent-native-phase3-refactors.
 | # | Item | Evidence |
 |---|------|----------|
 | 1 | `PreflightGateSpec` from YAML | `conf/benchmark/gates/*.yaml`, `src/jax/preflight_gate_loader.py`; no tuple tables in `preflight.py` for gate recipes |
-| 2 | Atomic `ow benchmark` primitives | `ow benchmark gate run <name>`, `ow benchmark tournament-proof`; `learn-proof` is thin composer (`src/cli/benchmark.py`) |
+| 2 | Atomic `ow benchmark` primitives | `ow benchmark gate run <name>`, `ow benchmark tournament-proof`; `learn-proof` is thin composer (`src/cli/benchmark/`) |
 | 3 | `ow sweep` unification | `src/cli/sweep.py`; deprecated paths noted in `ow train` / wandb help |
 | 4 | Cursor session-start hook | `docs/CURSOR.md`, `.cursor/hooks.json` example — PR #180 |
 | 5 | Seed-scheduler calibration + operator phase 2 | `training.reseed_every_updates: 50` in `conf/training/base.yaml` and `src/config/schema.py`; `docs/benchmarks/seed-scheduler-calibration.json` (`decision.chosen_interval: 50`); learning doc below |

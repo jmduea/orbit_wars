@@ -1,0 +1,56 @@
+# Orbit Wars — exclude from codebase search; agents can still Read/@ paths.
+# Policy: docs/CURSOR.md. Output layout: docs/architecture/output-layout.md
+
+# --- Local training / eval bulk (gitignored; double-cover for indexing) ---
+outputs/campaigns/
+outputs/cache/
+outputs/kaggle_runner/
+outputs/**/checkpoints/
+outputs/**/evaluations/
+outputs/**/replays/
+outputs/**/logs/
+outputs/**/queue/
+outputs/**/wandb/
+outputs/**/docker_validation/
+
+# Lightweight run discovery (agent-context, ow runs list)
+!outputs/indexes/
+!outputs/_meta/
+
+# --- Virtualenv: ignore deps except Kaggle reference env (JAX parity) ---
+.venv/*
+!.venv/lib/
+.venv/lib/*
+!.venv/lib/python3.12/
+.venv/lib/python3.12/*
+!.venv/lib/python3.12/site-packages/
+.venv/lib/python3.12/site-packages/*
+!.venv/lib/python3.12/site-packages/kaggle_environments/
+
+# --- Other environments & tool caches ---
+.pixi/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+htmlcov/
+.coverage
+*.egg-info/
+
+# --- Local-only / ephemeral (mostly gitignored) ---
+.audit/
+.cursor/hooks/state/
+.compound-engineering/*.local.yaml
+.omg/
+.worktrees/
+wandb/
+artifacts/
+
+# --- Regenerable plugin graph (source of truth: src/ + tests/) ---
+.understand-anything/
+
+# --- Low-signal docs for day-to-day coding ---
+docs/archive/
+docs/production-ready-data-science.pdf

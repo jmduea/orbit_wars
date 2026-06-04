@@ -12,6 +12,7 @@ class TaskConfig:
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
+    ship_speed: float = 6.0
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1
@@ -378,6 +379,10 @@ class TrainConfig:
     artifacts: ArtifactsConfig = field(default_factory=ArtifactsConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
+    training_seed_set: list[int] = field(default_factory=list)
+    eval_seed_set: list[int] = field(
+        default_factory=lambda: [43, 44, 45, 46]
+    )
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None
     from_promoted: str | None = None

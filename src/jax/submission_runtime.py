@@ -18,7 +18,13 @@ from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
 from src.jax.decoder_carry import empty_decoder_hidden
-from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
+from src.jax.env import (
+    JaxAction,
+    JaxFleetState,
+    JaxGameState,
+    JaxPlanetState,
+    empty_comet_state,
+)
 from src.jax.features import TurnBatch
 
 AgentActFn = Callable[[object], list[list[float | int]]]
@@ -135,9 +141,11 @@ def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
 
 
@@ -186,11 +194,13 @@ def batch_game(game: JaxGameState) -> JaxGameState:
         player=game.player[None],
         angular_velocity=game.angular_velocity[None],
         next_fleet_id=game.next_fleet_id[None],
+        episode_seed=game.episode_seed[None],
         planets=jax.tree_util.tree_map(lambda value: value[None, ...], game.planets),
         initial_planets=jax.tree_util.tree_map(
             lambda value: value[None, ...], game.initial_planets
         ),
         fleets=jax.tree_util.tree_map(lambda value: value[None, ...], game.fleets),
+        comets=jax.tree_util.tree_map(lambda value: value[None, ...], game.comets),
     )
 
 
@@ -447,9 +457,11 @@ def _jax_game_from_parsed(game, *, fleet_slots: int) -> JaxGameState:
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
 
 

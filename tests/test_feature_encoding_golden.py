@@ -86,14 +86,18 @@ def test_encode_v2_sun_crossing_targets_are_masked() -> None:
         ships=jnp.zeros((1,), dtype=jnp.float32),
         active=jnp.zeros((1,), dtype=bool),
     )
+    from src.jax.env import empty_comet_state
+
     game = JaxGameState(
         step=jnp.asarray(0, dtype=jnp.int32),
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.03, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
     batch = encode_turn(game, cfg)
     assert not bool(np.asarray(batch.edge_mask[0]).any())

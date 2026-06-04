@@ -14,6 +14,7 @@ from src.jax.action_codec import (
     planet_flow_action_log_prob_entropy,
     planet_flow_invalid_bucket_count,
 )
+from src.jax.array_ops import masked_mean
 from src.jax.distributional_value import (
     sparse_categorical_value_cross_entropy,
     value_support,
@@ -168,14 +169,6 @@ def _actor_advantages_from_state(
     if advantages.ndim == 1:
         return jnp.broadcast_to(advantages[:, None], (advantages.shape[0], sequence_k))
     return advantages
-
-
-def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
-    """Return the mean of ``x`` over entries where ``mask`` is non-zero."""
-
-    # jnp.where avoids NaN * 0.0 = NaN from padded or fully masked action paths.
-    safe_x = jnp.where(mask > 0, x, 0.0)
-    return safe_x.sum() / jnp.maximum(mask.sum(), 1.0)
 
 
 def _flatten_transition_to_turn_batch(batch: JaxTransitionBatch) -> TurnBatch:
@@ -591,31 +584,33 @@ def _ppo_update_factorized_jax(
         global_features=turn_batch.global_features[:first_mb_end],
         theta_ref=turn_batch.theta_ref[:first_mb_end],
     )
-    parity_metrics = rollout_replay_parity_summary(
-        train_state.params,
-        policy,
-        parity_batch,
-        cfg,
-        player_count=player_count[:first_mb_end],
-        source_index=source[:first_mb_end],
-        target_slot=target_slot[:first_mb_end],
-        ship_bucket=bucket[:first_mb_end],
-        stop_flag=stop_flag[:first_mb_end],
-        step_mask=mask[:first_mb_end],
-        ship_bucket_mask=ship_bucket_mask[:first_mb_end],
-        old_log_prob=old_log_prob[:first_mb_end],
-        ship_fraction=(
-            ship_fraction[:first_mb_end] if ship_fraction is not None else None
-        ),
-        decoder_hidden=(
-            decoder_hidden[:first_mb_end] if decoder_hidden is not None else None
-        ),
-        initial_remaining_ships=(
-            initial_planet_ships[:first_mb_end]
-            if initial_planet_ships is not None
-            else None
-        ),
-    )
+    parity_metrics: dict[str, jax.Array] = {}
+    if debug_group_enabled:
+        parity_metrics = rollout_replay_parity_summary(
+            train_state.params,
+            policy,
+            parity_batch,
+            cfg,
+            player_count=player_count[:first_mb_end],
+            source_index=source[:first_mb_end],
+            target_slot=target_slot[:first_mb_end],
+            ship_bucket=bucket[:first_mb_end],
+            stop_flag=stop_flag[:first_mb_end],
+            step_mask=mask[:first_mb_end],
+            ship_bucket_mask=ship_bucket_mask[:first_mb_end],
+            old_log_prob=old_log_prob[:first_mb_end],
+            ship_fraction=(
+                ship_fraction[:first_mb_end] if ship_fraction is not None else None
+            ),
+            decoder_hidden=(
+                decoder_hidden[:first_mb_end] if decoder_hidden is not None else None
+            ),
+            initial_remaining_ships=(
+                initial_planet_ships[:first_mb_end]
+                if initial_planet_ships is not None
+                else None
+            ),
+        )
 
     def update_minibatch(carry, minibatch):
         params, opt_state = carry
@@ -698,7 +693,10 @@ def _ppo_update_factorized_jax(
                 minibatch["returns"],
             )
             policy_loss = -masked_mean(policy_objective, minibatch["mask"])
-            value_loss = jnp.mean(value_error)
+            value_state_mask = (minibatch["mask"].sum(axis=-1) > 0.0).astype(
+                jnp.float32
+            )
+            value_loss = masked_mean(value_error, value_state_mask)
             entropy_loss = masked_mean(entropy, minibatch["mask"])
             entropy_stop_loss = masked_mean(stop_entropy, minibatch["mask"])
             entropy_move_loss = masked_mean(move_entropy, minibatch["mask"])

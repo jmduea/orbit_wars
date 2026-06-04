@@ -13,7 +13,8 @@ class SeedScheduleConfig:
     plateau_metric: str = "episode_reward_mean"
     plateau_window: int = 10
     plateau_delta: float = 0.0
-    heldout_eval_seed_set: list[int] = field(default_factory=list)
+    training_seed_set: list[int] = field(default_factory=list)
+    eval_seed_set: list[int] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -44,8 +45,9 @@ class SeedScheduler:
         self._cfg = cfg
         self._rng = random.Random(base_seed)
         self._recent_metrics: deque[float] = deque(maxlen=max(cfg.plateau_window, 1))
-        self._pool = list(cfg.heldout_eval_seed_set)
+        self._pool = list(cfg.training_seed_set)
         self._pool_index = 0
+        self._eval_reserved = frozenset(int(s) for s in cfg.eval_seed_set)
 
     @property
     def next_seed(self) -> int:
@@ -76,7 +78,7 @@ class SeedScheduler:
         chosen_policy = policy or self.next_seed_policy(update)
         old_seed = self._next_seed
         if chosen_policy == "random_jump":
-            self._next_seed = self._rng.randint(1, 2**31 - 1)
+            self._next_seed = self._draw_training_seed()
         elif chosen_policy == "shuffled_pool" and self._pool:
             if self._pool_index == 0:
                 self._rng.shuffle(self._pool)
@@ -84,6 +86,8 @@ class SeedScheduler:
             self._pool_index = (self._pool_index + 1) % len(self._pool)
         else:
             self._next_seed += 1
+            while self._next_seed in self._eval_reserved:
+                self._next_seed += 1
             chosen_policy = "incremental"
         return SeedEvent(
             update=int(update),
@@ -93,8 +97,21 @@ class SeedScheduler:
             policy=chosen_policy,
         )
 
+    def _draw_training_seed(self) -> int:
+        for _ in range(256):
+            candidate = self._rng.randint(1, 2**31 - 1)
+            if candidate not in self._eval_reserved:
+                return candidate
+        raise ValueError(
+            "Failed to draw a training reseed outside eval_seed_set; "
+            f"reserved={sorted(self._eval_reserved)}"
+        )
+
     def advance(self, count: int = 1) -> int:
-        self._next_seed += int(count)
+        for _ in range(int(count)):
+            self._next_seed += 1
+            while self._next_seed in self._eval_reserved:
+                self._next_seed += 1
         return self._next_seed
 
     @staticmethod

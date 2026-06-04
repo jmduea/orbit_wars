@@ -20,7 +20,7 @@ tags:
   - jax
 related_components:
   - src/jax/training_benchmark.py
-  - src/cli/benchmark.py
+  - src/cli/benchmark/training.py
   - src/jax/action_sampling.py
   - src/jax/rollout/collect.py
   - src/jax/ppo_update.py
@@ -157,6 +157,7 @@ hygiene validation with rollout/PPO log-prob parity handled deliberately.
 
 ## Related
 
+- Benchmark CLI package (`ow benchmark training` runner): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - `docs/architecture/jax-policy-encoder.md` — shared encoder + separate policy/value
   heads; PPO replay encodes once before the factorized decoder scan (relevant when
   judging whether to duplicate the trunk).

@@ -1,0 +1,896 @@
+<!-- Orbit Wars — SSOT training pipeline interactive flowchart -->
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit Wars — SSOT training pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #cc785c;
+      --primary-active: #a9583e;
+      --ink: #141413;
+      --body: #3d3d3a;
+      --muted: #6c6a64;
+      --hairline: #e6dfd8;
+      --canvas: #faf9f5;
+      --surface-card: #efe9de;
+      --surface-dark: #181715;
+      --on-dark: #faf9f5;
+      --success: #5db872;
+      --error: #c64545;
+      --accent-teal: #5db8a6;
+      --serif: "Cormorant Garamond", ui-serif, Georgia, serif;
+      --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      padding: 56px 24px 96px;
+    }
+
+    .sheet {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 40px;
+    }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 36px;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 12px;
+    }
+
+    .lead {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--body);
+      max-width: 680px;
+    }
+
+    .lead a {
+      color: var(--primary);
+    }
+
+    .lead code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: var(--surface-card);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: var(--surface-card);
+      color: var(--ink);
+    }
+
+    .badge.coral {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 32px;
+      align-items: start;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: static !important;
+      }
+    }
+
+    .canvas-wrap {
+      border: 1.5px solid var(--hairline);
+      border-radius: 12px;
+      background: #fff;
+      padding: 28px 20px;
+      overflow-x: auto;
+    }
+
+    svg.flow {
+      display: block;
+      width: 100%;
+      min-width: 640px;
+      height: auto;
+    }
+
+    .flow .edge,
+    .flow .lbl {
+      pointer-events: none;
+    }
+
+    .flow .masks rect {
+      fill: #fff;
+      stroke: none;
+      pointer-events: none;
+    }
+
+    .flow text {
+      font-family: var(--mono);
+      font-size: 11px;
+      fill: var(--ink);
+      pointer-events: none;
+    }
+
+    .flow .sub {
+      font-size: 9.5px;
+      fill: var(--muted);
+    }
+
+    .flow .req {
+      font-size: 8.5px;
+      fill: var(--primary);
+      font-weight: 500;
+    }
+
+    .flow .lbl {
+      font-size: 9px;
+      fill: var(--muted);
+    }
+
+    .node rect {
+      fill: #fff;
+      stroke: var(--hairline);
+      stroke-width: 1.5;
+      rx: 8;
+    }
+
+    .node.term rect {
+      rx: 22;
+    }
+
+    .node.gate path {
+      fill: #fff;
+      stroke: var(--hairline);
+      stroke-width: 1.5;
+    }
+
+    .node.ok rect {
+      fill: #eaf5ec;
+      stroke: var(--success);
+    }
+
+    .node.bad rect {
+      fill: #fceeee;
+      stroke: var(--error);
+    }
+
+    .node.alt rect {
+      fill: #eaf5f3;
+      stroke: var(--accent-teal);
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .node:hover rect,
+    .node:hover path {
+      stroke: var(--primary);
+      stroke-width: 2;
+    }
+
+    .node:hover:not(.gate) rect {
+      fill: var(--surface-card);
+    }
+
+    .node:hover.gate path {
+      fill: var(--surface-card);
+    }
+
+    .node.active rect,
+    .node.active path {
+      stroke: var(--primary);
+      stroke-width: 2;
+    }
+
+    .node.active:not(.gate) rect {
+      fill: var(--surface-card);
+    }
+
+    .node.active.gate path {
+      fill: var(--surface-card);
+    }
+
+    .edge {
+      stroke: var(--muted);
+      stroke-width: 1.5;
+      fill: none;
+      marker-end: url(#arrow);
+    }
+
+    .edge.no {
+      stroke: var(--error);
+      stroke-dasharray: 4 4;
+      marker-end: url(#arrow-err);
+    }
+
+    .edge.yes {
+      stroke: var(--success);
+      marker-end: url(#arrow-ok);
+    }
+
+    .edge.alt {
+      stroke: var(--accent-teal);
+      stroke-dasharray: 5 3;
+      marker-end: url(#arrow-teal);
+    }
+
+    aside {
+      position: sticky;
+      top: 24px;
+      border: 1.5px solid var(--hairline);
+      border-radius: 12px;
+      background: #fff;
+      padding: 20px 20px 22px;
+    }
+
+    aside .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    aside h3 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 22px;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+
+    aside .meta {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    aside p {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--body);
+      margin-bottom: 12px;
+    }
+
+    aside ul {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--body);
+      margin: 0 0 12px 18px;
+    }
+
+    aside li {
+      margin-bottom: 4px;
+    }
+
+    aside pre {
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.55;
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
+      border-radius: 8px;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      color: var(--ink);
+      margin-bottom: 10px;
+    }
+
+    aside .req-heading {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 14px 0 8px;
+    }
+
+    aside .req-list {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--body);
+      margin: 0 0 12px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    aside .req-list li {
+      margin-bottom: 8px;
+      padding-left: 0;
+    }
+
+    aside .req-list .rid {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--primary);
+      font-weight: 500;
+      margin-right: 4px;
+    }
+
+    aside .sc-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--error);
+      margin-top: 4px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 20px;
+      margin-top: 18px;
+      font-size: 12px;
+      color: var(--body);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chip {
+      width: 22px;
+      height: 14px;
+      border: 1.5px solid var(--hairline);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    .chip.gate {
+      transform: rotate(45deg);
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+
+    .chip.ok {
+      background: rgba(93, 184, 114, 0.12);
+      border-color: var(--success);
+    }
+
+    .chip.bad {
+      background: rgba(198, 69, 69, 0.10);
+      border-color: var(--error);
+    }
+
+    .chip.alt {
+      background: rgba(93, 184, 166, 0.10);
+      border-color: var(--accent-teal);
+    }
+
+    footer.note {
+      margin-top: 32px;
+      padding: 16px 18px;
+      background: var(--surface-card);
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--body);
+      max-width: 680px;
+    }
+
+    footer.note strong {
+      color: var(--ink);
+      font-weight: 500;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="sheet">
+    <header>
+      <div class="eyebrow">Orbit Wars · SSOT pipeline</div>
+      <h1>Config to Kaggle submission</h1>
+      <p class="lead">
+        Annotated flowchart for the canonical training spine in
+        <a href="../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md">SSOT requirements</a>.
+        Click any step to see commands, wall clock, and the <strong>requirements (R#)</strong> that apply at that stage.
+        Implementation tracked in <a href="https://github.com/jmduea/orbit_wars/issues/211">#211</a>.
+      </p>
+      <div class="badges">
+        <span class="badge coral">6 phases</span>
+        <span class="badge">W&amp;B sweep preflight</span>
+        <span class="badge">artifact handoff</span>
+        <span class="badge">long train observability</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div>
+        <div class="canvas-wrap">
+          <svg class="flow" viewBox="0 0 720 900" xmlns="http://www.w3.org/2000/svg"
+            aria-label="SSOT training pipeline flowchart">
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#6c6a64" />
+              </marker>
+              <marker id="arrow-ok" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#5db872" />
+              </marker>
+              <marker id="arrow-err" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#c64545" />
+              </marker>
+              <marker id="arrow-teal" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#5db8a6" />
+              </marker>
+            </defs>
+
+            <!-- main spine (center x=360) -->
+            <path class="edge" d="M360,72 L360,90" />
+            <path class="edge" d="M360,134 L360,152" />
+            <path class="edge yes" d="M360,208 L360,226" />
+            <path class="edge" d="M360,286 L360,304" />
+            <path class="edge yes" d="M360,360 L360,378" />
+            <path class="edge" d="M360,422 L360,440" />
+            <path class="edge yes" d="M360,496 L360,514" />
+            <path class="edge" d="M360,558 L360,576" />
+            <path class="edge" d="M360,628 L360,646" />
+            <path class="edge yes" d="M360,702 L360,720" />
+            <path class="edge" d="M360,764 L360,782" />
+            <path class="edge yes" d="M360,826 L360,844" />
+
+            <!-- side rails: outer lanes (left x=8, right x=712) — bypass terminal nodes -->
+            <path class="edge no" d="M415,180 L520,180 L520,170 L570,170" />
+            <path class="edge alt" d="M305,332 L8,332 L8,256 L160,256" />
+            <path class="edge no" d="M415,468 L712,468 L712,256 L560,256" />
+            <path class="edge" d="M305,674 L8,674 L8,536 L205,536" />
+            <path class="edge alt" d="M415,674 L520,674 L570,674" />
+
+            <!-- opaque masks — edges stop visually at node bounds -->
+            <g class="masks" aria-hidden="true">
+              <rect x="258" y="26" width="204" height="48" rx="8" />
+              <rect x="238" y="88" width="244" height="48" rx="8" />
+              <rect x="303" y="150" width="114" height="60" rx="8" />
+              <rect x="158" y="224" width="404" height="64" rx="8" />
+              <rect x="303" y="302" width="114" height="60" rx="8" />
+              <rect x="203" y="376" width="314" height="48" rx="8" />
+              <rect x="303" y="438" width="114" height="60" rx="8" />
+              <rect x="203" y="512" width="314" height="48" rx="8" />
+              <rect x="213" y="574" width="294" height="56" rx="8" />
+              <rect x="303" y="644" width="114" height="60" rx="8" />
+              <rect x="233" y="718" width="254" height="48" rx="8" />
+              <rect x="223" y="780" width="274" height="48" rx="8" />
+              <rect x="258" y="842" width="204" height="44" rx="22" />
+              <rect x="568" y="150" width="134" height="40" rx="22" />
+              <rect x="568" y="654" width="134" height="40" rx="22" />
+            </g>
+
+            <!-- nodes (centered on x=360) -->
+            <g class="node" data-k="config" transform="translate(260,28)">
+              <rect width="200" height="44" />
+              <text x="100" y="16" text-anchor="middle">1 · Config setup</text>
+              <text class="sub" x="100" y="30" text-anchor="middle">Hydra resolve</text>
+              <text class="req" x="100" y="40" text-anchor="middle">R1 · step 1</text>
+            </g>
+
+            <g class="node" data-k="tests" transform="translate(240,90)">
+              <rect width="240" height="44" />
+              <text x="120" y="16" text-anchor="middle">2 · Preliminary tests</text>
+              <text class="sub" x="120" y="30" text-anchor="middle">make test-fast · CPU</text>
+              <text class="req" x="120" y="40" text-anchor="middle">R1 · step 2</text>
+            </g>
+
+            <g class="node gate" data-k="gate-tests" transform="translate(305,152)">
+              <path d="M55,0 L110,28 L55,56 L0,28 Z" />
+              <text x="55" y="30" text-anchor="middle">Tests pass?</text>
+              <text class="req" x="55" y="42" text-anchor="middle">R1</text>
+            </g>
+
+            <g class="node alt" data-k="wandb" transform="translate(160,226)">
+              <rect width="400" height="60" />
+              <text x="200" y="16" text-anchor="middle">3 · W&amp;B sweep · short preflight</text>
+              <text class="sub" x="200" y="30" text-anchor="middle">ow make wandb_sweep + ow sweep create</text>
+              <text class="sub" x="200" y="44" text-anchor="middle">learning-stability metrics · artifacts</text>
+              <text class="req" x="200" y="54" text-anchor="middle">R5 R6 R9–R11 · R30 · KTD2 KTD11</text>
+            </g>
+
+            <g class="node gate" data-k="gate-pf" transform="translate(305,304)">
+              <path d="M55,0 L110,28 L55,56 L0,28 Z" />
+              <text x="55" y="26" text-anchor="middle">Gates 2–3</text>
+              <text x="55" y="38" text-anchor="middle">+ winner?</text>
+              <text class="req" x="55" y="50" text-anchor="middle">R5 · R9–R11</text>
+            </g>
+
+            <g class="node" data-k="packaging" transform="translate(205,378)">
+              <rect width="310" height="44" />
+              <text x="155" y="16" text-anchor="middle">4 · Packaging validation</text>
+              <text class="sub" x="155" y="30" text-anchor="middle">Docker · W&amp;B winner ckpt · seed 0 · 4p</text>
+              <text class="req" x="155" y="40" text-anchor="middle">R3–R4 R6–R8 · KTD3</text>
+            </g>
+
+            <g class="node gate" data-k="gate-pv" transform="translate(305,440)">
+              <path d="M55,0 L110,28 L55,56 L0,28 Z" />
+              <text x="55" y="30" text-anchor="middle">Smoke ok?</text>
+              <text class="req" x="55" y="42" text-anchor="middle">R6 · R8</text>
+            </g>
+
+            <g class="node" data-k="longtrain" transform="translate(205,514)">
+              <rect width="310" height="44" />
+              <text x="155" y="16" text-anchor="middle">5 · Long train</text>
+              <text class="sub" x="155" y="30" text-anchor="middle">W&amp;B on · ≤500M env steps · curriculum</text>
+              <text class="req" x="155" y="40" text-anchor="middle">R12–R14 · R13 · KTD4 KTD6</text>
+            </g>
+
+            <g class="node" data-k="qualifiers" transform="translate(215,576)">
+              <rect width="290" height="52" />
+              <text x="145" y="16" text-anchor="middle">Tournament qualifiers</text>
+              <text class="sub" x="145" y="30" text-anchor="middle">JAX · eval_seed_set only</text>
+              <text class="sub" x="145" y="42" text-anchor="middle">random → noop → sniper stages</text>
+              <text class="req" x="145" y="50" text-anchor="middle">R15–R19 R23–R25 · KTD5 KTD7</text>
+            </g>
+
+            <g class="node gate" data-k="gate-tq" transform="translate(305,646)">
+              <path d="M55,0 L110,28 L55,56 L0,28 Z" />
+              <text x="55" y="26" text-anchor="middle">Stage 3</text>
+              <text x="55" y="38" text-anchor="middle">clear?</text>
+              <text class="req" x="55" y="50" text-anchor="middle">R19 · R26–R28</text>
+            </g>
+
+            <g class="node" data-k="bracket" transform="translate(235,720)">
+              <rect width="250" height="44" />
+              <text x="125" y="16" text-anchor="middle">Main bracket μ/σ</text>
+              <text class="sub" x="125" y="30" text-anchor="middle">after stage 3 clearance</text>
+              <text class="req" x="125" y="40" text-anchor="middle">R20</text>
+            </g>
+
+            <g class="node" data-k="submission" transform="translate(225,782)">
+              <rect width="270" height="44" />
+              <text x="135" y="16" text-anchor="middle">6 · Submission</text>
+              <text class="sub" x="135" y="30" text-anchor="middle">trained weights · noop/random legs</text>
+              <text class="req" x="135" y="40" text-anchor="middle">R21–R22 · KTD9</text>
+            </g>
+
+            <g class="node ok term" data-k="done" transform="translate(260,844)">
+              <rect width="200" height="40" />
+              <text x="100" y="18" text-anchor="middle">✓ Submit-valid complete</text>
+              <text class="req" x="100" y="32" text-anchor="middle">R1 · AE5</text>
+            </g>
+
+            <g class="node bad term" data-k="stop" transform="translate(570,152)">
+              <rect width="130" height="36" />
+              <text x="65" y="18" text-anchor="middle">Stop · fix locally</text>
+              <text class="req" x="65" y="30" text-anchor="middle">R1 · step 2</text>
+            </g>
+
+            <g class="node bad term" data-k="weak" transform="translate(570,656)">
+              <rect width="130" height="36" />
+              <text x="65" y="18" text-anchor="middle">weak_config stop</text>
+              <text class="req" x="65" y="30" text-anchor="middle">R12 · AE4</text>
+            </g>
+            <!-- edge labels on top -->
+            <text class="lbl" x="468" y="176">fail → stop</text>
+            <text class="lbl" x="12" y="348">fail run · next agent</text>
+            <text class="lbl" x="716" y="362">fail → pick next run</text>
+            <text class="lbl" x="12" y="692">retry</text>
+            <text class="lbl" x="468" y="670">weak_config stop</text>
+          </svg>
+
+          <div class="legend">
+            <span><i class="chip"></i> process step · coral = R# applies</span>
+            <span><i class="chip gate"></i> decision / gate</span>
+            <span><i class="chip alt"></i> W&amp;B sweep stage</span>
+            <span><i class="chip ok"></i> terminal success</span>
+            <span><i class="chip bad"></i> stop (no cache)</span>
+          </div>
+        </div>
+
+        <footer class="note">
+          <strong>Not implemented yet.</strong> W&amp;B SSOT sweep recipe, <code>artifacts=ssot_pipeline</code>, and JAX
+          tournament qualifiers are plan #211 work — legacy paths remain until teardown (R29). No custom config registry
+          or
+          bad-config cache; W&amp;B holds sweep history and artifacts.
+        </footer>
+      </div>
+
+      <aside>
+        <div class="hint">Click a step in the chart →</div>
+        <h3 id="p-title">1 · Config setup</h3>
+        <div class="meta" id="p-meta">Hydra · ~seconds</div>
+        <p id="p-body">Resolve the full training composition and declare feature compatibility before any GPU work.</p>
+        <div class="req-heading" id="p-reqs-label">Requirements at this step</div>
+        <ul class="req-list" id="p-reqs"></ul>
+        <div class="sc-label" id="p-sc" hidden>Short-circuit</div>
+        <p id="p-sc-body" hidden></p>
+        <pre id="p-code">uv run ow train print_resolved_config=true</pre>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const DETAIL = {
+      config: {
+        title: "1 · Config setup",
+        meta: "Hydra compose · ~seconds",
+        body: "Resolve model, task, training, opponents, artifacts, and output groups. Feature schema and shield/decoder modes must match the intended competition agent. Sweep parameters and fixed Hydra overrides are declared in conf/wandb_sweep/*.yaml.",
+        sc: null,
+        code: "uv run ow train print_resolved_config=true\n# inspect model, task, artifacts, training.*",
+        reqs: [
+          { id: "R1", text: "Step 1 of the canonical spine: resolved Hydra config, feature compatibility declared before GPU work." },
+          { id: "R2", text: "Cross-cutting: operator docs describe only this spine as config → Kaggle submission." }
+        ]
+      },
+      tests: {
+        title: "2 · Preliminary tests",
+        meta: "CPU · ~3–8 min",
+        body: "Wiring tier: serial CPU pytest excluding slow, jax, and sweep markers. Catches config/schema mistakes, import errors, and domain regressions before GPU sweep or Docker smoke.",
+        sc: "Failure blocks the entire pipeline — no W&B sweep, no GPU.",
+        code: "make test-fast\n# = pytest -m \"not slow and not jax and not sweep\"",
+        reqs: [
+          { id: "R1", text: "Step 2: wiring tier (make test-fast); failure blocks all downstream stages." }
+        ]
+      },
+      "gate-tests": {
+        title: "Preliminary tests pass?",
+        meta: "decision",
+        body: "Any failing test short-circuits here. Fix locally and re-run make test-fast; do not spend GPU on a broken tree.",
+        sc: "All downstream stages skipped on fail.",
+        code: "# exit code != 0 → stop",
+        reqs: [
+          { id: "R1", text: "Preliminary test failure prevents steps 3–6 from starting." }
+        ]
+      },
+      wandb: {
+        title: "3 · W&B sweep · short preflight",
+        meta: "GPU · ~15–45 min per agent",
+        body: "Coordinate short preflight and ablations through W&B sweeps. Each run proves learning stability (win-rate delta, KL, entropy vs preflight-calibration.json), logs metrics, and uploads checkpoint artifacts. Failed runs stay in W&B — no local bad-config cache.",
+        sc: "Sweep-only ablations may stop after preflight pass (R30). Submit configs select a winner and continue to packaging.",
+        code: "uv run ow make wandb_sweep=ssot_preflight\nuv run ow sweep create --config conf/wandb_sweep/ssot_preflight.yaml\nwandb agent <entity>/<project>/<sweep_id>",
+        reqs: [
+          { id: "R5", text: "Coordinate short preflight/ablations via W&B sweeps; each run logs learning-stability metrics and checkpoint artifacts; operator selects winner." },
+          { id: "R6", text: "No config registry or bad-config cache; failed runs remain in W&B for comparison." },
+          { id: "R9", text: "Launch W&B sweep of short JAX runs; thresholds from preflight-calibration.json, not ad hoc." },
+          { id: "R10", text: "Preflight fail on a sweep agent → mark failed in W&B; pick next candidate — no local reject cache." },
+          { id: "R11", text: "Winner checkpoint artifact and Hydra overrides hand off to packaging and long train via W&B." },
+          { id: "R30", text: "Research sweeps are step 3 on the SSOT spine; ablations may stop after preflight pass." },
+          { id: "KTD2", text: "W&B replaces custom config registry; sweep history and artifacts live in W&B (R6)." },
+          { id: "KTD11", text: "Short preflight runs inside W&B sweeps; no long train until winner passes Gates 2–3." }
+        ]
+      },
+      "gate-pf": {
+        title: "Gates 2–3 + sweep winner?",
+        meta: "decision · W&B ranking",
+        body: "Operator or sweep objective picks the winning run (Gates 2–3 pass vs preflight-calibration.json + best metric). Download winner checkpoint artifact from W&B for packaging validation.",
+        sc: "Failed sweep runs: stop agent, pick next run, or adjust sweep — history lives in W&B.",
+        code: "# W&B UI or ow sweep winner\n# artifact: checkpoint from winning run",
+        reqs: [
+          { id: "R5", text: "Operator or sweep objective selects the winning run for packaging validation." },
+          { id: "R9", text: "Gates 2–3 thresholds from preflight-calibration.json, not ad hoc." },
+          { id: "R11", text: "Selected winner must pass preflight before proceeding to step 4." }
+        ]
+      },
+      packaging: {
+        title: "4 · Packaging validation",
+        meta: "Docker · ~3–8 min",
+        body: "Package agent from the W&B winner checkpoint. Run inside official Kaggle competition Docker via kaggle_environments: seed 0, 4-player, all four agents = packaged agent.",
+        sc: "Fail → pick next W&B sweep candidate. No fingerprint skip (R6).",
+        code: "uv run ow eval package --validate-docker \\\n  --checkpoint <wandb_winner_ckpt>\n# seed 0 · 4p · identical agents",
+        reqs: [
+          { id: "R3", text: "Canonical competition references: COMPETITION_OVERVIEW.md, COMPETITION_SUBMISSION.md." },
+          { id: "R4", text: "Package from W&B sweep winner checkpoint — full inference path exercised." },
+          { id: "R6", text: "Packaging always runs on selected winner before long train; no registry skip." },
+          { id: "R7", text: "Official Kaggle Docker; seed 0, 4-player, all four agents = packaged agent." },
+          { id: "R8", text: "Pass: exec() load, episode completes, StepTimingBudget (1s/step, 60s overage)." },
+          { id: "KTD3", text: "Packaging validation uses W&B sweep winner checkpoint (seed 0, 4p Docker smoke)." }
+        ]
+      },
+      "gate-pv": {
+        title: "Docker smoke ok?",
+        meta: "decision",
+        body: "validation_ok must be true in docker manifest. Tournament compute must never run on checkpoints that fail packaging.",
+        sc: "Fail → try next sweep candidate. Pass → long train with W&B observability.",
+        code: "\"validation_ok\": true\n# in docker_manifest.json",
+        reqs: [
+          { id: "R6", text: "Packaging pass required before long train; no fingerprint bypass." },
+          { id: "R8", text: "Docker smoke pass criteria must be satisfied." },
+          { id: "R11", text: "Long train requires packaging validation pass on the sweep winner." }
+        ]
+      },
+      longtrain: {
+        title: "5 · Long train",
+        meta: "GPU · hours–days (#204) · W&B on",
+        body: "Single SSOT profile (planned artifacts=ssot_pipeline): ≤500M environment steps. Rollout curriculum random → noop-heavy → sniper-heavy, advanced by tournament qualifier promotions on checkpoint ticks.",
+        sc: "500M without stage 3 → weak_config in W&B and stop (R12). training_seed_set only (R14).",
+        code: "uv run ow train artifacts=ssot_pipeline \\\n  output.campaign=<name> task=shield_cheap \\\n  telemetry.wandb.enabled=true",
+        reqs: [
+          { id: "R12", text: "≤500M env steps to clear qualifier stages; exhaustion → tag weak_config and stop." },
+          { id: "R13", text: "Single SSOT artifacts/training composition (successor to hybrid_promotion / bracket_training)." },
+          { id: "R14", text: "Rollout/reseed draw only from training_seed_set; eval_seed_set never in training." },
+          { id: "KTD4", text: "training_seed_set / eval_seed_set partition; rollout draws training seeds only." },
+          { id: "KTD6", text: "artifacts=ssot_pipeline profile; W&B on; rollout curriculum R15–R17 driven by qualifier promotions." }
+        ]
+      },
+      qualifiers: {
+        title: "Tournament qualifiers",
+        meta: "JAX held-out · minutes per tick",
+        body: "On checkpoint interval during long train: fast JAX eval on eval_seed_set only. Episode win = highest final score. Stage promotion uses calibrated statistical floors — not training JSONL win rates.",
+        sc: "Until qualifier-seed-calibration.json lands, conservative interim rules block ties (R19).",
+        code: "# JAX harness on checkpoint tick\n# eval_seed_set ∩ training_seed_set = ∅",
+        reqs: [
+          { id: "R15", text: "Stage 1: rollout predominantly random until random-leg statistical floor met." },
+          { id: "R16", text: "Stage 2: noop-heavy rollout (+ random mix) until noop and random floors met." },
+          { id: "R17", text: "Stage 3: sniper-heavy rollout (+ noop/random mix) until all three legs clear floors." },
+          { id: "R18", text: "JAX eval on checkpoint ticks; win = highest final score on held-out eval seeds." },
+          { id: "R19", text: "Calibrated statistical floors per leg; blocked until qualifier-seed-calibration.json committed." },
+          { id: "R23", text: "Env physics parity maintained (make test-kaggle-parity)." },
+          { id: "R24", text: "Outcome parity: JAX terminal scoring matches competition final-score rule." },
+          { id: "R25", text: "eval_seed_set reserved for qualifiers; disjoint from training_seed_set." },
+          { id: "KTD5", text: "Tournament qualifiers = JAX harness on checkpoint ticks; win = highest final score (R18)." },
+          { id: "KTD7", text: "Calibrated statistical floors from qualifier-seed-calibration.json before enforcement (R19)." }
+        ]
+      },
+      "gate-tq": {
+        title: "Stage 3 clear?",
+        meta: "decision · all legs",
+        body: "Stage 3 requires held-out win fraction on final-score metric to meet statistical floor for random, noop, and nearest_sniper legs.",
+        sc: "Not cleared → loop back to long train. Stage 3 cleared → main bracket. 500M exhausted → weak_config.",
+        code: "stage1: random floor\nstage2: noop + random\nstage3: + nearest_sniper",
+        reqs: [
+          { id: "R19", text: "Stage clearance uses calibrated floors; interim conservative rules until JSON committed." },
+          { id: "R26", text: "Seed counts and floors must come from calibration campaign, committed to JSON." },
+          { id: "R27", text: "5/10/20 seed hypothesis is calibration starting point, not production default." },
+          { id: "R28", text: "Do not relax floors to pass a failing config; recalibrate with evidence only." }
+        ]
+      },
+      bracket: {
+        title: "Main bracket μ/σ",
+        meta: "competition ranking · ongoing",
+        body: "After stage 3 clearance: margin-independent μ/σ updates. MVP: bracket persistence, stage-3→main transition, self-play mixture from learner + bracket rankings.",
+        sc: "Qualifier clearance does not substitute for submission — weights change during bracket play.",
+        code: "uv run ow eval bracket status --campaign <name>",
+        reqs: [
+          { id: "R20", text: "After stage 3 clearance enter main bracket (μ/σ). MVP: persistence, transition trigger, self-play mixture hook." }
+        ]
+      },
+      submission: {
+        title: "6 · Submission",
+        meta: "Docker + upload · ~5–15 min",
+        body: "Packaging smoke with trained checkpoint weights, held-out noop + random legs at trained weights, then Kaggle upload.",
+        sc: "Packaging-only pass without trained-weight opponent legs is not submit-valid.",
+        code: "uv run ow eval package --validate-docker \\\n  --checkpoint outputs/.../jax_ckpt_last.pkl\nuv run ow eval submit --checkpoint ... --validate-docker",
+        reqs: [
+          { id: "R21", text: "Submission requires trained-weight Docker smoke, held-out noop + random legs, then upload." },
+          { id: "R22", text: "Qualifier clearance does not substitute — weights changed → re-validate packaging." },
+          { id: "KTD9", text: "Bracket MVP reuses plan 005 artifacts; submission after stage 3 clearance (R20–R22)." }
+        ]
+      },
+      done: {
+        title: "Submit-valid complete",
+        meta: "terminal success",
+        body: "Checkpoint cleared tournament qualifiers, main bracket entry, trained-weight Docker smoke, and upload legs. Full lineage in W&B.",
+        sc: null,
+        code: "✓ config → Kaggle submission spine complete",
+        reqs: [
+          { id: "R1", text: "Submit-bound config completed steps 1–6 in order." },
+          { id: "AE5", text: "Bracket-qualified checkpoint → submission Docker pass with trained weights → upload allowed." }
+        ]
+      },
+      stop: {
+        title: "Stop · fix locally",
+        meta: "terminal · no cache",
+        body: "CPU test failure or operator halt before GPU work. Fix the tree or sweep definition and restart.",
+        sc: "Distinct from sweep run failure (those stay in W&B for comparison).",
+        code: "# make test-fast green before ow sweep create",
+        reqs: [
+          { id: "R1", text: "Step 2 failure blocks steps 3–6; no GPU spend on broken tree." }
+        ]
+      },
+      weak: {
+        title: "weak_config stop",
+        meta: "terminal · long train",
+        body: "500M env steps exhausted without stage 3 qualifier clearance. Tag weak_config in W&B and stop — not a silent retry into the sweep.",
+        sc: null,
+        code: "# tag weak_config in W&B · no bracket entry",
+        reqs: [
+          { id: "R12", text: "Long train budget exhausted without clearing all qualifier stages → weak_config and stop." },
+          { id: "AE4", text: "500M exhaustion example: run tagged weak_config; no bracket entry." }
+        ]
+      }
+    };
+
+    const nodes = document.querySelectorAll(".node");
+    const T = document.getElementById("p-title");
+    const M = document.getElementById("p-meta");
+    const B = document.getElementById("p-body");
+    const C = document.getElementById("p-code");
+    const SC = document.getElementById("p-sc");
+    const SCB = document.getElementById("p-sc-body");
+    const REQS = document.getElementById("p-reqs");
+    const REQS_LABEL = document.getElementById("p-reqs-label");
+
+    function showDetail(key) {
+      const d = DETAIL[key];
+      if (!d) return;
+      T.textContent = d.title;
+      M.textContent = d.meta;
+      B.textContent = d.body;
+      C.textContent = d.code;
+      if (d.reqs && d.reqs.length) {
+        REQS_LABEL.hidden = false;
+        REQS.innerHTML = d.reqs.map(r =>
+          `<li><span class="rid">${r.id}</span>${r.text}</li>`
+        ).join("");
+      } else {
+        REQS_LABEL.hidden = true;
+        REQS.innerHTML = "";
+      }
+      if (d.sc) {
+        SC.hidden = false;
+        SCB.hidden = false;
+        SCB.textContent = d.sc;
+      } else {
+        SC.hidden = true;
+        SCB.hidden = true;
+        SCB.textContent = "";
+      }
+    }
+
+    nodes.forEach(n => {
+      n.addEventListener("click", () => {
+        nodes.forEach(x => x.classList.remove("active"));
+        n.classList.add("active");
+        showDetail(n.dataset.k);
+      });
+    });
+
+    document.querySelector('.node[data-k="config"]').classList.add("active");
+    showDetail("config");
+  </script>
+</body>
+
+</html>
