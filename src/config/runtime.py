@@ -224,12 +224,15 @@ def train_config_from_omegaconf(
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
+    cfg.training_seed_set = _parse_seed_set(cfg.training_seed_set)
+    cfg.eval_seed_set = _parse_seed_set(cfg.eval_seed_set)
     _apply_from_promoted(cfg)
     _validate_train_config(cfg)
     return cfg
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:
+    _validate_seed_partition(cfg)
     _validate_registered_update_metric_name(
         cfg.artifacts.checkpoint_retention.best_metric_name,
         field_name="artifacts.checkpoint_retention.best_metric_name",
@@ -360,6 +363,104 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             raise ValueError(
                 "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
             )
+
+
+def _validate_seed_partition(cfg: TrainConfig) -> None:
+    if cfg.heldout_eval_seed_set:
+        raise ValueError(
+            "heldout_eval_seed_set is removed (SSOT R29). Use training_seed_set for "
+            "rollout reseeds and eval_seed_set for tournament qualifiers only."
+        )
+    training = set(cfg.training_seed_set)
+    eval_seeds = set(cfg.eval_seed_set)
+    overlap = training & eval_seeds
+    if overlap:
+        raise ValueError(
+            "training_seed_set and eval_seed_set must be disjoint; overlap: "
+            f"{sorted(overlap)}"
+        )
+    if int(cfg.seed) in eval_seeds:
+        raise ValueError(
+            "training.seed must not appear in eval_seed_set (AE6); "
+            f"seed={cfg.seed}, eval_seed_set={sorted(eval_seeds)}"
+        )
+
+
+def _validate_planet_flow_profile(cfg: TrainConfig) -> None:
+    values = tuple(
+        float(value) for value in cfg.model.planet_flow.pressure_bucket_values
+    )
+    if len(values) < 2:
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must contain at least two values."
+        )
+    if values[0] != 0.0:
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must start with 0.0 for hold."
+        )
+    if any(value < 0.0 or value > 1.0 for value in values):
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must be normalized to [0, 1]."
+        )
+    if any(left >= right for left, right in zip(values, values[1:], strict=False)):
+        raise ValueError(
+            "model.planet_flow.pressure_bucket_values must be strictly increasing."
+        )
+
+    artifacts = cfg.artifacts
+    pipeline = artifacts.artifact_pipeline
+    unsupported: list[str] = []
+    if pipeline.docker_validation_async:
+        unsupported.append("artifacts.artifact_pipeline.docker_validation_async")
+    if pipeline.checkpoint_eval_async:
+        unsupported.append("artifacts.artifact_pipeline.checkpoint_eval_async")
+    if artifacts.promotion.enabled:
+        unsupported.append("artifacts.promotion.enabled")
+    if artifacts.tournament.enabled:
+        unsupported.append("artifacts.tournament.enabled")
+    if pipeline.enabled:
+        if not pipeline.replay_async:
+            unsupported.append("artifacts.artifact_pipeline.replay_async")
+        if pipeline.replay_backend != "local":
+            unsupported.append("artifacts.artifact_pipeline.replay_backend=local")
+        if not artifacts.replay.enabled:
+            unsupported.append("artifacts.replay.enabled")
+    elif artifacts.replay.enabled:
+        unsupported.append("artifacts.replay.enabled")
+    if unsupported:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap is experimental and "
+            "only supports local async replay artifacts (e.g. artifacts=disabled "
+            "or artifacts=planet_flow_proof). Docker validation, tournament, and "
+            "promotion paths are not supported yet. "
+            f"Unsupported settings: {', '.join(unsupported)}."
+        )
+
+    if cfg.curriculum.enabled:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs require "
+            "curriculum=off; historical snapshot/self-play support is P1."
+        )
+    if cfg.opponents.self_play.enabled:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs do not "
+            "support self-play/latest snapshot opponents yet."
+        )
+    if (
+        int(cfg.opponents.snapshot.pool_size) != 0
+        or int(cfg.opponents.snapshot.interval_updates) != 0
+    ):
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap requires snapshot "
+            "pool_size=0 and interval_updates=0 for P0 proof runs."
+        )
+    historical_weight = float(cfg.opponents.mix.weights.get("historical", 0.0))
+    latest_weight = float(cfg.opponents.mix.weights.get("latest", 0.0))
+    if historical_weight > 0.0 or latest_weight > 0.0:
+        raise ValueError(
+            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs must not "
+            "use latest or historical opponent weights."
+        )
 
 
 def _apply_from_promoted(cfg: TrainConfig) -> None:

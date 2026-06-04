@@ -53,11 +53,11 @@ def test_reseed_random_jump_changes_seed() -> None:
     assert event.reason == "periodic"
 
 
-def test_reseed_shuffled_pool_cycles_heldout_set() -> None:
+def test_reseed_shuffled_pool_cycles_training_set() -> None:
     pool = [11, 22, 33]
     scheduler = SeedScheduler(
         base_seed=5,
-        cfg=SeedScheduleConfig(heldout_eval_seed_set=pool),
+        cfg=SeedScheduleConfig(training_seed_set=pool),
     )
     first = scheduler.reseed(update=1, reason="forced", policy="shuffled_pool")
     second = scheduler.reseed(update=2, reason="forced", policy="shuffled_pool")
@@ -71,7 +71,7 @@ def test_reseed_shuffled_pool_cycles_heldout_set() -> None:
 def test_next_seed_policy_prefers_pool_when_configured() -> None:
     scheduler = SeedScheduler(
         base_seed=1,
-        cfg=SeedScheduleConfig(heldout_eval_seed_set=[9, 8]),
+        cfg=SeedScheduleConfig(training_seed_set=[9, 8]),
     )
     assert scheduler.next_seed_policy(update=1) == "shuffled_pool"
 
@@ -91,3 +91,42 @@ def test_parse_seed_set_range_and_list() -> None:
 )
 def test_parse_seed_set_dash_range(raw: str, expected: list[int]) -> None:
     assert SeedScheduler.parse_seed_set(raw) == expected
+
+
+def test_random_jump_avoids_eval_seed_set() -> None:
+    scheduler = SeedScheduler(
+        base_seed=100,
+        cfg=SeedScheduleConfig(
+            reseed_every_updates=2,
+            eval_seed_set=[101, 102],
+        ),
+    )
+    for _ in range(20):
+        event = scheduler.reseed(update=2, reason="periodic")
+        assert event.new_seed not in {101, 102}
+
+
+def test_incremental_reseed_skips_eval_seed_set() -> None:
+    scheduler = SeedScheduler(
+        base_seed=42,
+        cfg=SeedScheduleConfig(eval_seed_set=[43, 44, 45, 46]),
+    )
+    event = scheduler.reseed(update=1, reason="forced", policy="incremental")
+    assert event.new_seed == 47
+    assert event.new_seed not in {43, 44, 45, 46}
+
+
+def test_advance_skips_eval_seed_set() -> None:
+    scheduler = SeedScheduler(
+        base_seed=42,
+        cfg=SeedScheduleConfig(eval_seed_set=[43, 44, 45, 46]),
+    )
+    assert scheduler.advance(1) == 47
+
+
+def test_resolve_reseed_every_updates_auto_scale() -> None:
+    assert resolve_reseed_every_updates(configured=-1, total_updates=500) == 50
+    assert resolve_reseed_every_updates(configured=-1, total_updates=100) == 25
+    assert resolve_reseed_every_updates(configured=-1, total_updates=2000) == 200
+    assert resolve_reseed_every_updates(configured=0, total_updates=500) == 0
+    assert resolve_reseed_every_updates(configured=50, total_updates=500) == 50

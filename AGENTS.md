@@ -2,6 +2,8 @@
 
 Hydra-first Python 3.12 JAX PPO project. See `docs/ONBOARDING.md` for architecture depth and `docs/CURSOR.md` for plugin setup.
 
+**Config → Kaggle pipeline (SSOT):** [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md) — canonical path from config to submission; competition rules in [`docs/competition/`](docs/competition/). Tracker: GitHub #205. Until implemented, `hybrid_promotion` / Gate 5 / `bracket_training` docs below are **legacy** (teardown per SSOT R29).
+
 ## Commands
 
 ```bash

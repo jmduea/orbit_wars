@@ -30,6 +30,9 @@ SWEEP_COMPOSE_RECIPES = (
     "sps_experiment",
     "sps_experiment_stage2",
     "post_encoder_once_overnight",
+    "planet_flow_ppo_signal",
+    "planet_flow_ppo_signal_short",
+    "ssot_preflight",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
