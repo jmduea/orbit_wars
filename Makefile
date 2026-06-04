@@ -23,6 +23,7 @@ help:
 	@echo "  test-premerge            test-daily + test-slow"
 	@echo "  test-sweep               Full W&B sweep grid (pre-release)"
 	@echo "  test-fast-parallel       CPU xdist (ORBIT_WARS_PYTEST_XDIST=1)"
+	@echo "  test-jax-trace-hygiene   tier-A static rg gate + jit import/smoke tests"
 	@echo "  test-domain-{config,features,jax-env,policy,artifacts,curriculum}"
 	@echo ""
 	@echo "Preflight (GPU for learn-proof; see docs/operator-runbook.md):"
@@ -73,6 +74,11 @@ test-launch-hygiene-e2e-throughput:
 		--out /tmp/launch_hygiene_e2e_gate.json \
 		--baseline docs/benchmarks/launch-hygiene-e2e-baseline.json \
 		--assert-within-pct 10
+
+# Tier-A trace safety: forbidden patterns in hot paths + fast jit contract smokes.
+test-jax-trace-hygiene:
+	./scripts/jax_trace_hygiene.sh
+	$(PYTEST_CPU) tests/test_jax_trace_hygiene.py -m "jax and not slow and not sweep"
 
 # Kaggle-relevant JAX env parity (mechanics + 4p); runs in test-jax tier, not slow.
 test-kaggle-parity:
