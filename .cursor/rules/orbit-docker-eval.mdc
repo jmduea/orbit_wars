@@ -1,0 +1,36 @@
+---
+description: "Docker for Orbit Wars eval packaging and submit-valid validation"
+globs:
+  - "**/Dockerfile*"
+  - "docker-compose*.yml"
+  - "docker-compose*.yaml"
+  - "src/**/docker*.py"
+  - "conf/**/artifacts*.yaml"
+alwaysApply: false
+---
+
+# Docker (Orbit Wars eval / Kaggle)
+
+Adapted from [cursorrules-collection `tools/docker.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/tools/docker.mdc).
+
+## Submit-valid order
+
+- Packaging/Docker validate **before** tournament ladder: `ow eval package --checkpoint ... --validate-docker` (JSON `"ok": true`).
+- Hybrid promotion: `artifacts=hybrid_promotion` → async `checkpoint_eval` (Docker → tournament → promote).
+
+## Dockerfile habits
+
+- Pin base image tags (no `:latest`).
+- Multi-stage builds: builder with dev deps, runtime with only agent artifacts.
+- `.dockerignore`: exclude `.git`, `outputs/`, tests, large checkpoints not needed in the image.
+- Non-root `USER` in runtime stage when compatible with Kaggle agent layout.
+
+## Security
+
+- No secrets in image layers; use runtime env / mounted secrets.
+- Never commit `.env` with credentials.
+
+## Debugging
+
+- Poll `ow eval status --run <path> --watch`; inspect `evaluations/checkpoint_eval_*/docker_validation/`.
+- Local replay HTML alone is not submit-valid proof.

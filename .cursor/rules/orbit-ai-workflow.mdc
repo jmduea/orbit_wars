@@ -1,0 +1,36 @@
+---
+description: "AI agent workflow for Orbit Wars: ow CLI, context, review"
+globs:
+  - "docs/AGENT_CAPABILITIES.md"
+  - "docs/ONBOARDING.md"
+  - "AGENTS.md"
+alwaysApply: false
+---
+
+# AI-assisted workflow (Orbit Wars)
+
+Adapted from [cursorrules-collection `practices/ai-assisted-development.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/practices/ai-assisted-development.mdc). Stack facts stay in `orbit-wars.mdc` + `AGENTS.md`.
+
+## Context to include
+
+- Task + paths: `src/jax/train/`, `conf/training/`, `tests/test_feature_encoding_golden.py`.
+- Point to `docs/AGENT_CAPABILITIES.md`, `make agent-context` for session JSON.
+- One task per prompt; pin only relevant files.
+
+## Verification commands (in order)
+
+1. `uv sync --group dev`
+2. After code change: `make test-fast` or `make test-domain-*`
+3. Config change: `uv run ow train print_resolved_config=true`
+4. Gates/benchmarks only when user requests GPU/time
+
+## Generation habits
+
+- Ask for tests with behavior changes; use existing golden/markers patterns.
+- Prefer `ow` subcommands (`ow runs watch`, `ow eval status`, `ow benchmark gate run`) over new `scripts/*.py`.
+- Read every diff before accept; watch for hallucinated JAX APIs or wrong metric denominators.
+
+## Rules maintenance
+
+- Keep `.mdc` files focused; stack-specific truth stays in `orbit-wars.mdc` + `AGENTS.md`.
+- Update rules when the same mistake repeats (bare `pytest -n`, v1 feature paths).

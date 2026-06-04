@@ -1,0 +1,45 @@
+---
+description: "JAX + Flax Linen: purity, scan, train state, modules (Orbit Wars PPO)"
+globs:
+  - "src/jax/**/*.py"
+alwaysApply: false
+---
+
+# JAX + Flax Linen (Orbit Wars)
+
+Synthesized from JAX/Flax docs and project patterns (`JaxTrainState`, `build_jax_policy`, `jax.lax.scan` in `ppo_update.py` / `rollout/collect.py`). Performance profiling: `jax-performance.mdc`. **Linen** is the stack; do not revive `flax.nn` / `flax.optim` or mix NNX without an explicit migration.
+
+## Linen modules
+
+- Build policy once via `build_jax_policy(cfg)`; **`init` outside** jitted hot paths — never `Module()` or `init` inside `jax.lax.scan` / per-minibatch Python loops.
+- Inject structure via constructor fields (`ComposableFactorizedPlanetPolicy`, encoders in `src/jax/encoders/`) — Hydra picks architecture, not per-step Python types.
+- Use **`nn.scan` / `nn.remat` for repeated layers** only; use **`jax.lax.scan` for env horizon, advantage pass, PPO minibatches**.
+
+## Functional transforms
+
+- Jitted steps **return new state** — `(JaxTrainState, metrics)` or `(carry, ys)`; no `self.params = …` or globals inside `jit`.
+- Python `if` on traced values → `jax.lax.cond`, `where`, or `scan`; branch on **Hydra-resolved static** config via `static_argnums` / separate compiled paths.
+- `jax.value_and_grad(..., has_aux=True)` on **`params` only** unless updating `batch_stats` intentionally.
+- RNG: `jax.random.split` / `fold_in` inside the step — never mutate a module-level key from Python under `jit`.
+
+## Train state & pytrees
+
+- Thread `JaxTrainState(params, opt_state, optimizer)` explicitly; mark non-pytree fields with `flax.struct.field(pytree_node=False)` (see `rollout/types.py`).
+- Keep `apply_fn` closure or pass `variables` consistently — stable `jit` signatures avoid retracing.
+- Metrics inside scan: merge with `_merge_metric_dicts`; **finalize rates after** the scan (rollout invariant).
+
+## Dtype / debug
+
+- Use `jnp` in jitted code; explicit `dtype=` on literals in policies. Avoid `numpy` on device arrays.
+- Debug: `jax.debug.print` inside `jit`, not `print`; `JAX_CHECK_TRACER_LEAKS=1` when hunting `UnexpectedTracerError`.
+- Tests: fixed keys, small `scan` length, `chex.assert_trees_all_close` on params/metrics pytrees.
+
+## Anti-patterns
+
+| Avoid | Why |
+|-------|-----|
+| `for t in range(T):` inside large `jit` | Compile explosion |
+| `model.init` per rollout/update | Retrace + alloc churn |
+| `block_until_ready` every train step | Kills async throughput (benchmarks only) |
+| Donated buffers used after `jit` | UB / silent corruption |
+| Iterator / file I/O inside `jit` | Trace-time only, wrong semantics |
