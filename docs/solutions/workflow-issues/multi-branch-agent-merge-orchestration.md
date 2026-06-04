@@ -90,7 +90,7 @@ Merge order:
 make test-premerge
 ```
 
-Fix failures on the integration branch — not by force-pushing partial fixes to `main`. Check the terminals folder before starting tests (parallel `test-daily` jobs contend on one GPU).
+Fix failures on the integration branch — not by force-pushing partial fixes to `main`. Check the terminals folder before starting tests (parallel `test-daily` jobs contend on one GPU). With project hooks enabled, `beforeShellExecution` also blocks GPU-heavy shell when another agent terminal is active — see [`docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md`](../developer-experience/cursor-before-shell-gpu-terminal-contention.md).
 
 ### 6. Land on `main`
 

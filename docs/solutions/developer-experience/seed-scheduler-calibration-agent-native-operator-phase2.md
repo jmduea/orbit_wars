@@ -76,7 +76,7 @@ Semantics: reseed resets **rollout env state**, not only the PRNG key. Use `-1` 
 
 | Capability | Command / hook | Notes |
 |------------|----------------|-------|
-| Richer session JSON | `make agent-context` | Preflight excerpt, roadmap, recent runs, **W&B sweep summary** (`wandb_sweeps`), GPU contention hint |
+| Richer session JSON | `make agent-context` | Preflight excerpt, roadmap, recent runs, **W&B sweep summary** (`wandb_sweeps`), GPU contention hint (`pgrep` patterns). **Enforcement:** project `beforeShellExecution` hook — [`cursor-before-shell-gpu-terminal-contention.md`](cursor-before-shell-gpu-terminal-contention.md) |
 | Archive completed run | `ow runs archive --run <path> [--dry-run] [--confirm]` | Refuses if eval queue has active jobs; moves tree under `outputs/archived/` |
 | Checkpoint delete | `ow runs checkpoint delete --run <path> --checkpoint <pkl> [--confirm]` | Blocks promoted incumbent; `--dry-run` previews |
 | Cancel W&B sweep runs | `ow sweep cancel --backend wandb --sweep-id <id> [--dry-run]` | JSON lists `cancelled_run_ids` |
