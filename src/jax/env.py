@@ -230,6 +230,12 @@ def _reference_planet_tables(
     return tuple(np.asarray(row) for row in rows)
 
 
+def _env_uses_kaggle_reference(cfg: TaskConfig) -> bool:
+    """True when reset/step should call Kaggle reference generators via pure_callback."""
+
+    return str(getattr(cfg, "env_parity_mode", "train")).strip().lower() == "kaggle"
+
+
 def _planet_table_specs() -> tuple[jax.ShapeDtypeStruct, ...]:
     return (
         jax.ShapeDtypeStruct((MAX_PLANETS,), jnp.int32),
@@ -502,7 +508,17 @@ def _spawn_comet_group(
     )
 
 
-def _pre_launch_comets(
+def _pre_launch_comets_train(
+    game: JaxGameState,
+) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
+    """Expire comet slots only; training never spawns reference comet paths."""
+
+    return _expire_comets_pre_launch(
+        game.planets, game.initial_planets, game.comets
+    )
+
+
+def _pre_launch_comets_kaggle(
     game: JaxGameState,
     comet_speed: float,
 ) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
@@ -524,10 +540,114 @@ def _pre_launch_comets(
     )
 
 
-def reset(
+def _reset_train(
     key: jax.Array, cfg: TaskConfig
 ) -> tuple[JaxEnvState, TurnBatch]:
-    """Create a deterministic initial board from a JAX PRNG key."""
+    """JAX-native planet layout for training (no host callbacks)."""
+
+    initial_planet_count = MAX_PLANETS - TOTAL_COMETS
+    fleet_count = max_fleets(cfg)
+    group_count = max(1, initial_planet_count // 4)
+    active_count = group_count * 4
+
+    idx = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
+    group = idx // 4
+    quadrant = idx % 4
+    active = idx < active_count
+
+    key_angle, key_radius, key_prod, key_ships, key_home, key_vel, key_seed = (
+        jax.random.split(key, 7)
+    )
+    base_angles = jax.random.uniform(
+        key_angle, (group_count,), minval=0.18, maxval=1.39
+    )
+    base_orbit = jax.random.uniform(
+        key_radius, (group_count,), minval=22.0, maxval=62.0
+    )
+    prod_group = jax.random.randint(
+        key_prod, (group_count,), minval=1, maxval=6
+    ).astype(jnp.float32)
+    ships_group = jax.random.randint(
+        key_ships, (group_count,), minval=5, maxval=31
+    ).astype(jnp.float32)
+    radius_group = 1.0 + jnp.log(prod_group)
+
+    safe_group = jnp.minimum(group, group_count - 1)
+    theta = jnp.take(base_angles, safe_group)
+    orbit = jnp.take(base_orbit, safe_group)
+    base_x = 50.0 + orbit * jnp.cos(theta)
+    base_y = 50.0 + orbit * jnp.sin(theta)
+    x = jnp.where(
+        quadrant == 0,
+        base_y,
+        jnp.where(
+            quadrant == 1,
+            100.0 - base_x,
+            jnp.where(quadrant == 2, base_x, 100.0 - base_y),
+        ),
+    )
+    y = jnp.where(
+        quadrant == 0,
+        base_x,
+        jnp.where(
+            quadrant == 1,
+            base_y,
+            jnp.where(quadrant == 2, 100.0 - base_y, 100.0 - base_x),
+        ),
+    )
+    production = jnp.where(active, jnp.take(prod_group, safe_group), 0.0)
+    ships = jnp.where(active, jnp.take(ships_group, safe_group), 0.0)
+    radius = jnp.where(active, jnp.take(radius_group, safe_group), 0.0)
+
+    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
+    home_group = jax.random.randint(key_home, (), minval=0, maxval=group_count)
+    home = (group == home_group) & active
+    if int(getattr(cfg, "player_count", 2)) == 4:
+        owner = jnp.where(home, quadrant, owner)
+        ships = jnp.where(home, 10.0, ships)
+    else:
+        owner = jnp.where(home & (quadrant == 0), 0, owner)
+        owner = jnp.where(home & (quadrant == 3), 1, owner)
+        ships = jnp.where(home & ((quadrant == 0) | (quadrant == 3)), 10.0, ships)
+
+    planets = JaxPlanetState(idx, owner, x, y, radius, ships, production, active)
+    empty_fleets = JaxFleetState(
+        id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        x=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        y=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        angle=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        from_planet_id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        ships=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        active=jnp.zeros((fleet_count,), dtype=bool),
+    )
+    seed = jax.random.randint(key_seed, (), 0, 2**31 - 1, dtype=jnp.int32)
+    game = JaxGameState(
+        step=jnp.array(0, dtype=jnp.int32),
+        player=jnp.array(0, dtype=jnp.int32),
+        angular_velocity=jax.random.uniform(key_vel, (), minval=0.025, maxval=0.05),
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        episode_seed=seed,
+        planets=planets,
+        initial_planets=planets,
+        fleets=empty_fleets,
+        comets=empty_comet_state(),
+    )
+    history = empty_feature_history(cfg)
+    batch, feature_history = encode_learner_turn(game, cfg, history)
+    env_state = JaxEnvState(
+        game=game,
+        learner_player=jnp.array(0, dtype=jnp.int32),
+        episode_count=jnp.array(0, dtype=jnp.int32),
+        feature_history=feature_history,
+    )
+    return env_state, batch
+
+
+def _reset_kaggle_reference(
+    key: jax.Array, cfg: TaskConfig
+) -> tuple[JaxEnvState, TurnBatch]:
+    """Kaggle-aligned reset via ``generate_planets`` (uses pure_callback when jitted)."""
 
     fleet_count = max_fleets(cfg)
     key_seed, key_vel = jax.random.split(key)
@@ -581,6 +701,20 @@ def reset(
         feature_history=feature_history,
     )
     return env_state, batch
+
+
+def reset(
+    key: jax.Array, cfg: TaskConfig
+) -> tuple[JaxEnvState, TurnBatch]:
+    """Create a deterministic initial board from a JAX PRNG key.
+
+    Training uses :func:`_reset_train` (no host callbacks). Set
+    ``task.env_parity_mode=kaggle`` for Kaggle ``generate_planets`` parity.
+    """
+
+    if _env_uses_kaggle_reference(cfg):
+        return _reset_kaggle_reference(key, cfg)
+    return _reset_train(key, cfg)
 
 
 def learner_player_for_episode(
@@ -762,8 +896,13 @@ def step_multi_player(
     """
 
     previous_game = state.game
-    comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
-    planets, initial_planets, comets = _pre_launch_comets(previous_game, comet_speed)
+    if _env_uses_kaggle_reference(cfg):
+        comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
+        planets, initial_planets, comets = _pre_launch_comets_kaggle(
+            previous_game, comet_speed
+        )
+    else:
+        planets, initial_planets, comets = _pre_launch_comets_train(previous_game)
     previous_game = previous_game._replace(
         planets=planets, initial_planets=initial_planets, comets=comets
     )

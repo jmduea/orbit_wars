@@ -1,0 +1,41 @@
+name: JAX trace hygiene
+
+on:
+  pull_request:
+    paths:
+      - "src/jax/**"
+      - "tests/test_jax_trace_hygiene.py"
+      - "scripts/jax_trace_hygiene.sh"
+      - "docs/architecture/jax-trace-tiers.md"
+      - ".github/workflows/jax-trace-hygiene.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "src/jax/**"
+      - "tests/test_jax_trace_hygiene.py"
+      - "scripts/jax_trace_hygiene.sh"
+
+concurrency:
+  group: jax-trace-hygiene-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jax-trace-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: JAX trace tier hygiene
+        run: make test-jax-trace-hygiene
+        env:
+          JAX_PLATFORMS: cpu

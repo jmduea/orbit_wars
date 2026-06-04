@@ -10,6 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = REPO_ROOT / "docs"
 README = DOCS_ROOT / "README.md"
+BENCHMARKS_README = DOCS_ROOT / "benchmarks" / "README.md"
 ONBOARDING = DOCS_ROOT / "ONBOARDING.md"
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -53,6 +54,14 @@ def _assert_link_resolves(base_dir: Path, href: str) -> None:
 @pytest.mark.parametrize("href", _extract_markdown_links(README.read_text(encoding="utf-8")))
 def test_docs_readme_links_resolve(href: str) -> None:
     _assert_link_resolves(DOCS_ROOT, href)
+
+
+@pytest.mark.parametrize(
+    "href",
+    _extract_markdown_links(BENCHMARKS_README.read_text(encoding="utf-8")),
+)
+def test_docs_benchmarks_readme_links_resolve(href: str) -> None:
+    _assert_link_resolves(DOCS_ROOT / "benchmarks", href)
 
 
 def test_docs_readme_start_here_excludes_brain_dump() -> None:
