@@ -108,7 +108,8 @@
     padding: 28px 20px;
     overflow-x: auto;
   }
-  svg.flow { display: block; width: 100%; min-width: 380px; height: auto; }
+  svg.flow { display: block; width: 100%; min-width: 420px; height: auto; }
+  .flow .edge, .flow .lbl { pointer-events: none; }
 
   .flow text {
     font-family: var(--mono);
@@ -126,10 +127,16 @@
   .node.bad rect { fill: rgba(198, 69, 69, 0.10); stroke: var(--error); }
   .node.alt rect { fill: rgba(93, 184, 166, 0.10); stroke: var(--accent-teal); }
 
-  .node { cursor: pointer; transition: transform 120ms ease; }
-  .node:hover { transform: translateY(-1px); }
+  .node { cursor: pointer; }
+  .node:hover rect,
+  .node:hover path {
+    stroke: var(--primary);
+    stroke-width: 2;
+  }
+  .node:hover:not(.gate) rect { fill: var(--surface-card); }
   .node.active rect,
   .node.active path { stroke: var(--primary); stroke-width: 2; }
+  .node.active:not(.gate) rect { fill: var(--surface-card); }
 
   .edge { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
   .edge.no { stroke: var(--error); stroke-dasharray: 4 4; marker-end: url(#arrow-err); }
@@ -250,7 +257,7 @@
   <div class="layout">
     <div>
       <div class="canvas-wrap">
-        <svg class="flow" viewBox="0 0 420 1180" xmlns="http://www.w3.org/2000/svg" aria-label="SSOT training pipeline flowchart">
+        <svg class="flow" viewBox="0 0 520 1120" xmlns="http://www.w3.org/2000/svg" aria-label="SSOT training pipeline flowchart">
           <defs>
             <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" fill="#6c6a64"/>
@@ -266,44 +273,47 @@
             </marker>
           </defs>
 
-          <!-- edges -->
+          <!-- edges (drawn under nodes; side rails avoid box overlap) -->
+          <!-- main spine -->
           <path class="edge" d="M210,68 L210,88"/>
           <path class="edge" d="M210,128 L210,148"/>
-          <path class="edge yes" d="M210,188 L210,208"/>
-          <path class="edge no" d="M280,168 L350,168 L350,1120 L300,1120"/>
-          <text class="lbl" x="288" y="162">fail</text>
-
+          <path class="edge yes" d="M210,204 L210,208"/>
           <path class="edge" d="M210,248 L210,268"/>
-          <path class="edge yes" d="M155,298 L80,298 L80,618 L155,618"/>
-          <text class="lbl" x="62" y="460">known good</text>
-          <path class="edge no" d="M265,308 L340,308 L340,1120 L300,1120"/>
-          <text class="lbl" x="348" y="302">known fail</text>
-          <path class="edge" d="M210,328 L210,348"/>
-
+          <path class="edge yes" d="M210,324 L210,348"/>
+          <path class="edge" d="M210,388 L210,408"/>
           <path class="edge yes" d="M210,464 L210,478"/>
-          <path class="edge no" d="M280,436 L340,436 L340,1120"/>
-          <text class="lbl" x="288" y="430">fail</text>
-          <path class="edge alt" d="M155,436 L60,436 L60,1040 L155,1040"/>
-          <text class="lbl" x="28" y="720">W&amp;B sweep</text>
+          <path class="edge" d="M210,518 L210,538"/>
+          <path class="edge yes" d="M210,594 L210,598"/>
+          <path class="edge" d="M210,638 L210,668"/>
+          <path class="edge" d="M210,716 L210,748"/>
+          <path class="edge yes" d="M210,804 L210,828"/>
+          <path class="edge" d="M210,868 L210,908"/>
+          <path class="edge yes" d="M210,948 L210,970"/>
 
-          <path class="edge yes" d="M210,538 L210,552"/>
-          <path class="edge no" d="M280,516 L340,516 L340,1120"/>
-          <text class="lbl" x="288" y="510">fail</text>
+          <!-- right fail rail (x=468, clear of boxes — max box edge ≈365) -->
+          <path class="edge no" d="M265,176 L468,176"/>
+          <path class="edge no" d="M265,296 L468,296"/>
+          <path class="edge no" d="M265,436 L468,436"/>
+          <path class="edge no" d="M265,566 L468,566"/>
+          <path class="edge no" d="M265,776 L468,776"/>
+          <path class="edge no" d="M468,176 L468,1060 L405,1078"/>
+          <text class="lbl" x="372" y="172">fail</text>
+          <text class="lbl" x="352" y="292">known fail</text>
+          <text class="lbl" x="372" y="432">fail</text>
+          <text class="lbl" x="372" y="562">fail</text>
+          <text class="lbl" x="340" y="772">500M exhaust</text>
 
-          <path class="edge yes" d="M210,618 L210,632"/>
-          <path class="edge no" d="M280,596 L340,596 L340,1120"/>
-          <text class="lbl" x="288" y="590">fail</text>
+          <!-- left bypass: registry known-good → long train -->
+          <path class="edge yes" d="M155,296 L38,296 L38,618 L155,618"/>
+          <text class="lbl" x="8" y="460">known good</text>
 
-          <path class="edge" d="M210,648 L210,668"/>
-          <path class="edge" d="M210,716 L210,736"/>
-          <path class="edge yes" d="M210,794 L210,814"/>
-          <path class="edge no" d="M280,774 L340,774 L340,1120"/>
-          <text class="lbl" x="288" y="768">500M exhaust</text>
-          <path class="edge" d="M155,754 L80,754 L80,628 L155,628"/>
-          <text class="lbl" x="48" y="690">retry</text>
+          <!-- left branch: W&B sweep exit after preflight gate -->
+          <path class="edge alt" d="M155,436 L22,436 L22,418"/>
+          <text class="lbl" x="4" y="430">W&amp;B sweep</text>
 
-          <path class="edge yes" d="M210,874 L210,894"/>
-          <path class="edge yes" d="M210,954 L210,974"/>
+          <!-- left loop: qualifier retry → long train -->
+          <path class="edge" d="M155,776 L18,776 L18,618 L155,618"/>
+          <text class="lbl" x="2" y="700">retry</text>
 
           <!-- nodes -->
           <g class="node" data-k="config" transform="translate(110,28)">
@@ -386,19 +396,19 @@
             <text class="sub" x="135" y="32" text-anchor="middle">trained weights · noop/random legs</text>
           </g>
 
-          <g class="node ok term" data-k="done" transform="translate(110,988)">
+          <g class="node ok term" data-k="done" transform="translate(110,970)">
             <rect width="200" height="36"/>
             <text x="100" y="22" text-anchor="middle">✓ Submit-valid complete</text>
           </g>
 
-          <g class="node bad term" data-k="bad" transform="translate(110,1100)">
-            <rect width="200" height="36"/>
-            <text x="100" y="22" text-anchor="middle">✗ Bad config cache</text>
+          <g class="node alt term" data-k="sweep" transform="translate(8,404)">
+            <rect width="128" height="32"/>
+            <text x="64" y="20" text-anchor="middle">↩ W&amp;B sweep stop</text>
           </g>
 
-          <g class="node alt term" data-k="sweep" transform="translate(110,1020)">
+          <g class="node bad term" data-k="bad" transform="translate(305,1060)">
             <rect width="200" height="36"/>
-            <text x="100" y="22" text-anchor="middle">↩ W&amp;B sweep stop</text>
+            <text x="100" y="22" text-anchor="middle">✗ Bad config cache</text>
           </g>
         </svg>
 
