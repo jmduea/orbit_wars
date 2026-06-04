@@ -9,8 +9,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import jax
 from src.artifacts.tournament.bracket.state import load_bracket_state
-from src.config.schema import ArtifactsConfig, OutputConfig, SsotPipelineConfig, TrainConfig
+from src.config.schema import (
+    ArtifactsConfig,
+    OutputConfig,
+    SsotPipelineConfig,
+    TrainConfig,
+)
 from src.game.constants import MAX_PLANETS
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, empty_comet_state
 from src.jax.qualifier_calibration import load_qualifier_calibration
@@ -26,6 +32,7 @@ from src.jax.tournament_qualifiers.promotion import (
 )
 from src.jax.tournament_qualifiers.runner import (
     evaluate_qualifier_legs,
+    prior_checkpoint_for_qualifier_eval,
     ssot_qualifier_tick,
 )
 
@@ -47,7 +54,9 @@ def test_stage_promotion_uses_final_score_win_rates_not_rollout_metric() -> None
 
 
 def test_missing_games_blocks_promotion() -> None:
-    verdict = evaluate_stage_promotion(stage=2, leg_wins={"noop": (0, 0), "random": (0, 0)})
+    verdict = evaluate_stage_promotion(
+        stage=2, leg_wins={"noop": (0, 0), "random": (0, 0)}
+    )
     assert not verdict.promoted
     assert verdict.fail_reason is not None
 
@@ -236,3 +245,75 @@ def test_ssot_interval_skips_eval_when_not_qualifier_phase(tmp_path: Path) -> No
         output_root=tmp_path,
     )
     assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+
+
+def test_prior_checkpoint_for_qualifier_eval_prefers_numbered(tmp_path: Path) -> None:
+    run_dir = tmp_path / "checkpoints"
+    run_dir.mkdir()
+    numbered = run_dir / "jax_ckpt_000040.pkl"
+    numbered.write_bytes(b"x")
+    (run_dir / "jax_ckpt_last.pkl").write_bytes(b"y")
+    path = prior_checkpoint_for_qualifier_eval(run_dir, update=50, interval=10)
+    assert path == numbered
+
+
+def test_record_phase_does_not_run_qualifier_eval(tmp_path: Path) -> None:
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 2
+    ckpt = tmp_path / "ckpt.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 10}))
+    tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+        phase="record",
+    )
+    assert not any(e.get("event") == "ssot_qualifier_eval" for e in tick.events)
+
+
+def test_eval_phase_promotes_before_rollout_stage_view(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    from src.jax import tournament_qualifiers
+
+    def _fake_legs() -> dict[str, tuple[int, int]]:
+        return {"random": (6, 10)}
+
+    monkeypatch.setattr(
+        tournament_qualifiers.runner,
+        "evaluate_qualifier_legs",
+        lambda *_args, **_kwargs: _fake_legs(),
+    )
+    cfg = _ssot_cfg(tmp_path, budget=10_000_000)
+    cfg.artifacts.ssot_pipeline.qualifier_games_per_seed = 2
+    state_path = tmp_path / "campaigns" / "ssot_demo" / "bracket" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({"ssot_qualifier_stage": 1, "phase": "qualifier", "entries": {}}),
+        encoding="utf-8",
+    )
+    ckpt = tmp_path / "prior.pkl"
+    ckpt.write_bytes(pickle.dumps({"update": 0}))
+    eval_tick = ssot_qualifier_tick(
+        cfg,
+        update=10,
+        total_env_steps=100,
+        checkpoint_path=ckpt,
+        output_root=tmp_path,
+        phase="eval",
+    )
+    assert eval_tick.qualifier_stage == 2
+    view = ssot_rollout_stage_view(
+        eval_tick.qualifier_stage,
+        10,
+        snapshot_ids=jnp.zeros((0,), dtype=jnp.int32),
+        snapshot_valid_mask=jnp.zeros((0,), dtype=bool),
+        snapshot_updates=jnp.zeros((0,), dtype=jnp.int32),
+    )
+    probs = np.asarray(jax.device_get(view.family_probs), dtype=np.float64)
+    expected = np.asarray(opponent_family_probs_for_stage(2), dtype=np.float64)
+    assert np.allclose(probs, expected, rtol=0.0, atol=1e-5)
