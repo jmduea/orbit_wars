@@ -1,0 +1,33 @@
+{
+  "manifest_id": "nuclear-cherry-pick-throughput-anchor-2026-06-05",
+  "assessed_date": "2026-06-05",
+  "baseline_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+  "baseline_branch": "throughput-baseline",
+  "baseline_gates": {
+    "throughput_e2e": {
+      "preset": "tier2_primary",
+      "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
+      "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput.json",
+      "verdict": "pending"
+    },
+    "learn_proof": {
+      "model": "transformer_factorized_small",
+      "through": "beat_noop",
+      "artifact": "outputs/benchmarks/cherry-pick/anchor_learn_proof.json",
+      "verdict": "pending"
+    },
+    "parity": {
+      "command": "make test-kaggle-parity",
+      "verdict": "pending"
+    }
+  },
+  "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), tier-2 production training throughput within the launch-hygiene-e2e baseline pass band, and learn-proof ladder VERIFIED at calibrated thresholds.",
+  "candidates": [],
+  "integration_state": {
+    "branch": "throughput-baseline-integration",
+    "ordered_shas": [],
+    "last_integrated_sha": null,
+    "integration_status": "building"
+  },
+  "decision": "Phase 1 anchor proof pending; populate baseline_gates after U1 GPU capture on throughput-baseline."
+}
