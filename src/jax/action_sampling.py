@@ -29,9 +29,13 @@ from src.jax.planet_flow import (
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
+    apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_to_turn_batch_v2,
+    factored_unshielded_topk_sampling_masks,
+    rollout_factorized_sampling_mode,
     selected_factored_launch_is_exact_safe_jax,
+    selected_factored_launch_passes_cheap_shield_jax,
     trajectory_shield_final_validate_selected,
     trajectory_shield_mode,
 )
@@ -485,13 +489,35 @@ def _sample_shielded_factored_sequence_with_params(
         decode_carry = _merge_factorized_decode_carry(
             decode_carry, proposed_decode_carry, sequence_active
         )
-        shielded = jax.vmap(
-            lambda game_row, batch_row, ships: (
-                apply_configured_trajectory_shield_factorized_topk(
-                    game_row, batch_row, cfg.task, remaining_planet_ships=ships
+        use_selected_validate = (
+            rollout_factorized_sampling_mode(cfg.task) == "selected_validate"
+        )
+        if use_selected_validate:
+            unshielded = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    factored_unshielded_topk_sampling_masks(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
                 )
-            )
-        )(game, batch, remaining_ships)
+            )(game, batch, remaining_ships)
+            shield_for_stack = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    apply_cheap_trajectory_shield_factorized_topk(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
+                )
+            )(game, batch, remaining_ships)
+            shielded = unshielded
+            stack_shield_mask = shield_for_stack.ship_bucket_mask
+        else:
+            shielded = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    apply_configured_trajectory_shield_factorized_topk(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
+                )
+            )(game, batch, remaining_ships)
+            stack_shield_mask = shielded.ship_bucket_mask
         if track_shield_diagnostics:
             diagnostics = _merge_shield_step_diagnostics(
                 diagnostics,
@@ -540,6 +566,42 @@ def _sample_shielded_factored_sequence_with_params(
             & (launched > 0.0)
             & jnp.where(continuous, ship_fraction > 0.0, bucket > 0)
         )
+
+        if use_selected_validate:
+            cheap_safe = jax.vmap(
+                lambda game_row, batch_row, src, slot, bkt, ships, stop_value, active: (
+                    selected_factored_launch_passes_cheap_shield_jax(
+                        game_row,
+                        batch_row,
+                        cfg.task,
+                        src,
+                        slot,
+                        bkt,
+                        ships,
+                        stop_value,
+                        active,
+                    )
+                )
+            )(
+                game,
+                batch,
+                source,
+                target_slot,
+                bucket,
+                launched,
+                stop,
+                sequence_active,
+            )
+            reject_launch = launch_valid & (~cheap_safe)
+            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+            ship_fraction = jnp.where(
+                reject_launch,
+                jnp.zeros_like(ship_fraction),
+                ship_fraction,
+            )
+            launched = jnp.where(reject_launch, 0.0, launched)
+            launch_valid = launch_valid & cheap_safe
 
         # Tiered mode: cheap mask for sampling, exact check only the sampled launch.
         # Rejected launches are converted into stop/no-op so replay log-prob is
@@ -608,7 +670,7 @@ def _sample_shielded_factored_sequence_with_params(
         ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(
             ship_fraction
         )
-        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(shield_step_mask)
+        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(stack_shield_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
         proposed_decode_carry = factorized_decode_advance_carry(
             params,
@@ -688,8 +750,12 @@ def _sample_shielded_factored_sequence_with_params(
     tiered_revalidate = trajectory_shield_mode(
         cfg.task
     ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)
+    selected_validate_replay = (
+        rollout_factorized_sampling_mode(cfg.task) == "selected_validate"
+    )
+    recompute_logprob = tiered_revalidate or selected_validate_replay
     if carry_enabled:
-        if tiered_revalidate:
+        if recompute_logprob:
             decoder_hidden_out = _factorized_decoder_hidden_from_teacher_sequence(
                 params,
                 policy,
@@ -703,7 +769,7 @@ def _sample_shielded_factored_sequence_with_params(
             decoder_hidden_out = decode_carry.state
     else:
         decoder_hidden_out = None
-    if tiered_revalidate:
+    if recompute_logprob:
         replay = replay_factored_sequence_logprob(
             params,
             policy,
