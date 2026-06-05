@@ -102,3 +102,4 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
   uv run ow benchmark training --preset primary --label gate --updates 20 --warmup 2 \
     --out /tmp/gate.json --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
   ```
+- **Throughput bisect (validation preset):** Apples-to-apples bisect via `scripts/issues_jax_30update_benchmark.py --preset validation` — do not conflate with `ssot_preflight` / multitask smokes; see `docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md`.
