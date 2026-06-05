@@ -27,6 +27,41 @@
     }
   },
   "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), tier-2 production training throughput within the launch-hygiene-e2e baseline pass band, and learn-proof ladder VERIFIED at calibrated thresholds.",
+  "throughput_gate_contract": {
+    "blocking_preset": "tier2_primary",
+    "blocking_metrics": [
+      "env_steps_per_sec",
+      "seconds_per_update_mean"
+    ],
+    "recorded_with_detailed_timing": [
+      "rollout_collect_seconds_per_update_mean",
+      "ppo_seconds_per_update_mean"
+    ],
+    "recorded_not_gated": [
+      "samples_per_sec"
+    ],
+    "primary_profile": {
+      "preset": "primary",
+      "training_format": "2p_only",
+      "notes": "PRIMARY_E2E_OVERRIDES + training/base.yaml format_weights 2:1.0 / 4:0.0 → single two_player rollout group (32 envs). Does not exercise 4p-only or mixed 2p+4p."
+    },
+    "supplementary_format_coverage": [
+      {
+        "label": "4p_only",
+        "override": "training=4p_32",
+        "blocking": false,
+        "phase": "characterization",
+        "notes": "Advisory until a 4p baseline is captured; does not block Phase 2 env-parity."
+      },
+      {
+        "label": "2p4p_split",
+        "override": "training=2p4p_32_split",
+        "blocking": false,
+        "phase": "characterization",
+        "notes": "Mixed-format production path; advisory until recalibrated baseline."
+      }
+    ]
+  },
   "candidates": [],
   "integration_state": {
     "branch": "throughput-baseline-integration",

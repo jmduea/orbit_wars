@@ -289,6 +289,8 @@ Synthesized from agent session `29f290d2-781a-474e-a1ef-4461f9159961`, including
 
 - **Manifest + bisect tooling alignment.** `docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md` records per-trial fields (`commit_sha`, `overrides[]`, `rollout_seconds_mean`, `env_steps_per_sec`) that should extend manifest `throughput_e2e` entries for env-parity candidates. Cherry-pick queue uses topological order from merge-base → `main`; PR #163 merge topology (`79162a20` first parent vs `6e75826` hygiene bundle) may require `commit_group` labels (see `co_landing_commits` in baseline JSON).
 
+- **Tier-2 format + metric scope (2026-06-05 feedback).** Blocking U1/tier-2 gate uses `primary` preset → **2p-only** (`format_weights` 2:1.0 / 4:0.0). **4p-only** (`training=4p_32`) and **mixed 2p+4p** (`training=2p4p_32_split`) are **supplementary characterization** runs (manifest `throughput_gate_contract.supplementary_format_coverage`) — advisory until format-specific baselines exist; they do **not** block Phase 2 env-parity. Gate authority: **`env_steps_per_sec`** + **`seconds_per_update_mean`** ceiling; **`samples_per_sec` recorded, not gated** (model-size dependent). Tier-2 captures should pass **`--detailed-timing`** for `rollout_collect_seconds_per_update_mean` / `ppo_seconds_per_update_mean` diagnosis.
+
 ---
 
 ## Outstanding Questions

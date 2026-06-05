@@ -70,7 +70,7 @@ test-launch-hygiene-e2e-throughput:
 	env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
 		uv run ow benchmark training \
 		--preset primary --label launch_hygiene_e2e_gate \
-		--updates 20 --warmup 2 \
+		--updates 20 --warmup 2 --detailed-timing \
 		--out /tmp/launch_hygiene_e2e_gate.json \
 		--baseline docs/benchmarks/launch-hygiene-e2e-baseline.json \
 		--assert-within-pct 10

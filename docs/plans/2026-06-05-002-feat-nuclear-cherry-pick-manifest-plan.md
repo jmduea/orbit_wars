@@ -157,6 +157,31 @@ flowchart TB
 
 **Verification:** `throughput-baseline` exists remotely or locally; manifest `baseline_gates.throughput_e2e.verdict: PASS`; learn-proof artifact path recorded; parity status documented.
 
+**Format coverage (U1 gap — supplementary, non-blocking for Phase 2):** Tier-2 `primary` preset today is **2p-only** (`training/base.yaml` `format_weights: {2: 1.0, 4: 0.0}` + `opponents=self_play_only`). Baseline capture `rollout_groups` are exclusively `two_player` / 32 envs. Phase 2 env-parity is blocked only by `make test-kaggle-parity`, not by format coverage. Record advisory characterization runs in manifest `throughput_gate_contract.supplementary_format_coverage`:
+
+```bash
+# Blocking U1 anchor (2p-only) — same as make test-launch-hygiene-e2e-throughput
+env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+  uv run ow benchmark training --preset primary --label anchor_2p \
+  --updates 20 --warmup 2 --detailed-timing --repeats 3 \
+  --out outputs/benchmarks/cherry-pick/anchor_throughput_2p.json \
+  --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
+
+# Advisory 4p-only (no --assert-within-pct until 4p baseline exists)
+env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+  uv run ow benchmark training --preset primary --overrides training=4p_32 \
+  --label anchor_4p --updates 20 --warmup 2 --detailed-timing --repeats 3 \
+  --out outputs/benchmarks/cherry-pick/anchor_throughput_4p.json
+
+# Advisory mixed 2p+4p split (16+16 envs)
+env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+  uv run ow benchmark training --preset primary --overrides training=2p4p_32_split \
+  --label anchor_2p4p --updates 20 --warmup 2 --detailed-timing --repeats 3 \
+  --out outputs/benchmarks/cherry-pick/anchor_throughput_2p4p.json
+```
+
+**Gate metrics (U1):** Blocking floors use **`env_steps_per_sec`** and **`seconds_per_update_mean`** ceiling only. **`samples_per_sec` is recorded but not gated** (scales with model width / samples per env-step). Use `--detailed-timing` on tier-2 runs to emit **`rollout_collect_seconds_per_update_mean`** and **`ppo_seconds_per_update_mean`** for operator diagnosis; timing buckets are not gated until a baseline exists.
+
 ---
 
 ### U2. Manifest artifact and schema guard

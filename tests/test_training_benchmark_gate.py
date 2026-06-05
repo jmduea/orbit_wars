@@ -63,6 +63,25 @@ def test_validate_baseline_requires_three_runs_and_gate() -> None:
     assert any("at least 3" in item for item in errors)
 
 
+def test_compare_passes_when_samples_below_floor_but_env_steps_ok() -> None:
+    pass_band = derive_e2e_pass_band(
+        {"env_steps_per_sec": {"mean": 4000.0, "stddev": 0.0}},
+        within_pct=10.0,
+    )
+    passed, failures = compare_e2e_throughput_to_baseline(
+        {
+            "env_steps_per_sec": 4000.0,
+            "samples_per_sec": 100.0,
+            "seconds_per_update_mean": 1.0,
+        },
+        pass_band=pass_band,
+    )
+
+    assert passed is True
+    assert failures == []
+    assert "samples_per_sec" not in pass_band.get("floors", {})
+
+
 def test_compare_fails_when_env_steps_below_floor() -> None:
     pass_band = derive_e2e_pass_band(
         {"env_steps_per_sec": {"mean": 4000.0, "stddev": 0.0}},

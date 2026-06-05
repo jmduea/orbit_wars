@@ -536,11 +536,9 @@ def derive_e2e_pass_band(
     factor_high = 1.0 + within_pct / 100.0
     floors: dict[str, float] = {}
     ceilings: dict[str, float] = {}
-    for metric in ("env_steps_per_sec", "samples_per_sec"):
-        stats = aggregate.get(metric)
-        if stats is None:
-            continue
-        floors[metric] = float(stats["mean"]) * factor_low
+    env_stats = aggregate.get("env_steps_per_sec")
+    if env_stats is not None:
+        floors["env_steps_per_sec"] = float(env_stats["mean"]) * factor_low
     seconds_stats = aggregate.get("seconds_per_update_mean")
     if seconds_stats is not None:
         ceilings["seconds_per_update_mean"] = float(seconds_stats["mean"]) * factor_high

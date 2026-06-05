@@ -59,8 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PCT",
         help=(
-            "Exit non-zero when measured env_steps/s, samples/s, or "
-            "seconds/update exceed baseline pass band (default from baseline or 10)."
+            "Exit non-zero when measured env_steps/s is below the baseline floor "
+            "or seconds/update exceeds the ceiling (default band from baseline or 10%%). "
+            "samples/s is recorded but not gated."
         ),
     )
     training.add_argument(
