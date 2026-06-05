@@ -1,0 +1,5 @@
+# @package _global_
+# Rollout throughput experiment: unshielded sampling masks + post-sample cheap validation.
+
+task:
+  rollout_factorized_sampling: selected_validate

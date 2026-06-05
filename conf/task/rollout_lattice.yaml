@@ -1,0 +1,5 @@
+# @package _global_
+# Explicit default: full per-sub-step trajectory shield lattice (current production behavior).
+
+task:
+  rollout_factorized_sampling: lattice

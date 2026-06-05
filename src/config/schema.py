@@ -21,6 +21,9 @@ class TaskConfig:
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
     trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
+    rollout_factorized_sampling: str = (
+        "lattice"  # lattice: full cheap shield mask per K-step; selected_validate: unshielded sample + point check
+    )
     # off: no trajectory filtering beyond ordinary action legality
     # cheap: feature-derived source/target/bucket mask, no horizon scan
     # exact: current full per-edge/per-bucket trajectory shield
