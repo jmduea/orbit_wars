@@ -6,14 +6,21 @@
   "baseline_gates": {
     "throughput_e2e": {
       "preset": "tier2_primary",
+      "training_format": "2p_only",
       "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
-      "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput.json",
-      "verdict": "admit",
-      "measured_commit_sha": "ac4b5b8090b0c087492d0ee0df78aae74089f882",
-      "gate_passed": true,
-      "env_steps_per_sec": 9627.617296393499,
-      "samples_per_sec": 48138.0864819675,
-      "seconds_per_update_mean": 1.6618857509005465
+      "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_2p.json",
+      "verdict": "reject",
+      "measured_commit_sha": "00746bacb97103160506cd076388df224f916922",
+      "gate_passed": false,
+      "env_steps_per_sec": 7754.957945596805,
+      "samples_per_sec": 38774.789727984025,
+      "seconds_per_update_mean": 2.0656463723661243,
+      "rollout_collect_seconds_per_update_mean": 1.2484655116996656,
+      "ppo_seconds_per_update_mean": 0.8109625613663714,
+      "gate_failures": [
+        "env_steps_per_sec 7754.9579 < floor 8798.6876",
+        "seconds_per_update_mean 2.0656 > ceiling 1.8006"
+      ]
     },
     "learn_proof": {
       "model": "transformer_factorized_small",
@@ -69,5 +76,5 @@
     "last_integrated_sha": null,
     "integration_status": "building"
   },
-  "decision": "Phase 1 U1 anchor throughput gate PASS (admit) at measured commit ac4b5b8; learn-proof ceiling and Kaggle parity captures still pending before env-parity substrate."
+  "decision": "Phase 1 U1 2p-only anchor throughput gate FAIL (reject) at worktree commit 00746bac (~7755 env_steps/s vs 8799 floor); learn-proof ceiling and Kaggle parity captures still pending before env-parity substrate."
 }

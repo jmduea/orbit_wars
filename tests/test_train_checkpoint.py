@@ -1,13 +1,89 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import jax
 from src.jax.train.checkpoint import (
     CheckpointHandler,
+    CheckpointResult,
     checkpoint_payload_builder,
     restore_historical_snapshot_pool,
 )
+
+
+def test_checkpoint_handler_skips_artifact_jobs_when_pipeline_disabled(
+    tmp_path: Path,
+) -> None:
+    """artifact_pipeline.enabled=false must not queue docker replay or sync replay."""
+    log_path = tmp_path / "metrics.jsonl"
+    checkpoint_path = tmp_path / "jax_ckpt_000100.pkl"
+    checkpoint_path.write_bytes(b"ckpt")
+    cfg = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            artifact_pipeline=SimpleNamespace(
+                enabled=False,
+                replay_async=True,
+                docker_validation_async=False,
+            ),
+            checkpoint_retention=SimpleNamespace(
+                keep_last_n=1,
+                keep_every_n_updates=0,
+                keep_best_k_by_metric=0,
+                best_metric_name="overall_win_rate",
+                best_metric_mode="max",
+                min_update_for_pruning=0,
+                dry_run_pruning=True,
+            ),
+            promotion=SimpleNamespace(
+                enabled=False,
+                strategy="metric",
+                metric_name="episode_reward_mean",
+            ),
+            tournament=SimpleNamespace(enabled=False),
+            replay=SimpleNamespace(enabled=True, output_dir="replays", max_steps=500),
+        ),
+        telemetry=SimpleNamespace(wandb=SimpleNamespace(log_artifacts=False)),
+    )
+    handler = CheckpointHandler(
+        cfg=cfg,
+        run_dir=tmp_path,
+        log_path=log_path,
+        run_context=SimpleNamespace(
+            evaluations_dir=tmp_path / "eval",
+            manifest_path=tmp_path / "manifest.json",
+        ),
+        telemetry=MagicMock(),
+        artifact_queue_dir=tmp_path / "queue",
+        checkpoint_pipeline=None,
+    )
+
+    with (
+        patch(
+            "src.jax.train.checkpoint.queue_optional_jobs_if_due",
+        ) as queue_jobs,
+        patch(
+            "src.jax.train.checkpoint.maybe_write_jax_checkpoint_replay",
+        ) as sync_replay,
+        patch(
+            "src.jax.train.checkpoint.queue_tournament_job_if_eligible",
+        ) as queue_tournament,
+    ):
+        handler.handle_results(
+            [
+                CheckpointResult(
+                    job_id="sync-100",
+                    update=100,
+                    status="committed",
+                    numbered_path=checkpoint_path,
+                    latest_path=tmp_path / "jax_ckpt_last.pkl",
+                    final=False,
+                )
+            ]
+        )
+
+    queue_jobs.assert_not_called()
+    sync_replay.assert_not_called()
+    queue_tournament.assert_not_called()
 
 
 def test_checkpoint_handler_records_failed_results(tmp_path: Path) -> None:
