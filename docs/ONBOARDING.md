@@ -101,6 +101,8 @@ Operational CLIs: JAX benchmarks, artifact workers, Kaggle Docker validation, at
 
 8. **Campaign outputs** — New runs use `outputs/campaigns/<campaign>/runs/<run_id>/` with Hydra snapshots, manifests, and checkpoints grouped by experimental question (`output.campaign=`).
 
+**See also:** [nomenclature RFC](nomenclature-rfc.md) — maps opaque jargon (tier-1/2, launch hygiene, Planet Flow) to descriptive terms and separates Kaggle mechanics parity from production training throughput gates.
+
 ---
 
 ## Guided Tour
