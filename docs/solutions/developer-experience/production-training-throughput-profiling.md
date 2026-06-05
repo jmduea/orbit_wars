@@ -24,6 +24,7 @@ related_components:
   - src/jax/action_sampling.py
   - src/jax/rollout/collect.py
   - src/jax/ppo_update.py
+  - scripts/issues_jax_30update_benchmark.py
 ---
 
 # Profile production training throughput before optimizing JAX hot paths
@@ -99,6 +100,32 @@ JAX tracing can add significant overhead or stall while writing trace artifacts,
 so start with timing buckets first. A stalled trace is less useful than a small,
 completed timing split.
 
+### Complementary: validation bisect benchmark
+
+`ow benchmark training --detailed-timing` answers **which bucket** (rollout vs PPO
+vs host) dominates on the current SHA. When the question is **cross-SHA throughput
+regression** — e.g. HEAD looks 10–30× slower than an older baseline — use the
+committed validation preset instead of ad-hoc smokes or tier-2 JSON:
+
+```bash
+uv run python scripts/issues_jax_30update_benchmark.py \
+  --preset validation --updates 30 --warmup 2 \
+  --label <label> --out /tmp/<label>.json
+```
+
+Read `env_steps_per_sec` plus `rollout_seconds_mean` / `update_seconds_mean` from
+the JSON payload. Do **not** treat tier-2 launch-hygiene e2e, `ssot_preflight`
+smokes, or multitask-smoke numbers as interchangeable with this preset.
+
+Preset comparability matters when bisecting: older artifacts (e.g.
+`docs/benchmarks/validation-500u.json` at `dcafdc8`) used
+`format=2p_4p_16env` + `training=workstation`; the current `--preset validation`
+bundle uses `training=2p4p_32_split`. Run the **same** preset command at each SHA
+and store `overrides[]` with every trial.
+
+Full bisect protocol and conflation table:
+[jax-validation-throughput-benchmark-and-bisect.md](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md).
+
 ## Why This Matters
 
 Microbenchmarks can be locally true and globally misleading. The sampler
@@ -126,6 +153,8 @@ inspection alone.
 - Before treating low `nvidia-smi` snapshots as evidence of CPU fallback.
 - Before changing PPO replay semantics to fix a training-loop throughput gap.
 - When a benchmark subprocess or JAX trace looks hung during first compile.
+- When stagger, multitask-smoke, or tier-2 e2e numbers disagree across SHAs —
+  run the validation preset at both commits before optimizing hot paths.
 
 ## Examples
 
@@ -157,6 +186,8 @@ hygiene validation with rollout/PPO log-prob parity handled deliberately.
 
 ## Related
 
+- Cross-SHA validation bisect (preset comparability, what not to conflate):
+  [jax-validation-throughput-benchmark-and-bisect.md](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md)
 - Benchmark CLI package (`ow benchmark training` runner): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - `docs/architecture/jax-policy-encoder.md` — shared encoder + separate policy/value
   heads; PPO replay encodes once before the factorized decoder scan (relevant when

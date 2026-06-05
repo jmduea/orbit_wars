@@ -17,10 +17,13 @@ tags:
   - preflight-learn-proof
   - benchmark-gates
   - rollout-throughput
+  - validation-preset
+  - bisect
 related_components:
   - docs/benchmarks/launch-hygiene-ablation.json
   - docs/benchmarks/launch-hygiene-e2e-baseline.json
   - docs/operator-runbook.md
+  - scripts/issues_jax_30update_benchmark.py
   - src/jax/action_sampling.py
 ---
 
@@ -46,10 +49,22 @@ When throughput parity looks unreachable, **do not** treat tier-2 pass as the on
 ### Gate hierarchy
 
 1. **Tier-1** (optional sanity): `make test-launch-hygiene-throughput` — isolated factorized sampler microbench.
-2. **Tier-2** (throughput authority when hot path is recoverable): `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` with `--assert-within-pct 10`.
+2. **Tier-2** (launch-hygiene e2e authority when hot path is recoverable): `make test-launch-hygiene-e2e-throughput` vs `docs/benchmarks/launch-hygiene-e2e-baseline.json` (pre-hygiene SHA `79162a…`) with `--assert-within-pct 10`. Uses `ow benchmark training --preset primary` — **not** the validation bisect preset.
 3. **Learner ablation** (tiebreaker when tier-2 fails and hot path is exhausted): compare arm A (pre-hygiene SHA) vs arm B (launch-hygiene `main`) on learn-proof through `beat_random`. **Winner = better learner, not throughput.**
 
 Document outcomes in `docs/benchmarks/launch-hygiene-ablation.json`. CI guards schema via `tests/test_training_benchmark_gate.py::test_committed_launch_hygiene_ablation_artifact`.
+
+### Tier-2 vs validation benchmark (do not conflate)
+
+These answer different questions. Mixing their `env_steps_per_sec` values produces false regressions or false confidence.
+
+| Benchmark | Baseline / recipe | Primary question | Throughput authority for |
+| --- | --- | --- | --- |
+| **Tier-2** (`make test-launch-hygiene-e2e-throughput`) | `docs/benchmarks/launch-hygiene-e2e-baseline.json` at pre-hygiene `79162a…`; `ow benchmark training --preset primary` | Did launch hygiene recover pre-hygiene e2e throughput? | **2026-06-02 merge decision** — keep hygiene when learner ablation wins |
+| **Validation** (`scripts/issues_jax_30update_benchmark.py --preset validation`) | Per-trial JSON at each SHA; current bundle is `training=2p4p_32_split` (older artifacts may use `format=2p_4p_16env` + `training=workstation`) | Where did cross-SHA env/rollout hot-path throughput regress? | **Bisect and cherry-pick workflows** — not tier-2 pass/fail |
+
+Tier-2 **failed out of band** in the 2026-06-02 decision; that does not block running the validation preset to localize newer slowdowns (comet env, train-loop refactors, etc.). Conversely, stagger perf or multitask-smoke wins do **not** clear a failing validation preset at HEAD. Bisect protocol and override-drift rules:
+[jax-validation-throughput-benchmark-and-bisect.md](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md).
 
 ### Ablation procedure
 
@@ -91,6 +106,7 @@ Using tier-2 alone would block merge indefinitely or force a hygiene revert that
 - Profiling confirms rollout collection (not PPO) dominates `seconds_per_update_mean`.
 - Product deadline pressure tempts disabling hygiene — run ablation first.
 - **Do not** use learner ablation to bypass tier-2 when hot-path fixes are still open — ablation is the tiebreaker, not a default skip.
+- **Do not** treat tier-2 pass/fail as the authority for cross-SHA bisect — use the validation preset and record `overrides[]` at every trial.
 
 ## Examples
 
@@ -123,6 +139,8 @@ Re-run procedure: `docs/operator-runbook.md` § Learner ablation.
 
 ## Related
 
+- Validation bisect benchmark (cross-SHA authority, preset comparability):
+  [jax-validation-throughput-benchmark-and-bisect.md](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md)
 - Tier-1 O(K²) fix: [launch-hygiene-incremental-carry-throughput.md](../performance-issues/launch-hygiene-incremental-carry-throughput.md)
 - Production-path profiling: [production-training-throughput-profiling.md](../developer-experience/production-training-throughput-profiling.md)
 - Operator commands: [operator-runbook.md](../../operator-runbook.md)
