@@ -15,6 +15,16 @@ Committed JSON and runbooks under this folder define verification thresholds and
 | [launch-hygiene-e2e-4p-baseline.json](launch-hygiene-e2e-4p-baseline.json) | 4p launch-hygiene baseline companion |
 | [launch-hygiene-ablation.json](launch-hygiene-ablation.json) | Launch-hygiene ablation reference |
 
+## Env parity A/B (comet / Kaggle generators)
+
+Isolate whether post–#188 comet stepping or Kaggle reference generators explain env-step cost:
+
+```bash
+uv run ow benchmark env-parity-ab --repeats 3 --out /tmp/env-parity-ab.json
+```
+
+Arms: `legacy` (comet-free hot path), `train` (production default), `kaggle` (reference `generate_planets` + comet spawn via `pure_callback`, diagnostic only). Compare `deltas.train_vs_legacy_pct` in the JSON; optional Hydra: `task=env_legacy` vs `task=kaggle_parity`.
+
 ## Runbooks
 
 | Doc | Topic |

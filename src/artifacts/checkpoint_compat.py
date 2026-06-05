@@ -81,7 +81,10 @@ def encoder_backbone_for_architecture(architecture: str) -> str:
     """Map ``model.architecture`` to the checkpoint encoder-backbone slug."""
 
     normalized = architecture.strip().lower()
-    if normalized == "planet_graph_transformer":
+    if normalized in {
+        "planet_graph_transformer",
+        "planet_graph_transformer_small",
+    }:
         return "planet_self_attention"
     raise ValueError(
         f"Unsupported model architecture for encoder_backbone metadata: {architecture!r}"

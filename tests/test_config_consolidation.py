@@ -56,7 +56,9 @@ PRIMARY_EVAL_PROFILES: dict[str, list[str]] = {
     "tournament_ready": ["artifacts.tournament.enabled=true"],
 }
 
-SACRED_ARCHITECTURES = frozenset({"planet_graph_transformer"})
+SACRED_ARCHITECTURES = frozenset(
+    {"planet_graph_transformer", "planet_graph_transformer_small"}
+)
 SACRED_POINTER_DECODERS = frozenset({"factorized_topk"})
 EXPERIMENTAL_POINTER_DECODERS = frozenset({"planet_flow_target_heatmap"})
 ACCEPTABLE_VALUE_HEADS = frozenset({"shared", "format_routed", "distributional"})
@@ -328,6 +330,48 @@ def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
     assert cfg.training.rollout_steps == 512
     assert cfg.training.update_chunk_rows == 2048
     assert cfg.model.max_moves_k == 1
+
+
+def test_multitask_smoke_overrides_compose() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model.architecture=planet_graph_transformer_small",
+            "task.candidate_count=3",
+            "task.edge_rank_mode=intercept_min",
+            "training.num_envs=2",
+            "training.rollout_microbatch_envs=2",
+            "training.rollout_steps=128",
+            "training.total_updates=20",
+            "training.update_chunk_rows=2048",
+            "opponents.mode.opponent=no_op",
+            "curriculum=off",
+            "output.campaign=multitask_smoke",
+        ]
+    )
+    assert cfg.model.architecture == "planet_graph_transformer_small"
+    assert cfg.opponents.mode.opponent == "no_op"
+    from src.jax.policy import build_jax_policy
+    from src.opponents.constants import validate_jax_training_opponent_mode
+
+    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    policy = build_jax_policy(cfg)
+    assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
+
+
+def test_jax_training_opponent_mode_normalization() -> None:
+    from src.opponents.constants import (
+        is_noop_jax_training_opponent_mode,
+        normalize_jax_training_opponent_mode,
+        validate_jax_training_opponent_mode,
+    )
+
+    for raw in ("no_op", "noop", "NO_OP"):
+        validate_jax_training_opponent_mode(raw)
+        assert normalize_jax_training_opponent_mode(raw) == "noop"
+        assert is_noop_jax_training_opponent_mode(raw)
+    validate_jax_training_opponent_mode("random")
+    with pytest.raises(ValueError, match="JAX training supports"):
+        validate_jax_training_opponent_mode("noop_only")
 
 
 def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(

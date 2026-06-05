@@ -21,6 +21,8 @@ from src.opponents.constants import (
     OPPONENT_OPPORTUNISTIC,
     OPPONENT_RANDOM,
     OPPONENT_TURTLE,
+    is_noop_jax_training_opponent_mode,
+    validate_jax_training_opponent_mode,
 )
 from src.opponents.jax_actions.builders import (
     build_noop_action_from_edge_batch,
@@ -365,6 +367,8 @@ def _sample_opponent_2p_action(
         (1 - opp_game.player).astype(jnp.int32)[:, None],
         axis=1,
     ).squeeze(axis=1)
+    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+        return build_noop_action_from_edge_batch(opp_game, opp_batch_cache, cfg)
     if cfg.opponents.mode.opponent == "self":
 
         def single_opponent_branch(_: None) -> JaxAction:
@@ -401,10 +405,8 @@ def _sample_opponent_2p_action(
         )
     if cfg.opponents.mode.opponent == "random":
         return _shielded_random_edge_action(opp_key, opp_game, opp_batch_cache, cfg)
-    raise ValueError(
-        "JAX training supports opponent='self' or opponent='random', "
-        f"got {cfg.opponents.mode.opponent!r}."
-    )
+    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    raise AssertionError("unreachable")
 
 
 
@@ -565,7 +567,11 @@ def _four_player_step_action(
     player_game = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_games)
     player_key = jax.random.fold_in(opp_key, player_id)
     slot_type = effective_type_ids[:, player_id]
-    if cfg.opponents.mode.opponent == "self":
+    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+        opponent_action = build_noop_action_from_edge_batch(
+            player_game, player_batch, cfg
+        )
+    elif cfg.opponents.mode.opponent == "self":
 
         def single_player_branch(_: None) -> JaxAction:
             return _sample_single_family_4p_action(
@@ -608,10 +614,8 @@ def _four_player_step_action(
             player_key, player_game, player_batch, cfg
         )
     else:
-        raise ValueError(
-            "JAX training supports opponent='self' or opponent='random', "
-            f"got {cfg.opponents.mode.opponent!r}."
-        )
+        validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+        raise AssertionError("unreachable")
     is_learner_player = learner_player == player_id
     return _select_env_action(is_learner_player, learner_action, opponent_action)
 

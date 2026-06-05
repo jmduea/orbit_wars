@@ -19,15 +19,23 @@ from src.jax.action_codec import (
     source_mask_from_bucket_mask_and_ships,
 )
 from src.jax.decoder_carry import decoder_carry_enabled
+from src.jax.decoders.factorized_topk_pointer import FactorizedDecodeCarry
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
-from src.jax.planet_flow import compile_planet_flow_action, planet_flow_sampling_target_mask
+from src.jax.planet_flow import (
+    compile_planet_flow_action,
+    planet_flow_sampling_target_mask,
+)
 from src.jax.rollout.types import ShieldedSequenceSample
 from src.jax.shield import (
     ShieldDiagnostics,
+    apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_to_turn_batch_v2,
+    factored_unshielded_topk_sampling_masks,
+    rollout_factorized_sampling_mode,
     selected_factored_launch_is_exact_safe_jax,
+    selected_factored_launch_passes_cheap_shield_jax,
     trajectory_shield_final_validate_selected,
     trajectory_shield_mode,
 )
@@ -43,6 +51,74 @@ from src.opponents.jax_actions.builders import (
     noop_edge_index,
     owned_planet_ships,
 )
+
+
+def _merge_factorized_decode_carry(
+    carry: FactorizedDecodeCarry,
+    proposed: FactorizedDecodeCarry,
+    active: jax.Array,
+) -> FactorizedDecodeCarry:
+    """Keep decoder carry fixed for env rows that finished the sub-move sequence."""
+
+    active = active.reshape(active.shape + (1,) * (carry.state.ndim - 1))
+    return FactorizedDecodeCarry(
+        state=jnp.where(active, proposed.state, carry.state),
+        input_emb=jnp.where(active, proposed.input_emb, carry.input_emb),
+    )
+
+
+def _factorized_decoder_hidden_from_teacher_sequence(
+    params: dict,
+    policy: object,
+    encoder_out,
+    *,
+    source_sequence: jax.Array,
+    target_slot_sequence: jax.Array,
+    decoder_hidden_in: jax.Array | None,
+    deterministic: bool,
+) -> jax.Array:
+    """Replay K decoder steps on committed teachers (no logits stacks)."""
+
+    from src.jax.policy import (
+        factorized_decode_advance_carry,
+        factorized_decode_init_carry,
+        factorized_decode_step,
+    )
+
+    sequence_k = source_sequence.shape[1]
+    carry = factorized_decode_init_carry(
+        params,
+        policy,
+        encoder_out,
+        decoder_hidden=decoder_hidden_in,
+    )
+
+    def replay_body(carry_in, step_idx):
+        _, step_carry = factorized_decode_step(
+            params,
+            policy,
+            encoder_out,
+            carry_in,
+            teacher_source=source_sequence[:, step_idx],
+            teacher_target_slot=target_slot_sequence[:, step_idx],
+            deterministic=deterministic,
+        )
+        next_carry = factorized_decode_advance_carry(
+            params,
+            policy,
+            encoder_out,
+            step_carry,
+            source=source_sequence[:, step_idx],
+            target_slot=target_slot_sequence[:, step_idx],
+        )
+        return next_carry, None
+
+    carry_out, _ = jax.lax.scan(
+        replay_body,
+        carry,
+        jnp.arange(sequence_k, dtype=jnp.int32),
+    )
+    return carry_out.state
 
 
 def _policy_variables(params: dict) -> dict:
@@ -335,7 +411,11 @@ def _sample_shielded_factored_sequence_with_params(
         build_hygiene_lookups,
         empty_forbidden_grid,
     )
-    from src.jax.policy import factorized_decode
+    from src.jax.policy import (
+        factorized_decode_advance_carry,
+        factorized_decode_init_carry,
+        factorized_decode_step,
+    )
 
     env_count = batch.planet_features.shape[0]
     player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
@@ -356,6 +436,12 @@ def _sample_shielded_factored_sequence_with_params(
     entropy_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     ship_fraction_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     decoder_hidden_carry = decoder_hidden_in if carry_enabled else None
+    decode_carry = factorized_decode_init_carry(
+        params,
+        policy,
+        encoder_out,
+        decoder_hidden=decoder_hidden_carry,
+    )
     remaining_ships = owned_planet_ships(game)
     hygiene_lookups = build_hygiene_lookups(batch)
     cumulative_forbidden = empty_forbidden_grid(
@@ -365,6 +451,7 @@ def _sample_shielded_factored_sequence_with_params(
         buckets=cfg.task.ship_bucket_count,
     )
     diagnostic_zero = _shield_diagnostic_zeros(env_count)
+    track_shield_diagnostics = cfg.telemetry.metric_groups.trajectory_shield_debug
     diagnostics = _empty_shield_diagnostics(env_count)
     bucket_mask_stack = jnp.zeros(
         (env_count, sequence_k, MAX_PLANETS, k, cfg.task.ship_bucket_count),
@@ -386,37 +473,57 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ) = carry
-        step_kwargs = {
-            "player_count": player_count,
-            "source_sequence": source_sequence,
-            "target_slot_sequence": slot_sequence,
-            "rng": jax.random.fold_in(key, step_idx),
-            "deterministic": deterministic,
-        }
-        if carry_enabled:
-            step_kwargs["decoder_hidden"] = decoder_hidden_carry
-        step_output = factorized_decode(
+        step_logits, proposed_decode_carry = factorized_decode_step(
             params,
             policy,
             encoder_out,
-            include_value=False,
-            **step_kwargs,
+            decode_carry,
+            teacher_source=source_sequence[:, step_idx],
+            teacher_target_slot=slot_sequence[:, step_idx],
+            rng=jax.random.fold_in(key, step_idx),
+            deterministic=deterministic,
         )
-        shielded = jax.vmap(
-            lambda game_row, batch_row, ships: (
-                apply_configured_trajectory_shield_factorized_topk(
-                    game_row, batch_row, cfg.task, remaining_planet_ships=ships
+        decode_carry = _merge_factorized_decode_carry(
+            decode_carry, proposed_decode_carry, sequence_active
+        )
+        use_selected_validate = (
+            rollout_factorized_sampling_mode(cfg.task) == "selected_validate"
+        )
+        if use_selected_validate:
+            unshielded = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    factored_unshielded_topk_sampling_masks(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
                 )
+            )(game, batch, remaining_ships)
+            shield_for_stack = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    apply_cheap_trajectory_shield_factorized_topk(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
+                )
+            )(game, batch, remaining_ships)
+            shielded = unshielded
+            stack_shield_mask = shield_for_stack.ship_bucket_mask
+        else:
+            shielded = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    apply_configured_trajectory_shield_factorized_topk(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
+                )
+            )(game, batch, remaining_ships)
+            stack_shield_mask = shielded.ship_bucket_mask
+        if track_shield_diagnostics:
+            diagnostics = _merge_shield_step_diagnostics(
+                diagnostics,
+                shielded.diagnostics,
+                rate_placeholder=diagnostic_zero,
             )
-        )(game, batch, remaining_ships)
-        diagnostics = _merge_shield_step_diagnostics(
-            diagnostics,
-            shielded.diagnostics,
-            rate_placeholder=diagnostic_zero,
-        )
         shield_step_mask = shielded.ship_bucket_mask
         step_bucket_mask = apply_cumulative_forbidden_to_shield(
             shield_step_mask,
@@ -430,10 +537,10 @@ def _sample_shielded_factored_sequence_with_params(
             in_axes=(0, 0, 0, 0, 0, 0, 0, None),
         )(
             jax.random.split(jax.random.fold_in(key, 10_000 + step_idx), env_count),
-            step_output.source_logits[:, step_idx, :],
-            step_output.target_logits[:, step_idx, :],
-            step_output.stop_logits[:, step_idx],
-            step_output.ship_logits[:, step_idx, :, :],
+            step_logits.source_logits,
+            step_logits.target_logits,
+            step_logits.stop_logits,
+            step_logits.ship_logits,
             source_mask,
             step_bucket_mask,
             deterministic,
@@ -459,6 +566,42 @@ def _sample_shielded_factored_sequence_with_params(
             & (launched > 0.0)
             & jnp.where(continuous, ship_fraction > 0.0, bucket > 0)
         )
+
+        if use_selected_validate:
+            cheap_safe = jax.vmap(
+                lambda game_row, batch_row, src, slot, bkt, ships, stop_value, active: (
+                    selected_factored_launch_passes_cheap_shield_jax(
+                        game_row,
+                        batch_row,
+                        cfg.task,
+                        src,
+                        slot,
+                        bkt,
+                        ships,
+                        stop_value,
+                        active,
+                    )
+                )
+            )(
+                game,
+                batch,
+                source,
+                target_slot,
+                bucket,
+                launched,
+                stop,
+                sequence_active,
+            )
+            reject_launch = launch_valid & (~cheap_safe)
+            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+            ship_fraction = jnp.where(
+                reject_launch,
+                jnp.zeros_like(ship_fraction),
+                ship_fraction,
+            )
+            launched = jnp.where(reject_launch, 0.0, launched)
+            launch_valid = launch_valid & cheap_safe
 
         # Tiered mode: cheap mask for sampling, exact check only the sampled launch.
         # Rejected launches are converted into stop/no-op so replay log-prob is
@@ -527,8 +670,19 @@ def _sample_shielded_factored_sequence_with_params(
         ship_fraction_sequence = ship_fraction_sequence.at[:, step_idx].set(
             ship_fraction
         )
-        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(shield_step_mask)
+        bucket_mask_stack = bucket_mask_stack.at[:, step_idx].set(stack_shield_mask)
         sequence_active = sequence_active & jnp.logical_not(stop.astype(bool))
+        proposed_decode_carry = factorized_decode_advance_carry(
+            params,
+            policy,
+            encoder_out,
+            decode_carry,
+            source=source,
+            target_slot=target_slot,
+        )
+        decode_carry = _merge_factorized_decode_carry(
+            decode_carry, proposed_decode_carry, sequence_active
+        )
         return (
             source_sequence,
             slot_sequence,
@@ -542,7 +696,7 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ), None
 
@@ -560,7 +714,7 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             _sequence_active,
-            decoder_hidden_out,
+            decode_carry,
             _cumulative_forbidden,
         ),
         _,
@@ -579,12 +733,13 @@ def _sample_shielded_factored_sequence_with_params(
             diagnostics,
             bucket_mask_stack,
             sequence_active,
-            decoder_hidden_carry,
+            decode_carry,
             cumulative_forbidden,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-    diagnostics = _finalize_shield_diagnostics(diagnostics)
+    if track_shield_diagnostics:
+        diagnostics = _finalize_shield_diagnostics(diagnostics)
     noop_idx = noop_edge_index(cfg.task)
     target_sequence = source_sequence * k + slot_sequence
     target_sequence = jnp.where(
@@ -592,24 +747,29 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
-    if carry_enabled:
-        final_output = factorized_decode(
-            params,
-            policy,
-            encoder_out,
-            player_count=player_count,
-            source_sequence=source_sequence,
-            target_slot_sequence=slot_sequence,
-            decoder_hidden=decoder_hidden_in,
-            deterministic=deterministic,
-            include_value=False,
-        )
-        decoder_hidden_out = final_output.decoder_hidden
-    tiered_revalidate = (
-        trajectory_shield_mode(cfg.task) == "tiered"
-        and trajectory_shield_final_validate_selected(cfg.task)
+    tiered_revalidate = trajectory_shield_mode(
+        cfg.task
+    ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)
+    selected_validate_replay = (
+        rollout_factorized_sampling_mode(cfg.task) == "selected_validate"
     )
-    if tiered_revalidate:
+    recompute_logprob = tiered_revalidate or selected_validate_replay
+    if carry_enabled:
+        if recompute_logprob:
+            decoder_hidden_out = _factorized_decoder_hidden_from_teacher_sequence(
+                params,
+                policy,
+                encoder_out,
+                source_sequence=source_sequence,
+                target_slot_sequence=slot_sequence,
+                decoder_hidden_in=decoder_hidden_in,
+                deterministic=deterministic,
+            )
+        else:
+            decoder_hidden_out = decode_carry.state
+    else:
+        decoder_hidden_out = None
+    if recompute_logprob:
         replay = replay_factored_sequence_logprob(
             params,
             policy,
@@ -851,6 +1011,8 @@ def _sample_shielded_sequence_with_params(
         decoder_hidden_out=decoder_hidden_out if carry_enabled else None,
         ship_fraction=ship_fraction_sequence if continuous else None,
     )
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     game,
@@ -873,13 +1035,14 @@ def _sample_policy_action_with_params(
         )
         if not isinstance(output, PlanetFlowPolicyOutput):
             raise TypeError(
-                "planet_flow_target_heatmap policy must return "
-                "PlanetFlowPolicyOutput."
+                "planet_flow_target_heatmap policy must return PlanetFlowPolicyOutput."
             )
         pressure_action = sample_planet_flow_pressure_action(
             key,
             output,
-            jnp.asarray(cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32),
+            jnp.asarray(
+                cfg.model.planet_flow.pressure_bucket_values, dtype=jnp.float32
+            ),
             planet_flow_sampling_target_mask(game, batch),
             deterministic=deterministic,
         )

@@ -1,0 +1,17 @@
+{
+  "baseline": {
+    "artifact": "docs/benchmarks/multitask-smoke-pgt-small-noop-baseline-20260604.json",
+    "update_20_env_steps_per_sec": 54.95225125797153,
+    "update_20_rollout_env_steps_per_sec": 55.2143905573233,
+    "steady_u11_u19_mean_env_steps_per_sec": 63.98
+  },
+  "after": {
+    "artifact": "/tmp/pgt_small_benchmark_after.json",
+    "commit_sha": "5911320af609bdd6647221d048488edb6e2e7e4f",
+    "env_steps_per_sec": 75.435144073781,
+    "seconds_per_update_mean": 3.39364368085005,
+    "seconds_total": 67.872873617001
+  },
+  "delta_vs_baseline_update_20_pct": 37.3,
+  "delta_vs_steady_mean_u11_u19_pct": 17.9
+}

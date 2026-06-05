@@ -9,6 +9,7 @@ from hydra.core.config_store import ConfigStore
 @dataclass(slots=True)
 class TaskConfig:
     """Environment and feature-shape configuration shared by all backends."""
+
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
@@ -21,6 +22,7 @@ class TaskConfig:
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
     trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
+    rollout_factorized_sampling: str = "lattice"  # lattice: full cheap shield mask per K-step; selected_validate: unshielded sample + point check
     # off: no trajectory filtering beyond ordinary action legality
     # cheap: feature-derived source/target/bucket mask, no horizon scan
     # exact: current full per-edge/per-bucket trajectory shield
@@ -32,7 +34,7 @@ class TaskConfig:
     intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
     # train: JAX-native reset/step (no pure_callback); kaggle: reference planet/comet paths
-    env_parity_mode: str = "train"
+    env_parity_mode: str = "train"  # train | kaggle | legacy (legacy = pre-#188 comet-free hot path)
 
 
 @dataclass(slots=True)
@@ -101,7 +103,9 @@ class TrainingConfig:
     lr: float = 6e-5
     max_grad_norm: float = 1.0
     log_every: int = 1  # TODO: telemetry?
-    reseed_every_updates: int = 50  # 0=off, -1=auto max(25, total_updates//10); default pinned by calibration
+    reseed_every_updates: int = (
+        50  # 0=off, -1=auto max(25, total_updates//10); default pinned by calibration
+    )
     reseed_on_plateau: bool = False
     plateau_metric: str = "episode_reward_mean"
     plateau_window: int = 10
@@ -393,9 +397,7 @@ class TrainConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     training_seed_set: list[int] = field(default_factory=list)
-    eval_seed_set: list[int] = field(
-        default_factory=lambda: [43, 44, 45, 46]
-    )
+    eval_seed_set: list[int] = field(default_factory=lambda: [43, 44, 45, 46])
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None
     from_promoted: str | None = None

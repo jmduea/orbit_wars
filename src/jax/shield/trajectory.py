@@ -765,6 +765,85 @@ def _edge_scalar_feature(batch, feature_name: str) -> jax.Array:
     return value.reshape(value.shape[:-1])
 
 
+def factored_unshielded_topk_sampling_masks(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """Edge + ship-bucket legality without sun-cross filtering (sampling legality)."""
+
+    return _unshielded_factorized_topk_result(
+        game,
+        batch,
+        env_cfg,
+        remaining_planet_ships=remaining_planet_ships,
+    )
+
+
+def selected_factored_launch_passes_cheap_shield_jax(
+    game,
+    batch,
+    env_cfg: Any,
+    source_row: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    ships: jax.Array,
+    stop_flag: jax.Array,
+    step_active: jax.Array,
+) -> jax.Array:
+    """Pointwise cheap-shield check for one sampled factorized launch."""
+
+    bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
+    bucket_ids = jnp.arange(bucket_count, dtype=jnp.int32)
+    real_bucket = bucket_ids > 0
+
+    from src.features.catalog.edge import intercept_anchor_label
+
+    anchor_speeds = tuple(
+        float(s) for s in getattr(env_cfg, "intercept_anchors", (1.0, 3.0, 6.0))
+    )
+    sun_by_anchor = jnp.stack(
+        [
+            _edge_scalar_feature(
+                batch, f"sun_cross_at_intercept_{intercept_anchor_label(speed)}"
+            )
+            > 0.5
+            for speed in anchor_speeds
+        ],
+        axis=-1,
+    )
+    launch_bucket_count = max(bucket_count - 1, 1)
+    launch_bucket_ids = jnp.maximum(bucket_ids - 1, 0)
+    anchor_idx = jnp.round(
+        launch_bucket_ids.astype(jnp.float32)
+        * max(len(anchor_speeds) - 1, 0)
+        / max(launch_bucket_count - 1, 1)
+    ).astype(jnp.int32)
+    bucket_sun_blocked = jnp.take(sun_by_anchor, anchor_idx, axis=-1)
+
+    edge_active = batch.edge_mask[source_row, target_slot]
+    bucket = jnp.clip(ship_bucket, 0, bucket_count - 1)
+    source_ships = game.planets.ships[source_row]
+    has_ships = (ships > 0.0) & (ships <= source_ships)
+    sun_ok = ~bucket_sun_blocked[source_row, target_slot, bucket]
+    bucket_ok = (
+        edge_active
+        & (bucket > 0)
+        & real_bucket[bucket]
+        & has_ships
+        & sun_ok
+    )
+
+    should_check = (
+        step_active.astype(bool)
+        & jnp.logical_not(stop_flag.astype(bool))
+        & (ships > 0.0)
+        & (bucket > 0)
+    )
+    return (~should_check) | bucket_ok
+
+
 def apply_cheap_trajectory_shield_factorized_topk(
     game,
     batch,

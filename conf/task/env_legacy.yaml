@@ -1,0 +1,5 @@
+# @package _global_
+# Pre-#188 comet-free JAX env hot path (variable planet reset unchanged).
+
+task:
+  env_parity_mode: legacy

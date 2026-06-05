@@ -1,0 +1,5 @@
+defaults:
+  - transformer_factorized_small
+  - _self_
+
+architecture: planet_graph_transformer_small

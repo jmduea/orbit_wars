@@ -270,6 +270,10 @@ def build_parser() -> argparse.ArgumentParser:
     factorized_sampler.add_argument("--repeats", type=int, default=30)
     factorized_sampler.add_argument("--assert-max-ms", type=float, default=None)
 
+    from src.cli.benchmark.env_parity_ab import add_env_parity_ab_parser
+
+    add_env_parity_ab_parser(subparsers)
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Short sweep to derive JAX learning-signal and tournament win-proof thresholds.",
