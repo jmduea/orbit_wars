@@ -8,7 +8,12 @@
       "preset": "tier2_primary",
       "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
       "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput.json",
-      "verdict": "pending"
+      "verdict": "admit",
+      "measured_commit_sha": "ac4b5b8090b0c087492d0ee0df78aae74089f882",
+      "gate_passed": true,
+      "env_steps_per_sec": 9627.617296393499,
+      "samples_per_sec": 48138.0864819675,
+      "seconds_per_update_mean": 1.6618857509005465
     },
     "learn_proof": {
       "model": "transformer_factorized_small",
@@ -29,5 +34,5 @@
     "last_integrated_sha": null,
     "integration_status": "building"
   },
-  "decision": "Phase 1 anchor proof pending; populate baseline_gates after U1 GPU capture on throughput-baseline."
+  "decision": "Phase 1 U1 anchor throughput gate PASS (admit) at measured commit ac4b5b8; learn-proof ceiling and Kaggle parity captures still pending before env-parity substrate."
 }
