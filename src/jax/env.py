@@ -233,7 +233,15 @@ def _reference_planet_tables(
 def _env_uses_kaggle_reference(cfg: TaskConfig) -> bool:
     """True when reset/step should call Kaggle reference generators via pure_callback."""
 
-    return str(getattr(cfg, "env_parity_mode", "train")).strip().lower() == "kaggle"
+    from src.game.shield_config import env_parity_mode
+
+    return env_parity_mode(cfg) == "kaggle"
+
+
+def _env_comet_physics_enabled(cfg: TaskConfig) -> bool:
+    from src.game.shield_config import env_comet_physics_enabled
+
+    return env_comet_physics_enabled(cfg)
 
 
 def _planet_table_specs() -> tuple[jax.ShapeDtypeStruct, ...]:
@@ -896,16 +904,17 @@ def step_multi_player(
     """
 
     previous_game = state.game
-    if _env_uses_kaggle_reference(cfg):
-        comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
-        planets, initial_planets, comets = _pre_launch_comets_kaggle(
-            previous_game, comet_speed
+    if _env_comet_physics_enabled(cfg):
+        if _env_uses_kaggle_reference(cfg):
+            comet_speed = float(getattr(cfg, "comet_speed", COMET_SPEED))
+            planets, initial_planets, comets = _pre_launch_comets_kaggle(
+                previous_game, comet_speed
+            )
+        else:
+            planets, initial_planets, comets = _pre_launch_comets_train(previous_game)
+        previous_game = previous_game._replace(
+            planets=planets, initial_planets=initial_planets, comets=comets
         )
-    else:
-        planets, initial_planets, comets = _pre_launch_comets_train(previous_game)
-    previous_game = previous_game._replace(
-        planets=planets, initial_planets=initial_planets, comets=comets
-    )
     planets = previous_game.planets
     fleets = previous_game.fleets
     next_fleet_id = previous_game.next_fleet_id
@@ -1019,7 +1028,12 @@ def _move_and_resolve(
     cfg: TaskConfig,
 ):
     comets = previous_game.comets
-    is_comet = _is_comet_planet(comets, planets.id)
+    comet_physics = _env_comet_physics_enabled(cfg)
+    is_comet = jnp.where(
+        comet_physics,
+        _is_comet_planet(comets, planets.id),
+        jnp.zeros_like(planets.id, dtype=bool),
+    )
     old_px, old_py = planets.x, planets.y
     init_dx = previous_game.initial_planets.x - BOARD_CENTER[0]
     init_dy = previous_game.initial_planets.y - BOARD_CENTER[1]
@@ -1039,8 +1053,13 @@ def _move_and_resolve(
     new_py = jnp.where(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
-    new_px, new_py, comets = _advance_comet_positions(
-        comets, planets, old_px, old_py, new_px, new_py
+    new_px, new_py, comets = jax.lax.cond(
+        comet_physics,
+        lambda _: _advance_comet_positions(
+            comets, planets, old_px, old_py, new_px, new_py
+        ),
+        lambda _: (new_px, new_py, comets),
+        None,
     )
     check_collision = jnp.where(is_comet, old_px >= 0.0, True)
 
@@ -1085,8 +1104,13 @@ def _move_and_resolve(
     moved_fleets = fleets._replace(x=new_fx, y=new_fy, active=fleets.active & (~remove))
     moved_planets = planets._replace(x=new_px, y=new_py)
     moved_planets = _resolve_combat(moved_planets, fleets, hit_any, hit_idx, cfg)
-    moved_planets, initial_planets, comets = _expire_comets_pre_launch(
-        moved_planets, previous_game.initial_planets, comets
+    moved_planets, initial_planets, comets = jax.lax.cond(
+        comet_physics,
+        lambda _: _expire_comets_pre_launch(
+            moved_planets, previous_game.initial_planets, comets
+        ),
+        lambda _: (moved_planets, previous_game.initial_planets, comets),
+        None,
     )
     return moved_planets, moved_fleets, comets
 
