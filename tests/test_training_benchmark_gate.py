@@ -13,6 +13,7 @@ from src.jax.training_benchmark import (
     compare_e2e_throughput_to_baseline,
     derive_e2e_pass_band,
     load_e2e_baseline,
+    resolve_e2e_measured_for_gate,
     validate_e2e_baseline_artifact,
 )
 
@@ -98,6 +99,36 @@ def test_compare_fails_when_env_steps_below_floor() -> None:
 
     assert passed is False
     assert any("env_steps_per_sec" in item for item in failures)
+
+
+def test_resolve_measured_for_gate_uses_aggregate_means_for_repeats() -> None:
+    runs = _sample_runs()
+    aggregate = aggregate_e2e_run_payloads(runs)
+    measured = resolve_e2e_measured_for_gate(
+        repeats=3,
+        run_payloads=runs,
+        aggregate=aggregate,
+    )
+
+    assert measured == {
+        key: float(aggregate[key]["mean"])
+        for key in ("env_steps_per_sec", "samples_per_sec", "seconds_per_update_mean")
+    }
+
+
+def test_resolve_measured_for_gate_uses_first_run_when_single_repeat() -> None:
+    runs = _sample_runs()
+    measured = resolve_e2e_measured_for_gate(
+        repeats=1,
+        run_payloads=runs,
+        aggregate=None,
+    )
+
+    assert measured == {
+        "env_steps_per_sec": 4000.0,
+        "samples_per_sec": 8000.0,
+        "seconds_per_update_mean": 1.0,
+    }
 
 
 def test_compare_passes_when_all_metrics_within_band() -> None:
