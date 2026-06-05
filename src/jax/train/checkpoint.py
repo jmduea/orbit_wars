@@ -307,7 +307,7 @@ class CheckpointHandler:
                 protected_paths.add(result.latest_path)
             if result.final:
                 protected_paths.add(result.numbered_path)
-            if (
+            if self.artifact_cfg.enabled and (
                 self.artifact_cfg.replay_async
                 or self.artifact_cfg.docker_validation_async
             ):
@@ -380,14 +380,16 @@ class CheckpointHandler:
                         metric_name=promotion_attempt.metric_name,
                         metric_value=float(promotion_attempt.metric_value or 0.0),
                     )
-            tournament_job = queue_tournament_job_if_eligible(
-                self.cfg,
-                update=result.update,
-                checkpoint_path=result.numbered_path,
-                queue_dir=self.artifact_queue_dir,
-                result_root=self.run_context.evaluations_dir,
-                promotion_attempt_reason=promotion_attempt.reason,
-            )
+            tournament_job = None
+            if self.artifact_cfg.enabled:
+                tournament_job = queue_tournament_job_if_eligible(
+                    self.cfg,
+                    update=result.update,
+                    checkpoint_path=result.numbered_path,
+                    queue_dir=self.artifact_queue_dir,
+                    result_root=self.run_context.evaluations_dir,
+                    promotion_attempt_reason=promotion_attempt.reason,
+                )
             if tournament_job is not None:
                 append_jsonl(
                     self.log_path,
@@ -403,7 +405,7 @@ class CheckpointHandler:
                     result_root=self.run_context.evaluations_dir,
                     worker_state=self.artifact_worker_state,
                 )
-            if not self.artifact_cfg.replay_async:
+            if self.artifact_cfg.enabled and not self.artifact_cfg.replay_async:
                 replay_meta_path = maybe_write_jax_checkpoint_replay(
                     self.cfg,
                     update=result.update,
