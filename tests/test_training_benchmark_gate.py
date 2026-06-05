@@ -63,6 +63,25 @@ def test_validate_baseline_requires_three_runs_and_gate() -> None:
     assert any("at least 3" in item for item in errors)
 
 
+def test_compare_passes_when_samples_below_floor_but_env_steps_ok() -> None:
+    pass_band = derive_e2e_pass_band(
+        {"env_steps_per_sec": {"mean": 4000.0, "stddev": 0.0}},
+        within_pct=10.0,
+    )
+    passed, failures = compare_e2e_throughput_to_baseline(
+        {
+            "env_steps_per_sec": 4000.0,
+            "samples_per_sec": 100.0,
+            "seconds_per_update_mean": 1.0,
+        },
+        pass_band=pass_band,
+    )
+
+    assert passed is True
+    assert failures == []
+    assert "samples_per_sec" not in pass_band.get("floors", {})
+
+
 def test_compare_fails_when_env_steps_below_floor() -> None:
     pass_band = derive_e2e_pass_band(
         {"env_steps_per_sec": {"mean": 4000.0, "stddev": 0.0}},
@@ -209,3 +228,91 @@ def test_build_baseline_artifact_round_trip(tmp_path: Path) -> None:
     loaded = load_e2e_baseline(path)
     assert loaded["gate"] == E2E_THROUGHPUT_GATE
     assert len(loaded["runs"]) == 3
+
+
+_ANCHOR_SHA = "79162a2088160b8ed05c3e3a050e064c7f6c9556"
+_MANIFEST_VERDICT = frozenset({"admit", "reject", "pending"})
+_MANIFEST_PHASE = frozenset({"env_parity", "learning"})
+_MANIFEST_INTEGRATION_STATUS = frozenset({"building", "ready_for_main"})
+_MANIFEST_BASELINE_GATE_KEYS = frozenset({"throughput_e2e", "learn_proof", "parity"})
+_MANIFEST_REQUIRED_TOP_LEVEL = (
+    "manifest_id",
+    "assessed_date",
+    "baseline_sha",
+    "baseline_branch",
+    "baseline_gates",
+    "criterion",
+    "candidates",
+    "integration_state",
+    "decision",
+)
+
+
+def test_committed_cherry_pick_manifest_artifact() -> None:
+    """Committed cherry-pick manifest scaffold (assessed_date in JSON).
+
+    Populate baseline_gates and candidates[] after U1/U4–U5 gate captures per
+    docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md.
+    """
+    path = Path("docs/benchmarks/cherry-pick-manifest.json")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for field in _MANIFEST_REQUIRED_TOP_LEVEL:
+        assert field in payload, f"missing top-level field {field}"
+    assert payload["baseline_sha"] == _ANCHOR_SHA
+    baseline_path = Path("docs/benchmarks/launch-hygiene-e2e-baseline.json")
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert baseline["commit_sha"] == payload["baseline_sha"]
+
+    baseline_gates = payload["baseline_gates"]
+    assert isinstance(baseline_gates, dict)
+    assert set(baseline_gates) == _MANIFEST_BASELINE_GATE_KEYS
+    for gate_key, gate in baseline_gates.items():
+        assert isinstance(gate, dict), f"baseline_gates.{gate_key} must be object"
+        verdict = gate.get("verdict")
+        assert verdict in _MANIFEST_VERDICT, (
+            f"baseline_gates.{gate_key}.verdict invalid: {verdict!r}"
+        )
+        artifact = gate.get("artifact")
+        if artifact is not None:
+            artifact_path = Path(str(artifact))
+            assert not artifact_path.is_absolute(), (
+                f"baseline_gates.{gate_key}.artifact must be repo-relative"
+            )
+    throughput = baseline_gates["throughput_e2e"]
+    assert throughput.get("preset") == "tier2_primary"
+    assert throughput.get("source") == str(baseline_path)
+
+    candidates = payload["candidates"]
+    assert isinstance(candidates, list)
+    for idx, candidate in enumerate(candidates):
+        assert isinstance(candidate, dict), f"candidates[{idx}] must be object"
+        phase = candidate.get("phase")
+        if phase is not None:
+            assert phase in _MANIFEST_PHASE, f"candidates[{idx}].phase invalid"
+        verdict = candidate.get("verdict")
+        if verdict is not None:
+            assert verdict in _MANIFEST_VERDICT, (
+                f"candidates[{idx}].verdict invalid: {verdict!r}"
+            )
+        for block_key in ("throughput_e2e", "learn_proof", "parity"):
+            block = candidate.get(block_key)
+            if not isinstance(block, dict):
+                continue
+            block_verdict = block.get("verdict")
+            if block_verdict is not None:
+                assert block_verdict in _MANIFEST_VERDICT
+            artifact = block.get("artifact")
+            if artifact is not None:
+                artifact_path = Path(str(artifact))
+                assert not artifact_path.is_absolute()
+
+    integration = payload["integration_state"]
+    assert isinstance(integration, dict)
+    assert integration.get("branch") == "throughput-baseline-integration"
+    status = integration.get("integration_status")
+    assert status in _MANIFEST_INTEGRATION_STATUS, (
+        f"integration_status invalid: {status!r}"
+    )
+    ordered = integration.get("ordered_shas")
+    assert isinstance(ordered, list)
+    assert isinstance(payload.get("decision"), str) and payload["decision"].strip()

@@ -77,8 +77,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PCT",
         help=(
-            "Exit non-zero when measured env_steps/s, samples/s, or "
-            "seconds/update exceed baseline pass band (default from baseline or 10)."
+            "Exit non-zero when measured env_steps/s is below the baseline floor "
+            "or seconds/update exceeds the ceiling (default band from baseline or 10%%). "
+            "samples/s is recorded but not gated."
         ),
     )
     training.add_argument(
@@ -98,6 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=[],
         help="Per-update metric snapshots at these global update indices.",
+    )
+    training.add_argument(
+        "--detailed-timing",
+        action="store_true",
+        help=(
+            "Synchronize at rollout/PPO boundaries and emit timing buckets. "
+            "Use for profiling only; it adds extra barriers."
+        ),
     )
 
     factorized_sampler = subparsers.add_parser(
@@ -290,6 +299,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
             warmup=args.warmup,
             updates=updates,
             snapshot_updates=frozenset(args.snapshot_updates),
+            detailed_timing=bool(args.detailed_timing),
         )
         payload = training_benchmark_payload(result)
         payload.update(
