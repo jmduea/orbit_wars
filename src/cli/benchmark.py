@@ -266,10 +266,10 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         compose_benchmark_config,
         default_benchmark_updates,
         derive_e2e_pass_band,
-        e2e_throughput_metric_values,
         format_profile_name,
         load_e2e_baseline,
         resolve_benchmark_overrides,
+        resolve_e2e_measured_for_gate,
         resolve_e2e_pass_band,
         run_training_benchmark,
         training_benchmark_payload,
@@ -354,16 +354,11 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             print(str(exc), file=sys.stderr)
             return 1
-        measured_source = run_payloads[0] if repeats == 1 else output_payload
-        measured = e2e_throughput_metric_values(measured_source)
-        if repeats > 1:
-            aggregate_obj = output_payload.get("aggregate")
-            if isinstance(aggregate_obj, dict):
-                measured = {
-                    key: float(aggregate_obj[key]["mean"])  # type: ignore[index]
-                    for key in measured
-                    if key in aggregate_obj
-                }
+        measured = resolve_e2e_measured_for_gate(
+            repeats=repeats,
+            run_payloads=run_payloads,
+            aggregate=output_payload.get("aggregate"),
+        )
         device_ok, device_message = check_baseline_device_match(
             baseline,
             devices=run_payloads[0]["devices"],  # type: ignore[arg-type]

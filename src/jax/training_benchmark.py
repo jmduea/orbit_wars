@@ -508,6 +508,29 @@ def e2e_throughput_metric_values(payload: Mapping[str, object]) -> dict[str, flo
     }
 
 
+def resolve_e2e_measured_for_gate(
+    *,
+    repeats: int,
+    run_payloads: Sequence[Mapping[str, object]],
+    aggregate: Mapping[str, object] | None = None,
+) -> dict[str, float]:
+    """Throughput metrics for baseline gate comparison."""
+
+    if repeats == 1:
+        if not run_payloads:
+            return {}
+        return e2e_throughput_metric_values(run_payloads[0])
+    if not isinstance(aggregate, dict):
+        return {}
+    measured: dict[str, float] = {}
+    for key in E2E_THROUGHPUT_METRICS:
+        stats = aggregate.get(key)
+        if not isinstance(stats, dict) or "mean" not in stats:
+            continue
+        measured[key] = float(stats["mean"])
+    return measured
+
+
 def aggregate_e2e_run_payloads(
     runs: Sequence[Mapping[str, object]],
 ) -> dict[str, dict[str, float]]:
