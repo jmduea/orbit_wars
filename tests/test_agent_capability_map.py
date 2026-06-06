@@ -19,6 +19,20 @@ _TOP_LEVEL_OW_COMMANDS: frozenset[str] = frozenset(
 # Token-style subcommands not expressed as argparse ``{choices}`` in --help.
 _EXTRA_NESTED_TOKENS: dict[tuple[str, ...], frozenset[str]] = {
     ("ow", "benchmark", "gate"): frozenset({"list", "run"}),
+    (
+        "ow",
+        "benchmark",
+        "gate",
+        "run",
+    ): frozenset(
+        {
+            "admission",
+            "beat_noop",
+            "beat_random",
+            "curriculum_staged",
+            "win_proof_tournament",
+        }
+    ),
     ("ow", "train"): frozenset({"kaggle", "local"}),
 }
 
@@ -42,7 +56,11 @@ def _normalize_command_cell(cell: str) -> str:
 def _parse_ow_commands_from_table(section: str) -> list[tuple[str, ...]]:
     commands: list[tuple[str, ...]] = []
     for line in section.splitlines():
-        if not line.startswith("|") or line.startswith("| Action") or line.startswith("|-"):
+        if (
+            not line.startswith("|")
+            or line.startswith("| Action")
+            or line.startswith("|-")
+        ):
             continue
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) < 2:
@@ -123,14 +141,15 @@ def _command_registered(
         token = path[index]
         if prefix == ("ow", "train") and "=" in token:
             return index == len(path) - 1
-        nested = _nested_tokens(prefix, registry[prefix])
+        nested = _nested_tokens(prefix, registry.get(prefix, ""))
         if not nested:
             return False
         if token not in nested:
             return False
         prefix = (*prefix, token)
         if prefix not in registry and index < len(path) - 1:
-            return False
+            if not _EXTRA_NESTED_TOKENS.get(prefix):
+                return False
     return True
 
 
@@ -146,7 +165,9 @@ def test_shape_calibrate_not_registered_in_benchmark_help(
     assert not _command_registered(path, help_registry)
 
 
-def test_capability_map_ow_commands_in_help(help_registry: dict[tuple[str, ...], str]) -> None:
+def test_capability_map_ow_commands_in_help(
+    help_registry: dict[tuple[str, ...], str],
+) -> None:
     section = _read_capability_map_section()
     missing: list[str] = []
     for path in _parse_ow_commands_from_table(section):
@@ -154,4 +175,24 @@ def test_capability_map_ow_commands_in_help(help_registry: dict[tuple[str, ...],
             missing.append(" ".join(path))
     assert not missing, "capability map commands missing from ow --help:\n" + "\n".join(
         missing
+    )
+
+
+def test_benchmark_help_commands_in_capability_map(
+    help_registry: dict[tuple[str, ...], str],
+) -> None:
+    """Every ``ow benchmark`` subcommand in --help has a capability-map row."""
+    benchmark_help = help_registry.get(("ow", "benchmark"), "")
+    subcommands = _choices_from_help(benchmark_help)
+    assert subcommands, "expected benchmark subcommands in --help"
+
+    section = _read_capability_map_section()
+    map_paths = _parse_ow_commands_from_table(section)
+    mapped_benchmark = {
+        path[2] for path in map_paths if len(path) >= 3 and path[1] == "benchmark"
+    }
+    missing = sorted(subcommands - mapped_benchmark)
+    assert not missing, (
+        "benchmark --help subcommands missing from capability map:\n"
+        + "\n".join(f"  ow benchmark {name}" for name in missing)
     )

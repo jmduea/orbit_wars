@@ -49,6 +49,13 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Planet Flow noop smoke | `ow benchmark planet-flow-noop-smoke` |
 | Env shaping calibration (planned) | `ow benchmark shape-calibrate` |
 | Tier-1 factorized sampler bench | `ow benchmark factorized-sampler` |
+| Encode-turn microbench | `ow benchmark encode-turn` |
+| Policy path profile | `ow benchmark policy-path-profile` |
+| Env parity A/B microbench | `ow benchmark env-parity-ab` |
+| Admission throughput extract | `ow benchmark admission-throughput` |
+| Rollout phase profile | `ow benchmark rollout-phase-profile` |
+| Rollout phase breakdown | `ow benchmark rollout-phase-breakdown` |
+| Admission gate (cherry-pick) | `ow benchmark gate run admission` |
 | Learn-proof composer | `ow benchmark learn-proof` |
 | W&B/Kaggle sweep create | `ow sweep create` |
 | Sweep status | `ow sweep status` |

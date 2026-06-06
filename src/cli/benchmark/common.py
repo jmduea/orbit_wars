@@ -50,6 +50,7 @@ def print_benchmark_help() -> None:
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
         "  factorized-sampler     Tier-1 launch-hygiene microbenchmark (in-process JAX)\n"
+        "  encode-turn            encode_turn / learner throughput microbenchmark\n"
         "  policy-path-profile    Encoder / decoder / shield_off vs cheap breakdown\n"
         "  env-parity-ab          Legacy vs train vs kaggle env step throughput A/B\n\n"
         "Examples:\n"

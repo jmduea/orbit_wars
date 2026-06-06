@@ -9,7 +9,7 @@ import sys
 from src.benchmark.calibration.qualifier_floors import (
     default_qualifier_calibration_stub,
 )
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
 
 
 def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
@@ -24,7 +24,7 @@ def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
             "ok": True,
             "mode": "write_stub",
             "written_calibration_path": str(args.out),
-            "git_head": _git_head_sha(REPO_ROOT),
+            "git_head": _git_head_sha(),
             "seconds_total": __import__("time").perf_counter() - started,
         }
         print(json.dumps(report, indent=2))

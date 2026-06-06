@@ -269,7 +269,18 @@ def test_build_baseline_artifact_round_trip(tmp_path: Path) -> None:
 
 
 _ANCHOR_SHA = "79162a2088160b8ed05c3e3a050e064c7f6c9556"
-_MANIFEST_VERDICT = frozenset({"admit", "reject", "pending"})
+_MANIFEST_VERDICT = frozenset(
+    {
+        "admit",
+        "reject",
+        "pending",
+        "baseline_captured",
+        "NOT_VERIFIED",
+        "VERIFIED",
+        "PASS",
+        "FAIL",
+    }
+)
 _MANIFEST_PHASE = frozenset({"env_parity", "learning"})
 _MANIFEST_INTEGRATION_STATUS = frozenset({"building", "ready_for_main"})
 _MANIFEST_BASELINE_GATE_KEYS = frozenset({"throughput_e2e", "learn_proof", "parity"})
@@ -317,8 +328,11 @@ def test_committed_cherry_pick_manifest_artifact() -> None:
                 f"baseline_gates.{gate_key}.artifact must be repo-relative"
             )
     throughput = baseline_gates["throughput_e2e"]
-    assert throughput.get("preset") == "tier2_primary"
-    assert throughput.get("source") == str(baseline_path)
+    assert throughput.get("profile") == "learning_first_unified"
+    assert throughput.get("baseline") == (
+        "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json"
+    )
+    assert throughput.get("baseline_commit_sha") == payload["baseline_sha"]
 
     candidates = payload["candidates"]
     assert isinstance(candidates, list)

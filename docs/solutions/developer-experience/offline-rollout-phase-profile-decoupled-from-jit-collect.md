@@ -1,6 +1,7 @@
 ---
 title: Offline rollout phase profiling — keep host-timed collect out of production train
 date: 2026-06-06
+last_updated: 2026-06-06
 category: developer-experience
 module: jax-rollout
 problem_type: developer_experience
@@ -63,12 +64,14 @@ Root cause: host-timed collect calls `jax.block_until_ready` **once per rollout 
 Host-instrumented buckets (each step syncs before accumulating):
 
 - **policy** — learner `_sample_shielded_sequence_with_params` + shield + `build_action_from_factored_batch`
-- **opponent** — opponent action sampling **and** `encode_turn` for opponent feature cache refresh
+- **opponent** — combined opponent action sampling **and** post-step `encode_turn` (see sub-meters below)
+- **opponent_sample** — 2p: `_sample_opponent_2p_action`; 4p: `_four_player_step_action` only (shield, family loop, neural K-step, historical pool vmap)
+- **opponent_encode** — 2p: post-step `opp_encode_2p`; 4p: `_encode_four_player_turn_batches` only
 - **env_step** — `batched_step` / `batched_step_multi_player`
 - **reset** — episode-done branch only: `batched_reset_with_pool` (map pool) or `batched_reset`, plus `assign_learner_players`
 - **post_step** — decoder carry bookkeeping and other post-step work outside the above
 
-Emitted keys: `rollout_phase_{policy,opponent,env_step,reset,post_step}_{seconds,fraction}` plus `rollout_phase_measured_total_seconds`.
+Emitted keys: `rollout_phase_{policy,opponent,env_step,reset,post_step}_{seconds,fraction}` plus `rollout_phase_{opponent_sample,opponent_encode}_{seconds,fraction}` and `rollout_phase_measured_total_seconds`. `rollout_phase_opponent_*` equals sample + encode. `ow benchmark rollout-phase-breakdown` prints indented `sample` / `encode` under `opponent` when sub-meter keys are present.
 
 ### Geometry modes
 
@@ -118,16 +121,18 @@ Post-hygiene throughput work already showed **rollout collect dominates** update
 
 Wiring host timers into production train **poisoned the very path being measured**: 32×256 × per-step sync × compile = multi-hour first updates, zero actionable data. Offline profiling answers “where inside collect?” in minutes on quick geometry, then optionally confirms on full geometry when worth the wait.
 
-**Verified quick `task=map_pool` profile (3 measured updates after warmup):**
+**Verified quick `task=map_pool` profile (3 measured updates after warmup, 2 envs × 8 steps):**
 
 | Phase | Share |
 |-------|-------|
-| opponent | ~68% |
+| opponent (total) | ~68–73% |
+| opponent_sample | ~68–75% of collect |
+| opponent_encode | ~3–5% of collect |
 | policy | ~17% |
 | env_step | ~10% |
 | reset | ~0% |
 
-At smoke geometry with map pool, **opponent sampling+encoding** is the largest collect slice; reset/gather is negligible at this episode length — not a license to skip map-pool reset profiling at full geometry or longer episodes.
+The combined **opponent** bucket is the largest collect slice, but **sub-meters show encode is a small fraction** (~3–5% of collect at quick 2p geometry). Do not treat `rollout_phase_opponent_fraction` as an encode-first optimization target without reading sample vs encode — see [opponent-rollout-encode-vs-sample-subphase-meters.md](opponent-rollout-encode-vs-sample-subphase-meters.md). Reset/gather is negligible at this episode length — not a license to skip map-pool reset profiling at full geometry or longer episodes.
 
 ## When to Apply
 
@@ -175,6 +180,7 @@ uv run ow benchmark rollout-phase-profile \
 
 ## Related
 
+- [`opponent-rollout-encode-vs-sample-subphase-meters.md`](opponent-rollout-encode-vs-sample-subphase-meters.md) — measured sample vs encode split inside the opponent bucket; optimization priority after sub-meters
 - [`production-training-throughput-profiling.md`](production-training-throughput-profiling.md) — coarse rollout vs PPO split (`--detailed-timing`); use this doc for the next level down
 - [`jax-validation-throughput-benchmark-and-bisect.md`](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md) — validation bisect uses coarse `rollout_seconds_mean`; phase profile is diagnostic-only
 - [`benchmark-cli-package-split-agent-native-parity.md`](../architecture-patterns/benchmark-cli-package-split-agent-native-parity.md) — `ow benchmark` package layout (refresh for `rollout-phase-*` subcommands)
