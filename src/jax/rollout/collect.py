@@ -37,6 +37,7 @@ from src.opponents.jax_actions.sampling import (
     _single_stage_family_id,
 )
 from src.opponents.pool import sample_opponent_type_ids_jax
+from src.telemetry.metric_registry import rollout_collection_enabled_groups
 from src.training.curriculum import StageView, default_stage_view
 
 from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
