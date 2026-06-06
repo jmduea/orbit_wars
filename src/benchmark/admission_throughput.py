@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import statistics
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from src.benchmark import jsonl_window
+from src.benchmark.jsonl_window import (
+    default_throughput_window,
+    record_float,
+    record_update,
+)
 from src.benchmark.training import (
     DEFAULT_E2E_WITHIN_PCT,
     E2E_THROUGHPUT_METRICS,
@@ -18,71 +22,20 @@ from src.benchmark.training import (
 )
 from src.jax.preflight import read_jsonl_records
 
+ThroughputWindow = jsonl_window.ThroughputWindow
+DEFAULT_WARMUP = jsonl_window.DEFAULT_WARMUP
+DEFAULT_MAX_MEASURED_UPDATE = jsonl_window.DEFAULT_MAX_MEASURED_UPDATE
+resolve_log_path_from_input = jsonl_window.resolve_log_path_from_input
+
 ADMISSION_THROUGHPUT_GATE = "admission_throughput"
-DEFAULT_WARMUP = 2
-DEFAULT_MAX_MEASURED_UPDATE = 20
-
-
-@dataclass(frozen=True, slots=True)
-class ThroughputWindow:
-    """Measured update window after JIT warmup (launch hygiene convention)."""
-
-    warmup: int
-    max_measured_update: int
-
-    @property
-    def first_update(self) -> int:
-        return self.warmup + 1
-
-    def includes(self, update: int) -> bool:
-        return self.first_update <= update <= self.max_measured_update
-
-
-def resolve_log_path_from_input(path: Path) -> tuple[Path, Path | None]:
-    """Resolve a jax jsonl path from a log file or gate-result JSON."""
-
-    if not path.is_file():
-        raise FileNotFoundError(f"input not found: {path}")
-    if path.name.endswith("_jax.jsonl") or path.suffix == ".jsonl":
-        return path, None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    stage = payload.get("stage")
-    if isinstance(stage, dict):
-        log_path = stage.get("log_path")
-        if isinstance(log_path, str) and log_path:
-            return Path(log_path), path
-    log_path = payload.get("log_path")
-    if isinstance(log_path, str) and log_path:
-        return Path(log_path), path
-    raise ValueError(
-        f"no log_path in gate result {path}; pass a *_jax.jsonl path directly"
-    )
-
-
-def _record_update(record: Mapping[str, object]) -> int | None:
-    update = record.get("update")
-    if isinstance(update, int):
-        return update
-    if isinstance(update, float) and update.is_integer():
-        return int(update)
-    return None
-
-
-def _record_float(record: Mapping[str, object], key: str) -> float | None:
-    value = record.get(key)
-    if isinstance(value, int | float):
-        return float(value)
-    return None
 
 
 def _env_steps_for_record(record: Mapping[str, object]) -> float | None:
-    direct = _record_float(record, "env_steps")
+    direct = record_float(record, "env_steps")
     if direct is not None:
         return direct
-    update_seconds = _record_float(record, "update_seconds")
-    env_steps_per_sec = _record_float(record, "env_steps_per_sec")
+    update_seconds = record_float(record, "update_seconds")
+    env_steps_per_sec = record_float(record, "env_steps_per_sec")
     if update_seconds is not None and env_steps_per_sec is not None:
         return env_steps_per_sec * update_seconds
     return None
@@ -95,16 +48,13 @@ def extract_throughput_from_records(
 ) -> dict[str, object]:
     """Aggregate throughput metrics from per-update JSONL rows."""
 
-    resolved_window = window or ThroughputWindow(
-        warmup=DEFAULT_WARMUP,
-        max_measured_update=DEFAULT_MAX_MEASURED_UPDATE,
-    )
+    resolved_window = window or default_throughput_window()
     selected: list[Mapping[str, object]] = []
     for record in records:
-        update = _record_update(record)
+        update = record_update(record)
         if update is None or not resolved_window.includes(update):
             continue
-        if _record_float(record, "update_seconds") is None:
+        if record_float(record, "update_seconds") is None:
             continue
         selected.append(record)
 
@@ -123,20 +73,20 @@ def extract_throughput_from_records(
     ppo_seconds_values: list[float] = []
 
     for record in selected:
-        update_seconds = _record_float(record, "update_seconds")
+        update_seconds = record_float(record, "update_seconds")
         assert update_seconds is not None
         seconds_total += update_seconds
         update_seconds_values.append(update_seconds)
         env_steps = _env_steps_for_record(record)
         if env_steps is not None:
             env_steps_total += env_steps
-        samples = _record_float(record, "samples")
+        samples = record_float(record, "samples")
         if samples is not None:
             samples_total += samples
-        rollout_seconds = _record_float(record, "rollout_seconds")
+        rollout_seconds = record_float(record, "rollout_seconds")
         if rollout_seconds is not None:
             rollout_seconds_values.append(rollout_seconds)
-        ppo_seconds = _record_float(record, "ppo_seconds")
+        ppo_seconds = record_float(record, "ppo_seconds")
         if ppo_seconds is not None:
             ppo_seconds_values.append(ppo_seconds)
 
@@ -146,7 +96,7 @@ def extract_throughput_from_records(
         "warmup": resolved_window.warmup,
         "max_measured_update": resolved_window.max_measured_update,
         "measured_updates": measured_updates,
-        "updates_in_window": sorted(_record_update(record) for record in selected),
+        "updates_in_window": sorted(record_update(record) for record in selected),
         "seconds_total": seconds_total,
         "seconds_per_update_mean": seconds_total / measured_updates,
         "env_steps": int(env_steps_total),

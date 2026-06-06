@@ -7,8 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+from src.benchmark.jsonl_window import ThroughputWindow
 from src.jax.rollout.phase_timing_report import (
-    PhaseTimingWindow,
     extract_rollout_phase_breakdown_from_input,
     format_rollout_phase_breakdown,
 )
@@ -17,7 +17,7 @@ from src.jax.rollout.phase_timing_report import (
 def run_rollout_phase_breakdown_cli(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     try:
-        window = PhaseTimingWindow(
+        window = ThroughputWindow(
             warmup=int(args.warmup),
             max_measured_update=int(args.max_measured_update),
         )

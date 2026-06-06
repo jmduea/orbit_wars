@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import json
-import statistics
-import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
 import jax.numpy as jnp
 
 import jax
+from src.benchmark.jit_timing import TimingStats, measure_jitted
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
-from src.features.registry import edge_k
 from src.jax.action_sampling import (
     _sample_shielded_factored_sequence_with_params,
     owned_planet_ships,
@@ -33,43 +31,6 @@ from src.jax.policy import (
 from src.jax.shield.trajectory import apply_configured_trajectory_shield_factorized_topk
 
 ShieldMode = Literal["off", "cheap"]
-
-
-@dataclass(frozen=True, slots=True)
-class _TimingStats:
-    compile_seconds: float
-    mean_seconds: float
-    std_seconds: float
-    min_seconds: float
-    max_seconds: float
-
-
-def _measure_jitted(fn, *, warmup: int, repeats: int) -> _TimingStats:
-    compile_start = time.perf_counter()
-    out = fn()
-    jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-    compile_seconds = time.perf_counter() - compile_start
-
-    for _ in range(warmup):
-        out = fn()
-        jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-
-    timings: list[float] = []
-    for _ in range(repeats):
-        start = time.perf_counter()
-        out = fn()
-        jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-        timings.append(time.perf_counter() - start)
-
-    mean_s = statistics.mean(timings)
-    std_s = statistics.pstdev(timings) if len(timings) > 1 else 0.0
-    return _TimingStats(
-        compile_seconds=compile_seconds,
-        mean_seconds=mean_s,
-        std_seconds=std_s,
-        min_seconds=min(timings),
-        max_seconds=max(timings),
-    )
 
 
 def _train_cfg(
@@ -97,7 +58,7 @@ def _train_cfg(
     return cfg
 
 
-def _stats_row(name: str, stats: _TimingStats) -> dict[str, Any]:
+def _stats_row(name: str, stats: TimingStats) -> dict[str, Any]:
     return {
         "name": name,
         **asdict(stats),
@@ -144,7 +105,6 @@ def _format_comparison_table(payload: dict[str, Any]) -> str:
     ]
     for block in payload["shield_modes"]:
         mode = block["shield_mode"]
-        full_ms = block["cumulative_ms"]["full_sample"]
         lines.append(f"=== shield_{mode} ===")
         lines.append(f"{'tier':<24} {'cum_ms':>8} {'marg_ms':>8} {'%full':>7}")
         lines.append(f"{'-' * 24} {'-' * 8} {'-' * 8} {'-' * 7}")
@@ -158,10 +118,12 @@ def _format_comparison_table(payload: dict[str, Any]) -> str:
         )
         lines.append("")
     if len(payload["shield_modes"]) == 2:
-        off = payload["shield_modes"][0]
-        cheap = payload["shield_modes"][1]
-        if off["shield_mode"] != "off":
-            off, cheap = cheap, off
+        by_mode = {block["shield_mode"]: block for block in payload["shield_modes"]}
+        off = by_mode.get("off")
+        cheap = by_mode.get("cheap")
+        if off is None or cheap is None:
+            off = payload["shield_modes"][0]
+            cheap = payload["shield_modes"][1]
         lines.append("=== cheap - off ===")
         lines.append(
             f"  full_sample          "
@@ -195,7 +157,6 @@ def _run_shield_mode_block(
         decoder_carry=decoder_carry,
         candidate_count=candidate_count,
     )
-    k_slots = edge_k(cfg.task)
     keys = jax.random.split(jax.random.PRNGKey(0), batch_size)
     state, batch = batched_reset(keys, cfg.task)
     policy = build_planet_graph_transformer_policy(cfg)
@@ -293,7 +254,7 @@ def _run_shield_mode_block(
         "full_sample": bench_full_sample,
     }
     scenario_stats = {
-        name: _measure_jitted(fn, warmup=warmup, repeats=repeats)
+        name: measure_jitted(fn, warmup=warmup, repeats=repeats)
         for name, fn in scenario_fns.items()
     }
     cumulative_ms = {

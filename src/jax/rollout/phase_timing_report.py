@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import statistics
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from src.benchmark.admission_throughput import (
+from src.benchmark.jsonl_window import (
     ThroughputWindow,
-    _record_float,
-    _record_update,
+    default_throughput_window,
+    record_float,
+    record_update,
     resolve_log_path_from_input,
 )
 from src.jax.preflight import read_jsonl_records
@@ -44,49 +44,21 @@ OPPONENT_DETAIL_FRACTION_KEYS: tuple[str, ...] = tuple(
 MEASURED_TOTAL_KEY = "rollout_phase_measured_total_seconds"
 
 
-@dataclass(frozen=True, slots=True)
-class PhaseTimingWindow:
-    """Update window for steady-state phase averages (launch hygiene convention)."""
-
-    warmup: int
-    max_measured_update: int
-
-    @property
-    def first_update(self) -> int:
-        return self.warmup + 1
-
-    def includes(self, update: int) -> bool:
-        return self.first_update <= update <= self.max_measured_update
-
-
-def _window_from_throughput(
-    window: ThroughputWindow | PhaseTimingWindow | None,
-) -> PhaseTimingWindow:
-    if window is None:
-        return PhaseTimingWindow(warmup=2, max_measured_update=20)
-    if isinstance(window, PhaseTimingWindow):
-        return window
-    return PhaseTimingWindow(
-        warmup=window.warmup,
-        max_measured_update=window.max_measured_update,
-    )
-
-
 def _has_phase_timing(record: Mapping[str, object]) -> bool:
-    return _record_float(record, PHASE_SECOND_KEYS[0]) is not None
+    return record_float(record, PHASE_SECOND_KEYS[0]) is not None
 
 
 def extract_rollout_phase_breakdown_from_records(
     records: Sequence[Mapping[str, object]],
     *,
-    window: ThroughputWindow | PhaseTimingWindow | None = None,
+    window: ThroughputWindow | None = None,
 ) -> dict[str, object]:
     """Aggregate per-phase rollout seconds and fractions from JSONL rows."""
 
-    resolved = _window_from_throughput(window)
+    resolved = window or default_throughput_window()
     selected: list[Mapping[str, object]] = []
     for record in records:
-        update = _record_update(record)
+        update = record_update(record)
         if update is None or not resolved.includes(update):
             continue
         if not _has_phase_timing(record):
@@ -116,8 +88,8 @@ def extract_rollout_phase_breakdown_from_records(
         for name, sec_key, frac_key in zip(
             PHASE_NAMES, PHASE_SECOND_KEYS, PHASE_FRACTION_KEYS, strict=True
         ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
+            sec = record_float(record, sec_key)
+            frac = record_float(record, frac_key)
             if sec is not None:
                 phase_seconds[name].append(sec)
             if frac is not None:
@@ -128,16 +100,16 @@ def extract_rollout_phase_breakdown_from_records(
             OPPONENT_DETAIL_FRACTION_KEYS,
             strict=True,
         ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
+            sec = record_float(record, sec_key)
+            frac = record_float(record, frac_key)
             if sec is not None:
                 opponent_detail_seconds[name].append(sec)
             if frac is not None:
                 opponent_detail_fractions[name].append(frac)
-        measured = _record_float(record, MEASURED_TOTAL_KEY)
+        measured = record_float(record, MEASURED_TOTAL_KEY)
         if measured is not None:
             measured_totals.append(measured)
-        rollout_s = _record_float(record, "rollout_seconds")
+        rollout_s = record_float(record, "rollout_seconds")
         if rollout_s is not None:
             rollout_seconds.append(rollout_s)
 
@@ -165,7 +137,7 @@ def extract_rollout_phase_breakdown_from_records(
         "max_measured_update": resolved.max_measured_update,
         "measured_updates": len(selected),
         "updates_in_window": sorted(
-            u for u in (_record_update(record) for record in selected) if u is not None
+            u for u in (record_update(record) for record in selected) if u is not None
         ),
         "phases": phases_payload,
         "opponent_details": opponent_details,
@@ -179,7 +151,7 @@ def extract_rollout_phase_breakdown_from_records(
 def extract_rollout_phase_breakdown_from_log(
     log_path: Path,
     *,
-    window: ThroughputWindow | PhaseTimingWindow | None = None,
+    window: ThroughputWindow | None = None,
 ) -> dict[str, object]:
     records = read_jsonl_records(log_path)
     payload = extract_rollout_phase_breakdown_from_records(records, window=window)
@@ -203,7 +175,7 @@ def _profile_records_from_payload(
 def extract_rollout_phase_breakdown_from_input(
     path: Path,
     *,
-    window: ThroughputWindow | PhaseTimingWindow | None = None,
+    window: ThroughputWindow | None = None,
 ) -> dict[str, object]:
     """Load phase rows from profile JSON, gate JSON (via log_path), or JSONL."""
 
@@ -222,7 +194,7 @@ def extract_rollout_phase_breakdown_from_input(
         if resolved_window is None:
             warmup = payload.get("warmup")
             max_update = payload.get("max_measured_update")
-            resolved_window = PhaseTimingWindow(
+            resolved_window = ThroughputWindow(
                 warmup=int(warmup) if isinstance(warmup, int | float) else 2,
                 max_measured_update=(
                     int(max_update) if isinstance(max_update, int | float) else 20
@@ -241,10 +213,6 @@ def extract_rollout_phase_breakdown_from_input(
     if gate_result_path is not None:
         breakdown["gate_result_path"] = str(gate_result_path)
     return breakdown
-
-
-def resolve_input_to_log_path(path: Path) -> tuple[Path, Path | None]:
-    return resolve_log_path_from_input(path)
 
 
 def format_rollout_phase_breakdown(payload: Mapping[str, object]) -> str:

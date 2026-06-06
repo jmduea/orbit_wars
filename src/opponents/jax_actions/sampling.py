@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import jax.numpy as jnp
 
 import jax
@@ -52,17 +54,6 @@ def _select_env_action(
     )
 
 
-def _slice_env_axis(tree: object, env_index: jax.Array) -> object:
-    """Slice leading env axis to a single row (keeps batch dim size 1)."""
-
-    def slice_leaf(value):
-        if isinstance(value, jax.Array) and value.ndim > 0:
-            return jax.lax.dynamic_index_in_dim(value, env_index, axis=0, keepdims=True)
-        return value
-
-    return jax.tree.map(slice_leaf, tree)
-
-
 def _masked_env_sort_order(mask: jax.Array) -> jax.Array:
     """Sort env axis so masked rows are leading (JIT-safe, no dynamic slice sizes)."""
 
@@ -105,15 +96,21 @@ def _merge_reordered_family_action(
     return jax.tree.map(merge_leaf, full_action, partial_action)
 
 
-def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
-    """Stack per-player batched actions into batched_step_multi_player layout."""
+def _gather_action_by_env(
+    pool_action: JaxAction,
+    snapshot_indices: jax.Array,
+    pool_row_indices: jax.Array,
+) -> JaxAction:
+    """Gather per-env actions from a snapshot×env pool.
 
-    return jax.tree.map(lambda *xs: jnp.stack(xs, axis=1), *player_actions)
+    ``pool_action[s, p]`` was sampled with batch row ``p``. For original env ``e``,
+    pass ``pool_row_indices[e] = p`` (use ``jnp.argsort(order)`` after reorder).
+    """
 
-
-def _gather_action_by_env(pool_action: JaxAction, indices: jax.Array) -> JaxAction:
-    env_indices = jnp.arange(indices.shape[0], dtype=jnp.int32)
-    return jax.tree.map(lambda field: field[indices, env_indices], pool_action)
+    return jax.tree.map(
+        lambda field: field[snapshot_indices, pool_row_indices],
+        pool_action,
+    )
 
 
 def _opponent_count_metrics(
@@ -153,18 +150,6 @@ def _opponent_count_metrics(
         .astype(jnp.float32)
         .sum(),
     }
-
-
-OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
-    "opponent_slots_total",
-    "opponent_slots_latest",
-    "opponent_slots_historical",
-    "opponent_slots_random",
-    "opponent_slots_noop",
-    "opponent_slots_nearest_sniper",
-    "opponent_slots_turtle",
-    "opponent_slots_opportunistic",
-)
 
 
 def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
@@ -216,7 +201,6 @@ def _maybe_effective_single_family_id(
         stage_view.fallback_family_id,
         family_id,
     )
-
 
 
 def _edge_bucket_mask(
@@ -280,6 +264,7 @@ def _sample_historical_action(
     current_action: JaxAction,
     policy: object,
     cfg: TrainConfig,
+    pool_row_indices: jax.Array,
 ) -> tuple[JaxAction, jax.Array]:
     env_count = batch.planet_features.shape[0]
     has_snapshot = jnp.any(stage_view.snapshot_valid_mask)
@@ -303,7 +288,7 @@ def _sample_historical_action(
             deterministic=cfg.opponents.snapshot.deterministic,
         )[0]
     )(jnp.arange(pool_size, dtype=jnp.int32), historical_params_pool)
-    historical_action = _gather_action_by_env(pool_actions, selected)
+    historical_action = _gather_action_by_env(pool_actions, selected, pool_row_indices)
     fallback = jnp.logical_not(has_snapshot)
     action = jax.tree.map(
         lambda hist, cur: jnp.where(fallback, cur, hist),
@@ -328,6 +313,7 @@ def _sample_single_family_2p_action(
     cfg: TrainConfig,
     stage_view: StageView,
     historical_params_pool: dict | None,
+    pool_row_indices: jax.Array,
 ) -> JaxAction:
     def latest_branch(_: None) -> JaxAction:
         action, _decoder_hidden = _sample_policy_action(
@@ -352,6 +338,7 @@ def _sample_single_family_2p_action(
             current_action,
             policy,
             cfg,
+            pool_row_indices,
         )
         return historical_action
 
@@ -391,6 +378,40 @@ def _sample_single_family_2p_action(
     )
 
 
+def _sample_mixed_by_family_batched(
+    *,
+    slot_type: jax.Array,
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    base_key: jax.Array,
+    sample_single_family: Callable[
+        [jax.Array, jax.Array, object, TurnBatch, jax.Array], JaxAction
+    ],
+) -> JaxAction:
+    env_count = int(slot_type.shape[0])
+    merged = build_noop_action_from_edge_batch(game, batch, cfg)
+    for family_id in range(OPPONENT_NOOP + 1):
+        mask = slot_type == family_id
+        if family_id == OPPONENT_NOOP:
+            continue
+
+        def sample_branch(_: None) -> JaxAction:
+            order = _masked_env_sort_order(mask)
+            pool_row_indices = jnp.argsort(order)
+            sub_action = sample_single_family(
+                jax.random.fold_in(base_key, family_id),
+                jnp.asarray(family_id, dtype=jnp.int32),
+                _reorder_env_axis(game, order, env_count),
+                _reorder_env_axis(batch, order, env_count),
+                pool_row_indices,
+            )
+            return _merge_reordered_family_action(merged, sub_action, mask, order)
+
+        merged = jax.lax.cond(jnp.any(mask), sample_branch, lambda _: merged, None)
+    return merged
+
+
 def _sample_mixed_opponent_2p_action(
     opp_key: jax.Array,
     opp_game,
@@ -402,28 +423,30 @@ def _sample_mixed_opponent_2p_action(
     stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    env_count = int(slot_type.shape[0])
-    merged = build_noop_action_from_edge_batch(opp_game, opp_batch_cache, cfg)
-    for family_id in range(OPPONENT_NOOP + 1):
-        mask = slot_type == family_id
+    def sample_single_family(
+        key, family_id, reordered_game, reordered_batch, pool_row_indices
+    ):
+        return _sample_single_family_2p_action(
+            key,
+            family_id,
+            reordered_game,
+            reordered_batch,
+            train_state,
+            policy,
+            cfg,
+            stage_view,
+            historical_params_pool,
+            pool_row_indices,
+        )
 
-        def sample_branch(_: None) -> JaxAction:
-            order = _masked_env_sort_order(mask)
-            sub_action = _sample_single_family_2p_action(
-                jax.random.fold_in(opp_key, family_id),
-                jnp.asarray(family_id, dtype=jnp.int32),
-                _reorder_env_axis(opp_game, order, env_count),
-                _reorder_env_axis(opp_batch_cache, order, env_count),
-                train_state,
-                policy,
-                cfg,
-                stage_view,
-                historical_params_pool,
-            )
-            return _merge_reordered_family_action(merged, sub_action, mask, order)
-
-        merged = jax.lax.cond(jnp.any(mask), sample_branch, lambda _: merged, None)
-    return merged
+    return _sample_mixed_by_family_batched(
+        slot_type=slot_type,
+        game=opp_game,
+        batch=opp_batch_cache,
+        cfg=cfg,
+        base_key=opp_key,
+        sample_single_family=sample_single_family,
+    )
 
 
 def _sample_opponent_2p_action(
@@ -450,6 +473,7 @@ def _sample_opponent_2p_action(
     if cfg.opponents.mode.opponent == "self":
 
         def single_opponent_branch(_: None) -> JaxAction:
+            env_count = opp_batch_cache.planet_features.shape[0]
             return _sample_single_family_2p_action(
                 opp_key,
                 effective_single_family_id,
@@ -460,6 +484,7 @@ def _sample_opponent_2p_action(
                 cfg,
                 stage_view,
                 historical_params_pool,
+                jnp.arange(env_count, dtype=jnp.int32),
             )
 
         def mixed_opponent_branch(_: None) -> JaxAction:
@@ -485,8 +510,6 @@ def _sample_opponent_2p_action(
         return _shielded_random_edge_action(opp_key, opp_game, opp_batch_cache, cfg)
     validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
     raise AssertionError("unreachable")
-
-
 
 
 def _opponent_params_for_player(
@@ -516,6 +539,7 @@ def _sample_single_family_4p_action(
     opponent_params_by_player: tuple[dict, ...] | None,
     stage_view: StageView,
     historical_params_pool: dict | None,
+    pool_row_indices: jax.Array,
 ) -> JaxAction:
     opponent_params = _opponent_params_for_player(
         player_id,
@@ -547,6 +571,7 @@ def _sample_single_family_4p_action(
             current_action,
             policy,
             cfg,
+            pool_row_indices,
         )
         return historical_action
 
@@ -601,30 +626,32 @@ def _sample_mixed_player_4p_action(
     stage_view: StageView,
     historical_params_pool: dict | None,
 ) -> JaxAction:
-    env_count = int(slot_type.shape[0])
-    merged = build_noop_action_from_edge_batch(player_game, player_batch, cfg)
-    for family_id in range(OPPONENT_NOOP + 1):
-        mask = slot_type == family_id
+    def sample_single_family(
+        key, family_id, reordered_game, reordered_batch, pool_row_indices
+    ):
+        return _sample_single_family_4p_action(
+            key,
+            family_id,
+            player_id,
+            reordered_game,
+            reordered_batch,
+            train_state,
+            policy,
+            cfg,
+            opponent_params_by_player,
+            stage_view,
+            historical_params_pool,
+            pool_row_indices,
+        )
 
-        def sample_branch(_: None) -> JaxAction:
-            order = _masked_env_sort_order(mask)
-            sub_action = _sample_single_family_4p_action(
-                jax.random.fold_in(player_key, family_id),
-                jnp.asarray(family_id, dtype=jnp.int32),
-                player_id,
-                _reorder_env_axis(player_game, order, env_count),
-                _reorder_env_axis(player_batch, order, env_count),
-                train_state,
-                policy,
-                cfg,
-                opponent_params_by_player,
-                stage_view,
-                historical_params_pool,
-            )
-            return _merge_reordered_family_action(merged, sub_action, mask, order)
-
-        merged = jax.lax.cond(jnp.any(mask), sample_branch, lambda _: merged, None)
-    return merged
+    return _sample_mixed_by_family_batched(
+        slot_type=slot_type,
+        game=player_game,
+        batch=player_batch,
+        cfg=cfg,
+        base_key=player_key,
+        sample_single_family=sample_single_family,
+    )
 
 
 def _four_player_step_action(
@@ -658,6 +685,7 @@ def _four_player_step_action(
     elif cfg.opponents.mode.opponent == "self":
 
         def single_player_branch(_: None) -> JaxAction:
+            env_count = player_batch.planet_features.shape[0]
             return _sample_single_family_4p_action(
                 player_key,
                 effective_single_family_id,
@@ -670,6 +698,7 @@ def _four_player_step_action(
                 opponent_params_by_player,
                 active_stage_view,
                 historical_params_pool,
+                jnp.arange(env_count, dtype=jnp.int32),
             )
 
         def mixed_player_branch(_: None) -> JaxAction:
@@ -702,4 +731,3 @@ def _four_player_step_action(
         raise AssertionError("unreachable")
     is_learner_player = learner_player == player_id
     return _select_env_action(is_learner_player, learner_action, opponent_action)
-
