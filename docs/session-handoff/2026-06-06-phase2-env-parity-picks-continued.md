@@ -8,7 +8,7 @@
 
 ## Start here
 
-You are continuing the **nuclear cherry-pick manifest** program. Phase 1 (anchor admission) is done. Phase 2 has landed picks **#1**, **#2**, and partial **3b** on the integration worktree; full pick **#3** was rejected for throughput. **Next work is pick #4** (pure JAX planet/comet generation ports).
+You are continuing the **nuclear cherry-pick manifest** program. Phase 1 (anchor admission) is done. Phase 2 has landed picks **#1**, **#2**, **3b**, and **#4** (greenfield on integration) on the integration worktree; full pick **#3** was rejected for throughput.
 
 **Read first (in order):**
 
@@ -28,7 +28,7 @@ You are continuing the **nuclear cherry-pick manifest** program. Phase 1 (anchor
 |------|------|--------|----------------|
 | Gate harness | `/home/jmduea/projects/orbit_wars` | `main` | Admission gate recipe fix committed (`conf/benchmark/gates/admission.yaml` `train_overrides`); manifest updated |
 | Phase 1 anchor | `/home/jmduea/projects/orbit_wars-throughput-anchor` | `throughput-baseline` | Pre-hygiene anchor + Phase 1 fixes; admission passed on locked recipe |
-| Phase 2 integration | `/home/jmduea/projects/orbit_wars-integration` | `throughput-baseline-integration` | **`9db50f5`** — picks #1, #2, **3b** committed |
+| Phase 2 integration | `/home/jmduea/projects/orbit_wars-integration` | `throughput-baseline-integration` | **`75a7cf2`** — picks #1, #2, **3b**, **#4** committed |
 | Pre-hygiene reference | `/home/jmduea/projects/orbit_wars-pre-hygiene` | detached @ baseline | Manifest `baseline_sha` reference only |
 
 Integration was created at **`../orbit_wars-integration`** (not `../orbit_wars-throughput-baseline-integration` from the original handoff). Use the path above consistently.
@@ -125,7 +125,7 @@ See [jax-no-kaggle-callbacks.md](../solutions/conventions/jax-no-kaggle-callback
 
 | Order | Subject | Status | Notes |
 |-------|---------|--------|-------|
-| **#4** | Pure JAX `planet_generation.py` + `comet_generation.py` wired into env | **pending — start here** | Wire into `_reset_train` and comet spawn **without callbacks**. Exclude `_reset_kaggle_reference`, `_reference_*`, `env_parity_mode`, `task=kaggle_parity`. |
+| **#4** | Pure JAX planet + comet generation | **admit** | Greenfield on integration @ `75a7cf2`; unified hot path, no callbacks/`env_parity_mode`. |
 | **#5** | Remaining mechanics hunks | pending | One hunk per pick if needed; prefer vectorized slot-order launch. Pick 3b already shipped rotation, ship_speed, first-hit, planet_id. Exclude bundled pick #3 replay and `step_multi_player` unless proven neutral. |
 | **#6** | Main-branch callback teardown | pending | On `main` eventually — remove dead callback paths so tier-A static gate is clean; single JAX env for train and parity tests. |
 
@@ -148,6 +148,28 @@ After each pick: `make test-kaggle-parity` + trace hygiene (tier-A static `rg` +
 ## Phase 3 (later)
 
 Topological **learning** cherry-picks onto integration head after env-parity stack is green — full gate sequence per manifest R8. Do not start until picks #4–#6 (or operator-defined parity milestone) are stable.
+
+---
+
+### Pick #4 (greenfield on integration) — ADMIT
+
+Pure JAX `src/jax/planet_generation.py` and `src/jax/comet_generation.py` plus unified env wiring (comet spawn/advance/expire, `episode_seed`, `JaxCometState`). User decision: implement on integration directly — not main-first.
+
+- Fast gates: parity PASS (16 passed), trace hygiene PASS (integration static rg + 10 pytest)
+- Excluded: `pure_callback`, `_reference_*`, `env_parity_mode`, sequential `lax.scan` launch
+- Manifest: `candidates[4]`, verdict `admit`
+- Integration HEAD: `75a7cf287f3a01903179f4459464af4c16a06acc`
+
+### Adversarial re-review (2026-06-06) — fast gates green, functional parity NOT verified
+
+Fast gates passed but adversarial + empirical checks found **merge-blocking defects** at `75a7cf2`:
+
+- **P0:** `planet_generation.py` static-phase early exit → 12 planets (3 groups) vs reference 24–32 (seeds 0/1/11/42 verified)
+- **P0:** `env.py` post-move expire drops `initial_planets` updates — desync at step 85 (`planets.active` 12 vs `initial_planets.active` 16)
+- **P1:** comet RNG hash ≠ Kaggle `Random(f"orbit_wars-comet-…")`; comet IDs use `max(active_id)+1` not slot index (breaks `_launch_fleets` on typical boards); comet spawn subgraph inlined in every `step` compile (50-step smoke hung 4+ min)
+- **Fix order:** P0 planet gen → P1 `px/py` split → comet ID scheme → comet RNG → split spawn from `step` → goldens
+
+**Do not start pick #5 or re-run admission until P0 (+ critical P1) fixed on integration.**
 
 ---
 

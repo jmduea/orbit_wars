@@ -470,6 +470,51 @@
         "step() \u2192 step_multi_player indirection for 2p",
         "comet state/subsystem, pure_callback, env_parity_mode"
       ]
+    },
+    {
+      "subject": "Pure JAX planet + comet generation ports",
+      "phase": "env_parity",
+      "cherry_pick_order": 4,
+      "status": "admit",
+      "implementation": "greenfield_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
+      "granularity": "Greenfield JAX ports of src/game/{planet,comet}_generation.py rejection-sampling plus unified comet env wiring (JaxCometState, episode_seed, spawn/expire/advance). User decision: implement on integration directly — not main-first transplant.",
+      "files_touched": [
+        "src/jax/planet_generation.py",
+        "src/jax/comet_generation.py",
+        "src/jax/env.py",
+        "src/jax/submission_runtime.py",
+        "tests/test_jax_env_parity.py"
+      ],
+      "excluded_from_main_commits": [
+        "pure_callback",
+        "_reference_planet_tables",
+        "_reference_comet_paths",
+        "_reset_kaggle_reference",
+        "env_parity_mode train/kaggle split",
+        "task=kaggle_parity",
+        "sequential lax.scan fleet launch (pick #3 throughput regression)"
+      ],
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "16 passed, 1 deselected in 84.10s"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg on integration src/jax + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "0 forbidden-pattern matches in integration src/jax; 10 pytest passed in 21.18s",
+        "note": "make test-jax-trace-hygiene from main harness alone fails on main src/jax (_reference_* present); run rg against integration tree per prior picks"
+      },
+      "throughput_admission": {
+        "status": "not_run",
+        "note": "Comet stepping adds hot-path work; operator may re-run admission at milestone. Pick #3 sequential launch still excluded."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "user_decision": "greenfield_on_integration_not_main_first"
     }
   ],
   "integration_state": {
@@ -480,12 +525,28 @@
       "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
       "33b56e2:src/jax/features.py + env.py learner encode call sites",
       "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)",
-      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)"
+      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)",
+      "greenfield:src/jax/{planet_generation,comet_generation}.py + env comet wiring (pick #4, 2026-06-06 @ 75a7cf2)"
     ],
     "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
-    "last_integrated_note": "Picks #1\u20132 + pick 3b cheap env mechanics (rotation, ship_speed, first-hit, planet_id); sequential launch deferred; admission not re-run after 3b",
-    "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
-    "integration_head_note": "Integration worktree HEAD after pick 3b cheap mechanics hunks; prior admission VERIFIED at 3f88f1b (picks #1\u20132 only); admission not re-run after 3b",
+    "last_integrated_note": "Picks #1\u20132 + pick 3b + pick #4 greenfield JAX planet/comet generation; sequential launch deferred; admission not re-run after 3b or #4",
+    "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
+    "integration_head_note": "Pick #4 ADMIT (2026-06-06): greenfield pure JAX planet_generation.py + comet_generation.py on integration; fast gates PASS; admission not re-run",
+    "pick_4_attempt_2026_06_06": {
+      "verdict": "admit",
+      "implementation": "greenfield_on_integration",
+      "integration_head": "75a7cf2",
+      "prior_blocked_reason": "no_source_commits_on_main",
+      "adversarial_re_review_2026_06_06": {
+        "fast_gates": "pass",
+        "functional_parity": "fail",
+        "p0": [
+          "planet_generation static-phase early exit (12 vs 24-32 planets)",
+          "env.py post-move expire drops initial_planets updates (desync step 85)"
+        ],
+        "fix_before": "pick_5_or_admission"
+      }
+    },
     "admission_passed": true,
     "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
     "admission_log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
@@ -641,16 +702,19 @@
     "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
     "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
   },
-  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (full bundle, throughput_regression); pick 3b ADMIT (2026-06-06 cheap hunks C\u2013F only, parity+trace PASS, admission not re-run). Integration admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (3f88f1b): learning win_rate_delta 0.173, throughput env_steps_per_sec 5419 / seconds_per_update 1.512. Sequential launch (hunk A) and step_multi_player (hunk B) remain deferred. Next: JAX-only planned picks #4\u20135 (pure JAX planet/comet generation ports; no callbacks on hot path). Re-run admission only if operator requests after 3b.",
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (full bundle, throughput_regression); pick 3b ADMIT; pick #4 ADMIT (2026-06-06 greenfield on integration @ 75a7cf2). Integration fast gates PASS (parity 16/16, trace hygiene). Admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (3f88f1b) but not re-run after 3b or #4. Sequential launch (hunk A) and step_multi_player (hunk B) remain deferred. Next: pick #5 mechanics hunks; pick #6 main callback teardown. Re-run admission only if operator requests.",
   "planned_picks": [
     {
       "cherry_pick_order": 4,
       "subject": "Pure JAX planet + comet generation ports",
-      "status": "pending",
+      "status": "admit",
+      "admit_date": "2026-06-06",
+      "implementation": "greenfield_on_integration",
+      "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
       "includes": [
         "src/jax/planet_generation.py",
         "src/jax/comet_generation.py",
-        "wire into _reset_train and comet spawn without callbacks"
+        "wire into reset and comet spawn without callbacks"
       ],
       "excludes": [
         "pure_callback",
