@@ -18,9 +18,13 @@ MAX_PRODUCTION = 5
 MAX_RADIUS = 1 + math.log(MAX_PRODUCTION)
 ROTATION_RADIUS_LIMIT = 50.0
 COMET_SPAWN_STEPS = [50, 150, 250, 350, 450]
+MAX_COMET_GROUPS = len(COMET_SPAWN_STEPS)
+COMETS_PER_GROUP = 4
+MAX_COMET_PATH_LEN = 40
 COMET_RADIUS = 1.0  # fixed according to orbit wars docs
 COMET_PRODUCTION = 1  # when owned
 COMET_SPEED = 4.0  # according to orbit wars docs
+COMET_OFF_BOARD = -99.0  # placeholder position before first path step
 
 # -- Fleet Constants --
 MAX_FLEET_SPEED = 6.0
