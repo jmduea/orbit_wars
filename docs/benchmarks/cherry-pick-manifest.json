@@ -429,6 +429,44 @@
         "action": "Reverted pick #3 mechanics hunks in integration worktree src/jax/env.py; restored anchor @ 52dfdb0 parallel _launch_fleets, direct step() 2p path, rotation step+1 indexing, MAX_FLEET_SPEED, argmax hit_idx. Kept pick #2 encode_learner_turn call sites.",
         "deferred_to": "REJECTED: kaggle-only env_parity_mode + callbacks (user_constraint jax_only_hot_path_no_callbacks). See planned_picks #4\u2013#6."
       }
+    },
+    {
+      "id": "pick_3_partial",
+      "subject": "Cheap env mechanics hunks (rotation, ship_speed, first-hit, planet_id)",
+      "phase": "env_parity",
+      "cherry_pick_order": "3b",
+      "parent_pick": 3,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "secondary_sha": "0cfd7622d1b633e0d07b7345655a89dd2d44d337",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188); planet_id validation from phase 1 simplification",
+      "granularity": "hunk-level pick; src/jax/env.py only \u2014 hunks C\u2013F: rotation step indexing, cfg.ship_speed fleet_speed, first-hit combat min planet index, planet_id launch guard. EXCLUDED: sequential _launch_fleets lax.scan (hunk A), step()\u2192step_multi_player (hunk B), comet/callbacks/env_parity_mode",
+      "files_touched": [
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "15 passed, 1 deselected in 18.02s"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 22.34s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax"
+      },
+      "throughput_admission": {
+        "status": "not_run",
+        "note": "Cheap hunks only; full pick #3 regressed ~18\u00d7 rollout via sequential launch. Re-run admission only if operator requests."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "excluded_hunks": [
+        "sequential _launch_fleets via lax.scan + fleet cap (throughput regression)",
+        "step() \u2192 step_multi_player indirection for 2p",
+        "comet state/subsystem, pure_callback, env_parity_mode"
+      ]
     }
   ],
   "integration_state": {
@@ -438,12 +476,13 @@
     "ordered_shas": [
       "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
       "33b56e2:src/jax/features.py + env.py learner encode call sites",
-      "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)"
+      "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)",
+      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)"
     ],
     "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
-    "last_integrated_note": "Picks #1\u20132 only after pick #3 revert (2026-06-06): game reference libs (test-only) + encode_learner_turn; admission VERIFIED at locked recipe 2026-06-06; env mechanics deferred to pure-JAX planned picks #4\u2013#6 (no callbacks)",
-    "integration_head_sha": "3f88f1b",
-    "integration_head_note": "Integration worktree HEAD after locked-recipe admission pass (52dfdb0 branch base + picks #1\u20132)",
+    "last_integrated_note": "Picks #1\u20132 + pick 3b cheap env mechanics (rotation, ship_speed, first-hit, planet_id); sequential launch deferred; admission not re-run after 3b",
+    "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
+    "integration_head_note": "Integration worktree HEAD after pick 3b cheap mechanics hunks; prior admission VERIFIED at 3f88f1b (picks #1\u20132 only); admission not re-run after 3b",
     "admission_passed": true,
     "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
     "admission_log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
@@ -599,7 +638,7 @@
     "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
     "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
   },
-  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (2026-06-06 throughput_regression). Integration admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (integration_head 3f88f1b): learning win_rate_delta 0.173, throughput env_steps_per_sec 5419 / seconds_per_update 1.512 (within \u00b110% of learning-first baseline). Contrast: 053609Z run FAILED on wrong recipe (500 rollout steps / 6 candidates) \u2014 not comparable. Prior kaggle-only env_parity_mode + pure_callback plan REJECTED under user_constraint jax_only_hot_path_no_callbacks. Next: JAX-only planned picks #4\u20135 (pure JAX planet/comet generation ports, then throughput-safe mechanics hunks; no callbacks on hot path). Defer gate-admission until picks #4\u20135 parity/trace gates green.",
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (full bundle, throughput_regression); pick 3b ADMIT (2026-06-06 cheap hunks C\u2013F only, parity+trace PASS, admission not re-run). Integration admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (3f88f1b): learning win_rate_delta 0.173, throughput env_steps_per_sec 5419 / seconds_per_update 1.512. Sequential launch (hunk A) and step_multi_player (hunk B) remain deferred. Next: JAX-only planned picks #4\u20135 (pure JAX planet/comet generation ports; no callbacks on hot path). Re-run admission only if operator requests after 3b.",
   "planned_picks": [
     {
       "cherry_pick_order": 4,
@@ -624,9 +663,13 @@
       "status": "pending",
       "granularity": "one hunk per pick with make test-kaggle-parity + throughput smoke; reject bundled pick #3 replay",
       "includes": [
+        "vectorized or lightweight sequential slot-order launch matching Kaggle without per-slot concat/compact"
+      ],
+      "partially_shipped_in_pick_3b": [
         "rotation step indexing parity",
         "first-hit combat (min planet index)",
-        "vectorized or lightweight sequential slot-order launch matching Kaggle without per-slot concat/compact"
+        "cfg.ship_speed fleet_speed",
+        "planet_id launch validation"
       ],
       "excludes": [
         "lax.scan launch with _concat_fleets/_compact_fleets per slot (pick #3 throughput regression)",
