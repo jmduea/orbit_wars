@@ -540,11 +540,13 @@
       "adversarial_re_review_2026_06_06": {
         "fast_gates": "pass",
         "functional_parity": "fail",
+        "mechanical_fidelity_scope_2026_06_06": "User pivot: validity/rules gate, not seed replay. Coordinate goldens and Kaggle string RNG deprioritized.",
         "p0": [
           "planet_generation static-phase early exit (12 vs 24-32 planets)",
           "env.py post-move expire drops initial_planets updates (desync step 85)"
         ],
-        "fix_before": "pick_5_or_admission"
+        "fix_before": "pick_5_or_admission",
+        "parity_criterion": "make test-kaggle-parity — mechanical validity invariants + env sync tests, not coordinate goldens vs reference"
       }
     },
     "admission_passed": true,

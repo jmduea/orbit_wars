@@ -160,16 +160,26 @@ Pure JAX `src/jax/planet_generation.py` and `src/jax/comet_generation.py` plus u
 - Manifest: `candidates[4]`, verdict `admit`
 - Integration HEAD: `75a7cf287f3a01903179f4459464af4c16a06acc`
 
-### Adversarial re-review (2026-06-06) — fast gates green, functional parity NOT verified
+### Scope pivot (2026-06-06) — mechanical fidelity, not seed replay
 
-Fast gates passed but adversarial + empirical checks found **merge-blocking defects** at `75a7cf2`:
+User confirmed Phase 2 env-parity targets **mechanical fidelity**: JAX must obey Orbit Wars rules and never emit invalid states. Maps and comet paths **may differ** from `kaggle_environments` for the same seed.
 
-- **P0:** `planet_generation.py` static-phase early exit → 12 planets (3 groups) vs reference 24–32 (seeds 0/1/11/42 verified)
-- **P0:** `env.py` post-move expire drops `initial_planets` updates — desync at step 85 (`planets.active` 12 vs `initial_planets.active` 16)
-- **P1:** comet RNG hash ≠ Kaggle `Random(f"orbit_wars-comet-…")`; comet IDs use `max(active_id)+1` not slot index (breaks `_launch_fleets` on typical boards); comet spawn subgraph inlined in every `step` compile (50-step smoke hung 4+ min)
-- **Fix order:** P0 planet gen → P1 `px/py` split → comet ID scheme → comet RNG → split spawn from `step` → goldens
+**In scope:** validity invariants (5–10 planet groups, symmetry, orbiting, bounds), `initial_planets` sync through spawn/expire, comet slot IDs, spawn `jit` isolation, independent px/py draws.
 
-**Do not start pick #5 or re-run admission until P0 (+ critical P1) fixed on integration.**
+**Out of scope / deprioritized:** Kaggle string RNG parity, coordinate goldens vs reference, home-group PRNG stream coupling.
+
+Plan: [`docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md`](../plans/2026-06-06-001-fix-pick4-jax-parity-plan.md).
+
+### Pick #4 mechanical fix slice — IN PROGRESS → verify integration HEAD after commit
+
+Fixes landed on integration worktree (see integration `git log -1` after commit):
+
+- P0 two-phase planet loop (no 12-planet static early exit)
+- P0 post-move `initial_planets` expire sync
+- P1 independent px/py, reserved comet slot IDs, `_jit_spawn_comet_group`
+- Validity tests: `tests/test_planet_generation.py`, `tests/test_comet_generation.py`, long-run sync in `test_jax_env_parity.py`
+
+**Pick #5 and admission remain operator-gated** until integration fast gates green on fix commit HEAD.
 
 ---
 
