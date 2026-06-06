@@ -31,7 +31,12 @@ from src.jax.rollout.collect import _policy_turn_batch
 from src.jax.rollout.phase_timing import ROLLOUT_PHASE_TIMING_KEYS
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
-from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
+from src.opponents.constants import (
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+    is_noop_jax_training_opponent_mode,
+    validate_jax_training_opponent_mode,
+)
 from src.opponents.jax_actions.builders import (
     build_action_from_factored_batch,
     owned_planet_ships,
@@ -206,6 +211,12 @@ def collect_rollout_jax_timed(
     map_pool: MapPoolConstants | None = None,
 ):
     del update
+    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    skip_opp_batch_refresh = (
+        cfg.task.player_count == 2
+        and is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    )
+
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
         env_index_offset, dtype=jnp.int32
@@ -313,12 +324,15 @@ def collect_rollout_jax_timed(
     decoder_hidden = initial_decoder_hidden
 
     if cfg.task.player_count == 2:
-        initial_opp_game = state.game._replace(
-            player=(1 - state.learner_player).astype(jnp.int32)
-        )
-        opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-            initial_opp_game
-        )
+        if skip_opp_batch_refresh:
+            opp_batch_cache = batch
+        else:
+            initial_opp_game = state.game._replace(
+                player=(1 - state.learner_player).astype(jnp.int32)
+            )
+            opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                initial_opp_game
+            )
     else:
         opp_batch_cache = batch
 
@@ -508,7 +522,7 @@ def collect_rollout_jax_timed(
             next_state = next_state
             next_batch = result.batch
 
-        if cfg.task.player_count == 2:
+        if cfg.task.player_count == 2 and not skip_opp_batch_refresh:
             encode_start = time.perf_counter()
             opp_batch_cache = opp_encode_2p(next_state)
             _sync(opp_batch_cache)

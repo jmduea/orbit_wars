@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+
+enabled: true
+stages:
+  - id: scripted_heavy
+    min_updates: 100000
+    cooldown_updates: 0
+    opponent_families:
+      latest: 0.0
+      historical: 0.0
+      random: 0.25
+      noop: 0.0
+      nearest_sniper: 0.25
+      turtle: 0.25
+      opportunistic: 0.25
