@@ -29,15 +29,17 @@ import os
 from src.jax.device import configure_jax_runtime_for_host, nvidia_gpu_present
 
 configure_jax_runtime_for_host()
-if nvidia_gpu_present() or os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().lower().startswith("nvidia"):
+if nvidia_gpu_present() or os.environ.get(
+    "KAGGLE_ACCELERATOR_ID", ""
+).strip().lower().startswith("nvidia"):
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
 
 import jax.numpy as jnp
 
 import jax
+from src.benchmark.production import rollout_group_summary
 from src.config import compose_hydra_train_config
-from src.jax.benchmark import rollout_group_summary
 from src.jax.device import ensure_jax_accelerator_backend
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
@@ -330,7 +332,9 @@ def main() -> None:
         payload[rk] = rollout_sums[rk] / max(measured, 1)
     if snapshots:
         payload["snapshots"] = snapshots
-        payload["snapshots_all_finite"] = all(_finite_metrics(item) for item in snapshots)
+        payload["snapshots_all_finite"] = all(
+            _finite_metrics(item) for item in snapshots
+        )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps(payload, sort_keys=True))

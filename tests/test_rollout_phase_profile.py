@@ -5,14 +5,14 @@ from __future__ import annotations
 import pytest
 
 import jax
+from src.benchmark.rollout_phase_profile import (
+    _maybe_seed_historical_snapshots,
+    resolve_profile_overrides,
+)
 from src.config import compose_hydra_train_config
 from src.jax.policy import build_jax_policy
 from src.jax.rollout.phase_timing_report import (
     extract_rollout_phase_breakdown_from_records,
-)
-from src.jax.rollout_phase_profile import (
-    _maybe_seed_historical_snapshots,
-    resolve_profile_overrides,
 )
 from src.jax.train import init_train_state
 from src.jax.train.snapshots import init_historical_snapshot_pool
@@ -68,6 +68,34 @@ def test_profile_breakdown_uses_measured_window() -> None:
     payload = extract_rollout_phase_breakdown_from_records(records)
     assert payload["measured_updates"] == 1
     assert payload["phases"]["policy"]["fraction_mean"] == pytest.approx(0.6)
+
+
+def test_profile_breakdown_includes_opponent_subphase_details() -> None:
+    records = [
+        {
+            "update": 3,
+            "rollout_seconds": 10.0,
+            "rollout_phase_policy_seconds": 2.0,
+            "rollout_phase_opponent_seconds": 6.0,
+            "rollout_phase_opponent_sample_seconds": 4.0,
+            "rollout_phase_opponent_encode_seconds": 2.0,
+            "rollout_phase_env_step_seconds": 1.0,
+            "rollout_phase_reset_seconds": 0.5,
+            "rollout_phase_post_step_seconds": 0.5,
+            "rollout_phase_measured_total_seconds": 10.0,
+            "rollout_phase_policy_fraction": 0.2,
+            "rollout_phase_opponent_fraction": 0.6,
+            "rollout_phase_opponent_sample_fraction": 0.4,
+            "rollout_phase_opponent_encode_fraction": 0.2,
+            "rollout_phase_env_step_fraction": 0.1,
+            "rollout_phase_reset_fraction": 0.05,
+            "rollout_phase_post_step_fraction": 0.05,
+        }
+    ]
+    payload = extract_rollout_phase_breakdown_from_records(records)
+    details = payload["opponent_details"]
+    assert details["opponent_sample"]["fraction_mean"] == pytest.approx(0.4)
+    assert details["opponent_encode"]["fraction_mean"] == pytest.approx(0.2)
 
 
 @pytest.mark.jax

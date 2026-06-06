@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from src.cli.benchmark import build_parser, main
-from src.cli.map_pool_benchmark import (
+from src.benchmark.map_pool import (
     DEFAULT_MAX_EXTRAPOLATED_SECS,
     _bake_gate_ok,
     run_bake_cli,
 )
+from src.cli.benchmark import build_parser, main
 from src.jax.map_pool.bake import bake_one_entry, save_pool_npz
 
 

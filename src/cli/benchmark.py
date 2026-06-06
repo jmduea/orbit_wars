@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
         "factorized-sampler",
         help=(
             "Tier-1 factorized shield sampler microbenchmark "
-            "(in-process JAX via src/jax/factorized_sampler_benchmark.py)."
+            "(in-process JAX via src/benchmark/factorized_sampler.py)."
         ),
     )
     factorized_sampler.add_argument("--max-moves-k", type=int, default=3)
@@ -313,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_phase_breakdown.add_argument("--warmup", type=int, default=2)
     rollout_phase_breakdown.add_argument("--max-measured-update", type=int, default=20)
 
-    from src.cli.map_pool_benchmark import build_map_pool_parser
+    from src.benchmark.map_pool import build_map_pool_parser
 
     build_map_pool_parser(subparsers)
 
@@ -332,8 +332,8 @@ def _init_benchmark_runtime() -> None:
 
 def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     import jax
-    from src.jax.benchmark import rollout_group_summary
-    from src.jax.training_benchmark import (
+    from src.benchmark.production import rollout_group_summary
+    from src.benchmark.training import (
         E2E_THROUGHPUT_GATE,
         aggregate_e2e_run_payloads,
         check_baseline_device_match,
@@ -475,7 +475,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
 
 
 def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
-    from src.jax.factorized_sampler_benchmark import run_factorized_sampler_benchmark
+    from src.benchmark.factorized_sampler import run_factorized_sampler_benchmark
 
     return run_factorized_sampler_benchmark(
         max_moves_k=int(args.max_moves_k),
@@ -489,19 +489,19 @@ def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
 
 def run_sanity_cli(args: argparse.Namespace) -> int:
     import jax
+    from src.benchmark.training import (
+        compose_benchmark_config,
+        run_training_benchmark,
+        training_benchmark_payload,
+    )
     from src.jax.preflight import (
         PreflightVerdict,
         compare_repro_snapshots,
         write_report,
     )
-    from src.jax.training_benchmark import (
-        compose_benchmark_config,
-        run_training_benchmark,
-        training_benchmark_payload,
-    )
 
     _init_benchmark_runtime()
-    from src.jax.training_benchmark import WORKSTATION_VALIDATION_OVERRIDES
+    from src.benchmark.training import WORKSTATION_VALIDATION_OVERRIDES
 
     overrides = (
         list(args.overrides)
@@ -781,14 +781,14 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
 
 
 def run_rollout_phase_profile_cli(args: argparse.Namespace) -> int:
-    from src.jax.rollout.phase_timing_report import PhaseTimingWindow
-    from src.jax.rollout_phase_profile import (
+    from src.benchmark.rollout_phase_profile import (
         compose_profile_config,
         format_profile_report,
         profile_result_payload,
         resolve_profile_overrides,
         run_rollout_phase_profile,
     )
+    from src.jax.rollout.phase_timing_report import PhaseTimingWindow
 
     quick = not bool(args.full_geometry)
     overrides = resolve_profile_overrides(
@@ -879,7 +879,7 @@ def main(argv: list[str] | None = None) -> int:
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
         case "map-pool":
-            from src.cli.map_pool_benchmark import dispatch_map_pool
+            from src.benchmark.map_pool import dispatch_map_pool
 
             return dispatch_map_pool(args)
         case "rollout-phase-profile":

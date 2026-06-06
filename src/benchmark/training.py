@@ -16,8 +16,8 @@ import jax.random
 import jax.tree
 
 import jax
+from src.benchmark.production import rollout_group_summary
 from src.config import TrainConfig, compose_hydra_train_config
-from src.jax.benchmark import rollout_group_summary
 from src.jax.device import ensure_jax_accelerator_backend
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
@@ -107,6 +107,7 @@ PLANET_FLOW_P0_BENCHMARK_OVERRIDES: tuple[str, ...] = (
     "telemetry.metric_groups.action_decision=true",
     "seed=42",
 )
+
 
 @dataclass(frozen=True, slots=True)
 class TrainingBenchmarkSnapshot:

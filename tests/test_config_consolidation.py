@@ -16,12 +16,12 @@ import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
-from src.config.rollout_allocation import resolve_rollout_group_specs
-from src.jax.training_benchmark import (
+from src.benchmark.training import (
     WORKSTATION_VALIDATION_OVERRIDES,
     compose_benchmark_config,
 )
+from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
+from src.config.rollout_allocation import resolve_rollout_group_specs
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
