@@ -316,6 +316,73 @@ def _shielded_scripted_edge_action(
     )
 
 
+def _switch_sample_opponent_family(
+    key: jax.Array,
+    family_id: jax.Array,
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+    *,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+    policy: object,
+    pool_row_indices: jax.Array,
+    sample_latest: Callable[[], JaxAction],
+    random_key: jax.Array,
+) -> JaxAction:
+    """Dispatch one opponent family via the shared seven-way lax.switch."""
+
+    def historical_branch(_: None) -> JaxAction:
+        current_action = sample_latest(None)
+        historical_action, _fallback = _sample_historical_action(
+            jax.random.fold_in(key, 71),
+            game,
+            batch,
+            historical_params_pool,
+            stage_view,
+            current_action,
+            policy,
+            cfg,
+            pool_row_indices,
+        )
+        return historical_action
+
+    def random_branch(_: None) -> JaxAction:
+        return _shielded_random_edge_action(random_key, game, batch, cfg)
+
+    def nearest_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_sniper_action_from_edge_batch
+        )
+
+    def turtle_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_turtle_action_from_edge_batch
+        )
+
+    def opportunistic_branch(_: None) -> JaxAction:
+        return _shielded_scripted_edge_action(
+            game, batch, cfg, build_opportunistic_action_from_edge_batch
+        )
+
+    def noop_branch(_: None) -> JaxAction:
+        return build_noop_action_from_edge_batch(game, batch, cfg)
+
+    return jax.lax.switch(
+        jnp.clip(family_id, 0, OPPONENT_NOOP),
+        (
+            sample_latest,
+            historical_branch,
+            nearest_branch,
+            turtle_branch,
+            opportunistic_branch,
+            random_branch,
+            noop_branch,
+        ),
+        None,
+    )
+
+
 def _sample_historical_action(
     key: jax.Array,
     game,
@@ -364,7 +431,7 @@ def _sample_historical_action(
     return action, fallback_count
 
 
-def _sample_single_family_2p_action(
+def _sample_single_family_action(
     key: jax.Array,
     family_id: jax.Array,
     game,
@@ -375,67 +442,56 @@ def _sample_single_family_2p_action(
     stage_view: StageView,
     historical_params_pool: dict | None,
     pool_row_indices: jax.Array,
+    *,
+    player_id: jax.Array,
+    opponent_params_by_player: tuple[dict, ...] | None,
 ) -> JaxAction:
-    def latest_branch(_: None) -> JaxAction:
-        action, _decoder_hidden = _sample_policy_action(
-            key,
-            game,
-            batch,
-            train_state,
-            policy,
-            cfg,
-            deterministic=cfg.opponents.self_play.deterministic,
-        )
+    player_count = int(cfg.task.player_count)
+
+    def sample_latest(_: None) -> JaxAction:
+        if player_count == 4:
+            opponent_params = _opponent_params_for_player(
+                player_id,
+                train_state,
+                opponent_params_by_player,
+                player_count=player_count,
+            )
+            action, _decoder_hidden = _sample_policy_action_with_params(
+                key,
+                game,
+                batch,
+                opponent_params,
+                policy,
+                cfg,
+                deterministic=cfg.opponents.self_play.deterministic,
+            )
+        else:
+            action, _decoder_hidden = _sample_policy_action(
+                key,
+                game,
+                batch,
+                train_state,
+                policy,
+                cfg,
+                deterministic=cfg.opponents.self_play.deterministic,
+            )
         return action
 
-    def historical_branch(_: None) -> JaxAction:
-        current_action = latest_branch(None)
-        historical_action, _fallback = _sample_historical_action(
-            jax.random.fold_in(key, 71),
-            game,
-            batch,
-            historical_params_pool,
-            stage_view,
-            current_action,
-            policy,
-            cfg,
-            pool_row_indices,
-        )
-        return historical_action
-
-    def random_branch(_: None) -> JaxAction:
-        return _shielded_random_edge_action(key, game, batch, cfg)
-
-    def nearest_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_sniper_action_from_edge_batch
-        )
-
-    def turtle_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_turtle_action_from_edge_batch
-        )
-
-    def opportunistic_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_opportunistic_action_from_edge_batch
-        )
-
-    def noop_branch(_: None) -> JaxAction:
-        return build_noop_action_from_edge_batch(game, batch, cfg)
-
-    return jax.lax.switch(
-        jnp.clip(family_id, 0, OPPONENT_NOOP),
-        (
-            latest_branch,
-            historical_branch,
-            nearest_branch,
-            turtle_branch,
-            opportunistic_branch,
-            random_branch,
-            noop_branch,
-        ),
-        None,
+    random_key = (
+        jax.random.fold_in(key, player_count) if player_count == 4 else key
+    )
+    return _switch_sample_opponent_family(
+        key,
+        family_id,
+        game,
+        batch,
+        cfg,
+        stage_view=stage_view,
+        historical_params_pool=historical_params_pool,
+        policy=policy,
+        pool_row_indices=pool_row_indices,
+        sample_latest=sample_latest,
+        random_key=random_key,
     )
 
 
@@ -473,106 +529,6 @@ def _sample_mixed_by_family_batched(
     return merged
 
 
-def _sample_mixed_opponent_2p_action(
-    opp_key: jax.Array,
-    opp_game,
-    opp_batch_cache: TurnBatch,
-    train_state: JaxTrainState,
-    policy: object,
-    cfg: TrainConfig,
-    slot_type: jax.Array,
-    stage_view: StageView,
-    historical_params_pool: dict | None,
-) -> JaxAction:
-    def sample_single_family(
-        key, family_id, reordered_game, reordered_batch, pool_row_indices
-    ):
-        return _sample_single_family_2p_action(
-            key,
-            family_id,
-            reordered_game,
-            reordered_batch,
-            train_state,
-            policy,
-            cfg,
-            stage_view,
-            historical_params_pool,
-            pool_row_indices,
-        )
-
-    return _sample_mixed_by_family_batched(
-        slot_type=slot_type,
-        game=opp_game,
-        batch=opp_batch_cache,
-        cfg=cfg,
-        base_key=opp_key,
-        sample_single_family=sample_single_family,
-    )
-
-
-def _sample_opponent_2p_action(
-    opp_key: jax.Array,
-    opp_game,
-    opp_batch_cache: TurnBatch,
-    *,
-    effective_type_ids: jax.Array,
-    single_family: jax.Array,
-    effective_single_family_id: jax.Array,
-    train_state: JaxTrainState,
-    policy: object,
-    cfg: TrainConfig,
-    stage_view: StageView,
-    historical_params_pool: dict | None,
-) -> JaxAction:
-    slot_type = jnp.take_along_axis(
-        effective_type_ids,
-        (1 - opp_game.player).astype(jnp.int32)[:, None],
-        axis=1,
-    ).squeeze(axis=1)
-    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
-        return build_noop_action_from_edge_batch(opp_game, opp_batch_cache, cfg)
-    if cfg.opponents.mode.opponent == "self":
-
-        def single_opponent_branch(_: None) -> JaxAction:
-            env_count = opp_batch_cache.planet_features.shape[0]
-            return _sample_single_family_2p_action(
-                opp_key,
-                effective_single_family_id,
-                opp_game,
-                opp_batch_cache,
-                train_state,
-                policy,
-                cfg,
-                stage_view,
-                historical_params_pool,
-                jnp.arange(env_count, dtype=jnp.int32),
-            )
-
-        def mixed_opponent_branch(_: None) -> JaxAction:
-            return _sample_mixed_opponent_2p_action(
-                opp_key,
-                opp_game,
-                opp_batch_cache,
-                train_state,
-                policy,
-                cfg,
-                slot_type,
-                stage_view,
-                historical_params_pool,
-            )
-
-        return jax.lax.cond(
-            single_family,
-            single_opponent_branch,
-            mixed_opponent_branch,
-            None,
-        )
-    if cfg.opponents.mode.opponent == "random":
-        return _shielded_random_edge_action(opp_key, opp_game, opp_batch_cache, cfg)
-    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
-    raise AssertionError("unreachable")
-
-
 def _opponent_params_for_player(
     player_id: jax.Array,
     train_state: JaxTrainState,
@@ -588,207 +544,108 @@ def _opponent_params_for_player(
     )
 
 
-def _sample_single_family_4p_action(
-    key: jax.Array,
-    family_id: jax.Array,
-    player_id: jax.Array,
-    game,
-    batch: TurnBatch,
-    train_state: JaxTrainState,
-    policy: object,
-    cfg: TrainConfig,
-    opponent_params_by_player: tuple[dict, ...] | None,
-    stage_view: StageView,
-    historical_params_pool: dict | None,
-    pool_row_indices: jax.Array,
-) -> JaxAction:
-    opponent_params = _opponent_params_for_player(
-        player_id,
-        train_state,
-        opponent_params_by_player,
-        player_count=int(cfg.task.player_count),
-    )
-
-    def latest_branch(_: None) -> JaxAction:
-        action, _decoder_hidden = _sample_policy_action_with_params(
-            key,
-            game,
-            batch,
-            opponent_params,
-            policy,
-            cfg,
-            deterministic=cfg.opponents.self_play.deterministic,
-        )
-        return action
-
-    def historical_branch(_: None) -> JaxAction:
-        current_action = latest_branch(None)
-        historical_action, _fallback = _sample_historical_action(
-            jax.random.fold_in(key, 71),
-            game,
-            batch,
-            historical_params_pool,
-            stage_view,
-            current_action,
-            policy,
-            cfg,
-            pool_row_indices,
-        )
-        return historical_action
-
-    def random_branch(_: None) -> JaxAction:
-        return _shielded_random_edge_action(
-            jax.random.fold_in(key, cfg.task.player_count), game, batch, cfg
-        )
-
-    def nearest_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_sniper_action_from_edge_batch
-        )
-
-    def turtle_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_turtle_action_from_edge_batch
-        )
-
-    def opportunistic_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
-            game, batch, cfg, build_opportunistic_action_from_edge_batch
-        )
-
-    def noop_branch(_: None) -> JaxAction:
-        return build_noop_action_from_edge_batch(game, batch, cfg)
-
-    return jax.lax.switch(
-        jnp.clip(family_id, 0, OPPONENT_NOOP),
-        (
-            latest_branch,
-            historical_branch,
-            nearest_branch,
-            turtle_branch,
-            opportunistic_branch,
-            random_branch,
-            noop_branch,
-        ),
-        None,
-    )
-
-
-def _sample_mixed_player_4p_action(
-    player_key: jax.Array,
-    player_id: jax.Array,
-    player_game,
-    player_batch: TurnBatch,
-    slot_type: jax.Array,
-    train_state: JaxTrainState,
-    policy: object,
-    cfg: TrainConfig,
-    opponent_params_by_player: tuple[dict, ...] | None,
-    stage_view: StageView,
-    historical_params_pool: dict | None,
-) -> JaxAction:
-    def sample_single_family(
-        key, family_id, reordered_game, reordered_batch, pool_row_indices
-    ):
-        return _sample_single_family_4p_action(
-            key,
-            family_id,
-            player_id,
-            reordered_game,
-            reordered_batch,
-            train_state,
-            policy,
-            cfg,
-            opponent_params_by_player,
-            stage_view,
-            historical_params_pool,
-            pool_row_indices,
-        )
-
-    return _sample_mixed_by_family_batched(
-        slot_type=slot_type,
-        game=player_game,
-        batch=player_batch,
-        cfg=cfg,
-        base_key=player_key,
-        sample_single_family=sample_single_family,
-    )
-
-
-def _four_player_step_action(
-    player_id: jax.Array,
-    *,
+def _sample_opponent_player_action(
     opp_key: jax.Array,
-    player_games,
-    player_batches,
+    *,
     effective_type_ids: jax.Array,
     single_family: jax.Array,
     effective_single_family_id: jax.Array,
-    learner_action: JaxAction,
-    learner_player: jax.Array,
     train_state: JaxTrainState,
     policy: object,
     cfg: TrainConfig,
-    opponent_params_by_player: tuple[dict, ...] | None,
-    active_stage_view: StageView,
+    stage_view: StageView,
     historical_params_pool: dict | None,
+    opp_game=None,
+    opp_batch: TurnBatch | None = None,
+    player_id: jax.Array | None = None,
+    player_games=None,
+    player_batches=None,
+    opponent_params_by_player: tuple[dict, ...] | None = None,
+    learner_action: JaxAction | None = None,
+    learner_player: jax.Array | None = None,
 ) -> JaxAction:
-    player_batch = jax.tree.map(
-        lambda x: jnp.take(x, player_id, axis=0), player_batches
-    )
-    player_game = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_games)
-    player_key = jax.random.fold_in(opp_key, player_id)
-    slot_type = effective_type_ids[:, player_id]
+    """Shared 2p/4p opponent dispatch; 4p overlays learner actions per env."""
+
+    player_count = int(cfg.task.player_count)
+    if player_count == 2:
+        game = opp_game
+        batch = opp_batch
+        sample_key = opp_key
+        resolved_player_id = jnp.asarray(0, dtype=jnp.int32)
+        slot_type = jnp.take_along_axis(
+            effective_type_ids,
+            (1 - game.player).astype(jnp.int32)[:, None],
+            axis=1,
+        ).squeeze(axis=1)
+    else:
+        game = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_games)
+        batch = jax.tree.map(lambda x: jnp.take(x, player_id, axis=0), player_batches)
+        sample_key = jax.random.fold_in(opp_key, player_id)
+        resolved_player_id = player_id
+        slot_type = effective_type_ids[:, player_id]
+
     if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
-        opponent_action = build_noop_action_from_edge_batch(
-            player_game, player_batch, cfg
-        )
+        opponent_action = build_noop_action_from_edge_batch(game, batch, cfg)
     elif cfg.opponents.mode.opponent == "self":
 
-        def single_player_branch(_: None) -> JaxAction:
-            env_count = player_batch.planet_features.shape[0]
-            return _sample_single_family_4p_action(
-                player_key,
+        def single_family_branch(_: None) -> JaxAction:
+            env_count = batch.planet_features.shape[0]
+            return _sample_single_family_action(
+                sample_key,
                 effective_single_family_id,
-                player_id,
-                player_game,
-                player_batch,
+                game,
+                batch,
                 train_state,
                 policy,
                 cfg,
-                opponent_params_by_player,
-                active_stage_view,
+                stage_view,
                 historical_params_pool,
                 jnp.arange(env_count, dtype=jnp.int32),
+                player_id=resolved_player_id,
+                opponent_params_by_player=opponent_params_by_player,
             )
 
-        def mixed_player_branch(_: None) -> JaxAction:
-            return _sample_mixed_player_4p_action(
-                player_key,
-                player_id,
-                player_game,
-                player_batch,
-                slot_type,
-                train_state,
-                policy,
-                cfg,
-                opponent_params_by_player,
-                active_stage_view,
-                historical_params_pool,
+        def mixed_family_branch(_: None) -> JaxAction:
+            def sample_single_family(
+                key, family_id, reordered_game, reordered_batch, pool_row_indices
+            ):
+                return _sample_single_family_action(
+                    key,
+                    family_id,
+                    reordered_game,
+                    reordered_batch,
+                    train_state,
+                    policy,
+                    cfg,
+                    stage_view,
+                    historical_params_pool,
+                    pool_row_indices,
+                    player_id=resolved_player_id,
+                    opponent_params_by_player=opponent_params_by_player,
+                )
+
+            return _sample_mixed_by_family_batched(
+                slot_type=slot_type,
+                game=game,
+                batch=batch,
+                cfg=cfg,
+                base_key=sample_key,
+                sample_single_family=sample_single_family,
             )
 
         opponent_action = jax.lax.cond(
             single_family,
-            single_player_branch,
-            mixed_player_branch,
+            single_family_branch,
+            mixed_family_branch,
             None,
         )
     elif cfg.opponents.mode.opponent == "random":
-        opponent_action = _shielded_random_edge_action(
-            player_key, player_game, player_batch, cfg
-        )
+        opponent_action = _shielded_random_edge_action(sample_key, game, batch, cfg)
     else:
         validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
         raise AssertionError("unreachable")
-    is_learner_player = learner_player == player_id
-    return _select_env_action(is_learner_player, learner_action, opponent_action)
+
+    if player_count == 4:
+        is_learner_player = learner_player == player_id
+        return _select_env_action(is_learner_player, learner_action, opponent_action)
+    return opponent_action

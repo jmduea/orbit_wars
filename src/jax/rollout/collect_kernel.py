@@ -25,9 +25,8 @@ from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
 from src.opponents.jax_actions.builders import owned_planet_ships
 from src.opponents.jax_actions.sampling import (
     _encode_four_player_turn_batches,
-    _four_player_step_action,
     _opponent_count_metrics,
-    _sample_opponent_2p_action,
+    _sample_opponent_player_action,
     _single_stage_family_id,
     _maybe_effective_single_family_id,
 )
@@ -363,10 +362,8 @@ def _env_step_with_opponents(
         opp_game = state.game._replace(
             player=(1 - state.learner_player).astype(jnp.int32)
         )
-        opponent_action = _sample_opponent_2p_action(
+        opponent_action = _sample_opponent_player_action(
             opp_key,
-            opp_game,
-            opp_batch_cache,
             effective_type_ids=opponent_ctx.effective_type_ids,
             single_family=opponent_ctx.single_family,
             effective_single_family_id=opponent_ctx.effective_single_family_id,
@@ -375,6 +372,9 @@ def _env_step_with_opponents(
             cfg=cfg,
             stage_view=active_stage_view,
             historical_params_pool=historical_params_pool,
+            opp_game=opp_game,
+            opp_batch=opp_batch_cache,
+            opponent_params_by_player=opponent_params_by_player,
         )
         return batched_step(state, learner_action, opponent_action, cfg.task, cfg.reward)
 
@@ -383,22 +383,22 @@ def _env_step_with_opponents(
         state, cfg.task, env_count
     )
     per_player_action = jax.vmap(
-        lambda player_id: _four_player_step_action(
-            player_id,
-            opp_key=opp_key,
-            player_games=player_games,
-            player_batches=player_batches,
+        lambda player_id: _sample_opponent_player_action(
+            opp_key,
             effective_type_ids=opponent_ctx.effective_type_ids,
             single_family=opponent_ctx.single_family,
             effective_single_family_id=opponent_ctx.effective_single_family_id,
-            learner_action=learner_action,
-            learner_player=state.learner_player,
             train_state=train_state,
             policy=policy,
             cfg=cfg,
-            opponent_params_by_player=opponent_params_by_player,
-            active_stage_view=active_stage_view,
+            stage_view=active_stage_view,
             historical_params_pool=historical_params_pool,
+            player_id=player_id,
+            player_games=player_games,
+            player_batches=player_batches,
+            opponent_params_by_player=opponent_params_by_player,
+            learner_action=learner_action,
+            learner_player=state.learner_player,
         )
     )(player_ids)
     multi_player_action = jax.tree.map(
