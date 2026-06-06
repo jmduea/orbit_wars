@@ -571,6 +571,72 @@ def build_parser() -> argparse.ArgumentParser:
         help="Last update index included in the throughput window (default 20).",
     )
 
+    rollout_phase_profile = subparsers.add_parser(
+        "rollout-phase-profile",
+        help=(
+            "Offline admission-shaped rollout phase profile (runs in integration "
+            "worktree; host-timed — not for gate spine)."
+        ),
+    )
+    rollout_phase_profile.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Integration worktree (default: ../orbit_wars-integration).",
+    )
+    rollout_phase_profile.add_argument(
+        "--preset",
+        choices=("admission",),
+        default="admission",
+    )
+    rollout_phase_profile.add_argument("--train-overrides", nargs="*", default=[])
+    rollout_phase_profile.add_argument("--model", default=None)
+    rollout_phase_profile.add_argument("--updates", type=int, default=5)
+    rollout_phase_profile.add_argument("--warmup", type=int, default=2)
+    rollout_phase_profile.add_argument("--max-measured-update", type=int, default=20)
+    rollout_phase_profile.add_argument("--json", action="store_true")
+    rollout_phase_profile.add_argument(
+        "--full-geometry",
+        action="store_true",
+        help="Full admission 32×256 geometry (slow; default is quick 4×16).",
+    )
+    rollout_phase_profile.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Optional summary JSON path (written in integration worktree).",
+    )
+
+    rollout_phase_breakdown = subparsers.add_parser(
+        "rollout-phase-breakdown",
+        help=(
+            "Print rollout collect phase breakdown from gate JSON or *_jax.jsonl "
+            "(requires telemetry=rollout_phase_timing)."
+        ),
+    )
+    rollout_phase_breakdown.add_argument(
+        "input",
+        type=Path,
+        help="Gate result JSON (reads stage.log_path) or logs/*_jax.jsonl path.",
+    )
+    rollout_phase_breakdown.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON instead of a human-readable table.",
+    )
+    rollout_phase_breakdown.add_argument(
+        "--warmup",
+        type=int,
+        default=2,
+        help="Skip this many initial updates before averaging (default 2).",
+    )
+    rollout_phase_breakdown.add_argument(
+        "--max-measured-update",
+        type=int,
+        default=20,
+        help="Last update index included in the window (default 20).",
+    )
+
     tournament_proof = subparsers.add_parser(
         "tournament-proof",
         help=(

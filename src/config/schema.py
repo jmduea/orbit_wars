@@ -34,7 +34,11 @@ class TaskConfig:
     intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
     # train: JAX-native reset/step (no pure_callback); kaggle: reference planet/comet paths
-    env_parity_mode: str = "train"  # train | kaggle | legacy (legacy = pre-#188 comet-free hot path)
+    env_parity_mode: str = (
+        "train"  # train | kaggle | legacy (legacy = pre-#188 comet-free hot path)
+    )
+    map_pool_path: str | None = None
+    map_pool_sha256: str | None = None
 
 
 @dataclass(slots=True)
@@ -141,6 +145,7 @@ class MetricGroupsConfig:
     historical_pool: bool = False
     events: bool = True
     debug: bool = False
+    rollout_phase_timing: bool = False
 
 
 @dataclass(slots=True)

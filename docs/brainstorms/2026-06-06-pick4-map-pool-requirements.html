@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Requirements: Pick #4 pre-generated map pool</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ee;
+      --accent: #2d5a8c;
+      --accent-soft: #e8f0fa;
+      --accent-text: #1e4468;
+      --warn-soft: #fff4e5;
+      --warn-text: #7a4f00;
+      --radius: 8px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      --mono: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    header.doc-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    header.doc-header h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.55rem;
+      font-weight: 650;
+    }
+
+    header.doc-header .eyebrow {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header.doc-header dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 1.25rem;
+      margin: 1.25rem 0 0;
+      font-size: 0.9rem;
+    }
+
+    header.doc-header dt {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    header.doc-header dd {
+      margin: 0;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    section h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 650;
+      color: var(--accent-text);
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 0.4rem;
+    }
+
+    section h3 {
+      margin: 1.25rem 0 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+
+    p,
+    li {
+      max-width: 72ch;
+    }
+
+    p {
+      margin: 0 0 0.85rem;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 0.85rem;
+      padding-left: 1.35rem;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--accent-soft);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin: 0.5rem 0 1rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    .id-col {
+      width: 3.5rem;
+      white-space: nowrap;
+      font-weight: 600;
+      color: var(--accent-text);
+    }
+
+    .callout {
+      background: var(--warn-soft);
+      border-left: 4px solid #d4a017;
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+      color: var(--warn-text);
+    }
+
+    .ae-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.15rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .ae-block .ae-id {
+      font-weight: 700;
+      color: var(--accent-text);
+      margin-bottom: 0.35rem;
+    }
+
+    .ae-meta {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    footer.composition-signal {
+      margin-top: 2rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="doc-header">
+      <div class="eyebrow">Brainstorm requirements</div>
+      <h1>Pick #4 pre-generated map pool</h1>
+      <dl>
+        <dt>Date</dt>
+        <dd><time datetime="2026-06-06">2026-06-06</time></dd>
+        <dt>Topic</dt>
+        <dd>pick4-map-pool</dd>
+        <dt>Supersedes (strategy)</dt>
+        <dd>Inline JAX generation path in <a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/brainstorms/2026-06-06-pick4-compile-parity-requirements.html">2026-06-06-pick4-compile-parity-requirements.html</a>
+          (pick 4a failed compile gate)</dd>
+        <dt>Target</dt>
+        <dd><code>orbit_wars-integration</code> Phase 2 env-parity</dd>
+      </dl>
+    </header>
+
+    <section id="summary">
+      <h2>Summary</h2>
+      <p>
+        Re-attempt pick #4 using a <strong>500-map baked pool</strong> (planet layout + comet schedules per entry).
+        Training-path JAX <code>reset()</code> indexes into the pool with round-robin rotation across reseeds — no
+        inline generation in the JIT trace. Default pool committed in-repo; <code>ow</code> supports rebake and Hydra
+        override. Eval and replay stay on <code>kaggle_environments</code> observation replay. A <strong>profiling
+          gate</strong> must measure single-map bake time (with comets) before committing to the full 500-batch bake.
+      </p>
+    </section>
+
+    <section id="problem-frame">
+      <h2>Problem Frame</h2>
+      <p>
+        Inline pure JAX planet generation in <code>reset()</code> passed parity and trace hygiene but failed the compile
+        gate: cold-cache benchmark smoke hung 14+ minutes (same cliff class as <code>0eb349e</code>). Deferring comets
+        did not help — the rejection-sampling <code>while_loop</code> in reset is sufficient to brick training-loop
+        compile. Live generation inside the vmapped hot path is ruled out for integration.
+      </p>
+    </section>
+
+    <section id="key-decisions">
+      <h2>Key Decisions</h2>
+      <ul>
+        <li><strong>No inline live generation in training hot path.</strong> Proven path to
+          <code>compile_time_regression</code>; pool gather replaces generation in trace.</li>
+        <li><strong>All training-path JAX resets use the pool</strong> — rollout, benchmark smoke, parity tests. Not
+          eval/tournament reset.</li>
+        <li><strong>Eval + replay carve-out.</strong> Submit-valid and replay paths must use
+          <code>kaggle_environments</code> / observation replay — never pool reset.</li>
+        <li><strong>500 maps, round-robin rotation</strong> across reseed scheduler — reduces memorization vs fixed hash
+          per episode.</li>
+        <li><strong>Full v1 pool entries</strong> include planet layout and all comet wave schedules (not planets-only
+          deferral).</li>
+        <li><strong>Hybrid artifact stewardship.</strong> Default pool committed for reproducibility; CLI rebake and
+          Hydra path override for experiments.</li>
+        <li><strong>Profile-before-batch gate.</strong> Measure wall time to bake <em>one</em> full map (planets +
+          comets) before authorizing 500-map production bake.</li>
+        <li><strong>Compile admit unchanged.</strong> ≤5 minute first-compile on cold-cache benchmark smoke remains hard
+          gate.</li>
+      </ul>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+
+      <h3>Profiling &amp; bake gates</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r1">R1.</td>
+            <td>Before production 500-map bake, operator/agent runs a <strong>single-map profile</strong>: wall time and
+              success rate to generate one valid entry (planets + all comet waves) via offline reference generators.
+              Record result in manifest or bake log.</td>
+          </tr>
+          <tr>
+            <td id="r2">R2.</td>
+            <td>Full 500-map batch bake proceeds only after R1 profile is reviewed — extrapolated batch time (500 ×
+              per-map) must be acceptable for operator workflow (no fixed second threshold in this doc; operator
+              judges).</td>
+          </tr>
+          <tr>
+            <td id="r3">R3.</td>
+            <td>Every baked entry passes mechanical validity at bake time: 5–10 planet groups, symmetry, bounds, no
+              collisions, orbiting group; comet schedules valid per reference rules (spawn steps, path bounds, fourfold
+              symmetry).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Map pool &amp; reset behavior</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r4">R4.</td>
+            <td>Pool contains exactly <strong>500</strong> entries unless Hydra override explicitly sets a different
+              size for experiments (default committed artifact = 500).</td>
+          </tr>
+          <tr>
+            <td id="r5">R5.</td>
+            <td>Training-path <code>reset()</code> selects map via <strong>round-robin rotation</strong> tied to reseed
+              / episode indexing — not a static hash-only mapping for all training.</td>
+          </tr>
+          <tr>
+            <td id="r6">R6.</td>
+            <td>Hot-path reset is gather/copy from precomputed tensors + home assignment + angular velocity — no
+              <code>while_loop</code> rejection sampling, no comet path search in <code>step()</code>.</td>
+          </tr>
+          <tr>
+            <td id="r7">R7.</td>
+            <td><code>step()</code> activates precomputed comet data from the selected pool entry only
+              (spawn/expire/advance from baked schedules).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Artifact stewardship</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r8">R8.</td>
+            <td>Default map pool artifact is <strong>committed in-repo</strong> (versioned, reproducible). Manifest and
+              training config record pool version or content hash.</td>
+          </tr>
+          <tr>
+            <td id="r9">R9.</td>
+            <td><code>ow</code> exposes rebake and optional Hydra override path for experiments without replacing the
+              committed default silently.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Eval carve-out &amp; hot-path invariants</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r10">R10.</td>
+            <td>Eval, tournament, Docker packaging replay, and submit-valid paths use <code>kaggle_environments</code> /
+              observation replay — <strong>not</strong> pool-based <code>reset()</code>.</td>
+          </tr>
+          <tr>
+            <td id="r11">R11.</td>
+            <td>JAX-only hot path: no <code>pure_callback</code>, no <code>src/game/*</code> imports in
+              reset/step/rollout jit paths (tier-A trace hygiene). Offline bake may use reference Python generators.
+            </td>
+          </tr>
+          <tr>
+            <td id="r12">R12.</td>
+            <td>No sequential <code>lax.scan</code> in <code>_launch_fleets</code> (pick #3 rejection stands).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Verification &amp; admit</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r13">R13.</td>
+            <td>Per-pick fast gates: <code>make test-kaggle-parity</code> + tier-A trace hygiene on integration
+              <code>src/jax/</code>.</td>
+          </tr>
+          <tr>
+            <td id="r14">R14.</td>
+            <td>Compile smoke: cold-cache <code>ow benchmark training --preset primary --updates 3 --warmup 1</code>
+              first-compile ≤5 minutes before manifest admit.</td>
+          </tr>
+          <tr>
+            <td id="r15">R15.</td>
+            <td>Manifest records <code>env_parity_mode: map_pool</code>, pool hash/version, R1 single-map profile
+              metrics, and compile smoke verdict.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="acceptance-examples">
+      <h2>Acceptance Examples</h2>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae1">AE1.</div>
+        <div class="ae-meta">Covers R1, R2</div>
+        <p><strong>Trigger:</strong> Single-map profile reports 2.4s per entry with comets; operator accepts ~20 min for
+          500-map bake.</p>
+        <p><strong>Expected:</strong> Production bake authorized; profile artifact attached to manifest before batch
+          run.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae2">AE2.</div>
+        <div class="ae-meta">Covers R1, R2</div>
+        <p><strong>Trigger:</strong> Single-map profile reports 120s per entry — 500-map extrapolation ~16 hours.</p>
+        <p><strong>Expected:</strong> Batch bake blocked; replan bake algorithm (simplify comet precompute, smaller
+          pool, or parallel bake worker) before pick #4 implementation continues.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae3">AE3.</div>
+        <div class="ae-meta">Covers R6, R14</div>
+        <p><strong>Trigger:</strong> Pool gather reset landed; compile smoke completes in 4m 10s cold cache.</p>
+        <p><strong>Expected:</strong> Manifest admit <code>pick_4_map_pool</code>; integration HEAD advances from
+          rollback substrate.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae4">AE4.</div>
+        <div class="ae-meta">Covers R10</div>
+        <p><strong>Trigger:</strong> Operator runs tournament eval on checkpoint trained with map pool.</p>
+        <p><strong>Expected:</strong> Eval uses Kaggle env / obs replay; agent never receives pool-only boards on
+          submit-valid path.</p>
+      </div>
+    </section>
+
+    <section id="success-criteria">
+      <h2>Success Criteria</h2>
+      <ul>
+        <li>Single-map bake profile completed and reviewed before 500-map production bake (R1–R2).</li>
+        <li>Committed 500-map pool passes bake-time validity checks (R3).</li>
+        <li>Cold-cache compile smoke ≤5 minutes with pool gather reset (R14).</li>
+        <li>Parity + trace hygiene green on integration (R13, R11).</li>
+        <li>Eval/replay unchanged on Kaggle path (R10).</li>
+      </ul>
+    </section>
+
+    <section id="scope-boundaries">
+      <h2>Scope Boundaries</h2>
+
+      <h3>Deferred for later</h3>
+      <ul>
+        <li>Held-out map slice for admission overfitting checks (challenger option).</li>
+        <li>Operator <code>make gate-admission</code> re-run until compile + parity stack green.</li>
+        <li>Bit-exact seed replay vs <code>kaggle_environments</code> for training maps.</li>
+        <li>Pick #5 mechanics hunks until map-pool pick #4 admits.</li>
+      </ul>
+
+      <h3>Outside this product's identity</h3>
+      <ul>
+        <li>Inline JAX live generation in vmapped <code>reset()</code> / <code>step()</code> (proven compile cliff).
+        </li>
+        <li>Pool-based tournament boards (eval must use Kaggle env).</li>
+        <li><code>pure_callback</code> reference generators on hot path.</li>
+      </ul>
+    </section>
+
+    <section id="dependencies">
+      <h2>Dependencies &amp; Assumptions</h2>
+      <ul>
+        <li>Integration rollback substrate <code>9db50f5</code> (or subsequent admit) is bake/implementation base.</li>
+        <li>Reference generators in <code>src/game/planet_generation.py</code> and
+          <code>src/game/comet_generation.py</code> anchor offline bake rules.</li>
+        <li>Assumption: gather reset trace is small enough for ≤5 min compile — to be verified by R14 after pool lands.
+        </li>
+        <li>Assumption: single-map bake time is representative of batch bake (linear extrapolation); profile uses same
+          code path as batch entry.</li>
+      </ul>
+
+      <div class="callout">
+        <p><strong>Confirmed caveat:</strong> Full 500-map batch is gated on profiling one complete map (planets +
+          comets) first. Planning and implementation must not treat 500 as committed until R1 is recorded and operator
+          accepts extrapolated batch cost.</p>
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>Sources &amp; Research</h2>
+      <ul>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/brainstorms/2026-06-06-pick4-compile-parity-requirements.html">2026-06-06-pick4-compile-parity-requirements.html</a>
+          — prior split 4a/4b strategy; pick 4a compile failure</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md">phase2-pick4-jax-compile-rollback-criteria.md</a>
+        </li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/plans/2026-06-06-002-feat-pick4-compile-bounded-plan.html">2026-06-06-002-feat-pick4-compile-bounded-plan.html</a>
+          — inline gen plan superseded by this approach</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/solutions/conventions/jax-no-kaggle-callbacks.md">jax-no-kaggle-callbacks.md</a>
+        </li>
+      </ul>
+    </section>
+
+    <footer class="composition-signal">
+      Composed 2026-06-06 by ce-brainstorm — confirmed with single-map profile gate caveat
+    </footer>
+  </div>
+</body>
+
+</html>

@@ -28,7 +28,7 @@ You are continuing the **nuclear cherry-pick manifest** program. Phase 1 (anchor
 |------|------|--------|----------------|
 | Gate harness | `/home/jmduea/projects/orbit_wars` | `main` | Admission gate recipe fix committed (`conf/benchmark/gates/admission.yaml` `train_overrides`); manifest updated |
 | Phase 1 anchor | `/home/jmduea/projects/orbit_wars-throughput-anchor` | `throughput-baseline` | Pre-hygiene anchor + Phase 1 fixes; admission passed on locked recipe |
-| Phase 2 integration | `/home/jmduea/projects/orbit_wars-integration` | `throughput-baseline-integration` | **`75a7cf2`** — picks #1, #2, **3b**, **#4** committed |
+| Phase 2 integration | `/home/jmduea/projects/orbit_wars-integration` | `throughput-baseline-integration` | **`9db50f5`** — picks #1, #2, **3b** only (rolled back from `0eb349e` / `75a7cf2`, 2026-06-06) |
 | Pre-hygiene reference | `/home/jmduea/projects/orbit_wars-pre-hygiene` | detached @ baseline | Manifest `baseline_sha` reference only |
 
 Integration was created at **`../orbit_wars-integration`** (not `../orbit_wars-throughput-baseline-integration` from the original handoff). Use the path above consistently.
@@ -125,7 +125,7 @@ See [jax-no-kaggle-callbacks.md](../solutions/conventions/jax-no-kaggle-callback
 
 | Order | Subject | Status | Notes |
 |-------|---------|--------|-------|
-| **#4** | Pure JAX planet + comet generation | **admit** | Greenfield on integration @ `75a7cf2`; unified hot path, no callbacks/`env_parity_mode`. |
+| **#4** | Pure JAX planet + comet generation | **pending (re-attempt)** | Greenfield was @ `75a7cf2`; mechanical fix `0eb349e` **rejected** (`compile_time_regression`); worktree reset to `9db50f5`. |
 | **#5** | Remaining mechanics hunks | pending | One hunk per pick if needed; prefer vectorized slot-order launch. Pick 3b already shipped rotation, ship_speed, first-hit, planet_id. Exclude bundled pick #3 replay and `step_multi_player` unless proven neutral. |
 | **#6** | Main-branch callback teardown | pending | On `main` eventually — remove dead callback paths so tier-A static gate is clean; single JAX env for train and parity tests. |
 
@@ -170,16 +170,13 @@ User confirmed Phase 2 env-parity targets **mechanical fidelity**: JAX must obey
 
 Plan: [`docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md`](../plans/2026-06-06-001-fix-pick4-jax-parity-plan.md).
 
-### Pick #4 mechanical fix slice — IN PROGRESS → verify integration HEAD after commit
+### Pick #4 mechanical fix slice — REJECTED @ `0eb349e` (rolled back)
 
-Fixes landed on integration worktree (see integration `git log -1` after commit):
+Mechanical fidelity commit `0eb349e7be0f3f9479b39900c62df61c29b48879` (`fix(jax-env): mechanical fidelity for pick #4 planet/comet generation`) caused **10m+ JAX compile** on smoke/benchmark — unacceptable for the integration loop.
 
-- P0 two-phase planet loop (no 12-planet static early exit)
-- P0 post-move `initial_planets` expire sync
-- P1 independent px/py, reserved comet slot IDs, `_jit_spawn_comet_group`
-- Validity tests: `tests/test_planet_generation.py`, `tests/test_comet_generation.py`, long-run sync in `test_jax_env_parity.py`
+**Rollback (2026-06-06):** `git reset --hard 9db50f59f6f0d42d74b37cb1dbee373fc3ed6827` on `/home/jmduea/projects/orbit_wars-integration`. Integration HEAD is **`9db50f5`** (picks #1, #2, **3b** only). Pick #4 greenfield (`75a7cf2`) is no longer on the worktree until re-applied.
 
-**Pick #5 and admission remain operator-gated** until integration fast gates green on fix commit HEAD.
+Manifest: `integration_state.integration_head_sha` = `9db50f5`; mechanical fix recorded as **rejected** with reason `compile_time_regression`. Pick #5 remains pending; admission not re-run.
 
 ---
 

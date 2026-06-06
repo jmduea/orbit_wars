@@ -480,7 +480,7 @@
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "run_date": "2026-06-06",
       "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
-      "granularity": "Greenfield JAX ports of src/game/{planet,comet}_generation.py rejection-sampling plus unified comet env wiring (JaxCometState, episode_seed, spawn/expire/advance). User decision: implement on integration directly — not main-first transplant.",
+      "granularity": "Greenfield JAX ports of src/game/{planet,comet}_generation.py rejection-sampling plus unified comet env wiring (JaxCometState, episode_seed, spawn/expire/advance). User decision: implement on integration directly \u2014 not main-first transplant.",
       "files_touched": [
         "src/jax/planet_generation.py",
         "src/jax/comet_generation.py",
@@ -514,7 +514,67 @@
       },
       "verdict": "admit",
       "reject_reasons": [],
-      "user_decision": "greenfield_on_integration_not_main_first"
+      "user_decision": "greenfield_on_integration_not_main_first",
+      "superseded_by": "pick_4_map_pool",
+      "superseded_note": "Inline JAX generation compile cliff; map-pool gather reset is the active pick #4 strategy (2026-06-06)."
+    },
+    {
+      "id": "pick_4_map_pool",
+      "subject": "Pre-baked 500-map pool gather reset (offline bake, no inline generation)",
+      "phase": "env_parity",
+      "cherry_pick_order": 4,
+      "status": "reject",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
+      "integration_note": "Uncommitted working tree on 9db50f5 substrate; units U1\u2013U7 complete, U8 compile gate failed.",
+      "granularity": "Offline bake via src/game/* into data/jax_map_pool/default_v1.npz; training reset gathers pool entry + baked comet activation in step(); eval/tournament stay on Kaggle obs replay.",
+      "files_touched": [
+        "src/jax/map_pool/",
+        "src/jax/env.py",
+        "src/jax/rollout/collect.py",
+        "src/jax/train/rollout_groups.py",
+        "conf/task/map_pool.yaml",
+        "data/jax_map_pool/default_v1.npz",
+        "tests/test_map_pool_*.py",
+        "tests/test_jax_env_parity.py"
+      ],
+      "map_pool": {
+        "npz_path": "data/jax_map_pool/default_v1.npz",
+        "sha256": "b48a38e4ad63aab25ffb155af321ab470b4e658cff42eca0369d72048f8d3023",
+        "pool_size": 500,
+        "profile": {
+          "mean_secs_per_map": 0.13083340820157902,
+          "extrapolated_batch_secs": 65.4167041007895,
+          "bake_seconds": 81.66847151098773
+        }
+      },
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "25 passed, 1 deselected in 151.28s"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg on integration src/jax hot-path modules",
+        "verdict": "PASS",
+        "result": "0 matches for pure_callback, _reference_, while_loop in tier-A files present on integration worktree",
+        "note": "make test-jax-trace-hygiene from main harness scans main src/jax (legacy kaggle callbacks); integration map-pool path is callback-free"
+      },
+      "compile_smoke": {
+        "command": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pick4_map_pool_compile --updates 3 --warmup 1 --out /tmp/pick4_compile.json --overrides task=map_pool",
+        "verdict": "FAIL",
+        "compile_seconds_to_update_3": 306.0894605079957,
+        "ceiling_seconds": 300,
+        "default_backend": "gpu",
+        "commit_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
+        "note": "Cold-cache compile completes but exceeds R14 \u22645 min gate by ~6 s; do not admit per phase2 pick #4 rollback criteria"
+      },
+      "verdict": "reject",
+      "reject_reasons": [
+        "compile_time_regression"
+      ]
     }
   ],
   "integration_state": {
@@ -525,13 +585,25 @@
       "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
       "33b56e2:src/jax/features.py + env.py learner encode call sites",
       "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)",
-      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)",
-      "greenfield:src/jax/{planet_generation,comet_generation}.py + env comet wiring (pick #4, 2026-06-06 @ 75a7cf2)"
+      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)"
     ],
     "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
-    "last_integrated_note": "Picks #1\u20132 + pick 3b + pick #4 greenfield JAX planet/comet generation; sequential launch deferred; admission not re-run after 3b or #4",
-    "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
-    "integration_head_note": "Pick #4 ADMIT (2026-06-06): greenfield pure JAX planet_generation.py + comet_generation.py on integration; fast gates PASS; admission not re-run",
+    "last_integrated_note": "Picks #1\u20132 + pick 3b only; pick #4 greenfield (75a7cf2) and mechanical fix (0eb349e) rolled back 2026-06-06 to 9db50f5 (compile_time_regression on mechanical fix smoke/benchmark)",
+    "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
+    "integration_head_note": "Rollback 2026-06-06: git reset --hard 9db50f5 on integration worktree. Map-pool pick #4 (U1\u2013U7) implemented as uncommitted working tree; compile smoke 306 s > 300 s ceiling \u2014 not admitted.",
+    "pick_4_map_pool_attempt_2026_06_06": {
+      "verdict": "reject",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "integration_head": "9db50f5",
+      "working_tree": "uncommitted",
+      "parity": "25 passed make test-kaggle-parity",
+      "compile_smoke_seconds_to_update_3": 306.09,
+      "compile_ceiling_seconds": 300,
+      "reject_reason": "compile_time_regression",
+      "pool_sha256": "b48a38e4ad63aab25ffb155af321ab470b4e658cff42eca0369d72048f8d3023",
+      "next_steps": "Investigate compile budget (pool tensor shapes in trace, or relax gate with operator sign-off); commit integration work only after admit"
+    },
     "pick_4_attempt_2026_06_06": {
       "verdict": "admit",
       "implementation": "greenfield_on_integration",
@@ -539,17 +611,26 @@
       "prior_blocked_reason": "no_source_commits_on_main",
       "adversarial_re_review_2026_06_06": {
         "fast_gates": "pass",
-        "functional_parity": "fail",
+        "functional_parity": "pass",
         "mechanical_fidelity_scope_2026_06_06": "User pivot: validity/rules gate, not seed replay. Coordinate goldens and Kaggle string RNG deprioritized.",
         "p0": [
           "planet_generation static-phase early exit (12 vs 24-32 planets)",
           "env.py post-move expire drops initial_planets updates (desync step 85)"
         ],
         "fix_before": "pick_5_or_admission",
-        "parity_criterion": "make test-kaggle-parity — mechanical validity invariants + env sync tests, not coordinate goldens vs reference",
+        "parity_criterion": "make test-kaggle-parity \u2014 mechanical validity invariants + env sync tests, not coordinate goldens vs reference",
         "mechanical_fidelity_fix_head": "0eb349e",
-        "mechanical_fidelity_gates": "51 passed make test-kaggle-parity; tier-A rg 0 matches integration src/jax; 10 pytest trace hygiene"
-      }
+        "mechanical_fidelity_gates": "51 passed make test-kaggle-parity; tier-A rg 0 matches integration src/jax; 10 pytest trace hygiene",
+        "mechanical_fidelity_fix_verdict": "rejected",
+        "mechanical_fidelity_fix_reject_reason": "compile_time_regression",
+        "mechanical_fidelity_fix_reject_note": "10m+ JAX compile on smoke/benchmark after 0eb349e; operator rolled integration worktree back to 9db50f5"
+      },
+      "worktree_head_after_rollback": "9db50f5",
+      "rollback_date": "2026-06-06",
+      "rollback_from_shas": [
+        "0eb349e7be0f3f9479b39900c62df61c29b48879",
+        "75a7cf287f3a01903179f4459464af4c16a06acc"
+      ]
     },
     "admission_passed": true,
     "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",

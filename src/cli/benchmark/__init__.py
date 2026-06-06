@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from src.cli.benchmark.admission_throughput import run_admission_throughput_cli
 from src.cli.benchmark.calibrate import run_calibrate_cli
-from src.cli.benchmark.calibrate_seed import run_calibrate_seed_scheduler_cli
 from src.cli.benchmark.calibrate_qualifier_seeds import (
     run_calibrate_qualifier_seeds_cli,
 )
+from src.cli.benchmark.calibrate_seed import run_calibrate_seed_scheduler_cli
 from src.cli.benchmark.calibrate_unified import run_calibrate_unified_tournament_cli
 from src.cli.benchmark.common import (
     LEARN_PROOF_PRIMITIVES,
@@ -16,7 +17,6 @@ from src.cli.benchmark.common import (
 )
 from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.factorized import run_factorized_sampler_cli
-from src.cli.benchmark.admission_throughput import run_admission_throughput_cli
 from src.cli.benchmark.gate import run_gate_cli
 from src.cli.benchmark.learn_proof import run_learn_proof_cli
 from src.cli.benchmark.parser import build_parser
@@ -24,6 +24,8 @@ from src.cli.benchmark.planet_flow import (
     run_planet_flow_noop_smoke_cli,
     run_shortlist_planet_flow_sweep_cli,
 )
+from src.cli.benchmark.rollout_phase_breakdown import run_rollout_phase_breakdown_cli
+from src.cli.benchmark.rollout_phase_profile import run_rollout_phase_profile_cli
 from src.cli.benchmark.sanity import run_sanity_cli
 from src.cli.benchmark.tournament_proof import run_tournament_proof_cli
 from src.cli.benchmark.training import run_training_benchmark_cli
@@ -41,6 +43,8 @@ __all__ = [
     "run_env_parity_ab_cli",
     "run_factorized_sampler_cli",
     "run_admission_throughput_cli",
+    "run_rollout_phase_breakdown_cli",
+    "run_rollout_phase_profile_cli",
     "run_gate_cli",
     "run_learn_proof_cli",
     "run_planet_flow_noop_smoke_cli",
@@ -49,6 +53,7 @@ __all__ = [
     "run_tournament_proof_cli",
     "run_training_benchmark_cli",
 ]
+
 
 def main(argv: list[str] | None = None) -> int:
     if not argv:
@@ -86,6 +91,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_gate_cli(args)
         case "admission-throughput":
             return run_admission_throughput_cli(args)
+        case "rollout-phase-profile":
+            return run_rollout_phase_profile_cli(args)
+        case "rollout-phase-breakdown":
+            return run_rollout_phase_breakdown_cli(args)
         case "tournament-proof":
             return run_tournament_proof_cli(args)
         case _:

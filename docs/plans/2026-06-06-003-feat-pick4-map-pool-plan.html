@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: Pick #4 pre-generated map pool env parity</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ee;
+      --accent: #2d5a8c;
+      --accent-soft: #e8f0fa;
+      --accent-text: #1e4468;
+      --ok-soft: #e8f5e9;
+      --warn-soft: #fff4e5;
+      --radius: 8px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      --mono: ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    header.doc-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    header.doc-header h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.5rem;
+      font-weight: 650;
+    }
+
+    header.doc-header .eyebrow {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header.doc-header dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 1.25rem;
+      margin: 1.25rem 0 0;
+      font-size: 0.9rem;
+    }
+
+    header.doc-header dt {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    header.doc-header dd {
+      margin: 0;
+    }
+
+    .status {
+      display: inline-block;
+      background: var(--ok-soft);
+      color: #1b5e20;
+      font-weight: 600;
+      font-size: 0.82rem;
+      padding: 0.15em 0.55em;
+      border-radius: 4px;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    section h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 650;
+      color: var(--accent-text);
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 0.4rem;
+    }
+
+    section h3 {
+      margin: 1.25rem 0 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+
+    p,
+    li {
+      max-width: 72ch;
+    }
+
+    p {
+      margin: 0 0 0.85rem;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 0.85rem;
+      padding-left: 1.35rem;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--accent-soft);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin: 0.5rem 0 1rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    .id-col {
+      width: 3.5rem;
+      white-space: nowrap;
+      font-weight: 600;
+      color: var(--accent-text);
+    }
+
+    .callout {
+      background: var(--warn-soft);
+      border-left: 4px solid #d4a017;
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+    }
+
+    article.unit {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.15rem;
+      margin-bottom: 1rem;
+    }
+
+    article.unit header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      margin-bottom: 0.5rem;
+    }
+
+    article.unit .unit-id {
+      font-weight: 700;
+      color: var(--accent-text);
+    }
+
+    article.unit dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.2rem 1rem;
+      font-size: 0.88rem;
+      margin: 0.5rem 0;
+    }
+
+    article.unit dt {
+      color: var(--muted);
+    }
+
+    article.unit dd {
+      margin: 0;
+    }
+
+    .diagram-wrap {
+      overflow-x: auto;
+      margin: 1rem 0;
+      padding: 1rem;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+
+    footer.composition-signal {
+      margin-top: 2rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="doc-header">
+      <div class="eyebrow">Implementation plan</div>
+      <h1>Pick #4 pre-generated map pool env parity</h1>
+      <dl>
+        <dt>Date</dt>
+        <dd><time datetime="2026-06-06">2026-06-06</time></dd>
+        <dt>Status</dt>
+        <dd><span class="status">active</span></dd>
+        <dt>Type</dt>
+        <dd>feat</dd>
+        <dt>Origin</dt>
+        <dd><a
+            href="docs/brainstorms/2026-06-06-pick4-map-pool-requirements.html">docs/brainstorms/2026-06-06-pick4-map-pool-requirements.html</a>
+        </dd>
+        <dt>Supersedes</dt>
+        <dd><a
+            href="docs/plans/2026-06-06-002-feat-pick4-compile-bounded-plan.html">2026-06-06-002-feat-pick4-compile-bounded-plan.html</a>
+          (inline JAX generation — compile cliff proven)</dd>
+        <dt>Target repo</dt>
+        <dd><code>orbit_wars-integration</code> on branch <code>throughput-baseline-integration</code></dd>
+      </dl>
+    </header>
+
+    <section id="summary">
+      <h2>Summary</h2>
+      <p>
+        Replace inline JAX planet/comet generation in training-path <code>reset()</code> with a
+        <strong>500-entry pre-baked map pool</strong> (planets + full comet wave schedules). Hot-path reset becomes
+        constant-time gather from frozen tensors; round-robin map selection rotates across reseeds via per-env
+        <code>episode_count</code>. Offline bake uses reference Python generators; eval/tournament paths stay on
+        Kaggle observation replay. R1 single-map profile is <strong>already satisfied</strong> (~0.11&nbsp;s/map,
+        ~55&nbsp;s extrapolated batch).
+      </p>
+    </section>
+
+    <section id="problem-frame">
+      <h2>Problem Frame</h2>
+      <p>
+        Pick 4a (inline <code>src/jax/planet_generation.py</code> in <code>reset()</code>) passed parity and trace
+        hygiene but failed compile: cold-cache benchmark smoke hung 14+ minutes — same cliff as <code>0eb349e</code>.
+        Rejection-sampling <code>while_loop</code> inlined into vmapped training trace is ruled out. Integration
+        currently holds uncommitted 4a work on top of rollback substrate <code>9db50f5</code>; map-pool work must
+        start from a clean substrate without inline generation modules in the hot path.
+      </p>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+      <p>Traced from origin R1–R15.</p>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+            <th>Plan coverage</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r1">R1.</td>
+            <td>Single-map profile before 500-map bake</td>
+            <td>Satisfied (session); recorded in U4</td>
+          </tr>
+          <tr>
+            <td id="r2">R2.</td>
+            <td>Operator accepts extrapolated batch cost</td>
+            <td>Satisfied (~1&nbsp;min batch); U4</td>
+          </tr>
+          <tr>
+            <td id="r3">R3.</td>
+            <td>Bake-time mechanical validity per entry</td>
+            <td>U2, U3, U4, U7</td>
+          </tr>
+          <tr>
+            <td id="r4">R4.</td>
+            <td>500-entry default pool</td>
+            <td>U4</td>
+          </tr>
+          <tr>
+            <td id="r5">R5.</td>
+            <td>Round-robin map rotation on training reset</td>
+            <td>U6</td>
+          </tr>
+          <tr>
+            <td id="r6">R6.</td>
+            <td>No generation/search in hot-path reset</td>
+            <td>U1, U6</td>
+          </tr>
+          <tr>
+            <td id="r7">R7.</td>
+            <td>Step activates baked comet schedules only</td>
+            <td>U6</td>
+          </tr>
+          <tr>
+            <td id="r8">R8.</td>
+            <td>Committed default pool + hash in manifest</td>
+            <td>U4, U8</td>
+          </tr>
+          <tr>
+            <td id="r9">R9.</td>
+            <td><code>ow</code> rebake + Hydra path override</td>
+            <td>U3, U5</td>
+          </tr>
+          <tr>
+            <td id="r10">R10.</td>
+            <td>Eval/replay on Kaggle env — not pool reset</td>
+            <td>U7 (regression guard)</td>
+          </tr>
+          <tr>
+            <td id="r11">R11.</td>
+            <td>JAX-only hot path; tier-A trace hygiene</td>
+            <td>U1, U6, U8</td>
+          </tr>
+          <tr>
+            <td id="r12">R12.</td>
+            <td>No sequential <code>lax.scan</code> in <code>_launch_fleets</code></td>
+            <td>No change (invariant)</td>
+          </tr>
+          <tr>
+            <td id="r13">R13.</td>
+            <td>Fast gates: kaggle parity + trace hygiene</td>
+            <td>U8</td>
+          </tr>
+          <tr>
+            <td id="r14">R14.</td>
+            <td>Compile smoke ≤5&nbsp;min cold cache</td>
+            <td>U8</td>
+          </tr>
+          <tr>
+            <td id="r15">R15.</td>
+            <td>Manifest <code>env_parity_mode: map_pool</code> + metrics</td>
+            <td>U8</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="key-technical-decisions">
+      <h2>Key Technical Decisions</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">KTD</th>
+            <th>Decision</th>
+            <th>Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="ktd1">KTD1.</td>
+            <td>Pool artifact: versioned <code>.npz</code> + sidecar <code>manifest.json</code> under
+              <code>data/jax_map_pool/</code>
+            </td>
+            <td>NumPy stack is diff-friendly enough for hash pinning; loader maps directly to JAX constants. Sidecar
+              holds sha256, count, profile metrics, generator version — not duplicated in Hydra defaults.</td>
+          </tr>
+          <tr>
+            <td id="ktd2">KTD2.</td>
+            <td>Map index at reset: <code>(episode_count + env_index) % pool_size</code></td>
+            <td><code>episode_count</code> increments on done in <code>collect.py</code> reset branch; adding
+              <code>env_index</code> avoids all parallel envs sharing one map on first reset. (see origin: R5)
+            </td>
+          </tr>
+          <tr>
+            <td id="ktd3">KTD3.</td>
+            <td>Each pool entry stores full comet wave tensors (inactive at reset); <code>step()</code> only toggles
+              <code>group_active</code> and advances along pre-baked paths
+            </td>
+            <td>Matches greenfield <code>75a7cf2</code> activation pattern without path search in trace. (see origin:
+              R6, R7)</td>
+          </tr>
+          <tr>
+            <td id="ktd4">KTD4.</td>
+            <td>Offline bake only via <code>src/game/planet_generation.py</code> and
+              <code>src/game/comet_generation.py</code>; delete <code>src/jax/planet_generation.py</code> from
+              integration
+            </td>
+            <td>Hot path must not import <code>src/game/*</code> per jax-no-kaggle-callbacks convention. Inline JAX gen
+              proven to brick compile.</td>
+          </tr>
+          <tr>
+            <td id="ktd5">KTD5.</td>
+            <td>CLI: <code>ow benchmark map-pool</code> with <code>profile</code>, <code>bake</code>,
+              <code>validate</code> subcommands
+            </td>
+            <td>Follows existing <code>ow benchmark</code> registration pattern; rebake is operator primitive, not a
+              standalone script. (see origin: R9)</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="high-level-technical-design">
+      <h2>High-Level Technical Design</h2>
+
+      <h3>Data flow: offline bake → train reset</h3>
+      <div class="diagram-wrap">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" role="img"
+          aria-label="Map pool data flow">
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#2d5a8c" />
+            </marker>
+          </defs>
+          <rect x="10" y="70" width="130" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+          <text x="75" y="100" text-anchor="middle" font-size="12" fill="#1a1d26">Reference Python</text>
+          <text x="75" y="115" text-anchor="middle" font-size="10" fill="#5c6370">game generators</text>
+          <rect x="170" y="70" width="120" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+          <text x="230" y="100" text-anchor="middle" font-size="12" fill="#1a1d26">ow map-pool</text>
+          <text x="230" y="115" text-anchor="middle" font-size="10" fill="#5c6370">bake / validate</text>
+          <rect x="320" y="70" width="130" height="50" rx="6" fill="#e8f5e9" stroke="#2d5a8c" />
+          <text x="385" y="100" text-anchor="middle" font-size="12" fill="#1a1d26">data/jax_map_pool/</text>
+          <text x="385" y="115" text-anchor="middle" font-size="10" fill="#5c6370">.npz + manifest</text>
+          <rect x="480" y="70" width="110" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+          <text x="535" y="100" text-anchor="middle" font-size="12" fill="#1a1d26">pool loader</text>
+          <text x="535" y="115" text-anchor="middle" font-size="10" fill="#5c6370">JAX constants</text>
+          <rect x="610" y="70" width="100" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+          <text x="660" y="100" text-anchor="middle" font-size="12" fill="#1a1d26">reset()</text>
+          <text x="660" y="115" text-anchor="middle" font-size="10" fill="#5c6370">gather + RR</text>
+          <line x1="140" y1="95" x2="168" y2="95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+          <line x1="290" y1="95" x2="318" y2="95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+          <line x1="450" y1="95" x2="478" y2="95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+          <line x1="590" y1="95" x2="608" y2="95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+          <text x="360" y="40" text-anchor="middle" font-size="11" fill="#5c6370">Offline (not in JIT)</text>
+          <text x="660" y="40" text-anchor="middle" font-size="11" fill="#5c6370">Inside vmapped train trace</text>
+        </svg>
+      </div>
+
+      <h3>Eval carve-out</h3>
+      <p>
+        Training and benchmark smoke use pool gather reset. Tournament, Docker packaging validation, and
+        <code>jax_game_from_observation_fast</code> replay paths are unchanged — they never call pool
+        <code>reset()</code> for board truth. Parity tests that compare JAX stepping against Kaggle reference continue
+        to drive state from observations, not pool indices.
+      </p>
+    </section>
+
+    <section id="output-structure">
+      <h2>Output Structure</h2>
+      <pre><code>data/jax_map_pool/
+  default_v1.npz          # stacked pool tensors [500, ...]
+  default_v1.manifest.json  # sha256, count, profile, bake metadata
+src/jax/map_pool/
+  schema.py               # PoolEntry / tensor names (no JAX in bake)
+  bake.py                 # offline entry builder (imports src/game/*)
+  load.py                 # NPZ → frozen JAX arrays at train init
+src/cli/benchmark/map_pool.py
+conf/env/map_pool.yaml    # default path + size (Hydra override)
+tests/test_map_pool_bake.py
+tests/test_map_pool_reset.py</code></pre>
+    </section>
+
+    <section id="implementation-units">
+      <h2>Implementation Units</h2>
+
+      <article class="unit" id="u1">
+        <header><span class="unit-id">U1.</span><strong>Substrate cleanup — remove failed inline 4a</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Restore integration hot path to rollback substrate without inline JAX generation imports.</dd>
+          <dt>Requirements</dt>
+          <dd>R6, R11, KTD4</dd>
+          <dt>Dependencies</dt>
+          <dd>None</dd>
+          <dt>Files</dt>
+          <dd>
+            Modify: <code>src/jax/env.py</code>, <code>tests/test_jax_env_parity.py</code>,
+            <code>tests/conftest.py</code>,
+            <code>Makefile</code><br>
+            Delete: <code>src/jax/planet_generation.py</code>, <code>tests/test_planet_generation.py</code> (if present)
+          </dd>
+          <dt>Approach</dt>
+          <dd>Discard uncommitted 4a work: remove <code>planet_generation</code> import from <code>env.py</code>, revert
+            parity/Makefile/conftest changes tied to inline gen. Stub <code>reset()</code> may remain until U6 — but
+            must
+            not call generation helpers. Verify tier-A <code>rg</code> clean on integration <code>src/jax/</code>.</dd>
+          <dt>Patterns to follow</dt>
+          <dd><code>9db50f5</code> env reset substrate;
+            <code>docs/solutions/conventions/jax-no-kaggle-callbacks.md</code>
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Happy path: tier-A forbidden-pattern scan returns zero matches on integration <code>src/jax/</code>.
+              </li>
+              <li>Integration: existing fast parity suite still collects (may still use stub boards until U6).</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>No <code>src/jax/planet_generation.py</code> in tree; no <code>generate_planet_tables</code> in
+            <code>env.py</code>; trace hygiene gate unchanged green.
+          </dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u2">
+        <header><span class="unit-id">U2.</span><strong>Pool schema and offline bake module</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Define one pool entry’s tensor layout and build entries from reference generators with bake-time validity.
+          </dd>
+          <dt>Requirements</dt>
+          <dd>R3, KTD1, KTD4</dd>
+          <dt>Dependencies</dt>
+          <dd>U1</dd>
+          <dt>Files</dt>
+          <dd>
+            Create: <code>src/jax/map_pool/schema.py</code>, <code>src/jax/map_pool/bake.py</code>,
+            <code>tests/test_map_pool_bake.py</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            <code>bake_one_entry(seed)</code> calls <code>generate_planets</code> then
+            <code>generate_comet_paths</code> for all spawn waves; converts to fixed-shape arrays matching
+            <code>JaxPlanetState</code> and full comet schedule tensors (all groups, paths, lengths). Run existing
+            validity helpers from planet tests / game invariants at bake time; fail bake on invalid entry.
+          </dd>
+          <dt>Execution note</dt>
+          <dd>Test-first: bake validity tests before wiring CLI.</dd>
+          <dt>Patterns to follow</dt>
+          <dd><code>src/game/planet_generation.py</code>, <code>src/game/comet_generation.py</code>; greenfield
+            <code>JaxCometState</code> from <code>75a7cf2</code>
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Covers R3. Happy path: 10 fixed seeds each produce valid entry (5–10 groups, symmetry, comet waves).
+              </li>
+              <li>Edge case: bake rejects entry when planet group count out of range (inject bad mock only in test).
+              </li>
+              <li>Integration: baked planet tensors round-trip through existing validity assertion helpers used in
+                parity tests.</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd><code>tests/test_map_pool_bake.py</code> green; single-entry bake callable from Python without JAX
+            compile.
+          </dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u3">
+        <header><span class="unit-id">U3.</span><strong><code>ow benchmark map-pool</code> CLI</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Expose profile, batch bake, and validate as operator primitives with JSON stdout.</dd>
+          <dt>Requirements</dt>
+          <dd>R1, R2, R3, R9, KTD5</dd>
+          <dt>Dependencies</dt>
+          <dd>U2</dd>
+          <dt>Files</dt>
+          <dd>
+            Create: <code>src/cli/benchmark/map_pool.py</code><br>
+            Modify: <code>src/cli/benchmark/parser.py</code>, <code>src/cli/__init__.py</code>,
+            <code>src/cli/benchmark/common.py</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            Subcommands: <code>profile --repeats N --out path.json</code> (single-map timing),
+            <code>bake --count 500 --out-dir data/jax_map_pool --label default_v1</code>,
+            <code>validate --pool path.npz</code>. Defer heavy JAX imports until subcommand runs. Write manifest sidecar
+            with sha256 and profile stats on bake.
+          </dd>
+          <dt>Patterns to follow</dt>
+          <dd><code>src/cli/benchmark/parser.py</code> gate/training subcommands; AGENTS.md CLI policy</dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Happy path: parser registers <code>map-pool</code>; dry <code>validate</code> on tiny 2-entry test
+                artifact exits 0.</li>
+              <li>Edge case: <code>bake --count 0</code> fails fast with actionable error.</li>
+              <li>Integration: <code>uv run ow benchmark map-pool --help</code> lists subcommands (dispatch smoke).</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>CLI help and validate path work; profile JSON schema documented in sidecar example.</dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u4">
+        <header><span class="unit-id">U4.</span><strong>Production 500-map bake and committed artifact</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Land default pool in-repo with recorded R1 profile and content hash.</dd>
+          <dt>Requirements</dt>
+          <dd>R1, R2, R3, R4, R8</dd>
+          <dt>Dependencies</dt>
+          <dd>U3</dd>
+          <dt>Files</dt>
+          <dd>
+            Create: <code>data/jax_map_pool/default_v1.npz</code>,
+            <code>data/jax_map_pool/default_v1.manifest.json</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            Record completed R1 profile in manifest (mean ~0.11&nbsp;s/map, 10/10 seeds valid, extrapolated ~55&nbsp;s).
+            Run <code>ow benchmark map-pool bake --count 500</code> with deterministic seed stream; validate before
+            commit.
+            Binary npz committed; manifest is human-readable audit trail.
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Covers AE1. Happy path: committed npz loads; manifest sha256 matches file on disk.</li>
+              <li>Happy path: entry count == 500; validate subcommand passes on committed artifact.</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>Artifact pair exists; validate green; manifest documents profile metrics and bake timestamp.</dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u5">
+        <header><span class="unit-id">U5.</span><strong>JAX pool loader and Hydra config</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Load pool once at train/env init into immutable JAX arrays; support path override.</dd>
+          <dt>Requirements</dt>
+          <dd>R8, R9, KTD1</dd>
+          <dt>Dependencies</dt>
+          <dd>U4</dd>
+          <dt>Files</dt>
+          <dd>
+            Create: <code>src/jax/map_pool/load.py</code>, <code>conf/env/map_pool.yaml</code><br>
+            Modify: <code>src/config/schema.py</code>, <code>conf/config.yaml</code> (or task group default)
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            <code>load_map_pool(path) → MapPoolConstants</code> with leading dimension <code>[pool_size, ...]</code>.
+            Hydra <code>env.map_pool.path</code> defaults to committed artifact; override for experiments. Loader runs
+            outside jit (train startup); product is passed into env factory / reset closure.
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Happy path: loader returns arrays with expected shapes for 2-entry test npz.</li>
+              <li>Error path: missing file raises clear error before train loop starts.</li>
+              <li>Integration: resolved config smoke shows default pool path when
+                <code>print_resolved_config=true</code>.
+              </li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>Loader unit tests pass; config composes with default path.</dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u6">
+        <header><span class="unit-id">U6.</span><strong>Pool gather reset and comet step activation</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Wire training-path <code>reset()</code> and <code>step()</code> to pool data with round-robin selection
+            and
+            baked comet schedules.</dd>
+          <dt>Requirements</dt>
+          <dd>R5, R6, R7, R11, R12, KTD2, KTD3</dd>
+          <dt>Dependencies</dt>
+          <dd>U5</dd>
+          <dt>Files</dt>
+          <dd>
+            Modify: <code>src/jax/env.py</code>, <code>src/jax/train/</code> (env init wiring if needed)<br>
+            Create: <code>tests/test_map_pool_reset.py</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            Reintroduce <code>JaxCometState</code> and comet activation helpers from greenfield
+            <code>75a7cf2</code> (adapted for pool-sourced tensors). <code>reset(key, task, map_pool, map_id)</code>:
+            <code>map_id = (episode_count + env_index) % pool_size</code>; gather planets + comet schedule; assign homes
+            via existing angular-velocity/home helpers (no rejection loop). <code>step()</code>: activate groups at
+            <code>COMET_SPAWN_STEPS</code>, advance along baked paths — no path generation. Pass
+            <code>episode_count</code> and <code>env_index</code> from rollout reset branch in
+            <code>collect.py</code> if not already on <code>JaxEnvState</code>.
+          </dd>
+          <dt>Execution note</dt>
+          <dd>Characterization-first: extend parity tests for pool reset validity before full comet stepping assertions.
+          </dd>
+          <dt>Patterns to follow</dt>
+          <dd><code>75a7cf2:src/jax/env.py</code> comet types; <code>src/jax/rollout/collect.py</code> reset branch;
+            <code>docs/solutions/conventions/jax-no-kaggle-callbacks.md</code>
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Covers R5 / R6. Happy path: two consecutive resets with incremented episode_count select different
+                map indices mod pool_size.</li>
+              <li>Covers R7. Happy path: after reset, stepping to first comet spawn step activates baked group without
+                generating paths.</li>
+              <li>Edge case: pool_size override with 2-entry test pool wraps map_id correctly.</li>
+              <li>Integration: vmapped <code>batched_reset</code> produces valid <code>active_count</code> in 5–10
+                range for random map ids.</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>Pool reset tests green; tier-A scan still zero; no <code>while_loop</code> rejection in reset path.</dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u7">
+        <header><span class="unit-id">U7.</span><strong>Parity suite and gate test updates</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Restore full kaggle parity coverage with pool-based training reset; remove comet deferral markers.</dd>
+          <dt>Requirements</dt>
+          <dd>R3, R10, R13</dd>
+          <dt>Dependencies</dt>
+          <dd>U6</dd>
+          <dt>Files</dt>
+          <dd>
+            Modify: <code>tests/test_jax_env_parity.py</code>, <code>tests/conftest.py</code>, <code>Makefile</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            Parity tests that stepped JAX env from pool reset assert mechanical invariants (not bit-exact Kaggle seed
+            replay). Obs-replay tests unchanged for eval path. Remove <code>requires_comets</code> skip markers added
+            for
+            4a deferral. Ensure <code>make test-kaggle-parity</code> exercises comet spawn steps where applicable.
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Covers R10. Happy path: tournament/eval code paths grep shows no pool loader import in eval modules.
+              </li>
+              <li>Covers R13. Integration: <code>make test-kaggle-parity</code> passes on integration worktree.</li>
+              <li>Happy path: multi-step parity scenario with comet wave reaches valid terminal or mid-game state.</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>Kaggle parity Makefile target green; no deferred comet-only skips remain without justification.</dd>
+        </dl>
+      </article>
+
+      <article class="unit" id="u8">
+        <header><span class="unit-id">U8.</span><strong>Compile smoke and manifest admit</strong></header>
+        <dl>
+          <dt>Goal</dt>
+          <dd>Prove ≤5&nbsp;min cold-cache compile and record pick #4 map-pool admit on main manifest.</dd>
+          <dt>Requirements</dt>
+          <dd>R14, R15</dd>
+          <dt>Dependencies</dt>
+          <dd>U7</dd>
+          <dt>Files</dt>
+          <dd>
+            Modify (main repo): <code>docs/benchmarks/cherry-pick-manifest.json</code>
+          </dd>
+          <dt>Approach</dt>
+          <dd>
+            Run cold-cache compile smoke:
+            <code>env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --updates 3 --warmup 1 --out /tmp/pick4_compile.json</code>
+            from integration worktree. On pass, update manifest candidate
+            <code>pick_4_map_pool</code> with <code>env_parity_mode: map_pool</code>, pool sha256, R1 profile JSON,
+            compile verdict, integration HEAD. On fail: rollback per
+            phase2-pick4-jax-compile-rollback-criteria — do not admit.
+          </dd>
+          <dt>Test scenarios</dt>
+          <dd>
+            <ul>
+              <li>Covers AE3. Happy path: compile smoke JSON reports completion within 300&nbsp;s.</li>
+              <li>Covers AE4. Regression: eval submit path documentation unchanged — Kaggle env only.</li>
+            </ul>
+          </dd>
+          <dt>Verification</dt>
+          <dd>Compile ≤5&nbsp;min; fast gates green; manifest updated on main with map_pool mode and metrics.</dd>
+        </dl>
+      </article>
+    </section>
+
+    <section id="scope-boundaries">
+      <h2>Scope Boundaries</h2>
+      <h3>Deferred for later</h3>
+      <ul>
+        <li>Held-out map slice for admission overfitting checks.</li>
+        <li>Operator <code>make gate-admission</code> tier-2 until parity + compile stack green.</li>
+        <li>Bit-exact seed replay vs <code>kaggle_environments</code> for training maps.</li>
+        <li>Pick #5 mechanics hunks until map-pool pick #4 admits.</li>
+      </ul>
+      <h3>Outside this product's identity</h3>
+      <ul>
+        <li>Inline JAX live generation in vmapped <code>reset()</code> / <code>step()</code>.</li>
+        <li>Pool-based tournament boards.</li>
+        <li><code>pure_callback</code> reference generators on hot path.</li>
+      </ul>
+      <h3>Deferred to Follow-Up Work</h3>
+      <ul>
+        <li>Parallel/distributed bake worker if pool size grows beyond 500.</li>
+        <li>Automated CI rebake — default pool is committed static artifact for this pick.</li>
+      </ul>
+    </section>
+
+    <section id="risks">
+      <h2>Risks &amp; Dependencies</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Mitigation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>500× stacked tensors inflate compile or HBM despite gather-only reset</td>
+            <td>U8 compile gate; if fail, reduce pool rank in trace via shard strategy (deferred) or smaller default
+              pool
+              with manifest label.</td>
+          </tr>
+          <tr>
+            <td>Round-robin map_id needs <code>env_index</code> plumbed through batched reset</td>
+            <td>U6 explicitly wires from <code>collect.py</code>; test in U6 integration scenario.</td>
+          </tr>
+          <tr>
+            <td>Committed npz size bloats repo</td>
+            <td>Accept for reproducibility (R8); document size in manifest; Git LFS only if &gt;50&nbsp;MB in practice.
+            </td>
+          </tr>
+          <tr>
+            <td>Uncommitted 4a work confuses implementer</td>
+            <td>U1 is mandatory first step on integration worktree.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="deferred-implementation">
+      <h2>Implementation-Time Unknowns</h2>
+      <ul>
+        <li>Exact NPZ key naming and whether home assignment runs in reset or is pre-baked per entry (prefer reset-time
+          assignment from gathered planets to preserve player RNG).</li>
+        <li>Whether <code>episode_count</code> alone suffices without <code>env_index</code> once plumbed — validate in
+          U6 tests.</li>
+        <li>Final npz byte size and whether git commit needs LFS pointer.</li>
+      </ul>
+    </section>
+
+    <section id="sources">
+      <h2>Sources &amp; Research</h2>
+      <ul>
+        <li>Origin: <code>docs/brainstorms/2026-06-06-pick4-map-pool-requirements.html</code></li>
+        <li><code>docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md</code></li>
+        <li><code>docs/solutions/conventions/jax-no-kaggle-callbacks.md</code></li>
+        <li>Greenfield reference: integration commits <code>75a7cf2</code>, <code>0eb349e</code> (rollback forensics)
+        </li>
+        <li>R1 profile (session): ~0.11&nbsp;s/map mean, 500× extrapolation ~55&nbsp;s, 10/10 seeds valid with comets
+        </li>
+      </ul>
+    </section>
+
+    <footer class="composition-signal">
+      Composed 2026-06-06 by ce-plan from
+      <code>docs/brainstorms/2026-06-06-pick4-map-pool-requirements.html</code>
+    </footer>
+  </div>
+</body>
+
+</html>

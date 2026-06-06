@@ -44,6 +44,8 @@ def print_benchmark_help() -> None:
         "  calibrate-qualifier-seeds SSOT qualifier per-leg win-rate floor calibration\n"
         "  gate                     Composable preflight gates (run/list)\n"
         "  admission-throughput     Extract speed from gate JSONL (updates 3–20)\n"
+        "  rollout-phase-profile    Offline admission-shaped phase profile (integration)\n"
+        "  rollout-phase-breakdown  Itemize rollout cost from profile/gate JSONL\n"
         "  tournament-proof         Gate 5: Docker validate, then held-out ladder\n"
         "  shortlist-planet-flow-sweep  Rank finished Planet Flow W&B sweep runs\n"
         "  planet-flow-noop-smoke   Noop smoke on shortlist top-K before learn-proof\n"
@@ -76,4 +78,3 @@ def _init_benchmark_runtime() -> None:
 
     configure_jax_runtime_for_host()
     ensure_jax_accelerator_backend()
-
