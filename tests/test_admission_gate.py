@@ -69,6 +69,19 @@ def test_resolve_throughput_options_uses_learning_first_baseline() -> None:
     assert window.max_measured_update == 20
 
 
+def test_admission_gate_recipe_includes_operator_locked_overrides() -> None:
+    from src.cli.benchmark_gates import load_gate_recipe
+
+    recipe = load_gate_recipe("admission")
+    overrides = recipe.get("train_overrides")
+    assert isinstance(overrides, list)
+    assert "training.rollout_steps=256" in overrides
+    assert "task.candidate_count=3" in overrides
+    assert "telemetry.wandb.enabled=true" in overrides
+    assert "telemetry.wandb.group=preflight" in overrides
+    assert "artifacts.replay.enabled=false" in overrides
+
+
 def test_admission_gate_dry_run_cli(capsys) -> None:
     assert benchmark_cli.main(["gate", "run", "admission", "--dry-run"]) == 1
     payload = json.loads(capsys.readouterr().out)

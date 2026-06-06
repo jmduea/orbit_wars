@@ -281,12 +281,304 @@
       }
     ]
   },
-  "candidates": [],
+  "candidates": [
+    {
+      "subject": "Offline game reference libs \u2014 comet/planet generation",
+      "phase": "env_parity",
+      "cherry_pick_order": 1,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188)",
+      "granularity": "file-level pick from commit; src/game/comet_generation.py, planet_generation.py, constants.py only \u2014 excluded shield_config and all JAX/test hunks from same commit",
+      "files_touched": [
+        "src/game/comet_generation.py",
+        "src/game/planet_generation.py",
+        "src/game/constants.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "worktree_note": "User-specified path ../orbit_wars-integration (handoff doc ../orbit_wars-throughput-baseline-integration not present; created fresh at user path)",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "15 passed, 1 deselected in 21.25s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 25.32s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json"
+      },
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "subject": "encode_learner_turn / fused learner feature path",
+      "phase": "env_parity",
+      "cherry_pick_order": 2,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188)",
+      "granularity": "hunk-level pick from commit; src/jax/features.py encode_learner_turn + _encode_turn_with_snapshot + append_feature_history snapshot reuse; env.py learner encode call sites only (reset, assign_learner_players, _finish_step) \u2014 excluded comet state, golden test comet fields, and all other JAX env hunks",
+      "files_touched": [
+        "src/jax/features.py",
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "15 passed, 1 deselected in 24.80s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 26.62s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json"
+      },
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "subject": "Env mechanics hunks \u2014 rotation, fleet launch, combat ordering",
+      "phase": "env_parity",
+      "cherry_pick_order": 3,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188); follow-up planet_id validation from phase 1 simplification",
+      "secondary_sha": "0cfd7622d1b633e0d07b7345655a89dd2d44d337",
+      "granularity": "hunk-level pick; src/jax/env.py mechanics only \u2014 sequential _launch_fleets (lax.scan + fleet cap), rotation step indexing, first-hit combat ordering, cfg.ship_speed, step() \u2192 step_multi_player; excluded comet state/subsystem, pure_callback, Kaggle reference reset, env_parity_mode split (pick #4)",
+      "files_touched": [
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "PASS",
+        "result": "15 passed, 1 deselected in 21.87s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 22.92s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json"
+      },
+      "throughput_admission": {
+        "profile": "learning_first_unified",
+        "gate": "admission",
+        "floor_env_steps_per_sec": 4888.786588437074,
+        "pre_pick3": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T050013Z_jax.jsonl",
+          "env_steps_per_sec": 5696.451367,
+          "rollout_seconds_per_update_mean": 2.2229300870563344,
+          "measured_updates": 18,
+          "verdict": "PASS",
+          "note": "Picks #1-2 at 79162a2+dirty; env_steps floor PASS only \u2014 full admission FAIL on seconds/update at default 500/6 geometry",
+          "full_admission_passed": false,
+          "seconds_per_update_mean": 2.809,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "post_pick3": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T052219Z-s42-e5bb99b1",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T052219Z-s42-e5bb99b1/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T052245Z_jax.jsonl",
+          "env_steps_per_sec": 373.2232,
+          "rollout_seconds_per_update_mean": 42.15310395239503,
+          "measured_updates": 5,
+          "verdict": "FAIL",
+          "note": "~18\u00d7 rollout slowdown; sequential _launch_fleets (lax.scan) + step\u2192step_multi_player indirection"
+        },
+        "regression_ratio": 15.26,
+        "picks12_regate_52dfdb0": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+          "verdict": "FAIL",
+          "misconfigured_gate": true,
+          "seconds_per_update_mean": 3.037,
+          "env_steps_per_sec": 5268
+        }
+      },
+      "verdict": "reject",
+      "reject_reasons": [
+        "throughput_regression"
+      ],
+      "remediation": {
+        "date": "2026-06-06",
+        "action": "Reverted pick #3 mechanics hunks in integration worktree src/jax/env.py; restored anchor @ 52dfdb0 parallel _launch_fleets, direct step() 2p path, rotation step+1 indexing, MAX_FLEET_SPEED, argmax hit_idx. Kept pick #2 encode_learner_turn call sites.",
+        "deferred_to": "REJECTED: kaggle-only env_parity_mode + callbacks (user_constraint jax_only_hot_path_no_callbacks). See planned_picks #4\u2013#6."
+      }
+    }
+  ],
   "integration_state": {
     "branch": "throughput-baseline-integration",
-    "ordered_shas": [],
-    "last_integrated_sha": null,
-    "integration_status": "building"
+    "worktree": "/home/jmduea/projects/orbit_wars-integration",
+    "worktree_note": "Created at user path ../orbit_wars-integration (not handoff ../orbit_wars-throughput-baseline-integration)",
+    "ordered_shas": [
+      "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
+      "33b56e2:src/jax/features.py + env.py learner encode call sites",
+      "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)"
+    ],
+    "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+    "last_integrated_note": "Picks #1\u20132 only after pick #3 revert (2026-06-06): game reference libs (test-only) + encode_learner_turn; env mechanics deferred to pure-JAX planned picks #4\u2013#6 (no callbacks)",
+    "integration_status": "building",
+    "branch_base_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+    "branch_base_branch": "throughput-baseline",
+    "previous_branch_base_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+    "remediation": {
+      "date": "2026-06-06",
+      "action": "git merge --ff-only throughput-baseline after stash push -u -m phase2-picks-1-2",
+      "stash": "phase2-picks-1-2",
+      "stash_pop_conflicts": false,
+      "picks_reapplied": "Phase 2 picks #1-2 (game reference libs + encode_learner_turn) re-applied on anchor HEAD",
+      "post_remediation_gates": {
+        "test_kaggle_parity": "15 passed, 1 deselected (~19s)",
+        "trace_hygiene_tier_a": "PASS (integration worktree static rg gate)",
+        "test_jax_trace_hygiene_pytest": "10 passed (~22s, main harness test file, integration cwd)"
+      },
+      "pick3_revert_remediation": {
+        "date": "2026-06-06",
+        "action": "Reverted pick #3 env mechanics hunks only; kept picks #1\u20132",
+        "reverted_hunks": [
+          "sequential _launch_fleets via lax.scan + fleet cap",
+          "step() \u2192 step_multi_player indirection for 2p",
+          "rotation step indexing (step vs step+1)",
+          "cfg.ship_speed in fleet_speed",
+          "first-hit combat (min planet index vs argmax)"
+        ],
+        "kept_hunks": [
+          "encode_learner_turn import + reset/assign_learner_players/_finish_step call sites"
+        ],
+        "post_revert_gates": {
+          "test_kaggle_parity": "15 passed, 1 deselected in 18.14s",
+          "trace_hygiene_tier_a": "PASS (integration src/jax static rg)",
+          "test_jax_trace_hygiene_pytest": "10 passed in 22.57s (main harness, integration cwd)"
+        },
+        "throughput_evidence": {
+          "pre_pick3_env_steps_per_sec": 5696.451367,
+          "post_pick3_env_steps_per_sec": 373.2232,
+          "floor_env_steps_per_sec": 4888.786588437074
+        }
+      }
+    },
+    "admission_diagnosis_2026_06_06": {
+      "failed_run": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+        "git_commit": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+        "picks_applied": "1-2 only (pick 3 reverted)",
+        "admission_passed": false,
+        "root_cause_primary": "Gate recipe mismatch: run used beat_noop default geometry (rollout_steps=500, candidate_count=6) without operator_locked admission overrides (256 steps, 3 candidates, wandb). Anchor pass run included those overrides in .hydra/overrides.yaml.",
+        "root_cause_secondary": "At the heavier default geometry, picks 1-2 add ~8% rollout env-step regression vs pre-pick-3 integration run (rollout_env_steps_per_sec mean u3-20: 6640 vs 7200); insufficient alone for 3x seconds/update vs anchor.",
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 3.037,
+          "rollout_seconds_per_update_mean": 2.411,
+          "env_steps_per_sec": 5268,
+          "gate_passed": false,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "learning": {
+          "win_rate_delta_reported": -0.018,
+          "verdict": "NOT_VERIFIED",
+          "note": "Thresholds calibrated for 2p-only 16x128 geometry per manifest; mixed recipe + wrong rollout/candidate geometry invalidates strict learning comparison."
+        }
+      },
+      "anchor_reference_pass": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_admission/runs/20260606T041356Z-s42-bf947175",
+        "geometry": {
+          "rollout_steps": 256,
+          "candidate_count": 3,
+          "total_env_steps_per_update_mean_u3_20": 94208
+        },
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 0.928,
+          "rollout_seconds_per_update_mean": 0.796,
+          "env_steps_per_sec": 8832,
+          "admission_passed": true
+        },
+        "learning": {
+          "win_rate_delta": 0.052,
+          "verdict": "VERIFIED"
+        }
+      },
+      "pre_pick3_reference": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c",
+        "git_commit": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+        "full_admission_passed": false,
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 2.809,
+          "env_steps_per_sec": 5696,
+          "gate_passed": false,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "note": "Manifest pre_pick3 env_steps PASS was floor-only; never passed seconds_per_update ceiling at default 500/6 geometry."
+      },
+      "recommendations": [
+        "Re-run admission on integration @ 52dfdb0+picks1-2 with operator_locked_overrides from manifest (training.rollout_steps=256, task.candidate_count=3, wandb) \u2014 same overrides as anchor pass run.",
+        "Do not revert pick #2 before apples-to-apples re-gate; pick #1 is offline-only; pick #2 parity/trace gates passed.",
+        "Wire operator_locked gate_train_overrides into conf/benchmark/gates/admission.yaml or gate CLI so dry-run geometry matches anchor pass.",
+        "Treat learning threshold caution per manifest until recalibrated on locked mixed recipe."
+      ]
+    }
   },
-  "decision": "Admission gate 2026-06-06 (unified admission recipe on anchor via --repo-root): admission_passed true \u2014 learning VERIFIED and throughput within \u00b110% of launch-hygiene-e2e-baseline-learning-first.json on the same 200-update run. Prior anchor_learn_proof.json under beat_noop-only thresholds was NOT_VERIFIED (borderline win_rate_delta / high KL vs 2p-only calibration geometry). Phase 2 env-parity cherry-picks onto throughput-baseline-integration @ 79162a2 may proceed: build ordered env_parity queue from merge-base\u2192main, cherry-pick one commit at a time, gate each with make test-kaggle-parity; re-run make gate-admission on integration head after parity stack is green."
+  "user_constraint": {
+    "id": "jax_only_hot_path_no_callbacks",
+    "locked_date": "2026-06-06",
+    "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
+    "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
+  },
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (2026-06-06 throughput_regression). Prior pick #4 plan (kaggle-only env_parity_mode + pure_callback comet/planet reset) is REJECTED under user_constraint jax_only_hot_path_no_callbacks. Integration worktree keeps anchor parallel _launch_fleets + picks #1\u20132; main branch callback/comet code must not be cherry-picked as-is (fails tier-A static rg). Next: (A) port src/jax/planet_generation.py + comet_generation.py as pure JAX; (B) delete callback/_reference_/env_parity_mode branches from env.py on main; (C) fix slot-order/rotation/combat parity with throughput-safe vectorized launch (not full pick #3 lax.scan+concat bundle); (D) milestone gate-admission REPO_ROOT=integration after stack green.",
+  "planned_picks": [
+    {
+      "cherry_pick_order": 4,
+      "subject": "Pure JAX planet + comet generation ports",
+      "status": "pending",
+      "includes": [
+        "src/jax/planet_generation.py",
+        "src/jax/comet_generation.py",
+        "wire into _reset_train and comet spawn without callbacks"
+      ],
+      "excludes": [
+        "pure_callback",
+        "_reset_kaggle_reference",
+        "_reference_planet_tables",
+        "_reference_comet_paths",
+        "task=kaggle_parity / env_parity_mode=kaggle hot-path branch"
+      ]
+    },
+    {
+      "cherry_pick_order": 5,
+      "subject": "Mechanics hunks \u2014 rotation, combat, slot-order launch",
+      "status": "pending",
+      "granularity": "one hunk per pick with make test-kaggle-parity + throughput smoke; reject bundled pick #3 replay",
+      "includes": [
+        "rotation step indexing parity",
+        "first-hit combat (min planet index)",
+        "vectorized or lightweight sequential slot-order launch matching Kaggle without per-slot concat/compact"
+      ],
+      "excludes": [
+        "lax.scan launch with _concat_fleets/_compact_fleets per slot (pick #3 throughput regression)",
+        "step() \u2192 step_multi_player indirection unless proven neutral"
+      ]
+    },
+    {
+      "cherry_pick_order": 6,
+      "subject": "Main-branch callback teardown",
+      "status": "pending",
+      "note": "Remove dead callback paths from main env.py so tier-A static gate passes; single JAX env for train and parity tests"
+    }
+  ],
+  "throughput_anchor_head_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+  "throughput_anchor_head_note": "Integration branch fast-forwarded to throughput-baseline @ 52dfdb0 (7 commits past baseline_sha 79162a2); Phase 1 anchor fixes now on integration before Phase 2 picks."
 }

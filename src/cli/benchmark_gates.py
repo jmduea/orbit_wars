@@ -174,6 +174,10 @@ def run_gate_cli(
 
     recipe = load_gate_recipe(gate_id)
     learning_gate_id = resolve_learning_gate_id(recipe, gate_id)
+    recipe_train_overrides: tuple[str, ...] = ()
+    raw_recipe_overrides = recipe.get("train_overrides")
+    if isinstance(raw_recipe_overrides, list):
+        recipe_train_overrides = tuple(str(item) for item in raw_recipe_overrides)
     resolved_model = model or str(
         recipe.get("default_model") or "transformer_factorized_small"
     )
@@ -193,7 +197,7 @@ def run_gate_cli(
         verbose=verbose,
         thresholds_path=thresholds_path,
         profiles_path=profiles_path,
-        extra_train_overrides=train_overrides,
+        extra_train_overrides=(*recipe_train_overrides, *train_overrides),
     )
     learning_exit = 0 if evaluation.verdict == PreflightVerdict.VERIFIED else 1
     report: dict[str, object] = {
