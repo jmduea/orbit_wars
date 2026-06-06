@@ -75,6 +75,21 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert factorized.max_moves_k == 5
     assert factorized.assert_max_ms == 3.22
 
+    encode_turn = parser.parse_args(
+        [
+            "encode-turn",
+            "--sweep-defaults",
+            "--out",
+            "/tmp/encode_turn.json",
+            "--batch-size",
+            "8",
+        ]
+    )
+    assert encode_turn.command == "encode-turn"
+    assert encode_turn.sweep_defaults is True
+    assert encode_turn.out == Path("/tmp/encode_turn.json")
+    assert encode_turn.batch_size == 8
+
     held_out = parser.parse_args(
         [
             "learn-proof",

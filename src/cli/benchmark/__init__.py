@@ -16,6 +16,7 @@ from src.cli.benchmark.common import (
     print_benchmark_help,
 )
 from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
+from src.cli.benchmark.encode_turn import run_encode_turn_cli
 from src.cli.benchmark.factorized import run_factorized_sampler_cli
 from src.cli.benchmark.gate import run_gate_cli
 from src.cli.benchmark.learn_proof import run_learn_proof_cli
@@ -41,6 +42,7 @@ __all__ = [
     "run_calibrate_seed_scheduler_cli",
     "run_calibrate_unified_tournament_cli",
     "run_env_parity_ab_cli",
+    "run_encode_turn_cli",
     "run_factorized_sampler_cli",
     "run_admission_throughput_cli",
     "run_rollout_phase_breakdown_cli",
@@ -83,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_shortlist_planet_flow_sweep_cli(args)
         case "planet-flow-noop-smoke":
             return run_planet_flow_noop_smoke_cli(args)
+        case "encode-turn":
+            return run_encode_turn_cli(args)
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
         case "env-parity-ab":

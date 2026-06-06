@@ -271,6 +271,51 @@ def build_parser() -> argparse.ArgumentParser:
     factorized_sampler.add_argument("--repeats", type=int, default=30)
     factorized_sampler.add_argument("--assert-max-ms", type=float, default=None)
 
+    encode_turn = subparsers.add_parser(
+        "encode-turn",
+        help=(
+            "Tier-1 encode_turn microbenchmark "
+            "(in-process JAX via src/jax/encode_turn_benchmark.py)."
+        ),
+    )
+    encode_turn.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Env batch for vmap scenarios (default 32).",
+    )
+    encode_turn.add_argument("--player-count", type=int, default=2)
+    encode_turn.add_argument(
+        "--candidate-count",
+        type=int,
+        default=6,
+        help="Top-K edge candidate count (conf/task/base.yaml default).",
+    )
+    encode_turn.add_argument(
+        "--edge-rank-mode",
+        choices=["snapshot", "intercept_min"],
+        default=None,
+        help="Single edge_rank_mode (default snapshot; --sweep-defaults runs both).",
+    )
+    encode_turn.add_argument(
+        "--sweep-defaults",
+        action="store_true",
+        help="Sweep snapshot+intercept_min and 2p+4p player counts.",
+    )
+    encode_turn.add_argument("--warmup", type=int, default=3)
+    encode_turn.add_argument("--repeats", type=int, default=20)
+    encode_turn.add_argument(
+        "--include-learner-turn",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    encode_turn.add_argument(
+        "--include-4p-all-players",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    encode_turn.add_argument("--out", type=Path, default=None)
+
     from src.cli.benchmark.env_parity_ab import add_env_parity_ab_parser
 
     add_env_parity_ab_parser(subparsers)
