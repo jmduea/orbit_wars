@@ -577,10 +577,41 @@
       ]
     }
   ],
+  "reconciliation_2026_06_06": {
+    "date": "2026-06-06",
+    "doc": "docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
+    "doc_repo": "orbit_wars-integration",
+    "main_head_sha": "1f8766ae81be39079fafcea2250ce262c8a825ac",
+    "integration_head_sha": "87e3915",
+    "integration_branch": "optimize/opponent-rollout-throughput",
+    "merge_base_main_integration": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+    "pr_221": {
+      "number": 221,
+      "branch": "feat/family-batched-mixed-sampling",
+      "action": "close_superseded",
+      "reason": "Family-batched sampling + gather fix landed on integration (a46c37e, 894beb0) with H3/H4, ladder infra, map pool, env-parity picks. PR based on main; no shared history after 79162a2."
+    },
+    "pr_222": {
+      "number": 222,
+      "status": "closed",
+      "note": "exp-001 merged into integration via f979c2d / fadf02b; remote branch deleted"
+    },
+    "roles": {
+      "main": "Manifest SSOT, admission harness, controlled cherry-picks to main",
+      "integration": "Phase 2 env-parity + opponent optimizations landing zone"
+    },
+    "targeted_tests_integration": {
+      "command": "pytest tests/test_opponent_mixed_sampling.py tests/test_opponent_inference_only.py -q",
+      "verdict": "PASS",
+      "result": "10 passed",
+      "run_date": "2026-06-06"
+    },
+    "admission_blocker": "Post-optimization stack (3b, map pool 85576f0, family-batched, H3/H4) not re-gated; prior exp-001 throughput FAIL ~20% below floor. Re-run make gate-admission REPO_ROOT=integration before cherry-pick to main."
+  },
   "integration_state": {
-    "branch": "throughput-baseline-integration",
+    "branch": "optimize/opponent-rollout-throughput",
     "worktree": "/home/jmduea/projects/orbit_wars-integration",
-    "worktree_note": "Created at user path ../orbit_wars-integration (not handoff ../orbit_wars-throughput-baseline-integration)",
+    "worktree_note": "Phase 2 landing zone; reconciliation doc at docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
     "ordered_shas": [
       "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
       "33b56e2:src/jax/features.py + env.py learner encode call sites",
@@ -589,8 +620,8 @@
     ],
     "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
     "last_integrated_note": "Picks #1\u20132 + pick 3b only; pick #4 greenfield (75a7cf2) and mechanical fix (0eb349e) rolled back 2026-06-06 to 9db50f5 (compile_time_regression on mechanical fix smoke/benchmark)",
-    "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
-    "integration_head_note": "Rollback 2026-06-06: git reset --hard 9db50f5 on integration worktree. Map-pool pick #4 (U1\u2013U7) implemented as uncommitted working tree; compile smoke 306 s > 300 s ceiling \u2014 not admitted.",
+    "integration_head_sha": "87e3915",
+    "integration_head_note": "2026-06-06 reconciliation: branch optimize/opponent-rollout-throughput @ 87e3915. Includes map pool 85576f0, opponent stack (2718ba3\u219287e3915), env-parity picks. PR #221 closed as superseded.",
     "pick_4_map_pool_attempt_2026_06_06": {
       "verdict": "reject",
       "implementation": "map_pool_gather_reset",
@@ -787,7 +818,7 @@
     "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
     "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
   },
-  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (full bundle, throughput_regression); pick 3b ADMIT; pick #4 ADMIT (2026-06-06 greenfield on integration @ 75a7cf2). Integration fast gates PASS (parity 16/16, trace hygiene). Admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (3f88f1b) but not re-run after 3b or #4. Sequential launch (hunk A) and step_multi_player (hunk B) remain deferred. Next: pick #5 mechanics hunks; pick #6 main callback teardown. Re-run admission only if operator requests.",
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT; pick 3b ADMIT; pick #4 map pool COMMITTED on integration (85576f0) but manifest admit pending compile re-check. Opponent optimizations (family-batched, H3/H4, ladder) landed greenfield on integration \u2014 PR #221 closed superseded. Admission VERIFIED at 3f88f1b (picks #1\u20132 only); full stack @ 87e3915 needs re-gate before main cherry-pick. Next: gate-admission on integration, pick #5 hunks, pick #6 callback teardown from main. See reconciliation_2026_06_06.",
   "planned_picks": [
     {
       "cherry_pick_order": 4,
