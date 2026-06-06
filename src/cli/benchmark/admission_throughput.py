@@ -7,11 +7,8 @@ import json
 import sys
 from pathlib import Path
 
-from src.benchmark.admission_throughput import (
-    ThroughputWindow,
-    resolve_log_path_from_input,
-    run_throughput_gate,
-)
+from src.benchmark.admission_throughput import run_throughput_gate
+from src.benchmark.jsonl_window import ThroughputWindow, resolve_log_path_from_input
 
 
 def run_admission_throughput_cli(args: argparse.Namespace) -> int:

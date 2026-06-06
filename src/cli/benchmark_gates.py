@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from src.benchmark.admission_throughput import ThroughputWindow, run_throughput_gate
+from src.benchmark.admission_throughput import run_throughput_gate
+from src.benchmark.jsonl_window import ThroughputWindow
 from src.jax.preflight_gate_loader import (
     GATES_DIR,
     REPO_ROOT,

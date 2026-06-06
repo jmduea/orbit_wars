@@ -6,8 +6,8 @@ import statistics
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from src.benchmark import jsonl_window
 from src.benchmark.jsonl_window import (
+    ThroughputWindow,
     default_throughput_window,
     record_float,
     record_update,
@@ -21,11 +21,6 @@ from src.benchmark.training import (
     resolve_e2e_pass_band,
 )
 from src.jax.preflight import read_jsonl_records
-
-ThroughputWindow = jsonl_window.ThroughputWindow
-DEFAULT_WARMUP = jsonl_window.DEFAULT_WARMUP
-DEFAULT_MAX_MEASURED_UPDATE = jsonl_window.DEFAULT_MAX_MEASURED_UPDATE
-resolve_log_path_from_input = jsonl_window.resolve_log_path_from_input
 
 ADMISSION_THROUGHPUT_GATE = "admission_throughput"
 

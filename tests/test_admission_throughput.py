@@ -5,11 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from src.benchmark.admission_throughput import (
-    ThroughputWindow,
-    extract_throughput_from_records,
-    resolve_log_path_from_input,
-)
+from src.benchmark.admission_throughput import extract_throughput_from_records
+from src.benchmark.jsonl_window import ThroughputWindow, resolve_log_path_from_input
 from src.cli import benchmark as benchmark_cli
 
 

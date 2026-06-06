@@ -26,7 +26,8 @@ from src.opponents.jax_actions.sampling import (
     _masked_env_sort_order,
     _merge_reordered_family_action,
     _reorder_env_axis,
-    _sample_mixed_opponent_2p_action,
+    _sample_mixed_by_family_batched,
+    _sample_single_family_action,
     _single_stage_family_id,
     is_single_family_noop_stage_view,
 )
@@ -87,6 +88,45 @@ def _latest_only_stage_view(cfg: TrainConfig):
         cfg.opponents.snapshot,
     )
     return controller.stage_view(0, **_empty_snapshot_kwargs())
+
+
+def _sample_mixed_opponent_2p_for_test(
+    opp_key: jax.Array,
+    opp_game,
+    turn_batch,
+    train_state,
+    policy,
+    cfg,
+    slot_type,
+    stage_view,
+    historical_params_pool,
+):
+    def sample_single_family(
+        key, family_id, reordered_game, reordered_batch, pool_row_indices
+    ):
+        return _sample_single_family_action(
+            key,
+            family_id,
+            reordered_game,
+            reordered_batch,
+            train_state,
+            policy,
+            cfg,
+            stage_view,
+            historical_params_pool,
+            pool_row_indices,
+            player_id=jnp.asarray(0, dtype=jnp.int32),
+            opponent_params_by_player=None,
+        )
+
+    return _sample_mixed_by_family_batched(
+        slot_type=slot_type,
+        game=opp_game,
+        batch=turn_batch,
+        cfg=cfg,
+        base_key=opp_key,
+        sample_single_family=sample_single_family,
+    )
 
 
 def _mixed_stage_view(cfg: TrainConfig):
@@ -181,7 +221,7 @@ def test_mixed_opponent_sampling_finite_actions() -> None:
         [OPPONENT_LATEST, OPPONENT_RANDOM, OPPONENT_NOOP, OPPONENT_RANDOM],
         dtype=jnp.int32,
     )
-    action = _sample_mixed_opponent_2p_action(
+    action = _sample_mixed_opponent_2p_for_test(
         jax.random.PRNGKey(2),
         opp_game,
         turn_batch,
@@ -256,7 +296,7 @@ def test_mixed_historical_family_sampling_finite() -> None:
         [OPPONENT_HISTORICAL, OPPONENT_RANDOM, OPPONENT_HISTORICAL, OPPONENT_RANDOM],
         dtype=jnp.int32,
     )
-    action = _sample_mixed_opponent_2p_action(
+    action = _sample_mixed_opponent_2p_for_test(
         jax.random.PRNGKey(2),
         opp_game,
         turn_batch,
@@ -294,18 +334,28 @@ def test_mixed_opponent_sampling_is_deterministic_for_fixed_key() -> None:
         [OPPONENT_LATEST, OPPONENT_RANDOM, OPPONENT_NOOP, OPPONENT_RANDOM],
         dtype=jnp.int32,
     )
-    kwargs = dict(
-        opp_game=opp_game,
-        opp_batch_cache=turn_batch,
-        train_state=train_state,
-        policy=policy,
-        cfg=cfg,
-        slot_type=slot_type,
-        stage_view=stage_view,
-        historical_params_pool=None,
+    first = _sample_mixed_opponent_2p_for_test(
+        jax.random.PRNGKey(99),
+        opp_game,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        slot_type,
+        stage_view,
+        None,
     )
-    first = _sample_mixed_opponent_2p_action(jax.random.PRNGKey(99), **kwargs)
-    second = _sample_mixed_opponent_2p_action(jax.random.PRNGKey(99), **kwargs)
+    second = _sample_mixed_opponent_2p_for_test(
+        jax.random.PRNGKey(99),
+        opp_game,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+        slot_type,
+        stage_view,
+        None,
+    )
     assert jnp.all(first.angle == second.angle)
     assert jnp.all(first.ships == second.ships)
 
