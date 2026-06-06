@@ -35,6 +35,7 @@ FULL_JAX_FILES = frozenset(
         "test_jax_env.py",
         "test_jax_env_dispatch.py",
         "test_jax_env_parity.py",
+        "test_map_pool_reset.py",
         "test_jax_ppo.py",
         "test_jax_rollout.py",
         "test_jax_scripted_opponents.py",
@@ -53,6 +54,7 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_jax_env.py": "jax_env",
     "test_jax_env_dispatch.py": "jax_env",
     "test_jax_env_parity.py": "jax_env",
+    "test_map_pool_reset.py": "jax_env",
     "test_jax_policy_encoder.py": "policy",
     "test_jax_policy_factorized_decoder.py": "policy",
     "test_trajectory_shield_factorized.py": "policy",
@@ -238,7 +240,10 @@ def _is_slow(item: pytest.Item) -> bool:
         and test_name not in FAST_JAX_PPO_TESTS
     ):
         return True
-    if filename == "test_trajectory_shield.py" and test_name in SLOW_TRAJECTORY_SHIELD_TESTS:
+    if (
+        filename == "test_trajectory_shield.py"
+        and test_name in SLOW_TRAJECTORY_SHIELD_TESTS
+    ):
         return True
     return False
 
@@ -249,7 +254,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         domain = DOMAIN_BY_FILE.get(filename)
         if domain is not None:
             item.add_marker(getattr(pytest.mark, domain))
-        if filename == "test_jax_env_parity.py":
+        if filename in {"test_jax_env_parity.py", "test_map_pool_reset.py"}:
             item.add_marker(pytest.mark.kaggle_parity)
         if _is_jax(item):
             item.add_marker(pytest.mark.jax)

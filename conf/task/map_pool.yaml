@@ -1,0 +1,5 @@
+defaults:
+  - base
+  - _self_
+
+map_pool_path: data/jax_map_pool/default_v1.npz

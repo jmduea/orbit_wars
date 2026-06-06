@@ -242,6 +242,78 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--dry-run", action="store_true")
 
+    rollout_phase_profile = subparsers.add_parser(
+        "rollout-phase-profile",
+        help=(
+            "Offline admission-shaped rollout phase profile (short run; "
+            "host-timed collect — do not use on gate spine)."
+        ),
+    )
+    rollout_phase_profile.add_argument(
+        "--preset",
+        choices=("admission",),
+        default="admission",
+        help="Override bundle (default: operator-locked admission recipe).",
+    )
+    rollout_phase_profile.add_argument(
+        "--full-geometry",
+        action="store_true",
+        help=(
+            "Use full admission env geometry (32 envs × 256 steps). "
+            "Default is --quick (4 envs × 16 steps) for interactive profiling."
+        ),
+    )
+    rollout_phase_profile.add_argument(
+        "--train-overrides",
+        nargs="*",
+        default=[],
+        help="Extra Hydra overrides (e.g. task=map_pool).",
+    )
+    rollout_phase_profile.add_argument("--model", default=None)
+    rollout_phase_profile.add_argument("--updates", type=int, default=5)
+    rollout_phase_profile.add_argument("--warmup", type=int, default=2)
+    rollout_phase_profile.add_argument(
+        "--max-measured-update",
+        type=int,
+        default=20,
+        help="Last update index included in printed breakdown.",
+    )
+    rollout_phase_profile.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON instead of a human-readable table.",
+    )
+    rollout_phase_profile.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Optional path for summary JSON (includes per-update phase rows).",
+    )
+
+    rollout_phase_breakdown = subparsers.add_parser(
+        "rollout-phase-breakdown",
+        help=(
+            "Print rollout collect phase breakdown from gate JSON or *_jax.jsonl "
+            "(requires telemetry=rollout_phase_timing)."
+        ),
+    )
+    rollout_phase_breakdown.add_argument(
+        "input",
+        type=Path,
+        help="Gate result JSON (reads stage.log_path) or logs/*_jax.jsonl path.",
+    )
+    rollout_phase_breakdown.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit JSON instead of a human-readable table.",
+    )
+    rollout_phase_breakdown.add_argument("--warmup", type=int, default=2)
+    rollout_phase_breakdown.add_argument("--max-measured-update", type=int, default=20)
+
+    from src.cli.map_pool_benchmark import build_map_pool_parser
+
+    build_map_pool_parser(subparsers)
+
     return parser
 
 
@@ -705,6 +777,90 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     return 0 if overall == PreflightVerdict.VERIFIED else 1
 
 
+def run_rollout_phase_profile_cli(args: argparse.Namespace) -> int:
+    from src.jax.rollout.phase_timing_report import PhaseTimingWindow
+    from src.jax.rollout_phase_profile import (
+        compose_profile_config,
+        format_profile_report,
+        profile_result_payload,
+        resolve_profile_overrides,
+        run_rollout_phase_profile,
+    )
+
+    quick = not bool(args.full_geometry)
+    overrides = resolve_profile_overrides(
+        preset=args.preset,
+        extra_overrides=tuple(args.train_overrides),
+        updates=int(args.updates),
+        model=args.model,
+        quick=quick,
+    )
+    cfg = compose_profile_config(
+        preset=args.preset,
+        extra_overrides=tuple(args.train_overrides),
+        updates=int(args.updates),
+        model=args.model,
+        quick=quick,
+    )
+    if not quick:
+        print(
+            "warning: --full-geometry uses host-timed 32×256 collect; "
+            "first update may take 30+ minutes",
+            file=sys.stderr,
+            flush=True,
+        )
+    result = run_rollout_phase_profile(
+        cfg,
+        warmup=int(args.warmup),
+        updates=int(args.updates),
+        window=PhaseTimingWindow(
+            warmup=int(args.warmup),
+            max_measured_update=int(args.max_measured_update),
+        ),
+    )
+    payload = profile_result_payload(
+        result,
+        overrides=overrides,
+        preset=args.preset,
+    )
+    payload["geometry_mode"] = "full" if args.full_geometry else "quick"
+    payload["per_update_records"] = list(result.per_update_records)
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {args.out}", flush=True)
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(format_profile_report(payload), flush=True)
+    return 0
+
+
+def run_rollout_phase_breakdown_cli(args: argparse.Namespace) -> int:
+    from src.jax.rollout.phase_timing_report import (
+        PhaseTimingWindow,
+        extract_rollout_phase_breakdown_from_input,
+        format_rollout_phase_breakdown,
+    )
+
+    input_path = Path(args.input)
+    try:
+        window = PhaseTimingWindow(
+            warmup=int(args.warmup),
+            max_measured_update=int(args.max_measured_update),
+        )
+        payload = extract_rollout_phase_breakdown_from_input(input_path, window=window)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(format_rollout_phase_breakdown(payload))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -719,6 +875,14 @@ def main(argv: list[str] | None = None) -> int:
             return run_calibrate_cli(args)
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
+        case "map-pool":
+            from src.cli.map_pool_benchmark import dispatch_map_pool
+
+            return dispatch_map_pool(args)
+        case "rollout-phase-profile":
+            return run_rollout_phase_profile_cli(args)
+        case "rollout-phase-breakdown":
+            return run_rollout_phase_breakdown_cli(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2

@@ -1,17 +1,29 @@
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import jax
 from src.config import TaskConfig, compose_hydra_train_config
-from src.features.registry import edge_feature_dim, edge_k, global_feature_dim, planet_feature_dim
+from src.features.registry import (
+    edge_feature_dim,
+    edge_k,
+    global_feature_dim,
+    planet_feature_dim,
+)
 from src.game.constants import MAX_PLANETS
-from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, batched_reset, reset
+from src.jax.env import (
+    JaxFleetState,
+    JaxGameState,
+    JaxPlanetState,
+    batched_reset,
+    reset,
+)
 from src.jax.features import (
     append_feature_history,
     empty_feature_history,
     encode_turn,
 )
+from src.jax.map_pool.comets import empty_comet_state
 
 
 def _cfg(**kwargs) -> TaskConfig:
@@ -94,6 +106,7 @@ def test_encode_v2_sun_crossing_targets_are_masked() -> None:
         planets=planets,
         initial_planets=planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
     batch = encode_turn(game, cfg)
     assert not bool(np.asarray(batch.edge_mask[0]).any())

@@ -11,6 +11,37 @@ from src.telemetry.metric_registry import (
 )
 
 
+def finalize_rollout_phase_timing_metrics(
+    metrics: dict[str, jax.Array],
+) -> dict[str, jax.Array]:
+    """Recompute phase fractions after summing per-chunk seconds."""
+
+    second_keys = (
+        "rollout_phase_policy_seconds",
+        "rollout_phase_opponent_seconds",
+        "rollout_phase_env_step_seconds",
+        "rollout_phase_reset_seconds",
+        "rollout_phase_post_step_seconds",
+    )
+    if not any(key in metrics for key in second_keys):
+        return metrics
+    total = sum(metrics.get(key, 0.0) for key in second_keys)
+    total = jnp.maximum(total, 1e-9)
+    metrics["rollout_phase_measured_total_seconds"] = total
+    for key, fraction_key in zip(
+        second_keys,
+        (
+            "rollout_phase_policy_fraction",
+            "rollout_phase_opponent_fraction",
+            "rollout_phase_env_step_fraction",
+            "rollout_phase_reset_fraction",
+            "rollout_phase_post_step_fraction",
+        ),
+    ):
+        metrics[fraction_key] = metrics.get(key, 0.0) / total
+    return metrics
+
+
 def finalize_cross_chunk_rate_metrics(
     metrics: dict[str, jax.Array],
 ) -> dict[str, jax.Array]:
@@ -102,8 +133,10 @@ def sum_metric_dicts(
     metrics_by_chunk: list[dict[str, jax.Array]],
 ) -> dict[str, jax.Array]:
     if len(metrics_by_chunk) == 1:
-        return finalize_cross_chunk_rate_metrics(dict(metrics_by_chunk[0]))
-    return finalize_cross_chunk_rate_metrics(merge_metric_dicts(metrics_by_chunk))
+        merged = finalize_cross_chunk_rate_metrics(dict(metrics_by_chunk[0]))
+    else:
+        merged = finalize_cross_chunk_rate_metrics(merge_metric_dicts(metrics_by_chunk))
+    return finalize_rollout_phase_timing_metrics(merged)
 
 
 def prune_merged_rollout_metrics(

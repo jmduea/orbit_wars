@@ -16,6 +16,7 @@ import jax
 from src.config import RewardConfig, TaskConfig
 from src.game.constants import (
     BOARD_SIZE,
+    COMET_SPAWN_STEPS,
     MAX_FLEET_SPEED,
     MAX_PLANETS,
     MAX_STEPS,
@@ -23,7 +24,18 @@ from src.game.constants import (
     SUN_RADIUS,
     TOTAL_COMETS,
 )
+from src.jax.map_pool.comets import (
+    JaxCometState,
+    activate_baked_comet_group,
+    advance_comet_positions,
+    comet_state_from_pool,
+    empty_comet_state,
+    expire_comets_pre_launch,
+    is_comet_planet,
+)
 from src.jax.rewards import apply_early_terminal_reward_shaping_jax
+
+_MAX_HOME_GROUPS = 10
 
 from .features import (
     FeatureHistory,
@@ -86,6 +98,10 @@ class JaxGameState(NamedTuple):
     planets: JaxPlanetState
     initial_planets: JaxPlanetState
     fleets: JaxFleetState
+    comets: JaxCometState
+
+
+_COMET_SPAWN_STEPS = jnp.array(COMET_SPAWN_STEPS, dtype=jnp.int32)
 
 
 class JaxEnvState(NamedTuple):
@@ -157,10 +173,29 @@ def empty_action(cfg: TaskConfig) -> JaxAction:
     )
 
 
-def reset(
-    key: jax.Array, cfg: TaskConfig
-) -> tuple[JaxEnvState, TurnBatch]:
-    """Create a deterministic initial board from a JAX PRNG key."""
+def _pre_launch_comets(
+    game: JaxGameState,
+) -> tuple[JaxPlanetState, JaxPlanetState, JaxCometState]:
+    planets = game.planets
+    initial = game.initial_planets
+    comets = game.comets
+    planets, initial, comets = expire_comets_pre_launch(planets, initial, comets)
+    spawn_step = game.step + jnp.array(1, dtype=jnp.int32)
+    should_spawn = jnp.any(spawn_step == _COMET_SPAWN_STEPS)
+
+    def spawn(_):
+        return activate_baked_comet_group(planets, initial, comets, spawn_step)
+
+    return jax.lax.cond(
+        should_spawn,
+        spawn,
+        lambda _: (planets, initial, comets),
+        None,
+    )
+
+
+def _reset_legacy(key: jax.Array, cfg: TaskConfig) -> tuple[JaxEnvState, TurnBatch]:
+    """Stub board for tests and configs without a map pool."""
 
     initial_planet_count = MAX_PLANETS - TOTAL_COMETS
     fleet_count = max_fleets(cfg)
@@ -247,6 +282,94 @@ def reset(
         planets=planets,
         initial_planets=planets,
         fleets=empty_fleets,
+        comets=empty_comet_state(),
+    )
+    history = empty_feature_history(cfg)
+    batch, feature_history = encode_learner_turn(game, cfg, history)
+    env_state = JaxEnvState(
+        game=game,
+        learner_player=jnp.array(0, dtype=jnp.int32),
+        episode_count=jnp.array(0, dtype=jnp.int32),
+        feature_history=feature_history,
+    )
+    return env_state, batch
+
+
+def reset(key: jax.Array, cfg: TaskConfig) -> tuple[JaxEnvState, TurnBatch]:
+    """Create a deterministic initial board from a JAX PRNG key."""
+
+    return _reset_legacy(key, cfg)
+
+
+def reset_with_pool(
+    key: jax.Array,
+    cfg: TaskConfig,
+    map_pool,
+    map_id: jax.Array,
+) -> tuple[JaxEnvState, TurnBatch]:
+    """Gather planets and baked comet schedules from a frozen map pool entry."""
+
+    from src.jax.map_pool.home_assignment import PlanetTables, assign_home_planets
+
+    mid = map_id % jnp.asarray(map_pool.pool_size, dtype=jnp.int32)
+    fleet_count = max_fleets(cfg)
+    (key_home,) = jax.random.split(key, 1)
+
+    planet_id = map_pool.planet_id[mid]
+    planet_owner = jnp.full_like(planet_id, -1)
+    tables = PlanetTables(
+        id=planet_id,
+        owner=planet_owner,
+        x=map_pool.planet_x[mid],
+        y=map_pool.planet_y[mid],
+        radius=map_pool.planet_radius[mid],
+        ships=map_pool.planet_ships[mid],
+        production=map_pool.planet_production[mid],
+        active=map_pool.planet_active[mid],
+    )
+    num_groups = jnp.maximum(tables.active.astype(jnp.int32).sum() // 4, 1)
+    home_group = jax.random.randint(key_home, (), 0, _MAX_HOME_GROUPS) % num_groups
+    tables = assign_home_planets(
+        tables,
+        player_count=int(getattr(cfg, "player_count", 2)),
+        home_group=home_group,
+    )
+    planets = JaxPlanetState(
+        tables.id,
+        tables.owner,
+        tables.x,
+        tables.y,
+        tables.radius,
+        tables.ships,
+        tables.production,
+        tables.active,
+    )
+    comets = comet_state_from_pool(
+        planet_ids=map_pool.comet_planet_ids[mid],
+        paths_x=map_pool.comet_paths_x[mid],
+        paths_y=map_pool.comet_paths_y[mid],
+        path_lengths=map_pool.comet_path_lengths[mid],
+        wave_ok=map_pool.comet_wave_ok[mid],
+    )
+    empty_fleets = JaxFleetState(
+        id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        owner=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        x=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        y=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        angle=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        from_planet_id=jnp.full((fleet_count,), -1, dtype=jnp.int32),
+        ships=jnp.zeros((fleet_count,), dtype=jnp.float32),
+        active=jnp.zeros((fleet_count,), dtype=bool),
+    )
+    game = JaxGameState(
+        step=jnp.array(0, dtype=jnp.int32),
+        player=jnp.array(0, dtype=jnp.int32),
+        angular_velocity=map_pool.angular_velocity[mid],
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        planets=planets,
+        initial_planets=planets,
+        fleets=empty_fleets,
+        comets=comets,
     )
     history = empty_feature_history(cfg)
     batch, feature_history = encode_learner_turn(game, cfg, history)
@@ -331,13 +454,14 @@ def _finish_step(
             planets.ships,
         )
     )
-    planets, fleets = _move_and_resolve(previous_game, planets, fleets, cfg)
+    planets, fleets, comets = _move_and_resolve(previous_game, planets, fleets, cfg)
 
     next_game = previous_game._replace(
         step=previous_game.step + jnp.array(1, dtype=jnp.int32),
         next_fleet_id=next_fleet_id,
         planets=planets,
         fleets=fleets,
+        comets=comets,
     )
     (
         done,
@@ -400,6 +524,10 @@ def step(
     """
 
     previous_game = state.game
+    planets, initial_planets, comets = _pre_launch_comets(previous_game)
+    previous_game = previous_game._replace(
+        planets=planets, initial_planets=initial_planets, comets=comets
+    )
     actions0 = jax.tree.map(
         lambda learner, opponent: jnp.where(
             state.learner_player == 0, learner, opponent
@@ -426,7 +554,9 @@ def step(
     planets, fleets, next_fleet_id = _launch_fleets(
         planets, fleets, next_fleet_id, actions1, 1, cfg
     )
-    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
+    return _finish_step(
+        previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg
+    )
 
 
 def step_multi_player(
@@ -445,6 +575,10 @@ def step_multi_player(
     """
 
     previous_game = state.game
+    planets, initial_planets, comets = _pre_launch_comets(previous_game)
+    previous_game = previous_game._replace(
+        planets=planets, initial_planets=initial_planets, comets=comets
+    )
     planets = previous_game.planets
     fleets = previous_game.fleets
     next_fleet_id = previous_game.next_fleet_id
@@ -464,7 +598,9 @@ def step_multi_player(
         lambda player_id, carry: launch_player(player_id, carry),
         (planets, fleets, next_fleet_id),
     )
-    return _finish_step(previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg)
+    return _finish_step(
+        previous_game, state, planets, fleets, next_fleet_id, cfg, reward_cfg
+    )
 
 
 def _launch_fleets(
@@ -537,11 +673,17 @@ def _move_and_resolve(
     fleets: JaxFleetState,
     cfg: TaskConfig,
 ):
+    comets = previous_game.comets
+    is_comet = is_comet_planet(comets, planets.id)
     old_px, old_py = planets.x, planets.y
     init_dx = previous_game.initial_planets.x - BOARD_CENTER[0]
     init_dy = previous_game.initial_planets.y - BOARD_CENTER[1]
     orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
-    rotates = (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT) & planets.active
+    rotates = (
+        (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT)
+        & planets.active
+        & (~is_comet)
+    )
     init_angle = jnp.arctan2(init_dy, init_dx)
     cur_angle = init_angle + previous_game.angular_velocity * previous_game.step.astype(
         jnp.float32
@@ -552,6 +694,8 @@ def _move_and_resolve(
     new_py = jnp.where(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
+    new_px, new_py, comets = advance_comet_positions(comets, planets, new_px, new_py)
+    check_collision = jnp.where(is_comet, old_px >= 0.0, True)
 
     speed = fleet_speed(
         fleets.ships, float(getattr(cfg, "ship_speed", MAX_FLEET_SPEED))
@@ -571,7 +715,12 @@ def _move_and_resolve(
         new_py[None, :],
         planets.radius[None, :],
     )
-    hits = hits & fleets.active[:, None] & planets.active[None, :]
+    hits = (
+        hits
+        & fleets.active[:, None]
+        & planets.active[None, :]
+        & check_collision[None, :]
+    )
     hit_any = hits.any(axis=1)
     planet_order = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
     hit_idx = jnp.min(jnp.where(hits, planet_order[None, :], MAX_PLANETS), axis=1)
@@ -589,7 +738,10 @@ def _move_and_resolve(
     moved_fleets = fleets._replace(x=new_fx, y=new_fy, active=fleets.active & (~remove))
     moved_planets = planets._replace(x=new_px, y=new_py)
     moved_planets = _resolve_combat(moved_planets, fleets, hit_any, hit_idx, cfg)
-    return moved_planets, moved_fleets
+    moved_planets, initial_planets, comets = expire_comets_pre_launch(
+        moved_planets, previous_game.initial_planets, comets
+    )
+    return moved_planets, moved_fleets, comets
 
 
 def fleet_speed(ships: jax.Array, ship_speed: float = DEFAULT_SHIP_SPEED) -> jax.Array:
@@ -830,6 +982,7 @@ def _shaping(
 
 
 batched_reset = jax.vmap(reset, in_axes=(0, None))
+batched_reset_with_pool = jax.vmap(reset_with_pool, in_axes=(0, None, None, 0))
 batched_step = jax.vmap(step, in_axes=(0, 0, 0, None, None))
 batched_step_multi_player = jax.vmap(step_multi_player, in_axes=(0, 0, None, None))
 

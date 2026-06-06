@@ -243,6 +243,19 @@ def test_ppo_health_metrics_are_registered_as_losses():
         assert metric_definition(name).group == "losses"
 
 
+def test_rollout_phase_timing_metrics_are_registered_offline_only():
+    from src.jax.rollout.phase_timing import ROLLOUT_PHASE_TIMING_KEYS
+
+    names = enabled_metric_names(
+        _metric_groups(rollout_phase_timing=True),
+        record_kind="update",
+        extra_protected_names=protected_metric_names(),
+    )
+    for key in ROLLOUT_PHASE_TIMING_KEYS:
+        assert key in names
+        assert metric_definition(key).group == "rollout_phase_timing"
+
+
 def test_per_format_timing_metrics_are_registered_as_debug():
     per_format_names = {
         "rollout_seconds_2p",
@@ -293,12 +306,14 @@ def test_rollout_metric_contract_syncs_with_telemetry_registry() -> None:
     assert ROLLOUT_OUTPUT_METRIC_NAMES <= frozenset(LOGGED_ROLLOUT_SCALAR_KEYS)
 
     assert all(key in BASE_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
-    assert not any(key in LOGGED_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS)
-    assert all(
-        key in LOGGED_ROLLOUT_SCALAR_KEYS for key in FINALIZED_ROLLOUT_RATE_KEYS
+    assert not any(
+        key in LOGGED_ROLLOUT_SCALAR_KEYS for key in ROLLOUT_INTERNAL_SCALAR_KEYS
     )
+    assert all(key in LOGGED_ROLLOUT_SCALAR_KEYS for key in FINALIZED_ROLLOUT_RATE_KEYS)
 
-    logged_and_internal = set(LOGGED_ROLLOUT_SCALAR_KEYS) | set(ROLLOUT_INTERNAL_SCALAR_KEYS)
+    logged_and_internal = set(LOGGED_ROLLOUT_SCALAR_KEYS) | set(
+        ROLLOUT_INTERNAL_SCALAR_KEYS
+    )
     unexpected_base_keys = sorted(
         key for key in BASE_ROLLOUT_SCALAR_KEYS if key not in logged_and_internal
     )

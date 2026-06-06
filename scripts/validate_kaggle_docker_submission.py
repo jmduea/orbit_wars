@@ -59,6 +59,9 @@ RUNTIME_FILES = (
     "jax/policy.py",
     "jax/submission_runtime.py",
     "jax/env.py",
+    "jax/map_pool/__init__.py",
+    "jax/map_pool/comets.py",
+    "jax/map_pool/home_assignment.py",
     "jax/rollout/__init__.py",
     "jax/rollout/types.py",
     "jax/ship_action.py",
@@ -68,7 +71,14 @@ RUNTIME_FILES = (
     "artifacts/checkpoint_compat.py",
     "artifacts/timing.py",
 )
-TRAINING_ONLY_IMPORTS = ("hydra", "omegaconf", "wandb", "optax", "src.train", "src.jax.train")
+TRAINING_ONLY_IMPORTS = (
+    "hydra",
+    "omegaconf",
+    "wandb",
+    "optax",
+    "src.train",
+    "src.jax.train",
+)
 
 
 class ValidationError(RuntimeError):
@@ -88,10 +98,16 @@ def main() -> int:
             return 0
         run_docker_validation(package_path, args)
     except ValidationError as exc:
-        print(json.dumps({"ok": False, "phase": exc.phase, "error": exc.message}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "phase": exc.phase, "error": exc.message}),
+            file=sys.stderr,
+        )
         return 1
     except Exception as exc:  # pragma: no cover - last-resort CLI guard
-        print(json.dumps({"ok": False, "phase": "unexpected_failure", "error": str(exc)}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "phase": "unexpected_failure", "error": str(exc)}),
+            file=sys.stderr,
+        )
         return 1
     return 0
 
@@ -101,7 +117,9 @@ def parse_args() -> argparse.Namespace:
         description="Package and validate an Orbit Wars Kaggle submission in Kaggle Docker."
     )
     parser.add_argument("--checkpoint", required=True, type=Path)
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/kaggle_submission"))
+    parser.add_argument(
+        "--output-dir", type=Path, default=Path("artifacts/kaggle_submission")
+    )
     parser.add_argument("--docker-image", default=DOCKER_IMAGE)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
@@ -136,7 +154,9 @@ def parse_args() -> argparse.Namespace:
 def build_submission_package(args: argparse.Namespace) -> Path:
     checkpoint_path = args.checkpoint.resolve()
     if not checkpoint_path.is_file():
-        raise ValidationError("checkpoint_missing", f"Checkpoint does not exist: {checkpoint_path}")
+        raise ValidationError(
+            "checkpoint_missing", f"Checkpoint does not exist: {checkpoint_path}"
+        )
 
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -166,25 +186,33 @@ def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
         raise ValidationError("checkpoint_load_failed", str(exc)) from exc
 
     if not isinstance(checkpoint, Mapping) or "params" not in checkpoint:
-        raise ValidationError("checkpoint_schema_failed", "Checkpoint must be a mapping with params")
+        raise ValidationError(
+            "checkpoint_schema_failed", "Checkpoint must be a mapping with params"
+        )
 
     config = checkpoint.get("config")
     config_dict = _to_plain_data(config)
     if not isinstance(config_dict, dict):
-        raise ValidationError("checkpoint_schema_failed", "Checkpoint config could not be serialized")
+        raise ValidationError(
+            "checkpoint_schema_failed", "Checkpoint config could not be serialized"
+        )
     task_cfg = _require_dict(config_dict, "task")
     reward_cfg = _require_dict(config_dict, "reward")
     model_cfg = _require_dict(config_dict, "model")
     training_cfg = _require_dict(config_dict, "training")
     architecture = str(model_cfg.get("architecture", "")).strip().lower()
     if architecture not in {"planet_graph_transformer"}:
-        raise ValidationError("unsupported_architecture", f"Unsupported architecture: {architecture!r}")
+        raise ValidationError(
+            "unsupported_architecture", f"Unsupported architecture: {architecture!r}"
+        )
 
     feature_metadata = _to_plain_data(checkpoint.get("feature_metadata", {}))
     if not isinstance(feature_metadata, dict):
         feature_metadata = {}
     stored_decoder = feature_metadata.get("pointer_decoder")
-    model_decoder = str(model_cfg.get("pointer_decoder", "factorized_topk")).strip().lower()
+    model_decoder = (
+        str(model_cfg.get("pointer_decoder", "factorized_topk")).strip().lower()
+    )
     if stored_decoder is not None and str(stored_decoder) != model_decoder:
         raise ValidationError(
             "checkpoint_schema_failed",
@@ -237,11 +265,15 @@ def write_runtime_package(staging_dir: Path, artifact: dict[str, Any]) -> None:
         "feature_metadata": artifact["feature_metadata"],
         "forbidden_runtime_imports": TRAINING_ONLY_IMPORTS,
     }
-    (staging_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (staging_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
 
     package_dir = staging_dir / "src"
     package_dir.mkdir()
-    (package_dir / "__init__.py").write_text("from .config import TrainConfig\n", encoding="utf-8")
+    (package_dir / "__init__.py").write_text(
+        "from .config import TrainConfig\n", encoding="utf-8"
+    )
     config_dir = package_dir / "config"
     config_dir.mkdir()
     (config_dir / "__init__.py").write_text(CONFIG_TEMPLATE, encoding="utf-8")
@@ -274,7 +306,9 @@ def validate_tarball_layout(package_path: Path) -> None:
         for member in members:
             _validate_tar_member(member, Path("."), phase_error=ValidationError)
         if "main.py" not in names:
-            raise ValidationError("package_layout_failed", "submission.tar.gz must contain root main.py")
+            raise ValidationError(
+                "package_layout_failed", "submission.tar.gz must contain root main.py"
+            )
 
 
 def _resolve_docker_cli() -> str:
@@ -310,7 +344,9 @@ def _resolve_docker_cli() -> str:
 def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
     docker_cli = _resolve_docker_cli()
     if str(args.docker_image).startswith("-"):
-        raise ValidationError("docker_image_invalid", "Docker image must not start with '-'")
+        raise ValidationError(
+            "docker_image_invalid", "Docker image must not start with '-'"
+        )
     docker_info = subprocess.run(
         [docker_cli, "info", "--format", "{{.ServerVersion}}"],
         text=True,
@@ -318,12 +354,16 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
         check=False,
     )
     if docker_info.returncode != 0:
-        message = (docker_info.stderr or docker_info.stdout or "docker daemon is not reachable").strip()
+        message = (
+            docker_info.stderr or docker_info.stdout or "docker daemon is not reachable"
+        ).strip()
         raise ValidationError("docker_unavailable", message)
     replay_output_dir = args.output_dir.resolve() / "replays"
     replay_output_dir.mkdir(parents=True, exist_ok=True)
     replay_output_dir.chmod(0o777)
-    with tempfile.TemporaryDirectory(prefix="orbit-wars-kaggle-docker-") as temp_dir_text:
+    with tempfile.TemporaryDirectory(
+        prefix="orbit-wars-kaggle-docker-"
+    ) as temp_dir_text:
         temp_dir = Path(temp_dir_text)
         validator_path = temp_dir / "validate_submission.py"
         validator_path.write_text(IN_CONTAINER_VALIDATOR, encoding="utf-8")
@@ -376,7 +416,9 @@ def run_docker_validation(package_path: Path, args: argparse.Namespace) -> None:
                     "docker_container_killed",
                     "docker exited 137; container was killed, commonly by OOM or an external stop",
                 )
-            raise ValidationError("docker_validation_failed", f"docker exited {completed.returncode}")
+            raise ValidationError(
+                "docker_validation_failed", f"docker exited {completed.returncode}"
+            )
 
 
 def _checkpoint_update_from_package_manifest(package_path: Path) -> int:
@@ -392,24 +434,37 @@ def _checkpoint_update_from_package_manifest(package_path: Path) -> int:
     return int(update) if isinstance(update, int) else -1
 
 
-def _validate_tar_member(member: tarfile.TarInfo, root: Path, *, phase_error: type[Exception]) -> None:
+def _validate_tar_member(
+    member: tarfile.TarInfo, root: Path, *, phase_error: type[Exception]
+) -> None:
     path = Path(member.name)
     if path.is_absolute() or ".." in path.parts:
-        raise phase_error("package_layout_failed", f"Unsafe archive member: {member.name}")
+        raise phase_error(
+            "package_layout_failed", f"Unsafe archive member: {member.name}"
+        )
     if member.issym() or member.islnk() or member.isdev() or member.isfifo():
-        raise phase_error("package_layout_failed", f"Unsafe archive member type: {member.name}")
+        raise phase_error(
+            "package_layout_failed", f"Unsafe archive member type: {member.name}"
+        )
     if member.size > 512 * 1024 * 1024:
-        raise phase_error("package_layout_failed", f"Archive member too large: {member.name}")
+        raise phase_error(
+            "package_layout_failed", f"Archive member too large: {member.name}"
+        )
     target = (root / path).resolve()
     root_resolved = root.resolve()
     if target != root_resolved and root_resolved not in target.parents:
-        raise phase_error("package_layout_failed", f"Archive member escapes extraction root: {member.name}")
+        raise phase_error(
+            "package_layout_failed",
+            f"Archive member escapes extraction root: {member.name}",
+        )
 
 
 def _require_dict(config: dict[str, Any], key: str) -> dict[str, Any]:
     value = config.get(key)
     if not isinstance(value, dict):
-        raise ValidationError("checkpoint_schema_failed", f"Checkpoint config missing {key}")
+        raise ValidationError(
+            "checkpoint_schema_failed", f"Checkpoint config missing {key}"
+        )
     return value
 
 
@@ -432,7 +487,11 @@ def _to_plain_data(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if hasattr(value, "__dict__"):
-        return {key: _to_plain_data(item) for key, item in vars(value).items() if not key.startswith("_")}
+        return {
+            key: _to_plain_data(item)
+            for key, item in vars(value).items()
+            if not key.startswith("_")
+        }
     return value
 
 

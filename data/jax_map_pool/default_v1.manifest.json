@@ -1,0 +1,19 @@
+{
+  "label": "default_v1",
+  "pool_size": 500,
+  "npz_path": "data/jax_map_pool/default_v1.npz",
+  "sha256": "b48a38e4ad63aab25ffb155af321ab470b4e658cff42eca0369d72048f8d3023",
+  "generator_version": "map_pool_bake_v1",
+  "commit_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
+  "seed_start": 0,
+  "seed_attempts": 504,
+  "rejected_seeds": 4,
+  "bake_seconds": 81.66847151098773,
+  "profile_path": "/tmp/pick4_profile.json",
+  "accept_extrapolated_secs": null,
+  "profile": {
+    "mean_secs_per_map": 0.13083340820157902,
+    "success_rate": 1.0,
+    "extrapolated_batch_secs": 65.4167041007895
+  }
+}
