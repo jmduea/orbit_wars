@@ -213,6 +213,34 @@ def should_skip_opponent_batch_refresh_2p(
     return (single_family_id >= 0) & (effective_id == OPPONENT_NOOP)
 
 
+def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
+    """Host-side mirror of single-family noop detection used in rollout scan."""
+
+    probs = [float(value) for value in list(stage_view.family_probs)]
+    family_ids = [int(value) for value in list(stage_view.family_ids)]
+    active_indices = [index for index, prob in enumerate(probs) if prob > 0.0]
+    if len(active_indices) != 1:
+        return False
+    family_id = family_ids[active_indices[0]]
+    has_historical = any(bool(value) for value in list(stage_view.snapshot_valid_mask))
+    if family_id == OPPONENT_HISTORICAL and not has_historical:
+        family_id = int(stage_view.fallback_family_id)
+    return family_id == OPPONENT_NOOP
+
+
+def should_skip_opponent_batch_refresh_2p(
+    cfg: TrainConfig,
+    stage_view: StageView,
+) -> bool:
+    """Skip 2p opponent re-encode when opponents ignore edge semantics (noop paths)."""
+
+    if cfg.task.player_count != 2:
+        return False
+    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+        return True
+    return is_single_family_noop_stage_view(stage_view)
+
+
 def _single_stage_family_id(stage_view: StageView) -> jax.Array:
     """Return the sole configured opponent family id, or -1 for true mixtures."""
 
