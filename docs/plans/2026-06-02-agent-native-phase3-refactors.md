@@ -2,13 +2,13 @@
 date: 2026-06-02
 topic: agent-native-operator-cli
 status: completed
-origin: docs/agent-native-phase2-status.md
+origin: docs/audits/agent-native-status.md
 depends_on: agent-native-phase2 (PR)
 ---
 
 # Agent-native Phase 3 — large refactors (scheduled)
 
-> **Update 2026-06-02:** Items 1–4 below are shipped on `main`. See `docs/agent-native-phase3-status.md` for evidence and operator entry points. This file remains the historical backlog spec.
+> **Update 2026-06-02:** Items 1–4 below are shipped on `main`. See `docs/audits/agent-native-status.md` for evidence and operator entry points. This file remains the historical backlog spec.
 
 Phase 2 shipped composable gate **recipes** and operator **primitives**; Phase 3 decomposes remaining workflow monoliths and externalizes gate specs. **No implementation in Phase 2 PR** — this document is the ordered backlog.
 
@@ -105,6 +105,6 @@ uv run ow benchmark gate --list
 
 ## References
 
-- Phase 2 completion: `docs/agent-native-phase2-status.md`
+- Phase 2 completion: `docs/audits/agent-native-status.md`
 - Phase 1 plan: `docs/plans/2026-06-01-agent-native-operator-cli-plan.md`
 - Gate recipes: `conf/benchmark/gates/*.yaml`

@@ -1,6 +1,6 @@
 # Orbit Wars Agent Guide
 
-Hydra-first Python 3.12 JAX PPO project. See `docs/README.md` for the doc-type map, then `docs/ONBOARDING.md` for architecture depth, `docs/AGENT_CAPABILITIES.md` for task prompts, `docs/CURSOR.md` for plugin setup, and `docs/agent-native-phase3-status.md` for shipped benchmark/sweep primitives.
+Hydra-first Python 3.12 JAX PPO project. See `docs/README.md` for the doc-type map, then `docs/ONBOARDING.md` for architecture depth, `docs/AGENT_CAPABILITIES.md` for task prompts, `docs/CURSOR.md` for plugin setup, and `docs/audits/agent-native-status.md` for shipped benchmark/sweep primitives.
 
 **Config → Kaggle pipeline (SSOT):** [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md) — canonical path from config to submission; competition rules in [`docs/competition/`](docs/competition/). Tracker: GitHub #205. Until implemented, `hybrid_promotion` / Gate 5 / `bracket_training` docs below are **legacy** (teardown per SSOT R29).
 

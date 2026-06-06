@@ -1,6 +1,6 @@
 ---
 title: "Agent-native deferred CRUD + context (post-015)"
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/plans/2026-06-02-015-feat-agent-native-audit-gaps-plan.md
 parent_pr: 184

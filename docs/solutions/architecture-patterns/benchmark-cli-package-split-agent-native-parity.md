@@ -66,7 +66,7 @@ Wire `src/cli/__init__.py` to `benchmark.main` as before; delete the monolith on
 1. **Capability map** — every non-`(planned)` `ow …` row in `docs/AGENT_CAPABILITIES.md` § Capability map must resolve in the live argparse tree. After adding commands (e.g. `calibrate-unified-tournament`, `shortlist-planet-flow-sweep`, `planet-flow-noop-smoke`), add table rows in the same PR.
 2. **`tests/test_agent_capability_map.py`** — builds a help registry by walking `ow <cmd> --help` and nested `{choices}`. Extend `_EXTRA_NESTED_TOKENS` when subcommands are not expressed as argparse choices (e.g. `ow benchmark gate` → `list`, `run`). Skip `(planned)` rows in the table parser.
 3. **Planned commands** — `shape-calibrate` is documented as planned but must **not** appear in benchmark `--help`; `test_shape_calibrate_not_registered_in_benchmark_help` guards against false positives where the registry would otherwise accept a non-existent subcommand.
-4. **Help hygiene** — update `print_benchmark_help` and `docs/agent-native-phase3-status.md` paths from `src/cli/benchmark.py` to `src/cli/benchmark/`; fix stale factorized-sampler help in `parser.py`; remove dead duplicate handlers in `gate.py`.
+4. **Help hygiene** — update `print_benchmark_help` and `docs/audits/agent-native-status.md` paths from `src/cli/benchmark.py` to `src/cli/benchmark/`; fix stale factorized-sampler help in `parser.py`; remove dead duplicate handlers in `gate.py`.
 
 ## Why This Matters
 

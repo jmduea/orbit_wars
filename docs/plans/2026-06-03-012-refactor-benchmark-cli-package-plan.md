@@ -1,7 +1,7 @@
 ---
 date: 2026-06-03
 topic: benchmark-cli-package
-status: active
+status: completed
 type: refactor
 origin: docs/plans/2026-06-03-011-refactor-src-simplification-followup-plan.md (U3); GitHub issue #194
 ---

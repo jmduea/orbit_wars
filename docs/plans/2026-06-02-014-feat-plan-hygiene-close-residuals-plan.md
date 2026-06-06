@@ -22,7 +22,7 @@ ROADMAP **Now/Next** are empty; multiple `docs/plans/*.md` still show `status: a
 |----|-------------|
 | R1 | Flip `status: active` → `completed` on plans whose work is merged (operator, observability, planet-flow sweep/reachability/angle, preflight profiles, launch hygiene e2e). |
 | R2 | Update `docs/plans/2026-06-02-agent-native-phase3-refactors.md` with shipped status for items 1–4. |
-| R3 | Add `docs/agent-native-phase3-status.md` pointing agents to primitives (`ow benchmark gate run`, `ow sweep`, gate YAML). |
+| R3 | Add `docs/audits/agent-native-status.md` pointing agents to primitives (`ow benchmark gate run`, `ow sweep`, gate YAML). |
 | R4 | PR closes #168, #169, #170 with evidence paths. |
 | R5 | `make test-fast` green. |
 
@@ -42,7 +42,7 @@ ROADMAP **Now/Next** are empty; multiple `docs/plans/*.md` still show `status: a
 
 ### U2. Phase 3 status doc + backlog update
 
-**Files:** `docs/agent-native-phase3-status.md` (new), `docs/plans/2026-06-02-agent-native-phase3-refactors.md`
+**Files:** `docs/audits/agent-native-status.md` (consolidated), `docs/plans/2026-06-02-agent-native-phase3-refactors.md`
 
 ### U3. Cross-link AGENTS.md
 

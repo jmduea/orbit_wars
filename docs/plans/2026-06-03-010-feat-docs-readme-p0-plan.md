@@ -1,7 +1,7 @@
 ---
 title: "feat: Docs README and P0 navigation IA"
 type: feat
-status: active
+status: completed
 date: 2026-06-03
 origin: docs/brainstorms/2026-06-03-docs-folder-organization-audit.md
 ---

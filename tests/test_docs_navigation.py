@@ -51,7 +51,9 @@ def _assert_link_resolves(base_dir: Path, href: str) -> None:
     assert target.exists(), f"missing path for {href!r}: {target}"
 
 
-@pytest.mark.parametrize("href", _extract_markdown_links(README.read_text(encoding="utf-8")))
+@pytest.mark.parametrize(
+    "href", _extract_markdown_links(README.read_text(encoding="utf-8"))
+)
 def test_docs_readme_links_resolve(href: str) -> None:
     _assert_link_resolves(DOCS_ROOT, href)
 
@@ -97,3 +99,20 @@ def test_agents_md_points_to_docs_readme() -> None:
     agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
     intro = agents.split("\n## ", maxsplit=1)[0]
     assert intro.count("docs/README.md") == 1
+
+
+def test_docs_readme_start_here_excludes_root_issues() -> None:
+    text = README.read_text(encoding="utf-8")
+    start_here = text.split("## Agent policy chain", maxsplit=1)[0]
+    assert "Issues.md" not in start_here
+
+
+def test_archived_issues_snapshot_exists() -> None:
+    assert (DOCS_ROOT / "archive" / "issues-snapshot-2026-06.md").is_file()
+
+
+def test_agent_native_status_under_audits() -> None:
+    status_doc = DOCS_ROOT / "audits" / "agent-native-status.md"
+    assert status_doc.is_file()
+    agents = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "docs/audits/agent-native-status.md" in agents

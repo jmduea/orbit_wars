@@ -1,7 +1,7 @@
 ---
 title: "feat: Docs IA P1 tail (agent-context, benchmarks index, tools/)"
 type: feat
-status: active
+status: completed
 date: 2026-06-04
 origin: docs/brainstorms/2026-06-03-docs-folder-organization-audit.md
 ---

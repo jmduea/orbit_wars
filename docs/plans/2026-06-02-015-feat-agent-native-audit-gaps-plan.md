@@ -1,6 +1,6 @@
 ---
 title: "Agent-native audit gap closure (CRUD, context, primitives)"
-status: active
+status: completed
 date: 2026-06-02
 origin: docs/audits/agent-native-architecture-2026-06-02.md
 ---

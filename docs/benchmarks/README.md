@@ -1,6 +1,6 @@
 # Benchmarks and calibration artifacts
 
-Committed JSON and runbooks under this folder define verification thresholds and baselines. **Do not invent round numbers** — derive pass/fail bars from these artifacts or recalibrate with `ow benchmark` commands documented in [`AGENTS.md`](../AGENTS.md) (preflight section).
+Committed JSON and runbooks under this folder define verification thresholds and baselines. **Do not invent round numbers** — derive pass/fail bars from these artifacts or recalibrate with `ow benchmark` commands documented in [`AGENTS.md`](../../AGENTS.md) (preflight section).
 
 ## Primary gate sources
 

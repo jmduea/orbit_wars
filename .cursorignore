@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 
-# Personal scratch (may remain tracked; keep off-model)
-docs/brain_dump.md
-docs/Issues.md
+# Personal scratch and archived snapshots (may remain tracked; keep off-model)
+docs/archive/brain_dump.md
+docs/archive/issues-snapshot-2026-06.md
+docs/archive/omg/

@@ -3,7 +3,7 @@
 **Date:** 2026-06-02  
 **Last refreshed:** 2026-06-03 (post–PR [#184](https://github.com/jmduea/orbit_wars/pull/184), merge `191fef3`)  
 **Scope:** Hydra + JAX PPO RL project; primary surface is `ow` CLI (`src/cli/`), not a web UI.  
-**References:** `ce-agent-native-audit` skill, `ce-agent-native-architecture` principles, `docs/AGENT_CAPABILITIES.md`, `docs/agent-native-phase3-status.md`, canonical operator learning `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, Phase 1 precursor `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`.
+**References:** `ce-agent-native-audit` skill, `ce-agent-native-architecture` principles, `docs/AGENT_CAPABILITIES.md`, `docs/audits/agent-native-status.md`, canonical operator learning `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, Phase 1 precursor `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`.
 
 **Refresh note:** Original audit was read-only (no GPU train). Post-#184, seed-scheduler calibration is **complete** (`training.reseed_every_updates: 50`, `docs/benchmarks/seed-scheduler-calibration.json`), Phase 2/3 operator primitives and capability-map test shipped; scores below are updated where evidence changed — overall **78%** mean is still representative.
 
@@ -357,8 +357,7 @@ Core RL remains code-native (expected). Operator gates and Hydra paths are stron
 
 - **Canonical learning (calibration + phase-2 CLI):** `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
 - Phase 1 precursor: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
-- Phase 2 status: `docs/agent-native-phase2-status.md`
-- Phase 3 status: `docs/agent-native-phase3-status.md`
+- Operator status: `docs/audits/agent-native-status.md`
 - Completed plans: `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`, `docs/plans/2026-06-02-015-feat-agent-native-audit-gaps-plan.md`, `docs/plans/2026-06-02-016-feat-agent-native-deferred-crud-plan.md`, `docs/plans/2026-06-02-017-feat-seed-u2-u3-capability-map-plan.md`
 - Plan backlog (items 1–4 shipped): `docs/plans/2026-06-02-agent-native-phase3-refactors.md`
 
@@ -367,4 +366,4 @@ Core RL remains code-native (expected). Operator gates and Hydra paths are stron
 ## Audit metadata
 
 - **Original pass (2026-06-02):** `uv run ow --help` (read-only); file/code review of `src/cli/`, `scripts/agent_context.py`, `.cursor/hooks/`, Makefile preflight targets. No GPU train.
-- **Refresh pass (2026-06-03):** Verified PR #184 merge `191fef3` — `reseed_every_updates: 50`, `tests/test_agent_capability_map.py`, `ow runs archive`, `ow runs checkpoint delete`, `ow sweep cancel`, `ow benchmark factorized-sampler`, `agent_context` gate/sweep/GPU fields; read `docs/agent-native-phase3-status.md`.
+- **Refresh pass (2026-06-03):** Verified PR #184 merge `191fef3` — `reseed_every_updates: 50`, `tests/test_agent_capability_map.py`, `ow runs archive`, `ow runs checkpoint delete`, `ow sweep cancel`, `ow benchmark factorized-sampler`, `agent_context` gate/sweep/GPU fields; read `docs/audits/agent-native-status.md`.

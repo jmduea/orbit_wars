@@ -35,7 +35,7 @@ Cursor respects `.gitignore` by default; this repo also ships explicit ignore fi
 | File | Use |
 |------|-----|
 | [`.cursorindexingignore`](../.cursorindexingignore) | Training artifacts, caches, `docs/archive/`, `.understand-anything/` graph JSON — still readable via `Read` / `@file` |
-| [`.cursorignore`](../.cursorignore) | `.env*`, `docs/Issues.md`, `docs/brain_dump.md` — do not reference in chat |
+| [`.cursorignore`](../.cursorignore) | `.env*`, `docs/archive/issues-snapshot-2026-06.md`, `docs/archive/brain_dump.md`, `docs/archive/omg/` — do not reference in chat |
 
 **Kept in search:** `src/`, `tests/`, `conf/`, `scripts/`, `AGENTS.md`, `docs/plans/`, `docs/solutions/`, `docs/benchmarks/`, `.cursor/rules/`.
 

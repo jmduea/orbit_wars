@@ -101,7 +101,7 @@ Agent-native phase 2 closes the audit gap between “agents can invoke `ow train
 
 - Before editing `training.reseed_every_updates` in `conf/` or schema defaults.
 - When extending operator CLI: add subcommand in `src/cli/`, register in `src/cli/__init__.py`, document in `docs/AGENT_CAPABILITIES.md` capability map, and extend `tests/test_agent_capability_map.py` if the map lists the command.
-- When changing the pinned reseed interval — re-run calibration and update `docs/benchmarks/seed-scheduler-calibration.json` before editing `conf/training/base.yaml` or schema defaults; see `docs/agent-native-phase3-status.md` for the current shipped default (**50**).
+- When changing the pinned reseed interval — re-run calibration and update `docs/benchmarks/seed-scheduler-calibration.json` before editing `conf/training/base.yaml` or schema defaults; see `docs/audits/agent-native-status.md` for the current shipped default (**50**).
 
 ## Examples
 
