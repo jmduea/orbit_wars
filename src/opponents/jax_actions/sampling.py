@@ -185,14 +185,16 @@ def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
 def should_skip_opponent_batch_refresh_2p(
     cfg: TrainConfig,
     stage_view: StageView,
-) -> bool:
+) -> jax.Array:
     """Skip 2p opponent re-encode when opponents ignore edge semantics (noop paths)."""
 
     if cfg.task.player_count != 2:
-        return False
+        return jnp.asarray(False)
     if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
-        return True
-    return is_single_family_noop_stage_view(stage_view)
+        return jnp.asarray(True)
+    single_family_id = _single_stage_family_id(stage_view)
+    effective_id = _maybe_effective_single_family_id(single_family_id, stage_view)
+    return (single_family_id >= 0) & (effective_id == OPPONENT_NOOP)
 
 
 def _single_stage_family_id(stage_view: StageView) -> jax.Array:

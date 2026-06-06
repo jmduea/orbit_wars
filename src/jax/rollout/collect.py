@@ -370,15 +370,24 @@ def collect_rollout_jax(
             operand=None,
         )
         if cfg.task.player_count == 2:
-            if skip_opp_batch_refresh:
-                next_opp_batch_cache = opp_batch_cache
-            else:
+
+            def skip_next_opp_batch(_: None):
+                return opp_batch_cache
+
+            def refresh_next_opp_batch(_: None):
                 next_opp_game = next_state.game._replace(
                     player=(1 - next_state.learner_player).astype(jnp.int32)
                 )
-                next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                return jax.vmap(lambda game: encode_turn(game, cfg.task))(
                     next_opp_game
                 )
+
+            next_opp_batch_cache = jax.lax.cond(
+                skip_opp_batch_refresh,
+                skip_next_opp_batch,
+                refresh_next_opp_batch,
+                None,
+            )
         else:
             next_opp_batch_cache = opp_batch_cache
 
@@ -515,16 +524,24 @@ def collect_rollout_jax(
         ), transition
 
     if cfg.task.player_count == 2:
-        if skip_opp_batch_refresh:
-            # Noop opponents ignore edge features; learner batch has the right shape.
-            initial_opp_batch_cache = turn_batch
-        else:
+
+        def skip_initial_opp_batch(_: None):
+            return turn_batch
+
+        def refresh_initial_opp_batch(_: None):
             initial_opp_game = env_state.game._replace(
                 player=(1 - env_state.learner_player).astype(jnp.int32)
             )
-            initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+            return jax.vmap(lambda game: encode_turn(game, cfg.task))(
                 initial_opp_game
             )
+
+        initial_opp_batch_cache = jax.lax.cond(
+            skip_opp_batch_refresh,
+            skip_initial_opp_batch,
+            refresh_initial_opp_batch,
+            None,
+        )
     else:
         initial_opp_batch_cache = turn_batch
 
