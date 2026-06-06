@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import statistics
-import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 import jax.numpy as jnp
 
 import jax
+from src.benchmark.jit_timing import EncodeTimingStats, measure_jitted_encodes
 from src.config.schema import TaskConfig
 from src.jax.env import batched_reset
 from src.jax.features import empty_feature_history, encode_learner_turn, encode_turn
@@ -35,56 +34,6 @@ def _task_cfg(
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _TimingStats:
-    compile_seconds: float
-    mean_seconds: float
-    std_seconds: float
-    min_seconds: float
-    max_seconds: float
-    encodes_per_call: int
-    mean_seconds_per_encode: float
-    encodes_per_second: float
-
-
-def _measure_jitted(
-    fn,
-    *,
-    warmup: int,
-    repeats: int,
-    encodes_per_call: int,
-) -> _TimingStats:
-    compile_start = time.perf_counter()
-    out = fn()
-    jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-    compile_seconds = time.perf_counter() - compile_start
-
-    for _ in range(warmup):
-        out = fn()
-        jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-
-    timings: list[float] = []
-    for _ in range(repeats):
-        start = time.perf_counter()
-        out = fn()
-        jax.tree_util.tree_map(lambda x: x.block_until_ready(), out)
-        timings.append(time.perf_counter() - start)
-
-    mean_s = statistics.mean(timings)
-    std_s = statistics.pstdev(timings) if len(timings) > 1 else 0.0
-    per_encode = mean_s / encodes_per_call
-    return _TimingStats(
-        compile_seconds=compile_seconds,
-        mean_seconds=mean_s,
-        std_seconds=std_s,
-        min_seconds=min(timings),
-        max_seconds=max(timings),
-        encodes_per_call=encodes_per_call,
-        mean_seconds_per_encode=per_encode,
-        encodes_per_second=(encodes_per_call / mean_s) if mean_s > 0 else 0.0,
-    )
-
-
 def _scenario_result(
     *,
     name: str,
@@ -92,7 +41,7 @@ def _scenario_result(
     player_count: int,
     candidate_count: int,
     batch_size: int,
-    stats: _TimingStats,
+    stats: EncodeTimingStats,
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -133,7 +82,7 @@ def _run_scenarios_for_config(
     results.append(
         _scenario_result(
             name="single_learner",
-            stats=_measure_jitted(
+            stats=measure_jitted_encodes(
                 single_learner,
                 warmup=warmup,
                 repeats=repeats,
@@ -153,7 +102,7 @@ def _run_scenarios_for_config(
         results.append(
             _scenario_result(
                 name="single_opponent_2p",
-                stats=_measure_jitted(
+                stats=measure_jitted_encodes(
                     single_opponent,
                     warmup=warmup,
                     repeats=repeats,
@@ -170,7 +119,7 @@ def _run_scenarios_for_config(
     results.append(
         _scenario_result(
             name="vmap_batch_learner",
-            stats=_measure_jitted(
+            stats=measure_jitted_encodes(
                 vmap_batch_learner,
                 warmup=warmup,
                 repeats=repeats,
@@ -181,9 +130,7 @@ def _run_scenarios_for_config(
     )
 
     if task_cfg.player_count == 2:
-        opp_games = games._replace(
-            player=jnp.ones_like(games.player, dtype=jnp.int32)
-        )
+        opp_games = games._replace(player=jnp.ones_like(games.player, dtype=jnp.int32))
 
         @jax.jit
         def vmap_batch_opponent():
@@ -192,7 +139,7 @@ def _run_scenarios_for_config(
         results.append(
             _scenario_result(
                 name="vmap_batch_opponent_2p",
-                stats=_measure_jitted(
+                stats=measure_jitted_encodes(
                     vmap_batch_opponent,
                     warmup=warmup,
                     repeats=repeats,
@@ -212,7 +159,7 @@ def _run_scenarios_for_config(
         results.append(
             _scenario_result(
                 name="encode_learner_turn_single",
-                stats=_measure_jitted(
+                stats=measure_jitted_encodes(
                     single_learner_turn,
                     warmup=warmup,
                     repeats=repeats,
@@ -233,7 +180,9 @@ def _run_scenarios_for_config(
                 )
             )(player_ids)
             flat_games = jax.tree.map(
-                lambda x: x.reshape((task_cfg.player_count * batch_size,) + x.shape[2:]),
+                lambda x: x.reshape(
+                    (task_cfg.player_count * batch_size,) + x.shape[2:]
+                ),
                 player_games,
             )
             return jax.vmap(lambda game: encode_turn(game, task_cfg))(flat_games)
@@ -242,7 +191,7 @@ def _run_scenarios_for_config(
         results.append(
             _scenario_result(
                 name="vmap_4p_all_players",
-                stats=_measure_jitted(
+                stats=measure_jitted_encodes(
                     vmap_4p_all_players,
                     warmup=warmup,
                     repeats=repeats,
