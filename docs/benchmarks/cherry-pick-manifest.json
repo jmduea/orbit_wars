@@ -175,11 +175,21 @@
   "baseline_gates": {
     "throughput_e2e": {
       "profile": "learning_first_unified",
-      "baseline_pending": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
+      "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
+      "baseline_capture_date": "2026-06-05",
+      "baseline_commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "baseline_worktree": "/home/jmduea/projects/orbit_wars-pre-hygiene",
+      "baseline_aggregate": {
+        "env_steps_per_sec_mean": 5431.985098263416,
+        "seconds_per_update_mean": 1.5082574630321082,
+        "pass_band_within_pct": 10.0,
+        "env_steps_per_sec_floor": 4888.786588437074,
+        "seconds_per_update_mean_ceiling": 1.659083309335319
+      },
       "baseline_superseded": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
       "baseline_superseded_note": "Old baseline used primary preset (self-play, full transformer, 32 envs × 500 steps). Locked admission recipe is noop, small model, mixed 2p/4p, 32 envs × 256 steps. Numbers are not comparable — do not gate new captures against the old JSON or the earlier 2p_16×128 proposal.",
       "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_unified.json",
-      "verdict": "awaiting_baseline_capture",
+      "verdict": "baseline_captured",
       "prior_capture": {
         "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_2p.json",
         "verdict": "obsolete_profile",
@@ -235,5 +245,5 @@
     "last_integrated_sha": null,
     "integration_status": "building"
   },
-  "decision": "Learning-first unified admission locked 2026-06-05 via config picker (beat_noop_core + operator deltas). Recipe: mixed 2p/4p, 32×256 rollouts, candidate_count=3, wandb preflight. Next: capture launch-hygiene-e2e-baseline-learning-first.json on this recipe, run beat_noop with gate --train-overrides, admission-throughput ±10%, then env-parity cherry-picks. Recalibrate beat_noop learning-signal thresholds if mixed-format gate results are ambiguous."
+  "decision": "Learning-first unified admission locked 2026-06-05 via config picker (beat_noop_core + operator deltas). Recipe: mixed 2p/4p, 32×256 rollouts, candidate_count=3, wandb preflight. Baseline captured 2026-06-05 at pre-hygiene anchor SHA (~5432 env-steps/s, ~1.51 s/update). Next: run beat_noop on throughput-anchor worktree with operator train overrides, admission-throughput ±10% against launch-hygiene-e2e-baseline-learning-first.json, then env-parity cherry-picks. Recalibrate beat_noop learning-signal thresholds if mixed-format gate results are ambiguous."
 }
