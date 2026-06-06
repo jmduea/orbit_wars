@@ -20,6 +20,7 @@ from src.jax.shield import (
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_factorized_topk,
     factorized_source_mask_from_shield,
+    selected_factored_launch_passes_cheap_shield_jax,
     trajectory_shield_mode,
 )
 from src.jax.submission_runtime import (
@@ -350,6 +351,61 @@ def _flat_edge_for_target(batch, target_id: int, *, src_row: int = 0) -> int:
         if int(batch.edge_tgt_ids[src_row, slot]) == target_id:
             return src_row * k + slot
     raise AssertionError(f"target {target_id} not found on source row {src_row}")
+
+
+def test_pointwise_cheap_matches_lattice_bucket_legality() -> None:
+    cfg = _modes_cfg()
+    game = _two_planet_game(x0=20.0, y0=20.0, x1=80.0, y1=20.0)
+    batch = encode_turn(game, cfg)
+    lattice = apply_cheap_trajectory_shield_factorized_topk(game, batch, cfg)
+    src = jnp.asarray(0, dtype=jnp.int32)
+    slot = jnp.asarray(0, dtype=jnp.int32)
+    bucket = jnp.asarray(1, dtype=jnp.int32)
+    ships = jnp.asarray(10.0, dtype=jnp.float32)
+    stop = jnp.asarray(0, dtype=jnp.int32)
+    active = jnp.asarray(True, dtype=bool)
+    pointwise_ok = selected_factored_launch_passes_cheap_shield_jax(
+        game,
+        batch,
+        cfg,
+        src,
+        slot,
+        bucket,
+        ships,
+        stop,
+        active,
+        source_ships_available=game.planets.ships[src],
+    )
+    lattice_ok = bool(np.asarray(lattice.ship_bucket_mask[src, slot, bucket]))
+    assert bool(np.asarray(pointwise_ok)) == lattice_ok
+
+
+def test_pointwise_cheap_rejects_sun_cross_launch() -> None:
+    cfg = _modes_cfg()
+    game = _three_planet_sun_cross_game()
+    batch = encode_turn(game, cfg)
+    unsafe_slot = _edge_slot_for_target(batch, 0, 1)
+    src = jnp.asarray(0, dtype=jnp.int32)
+    slot = jnp.asarray(unsafe_slot, dtype=jnp.int32)
+    bucket = jnp.asarray(1, dtype=jnp.int32)
+    ships = jnp.asarray(5.0, dtype=jnp.float32)
+    stop = jnp.asarray(0, dtype=jnp.int32)
+    active = jnp.asarray(True, dtype=bool)
+    pointwise_ok = selected_factored_launch_passes_cheap_shield_jax(
+        game,
+        batch,
+        cfg,
+        src,
+        slot,
+        bucket,
+        ships,
+        stop,
+        active,
+        source_ships_available=game.planets.ships[src],
+    )
+    lattice = apply_cheap_trajectory_shield_factorized_topk(game, batch, cfg)
+    assert not bool(np.asarray(pointwise_ok))
+    assert not bool(np.asarray(lattice.ship_bucket_mask[src, unsafe_slot, bucket]))
 
 
 @pytest.mark.skip(

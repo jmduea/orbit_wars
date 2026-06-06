@@ -22,9 +22,11 @@ from src.jax.shield import (
     apply_configured_trajectory_shield_factorized_topk,
     apply_trajectory_shield_to_turn_batch_v2,
     selected_factored_launch_is_exact_safe_jax,
+    selected_factored_launch_passes_cheap_shield_jax,
     trajectory_shield_final_validate_selected,
     trajectory_shield_mode,
 )
+from src.jax.shield.trajectory import _unshielded_factorized_topk_result
 from src.jax.ship_action import (
     continuous_fraction_log_prob_at_action,
     fraction_from_logit,
@@ -305,6 +307,7 @@ def _sample_shielded_factored_sequence_with_params(
     deterministic: bool,
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
+    inference_only: bool = False,
 ) -> ShieldedSequenceSample:
     from src.jax.factored_sequence_scan import (
         forward_factorized_critic,
@@ -318,9 +321,12 @@ def _sample_shielded_factored_sequence_with_params(
     carry_enabled = decoder_carry_enabled(cfg)
     continuous = is_continuous_ship_mode(cfg)
     encoder_out = forward_factorized_encode(params, policy, batch)
-    value_out = forward_factorized_critic(
-        params, policy, encoder_out, player_count=player_count
-    )
+    if inference_only:
+        value_scalar = jnp.zeros((env_count,), dtype=jnp.float32)
+    else:
+        value_scalar = forward_factorized_critic(
+            params, policy, encoder_out, player_count=player_count
+        ).value
     sequence_k = cfg.model.max_moves_k
     k = edge_k(cfg.task)
     source_sequence = jnp.zeros((env_count, sequence_k), dtype=jnp.int32)
@@ -383,32 +389,41 @@ def _sample_shielded_factored_sequence_with_params(
             include_value=False,
             **step_kwargs,
         )
-        shielded = jax.vmap(
-            lambda game_row, batch_row, ships: (
-                apply_configured_trajectory_shield_factorized_topk(
+        if inference_only:
+            shielded = jax.vmap(
+                lambda game_row, batch_row, ships: _unshielded_factorized_topk_result(
                     game_row, batch_row, cfg.task, remaining_planet_ships=ships
                 )
+            )(game, batch, remaining_ships)
+        else:
+            shielded = jax.vmap(
+                lambda game_row, batch_row, ships: (
+                    apply_configured_trajectory_shield_factorized_topk(
+                        game_row, batch_row, cfg.task, remaining_planet_ships=ships
+                    )
+                )
+            )(game, batch, remaining_ships)
+        if not inference_only:
+            step_diagnostics = shielded.diagnostics
+            diagnostics = ShieldDiagnostics(
+                blocked_count=diagnostics.blocked_count
+                + step_diagnostics.blocked_count,
+                blocked_sun_count=diagnostics.blocked_sun_count
+                + step_diagnostics.blocked_sun_count,
+                blocked_bounds_count=diagnostics.blocked_bounds_count
+                + step_diagnostics.blocked_bounds_count,
+                blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count
+                + step_diagnostics.blocked_unintended_hit_count,
+                blocked_horizon_count=diagnostics.blocked_horizon_count
+                + step_diagnostics.blocked_horizon_count,
+                fallback_noop_count=diagnostics.fallback_noop_count
+                + step_diagnostics.fallback_noop_count,
+                legal_non_noop_count=diagnostics.legal_non_noop_count
+                + step_diagnostics.legal_non_noop_count,
+                original_non_noop_count=diagnostics.original_non_noop_count
+                + step_diagnostics.original_non_noop_count,
+                legal_non_noop_rate=diagnostic_zero,
             )
-        )(game, batch, remaining_ships)
-        step_diagnostics = shielded.diagnostics
-        diagnostics = ShieldDiagnostics(
-            blocked_count=diagnostics.blocked_count + step_diagnostics.blocked_count,
-            blocked_sun_count=diagnostics.blocked_sun_count
-            + step_diagnostics.blocked_sun_count,
-            blocked_bounds_count=diagnostics.blocked_bounds_count
-            + step_diagnostics.blocked_bounds_count,
-            blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count
-            + step_diagnostics.blocked_unintended_hit_count,
-            blocked_horizon_count=diagnostics.blocked_horizon_count
-            + step_diagnostics.blocked_horizon_count,
-            fallback_noop_count=diagnostics.fallback_noop_count
-            + step_diagnostics.fallback_noop_count,
-            legal_non_noop_count=diagnostics.legal_non_noop_count
-            + step_diagnostics.legal_non_noop_count,
-            original_non_noop_count=diagnostics.original_non_noop_count
-            + step_diagnostics.original_non_noop_count,
-            legal_non_noop_rate=diagnostic_zero,
-        )
         step_bucket_mask = shielded.ship_bucket_mask
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
@@ -449,12 +464,57 @@ def _sample_shielded_factored_sequence_with_params(
             & jnp.where(continuous, ship_fraction > 0.0, bucket > 0)
         )
 
+        shield_mode = trajectory_shield_mode(cfg.task)
+        tiered_exact_validate = (
+            shield_mode == "tiered"
+            and trajectory_shield_final_validate_selected(cfg.task)
+        )
+        run_cheap_pointwise = inference_only and (
+            shield_mode in {"cheap", "off"}
+            or (shield_mode == "tiered" and not tiered_exact_validate)
+        )
+        if run_cheap_pointwise:
+            cheap_safe = jax.vmap(
+                lambda game_row, batch_row, rem_ships, src, slot, bkt, ships, stop_value, active: (
+                    selected_factored_launch_passes_cheap_shield_jax(
+                        game_row,
+                        batch_row,
+                        cfg.task,
+                        src,
+                        slot,
+                        bkt,
+                        ships,
+                        stop_value,
+                        active,
+                        source_ships_available=rem_ships[src],
+                    )
+                )
+            )(
+                game,
+                batch,
+                remaining_ships,
+                source,
+                target_slot,
+                bucket,
+                launched,
+                stop,
+                sequence_active,
+            )
+            reject_launch = launch_valid & (~cheap_safe)
+            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+            ship_fraction = jnp.where(
+                reject_launch,
+                jnp.zeros_like(ship_fraction),
+                ship_fraction,
+            )
+            launched = jnp.where(reject_launch, 0.0, launched)
+            launch_valid = launch_valid & cheap_safe
+
         # Tiered mode: cheap mask for sampling, exact check only the sampled launch.
         # Rejected launches are converted into stop/no-op so replay log-prob is
         # recomputed against the final stored sequence below.
-        if trajectory_shield_mode(
-            cfg.task
-        ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task):
+        if tiered_exact_validate:
             exact_safe = jax.vmap(
                 lambda game_row, batch_row, src, slot, ships, stop_value, active: (
                     selected_factored_launch_is_exact_safe_jax(
@@ -479,6 +539,40 @@ def _sample_shielded_factored_sequence_with_params(
             )
             reject_launch = launch_valid & (~exact_safe)
 
+            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+            ship_fraction = jnp.where(
+                reject_launch,
+                jnp.zeros_like(ship_fraction),
+                ship_fraction,
+            )
+            launched = jnp.where(reject_launch, 0.0, launched)
+            launch_valid = launch_valid & exact_safe
+
+        if inference_only and shield_mode not in {"off", "cheap", "tiered"}:
+            exact_safe = jax.vmap(
+                lambda game_row, batch_row, src, slot, ships, stop_value, active: (
+                    selected_factored_launch_is_exact_safe_jax(
+                        game_row,
+                        batch_row,
+                        cfg.task,
+                        src,
+                        slot,
+                        ships,
+                        stop_value,
+                        active,
+                    )
+                )
+            )(
+                game,
+                batch,
+                source,
+                target_slot,
+                launched,
+                stop,
+                sequence_active,
+            )
+            reject_launch = launch_valid & (~exact_safe)
             stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
             bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
             ship_fraction = jnp.where(
@@ -560,21 +654,22 @@ def _sample_shielded_factored_sequence_with_params(
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )
-    diagnostics = ShieldDiagnostics(
-        blocked_count=diagnostics.blocked_count,
-        blocked_sun_count=diagnostics.blocked_sun_count,
-        blocked_bounds_count=diagnostics.blocked_bounds_count,
-        blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count,
-        blocked_horizon_count=diagnostics.blocked_horizon_count,
-        fallback_noop_count=diagnostics.fallback_noop_count,
-        legal_non_noop_count=diagnostics.legal_non_noop_count,
-        original_non_noop_count=diagnostics.original_non_noop_count,
-        legal_non_noop_rate=jnp.where(
-            diagnostics.original_non_noop_count > 0.0,
-            diagnostics.legal_non_noop_count / diagnostics.original_non_noop_count,
-            0.0,
-        ),
-    )
+    if not inference_only:
+        diagnostics = ShieldDiagnostics(
+            blocked_count=diagnostics.blocked_count,
+            blocked_sun_count=diagnostics.blocked_sun_count,
+            blocked_bounds_count=diagnostics.blocked_bounds_count,
+            blocked_unintended_hit_count=diagnostics.blocked_unintended_hit_count,
+            blocked_horizon_count=diagnostics.blocked_horizon_count,
+            fallback_noop_count=diagnostics.fallback_noop_count,
+            legal_non_noop_count=diagnostics.legal_non_noop_count,
+            original_non_noop_count=diagnostics.original_non_noop_count,
+            legal_non_noop_rate=jnp.where(
+                diagnostics.original_non_noop_count > 0.0,
+                diagnostics.legal_non_noop_count / diagnostics.original_non_noop_count,
+                0.0,
+            ),
+        )
     noop_idx = noop_edge_index(cfg.task)
     target_sequence = source_sequence * k + slot_sequence
     target_sequence = jnp.where(
@@ -595,31 +690,35 @@ def _sample_shielded_factored_sequence_with_params(
             include_value=False,
         )
         decoder_hidden_out = final_output.decoder_hidden
-    replay = replay_factored_sequence_logprob(
-        params,
-        policy,
-        batch,
-        cfg,
-        player_count=player_count,
-        source_index=source_sequence,
-        target_slot=slot_sequence,
-        ship_bucket=bucket_sequence,
-        stop_flag=stop_sequence.astype(jnp.float32),
-        step_mask=step_mask_sequence,
-        ship_bucket_mask=bucket_mask_stack,
-        ship_fraction=ship_fraction_sequence if continuous else None,
-        decoder_hidden=decoder_hidden_in if carry_enabled else None,
-        initial_remaining_ships=owned_planet_ships(game),
-        encoder_out=encoder_out,
-    )
-    log_prob_sequence = replay.log_prob
-    entropy_sequence = replay.entropy
+    if not inference_only:
+        replay = replay_factored_sequence_logprob(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_index=source_sequence,
+            target_slot=slot_sequence,
+            ship_bucket=bucket_sequence,
+            stop_flag=stop_sequence.astype(jnp.float32),
+            step_mask=step_mask_sequence,
+            ship_bucket_mask=bucket_mask_stack,
+            ship_fraction=ship_fraction_sequence if continuous else None,
+            decoder_hidden=decoder_hidden_in if carry_enabled else None,
+            initial_remaining_ships=owned_planet_ships(game),
+            encoder_out=encoder_out,
+        )
+        log_prob_sequence = replay.log_prob
+        entropy_sequence = replay.entropy
+    else:
+        log_prob_sequence = jnp.zeros_like(log_prob_sequence)
+        entropy_sequence = jnp.zeros_like(entropy_sequence)
     return ShieldedSequenceSample(
         target_index=target_sequence,
         ship_bucket=bucket_sequence,
         log_prob=log_prob_sequence,
         entropy=entropy_sequence,
-        value=value_out.value,
+        value=value_scalar,
         ship_bucket_mask=bucket_mask_stack,
         diagnostics=diagnostics,
         source_index=source_sequence,
@@ -642,6 +741,7 @@ def _sample_shielded_sequence_with_params(
     deterministic: bool,
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
+    inference_only: bool = False,
 ) -> ShieldedSequenceSample:
     if is_factorized_pointer_decoder(cfg.model):
         return _sample_shielded_factored_sequence_with_params(
@@ -654,6 +754,7 @@ def _sample_shielded_sequence_with_params(
             deterministic=deterministic,
             deterministic_eval=deterministic_eval,
             decoder_hidden_in=decoder_hidden_in,
+            inference_only=inference_only,
         )
 
     env_count = batch.planet_features.shape[0]
@@ -877,6 +978,8 @@ def _sample_shielded_sequence_with_params(
         decoder_hidden_out=decoder_hidden_out if carry_enabled else None,
         ship_fraction=ship_fraction_sequence if continuous else None,
     )
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     game,
@@ -888,6 +991,7 @@ def _sample_policy_action_with_params(
     deterministic: bool,
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
+    inference_only: bool = False,
 ) -> tuple[JaxAction, jax.Array | None]:
     sample = _sample_shielded_sequence_with_params(
         key,
@@ -899,6 +1003,7 @@ def _sample_policy_action_with_params(
         deterministic=deterministic,
         deterministic_eval=deterministic_eval,
         decoder_hidden_in=decoder_hidden_in,
+        inference_only=inference_only,
     )
     if is_factorized_pointer_decoder(cfg.model):
         action = build_action_from_factored_batch(
@@ -930,6 +1035,57 @@ def _sample_policy_action(
     deterministic: bool,
 ) -> tuple[JaxAction, jax.Array | None]:
     return _sample_policy_action_with_params(
+        key,
+        game,
+        batch,
+        train_state.params,
+        policy,
+        cfg,
+        deterministic=deterministic,
+    )
+
+
+def _sample_opponent_policy_action_with_params(
+    key: jax.Array,
+    game,
+    batch: TurnBatch,
+    params: dict,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+    decoder_hidden_in: jax.Array | None = None,
+) -> tuple[JaxAction, jax.Array | None]:
+    """Neural opponent rollout: inference-only K-step path (no critic/logprob replay).
+
+    Uses unshielded factorized masks per sub-step plus pointwise cheap-shield
+    validation on the sampled launch instead of the full edge×bucket lattice.
+    """
+
+    return _sample_policy_action_with_params(
+        key,
+        game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=deterministic,
+        decoder_hidden_in=decoder_hidden_in,
+        inference_only=True,
+    )
+
+
+def _sample_opponent_policy_action(
+    key: jax.Array,
+    game,
+    batch: TurnBatch,
+    train_state,
+    policy: object,
+    cfg: TrainConfig,
+    *,
+    deterministic: bool,
+) -> tuple[JaxAction, jax.Array | None]:
+    return _sample_opponent_policy_action_with_params(
         key,
         game,
         batch,

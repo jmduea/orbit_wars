@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import jax
 from src.config import TrainConfig
 from src.jax.action_sampling import (
-    _sample_policy_action,
-    _sample_policy_action_with_params,
+    _sample_opponent_policy_action,
+    _sample_opponent_policy_action_with_params,
 )
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch
@@ -220,7 +220,7 @@ def _sample_historical_action(
     selected = jax.random.categorical(key, logits, shape=(env_count,))
     pool_size = stage_view.snapshot_valid_mask.shape[0]
     pool_actions = jax.vmap(
-        lambda idx, params: _sample_policy_action_with_params(
+        lambda idx, params: _sample_opponent_policy_action_with_params(
             jax.random.fold_in(key, idx),
             game,
             batch,
@@ -257,7 +257,7 @@ def _sample_single_family_2p_action(
     historical_params_pool: dict | None,
 ) -> JaxAction:
     def latest_branch(_: None) -> JaxAction:
-        action, _decoder_hidden = _sample_policy_action(
+        action, _decoder_hidden = _sample_opponent_policy_action(
             key,
             game,
             batch,
@@ -444,7 +444,7 @@ def _sample_single_family_4p_action(
     )
 
     def latest_branch(_: None) -> JaxAction:
-        action, _decoder_hidden = _sample_policy_action_with_params(
+        action, _decoder_hidden = _sample_opponent_policy_action_with_params(
             key,
             game,
             batch,

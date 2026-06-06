@@ -86,6 +86,11 @@ def main() -> int:
     parser.add_argument("--updates", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument(
+        "--full-geometry",
+        action="store_true",
+        help="Use admission 32×256 host-timed collect (slow; confirmation tier).",
+    )
     args = parser.parse_args()
 
     env = _cold_cache_env()
@@ -117,6 +122,8 @@ def main() -> int:
             *PROFILE_BASE_OVERRIDES,
             *rung_overrides,
         ]
+        if args.full_geometry:
+            bench_cmd.append("--full-geometry")
         bench_proc = _run(bench_cmd, env=env)
         if bench_proc.returncode != 0:
             last_error = (bench_proc.stderr or bench_proc.stdout or "")[-2000:]
