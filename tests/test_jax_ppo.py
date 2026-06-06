@@ -153,6 +153,13 @@ def test_rollout_metric_aggregation_recomputes_rate_metrics():
     assert float(metrics["average_placement_4p"]) == pytest.approx(2.5)
 
 
+def test_sum_metric_dicts_single_group_finalizes_win_rates() -> None:
+    chunk = _metric_chunk(episodes_2p=4.0, wins_2p=3.0, episodes_4p=0.0, first_places_4p=0.0)
+    metrics = sum_metric_dicts([chunk])
+    assert float(metrics["overall_win_rate"]) == pytest.approx(0.75)
+    assert float(metrics["win_rate_2p"]) == pytest.approx(0.75)
+
+
 def test_rollout_metrics_binary_win_rate_matches_terminal_reward() -> None:
     """Preflight noop gates use binary terminal reward; win rate must follow it."""
 

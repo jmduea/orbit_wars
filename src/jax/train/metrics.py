@@ -102,7 +102,7 @@ def sum_metric_dicts(
     metrics_by_chunk: list[dict[str, jax.Array]],
 ) -> dict[str, jax.Array]:
     if len(metrics_by_chunk) == 1:
-        return metrics_by_chunk[0]
+        return finalize_cross_chunk_rate_metrics(dict(metrics_by_chunk[0]))
     return finalize_cross_chunk_rate_metrics(merge_metric_dicts(metrics_by_chunk))
 
 
