@@ -35,7 +35,10 @@ from src.jax.train.rollout_groups import (
     init_profile_rollout_groups,
     replace_rollout_group_state,
 )
-from src.jax.train.snapshots import init_historical_snapshot_pool
+from src.jax.train.snapshots import (
+    add_historical_snapshot,
+    init_historical_snapshot_pool,
+)
 from src.training.curriculum import CurriculumController
 
 ADMISSION_PROFILE_OVERRIDES: tuple[str, ...] = (
@@ -126,6 +129,31 @@ def _emit_profile_progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
+def _historical_opponent_weight(
+    cfg: TrainConfig, curriculum: CurriculumController
+) -> float:
+    if not cfg.curriculum.enabled:
+        return 0.0
+    return float(curriculum.stage.opponent_families.get("historical", 0.0))
+
+
+def _maybe_seed_historical_snapshots(
+    pool,
+    params: dict,
+    cfg: TrainConfig,
+    curriculum: CurriculumController,
+    *,
+    seed_snapshots: int | None = None,
+):
+    pool_size = int(cfg.opponents.snapshot.pool_size)
+    if pool_size <= 0 or _historical_opponent_weight(cfg, curriculum) <= 0.0:
+        return pool
+    count = 1 if seed_snapshots is None else max(int(seed_snapshots), 0)
+    for _ in range(count):
+        pool, _event = add_historical_snapshot(pool, params, update=0)
+    return pool
+
+
 def _phase_record_from_metrics(
     *,
     update: int,
@@ -149,6 +177,7 @@ def run_rollout_phase_profile(
     warmup: int = 2,
     updates: int | None = None,
     window: PhaseTimingWindow | None = None,
+    seed_snapshots: int | None = None,
 ) -> RolloutPhaseProfileResult:
     """Short in-process train loop using host-timed rollout collect only."""
 
@@ -171,6 +200,13 @@ def run_rollout_phase_profile(
         train_state.params, cfg.opponents.snapshot.pool_size
     )
     curriculum = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    historical_pool = _maybe_seed_historical_snapshots(
+        historical_pool,
+        train_state.params,
+        cfg,
+        curriculum,
+        seed_snapshots=seed_snapshots,
+    )
     update_fn = jax.jit(lambda ts, tr: ppo_update_jax(ts, policy, tr, cfg))
 
     per_update_records: list[dict[str, object]] = []
