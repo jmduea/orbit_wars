@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from src.jax.admission_throughput import (
+from src.benchmark.admission_throughput import (
     ThroughputWindow,
     resolve_log_path_from_input,
     run_throughput_gate,

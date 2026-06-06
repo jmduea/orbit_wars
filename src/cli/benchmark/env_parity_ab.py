@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
 
 
 def run_env_parity_ab_cli(args: argparse.Namespace) -> int:
-    from src.jax.benchmark_progress import emit_benchmark_progress
-    from src.jax.env_parity_benchmark import run_env_parity_ab_benchmark
+    from src.benchmark.env_parity import run_env_parity_ab_benchmark
+    from src.benchmark.progress import emit_benchmark_progress
 
     _init_benchmark_runtime()
     modes = tuple(m.strip().lower() for m in args.modes.split(",") if m.strip())

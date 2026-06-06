@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from src.cli import benchmark as benchmark_cli
-from src.jax.benchmark_progress import (
+from src.benchmark.progress import (
     emit_benchmark_progress,
     total_updates_from_overrides,
 )
+from src.cli import benchmark as benchmark_cli
 
 
 def test_total_updates_from_overrides() -> None:
@@ -20,9 +20,7 @@ def test_gate_dry_run_emits_stderr_start(capsys) -> None:
 
 
 def test_gate_verbose_dry_run_hints(capsys) -> None:
-    assert (
-        benchmark_cli.main(["gate", "beat_noop", "--dry-run", "--verbose"]) == 1
-    )
+    assert benchmark_cli.main(["gate", "beat_noop", "--dry-run", "--verbose"]) == 1
     captured = capsys.readouterr()
     assert "Do not pipe this command to tail/head" in captured.err
     assert "Gate train overrides:" in captured.err

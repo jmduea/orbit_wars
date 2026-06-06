@@ -11,6 +11,7 @@ import pytest
 
 import jax
 from src.artifacts.tournament.bracket.state import load_bracket_state
+from src.benchmark.calibration.qualifier_floors import load_qualifier_calibration
 from src.config.schema import (
     ArtifactsConfig,
     OutputConfig,
@@ -19,7 +20,6 @@ from src.config.schema import (
 )
 from src.game.constants import MAX_PLANETS
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, empty_comet_state
-from src.jax.qualifier_calibration import load_qualifier_calibration
 from src.jax.tournament_qualifiers.eval import held_out_eval_seeds
 from src.jax.tournament_qualifiers.metrics import (
     final_ship_scores,

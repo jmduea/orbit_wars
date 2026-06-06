@@ -5,13 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
-from src.jax.qualifier_calibration import (
-    default_calibration_json_path,
+from src.benchmark.calibration.qualifier_floors import (
     default_qualifier_calibration_stub,
 )
+from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
 
 
 def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
@@ -60,5 +58,3 @@ def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 1
-
-

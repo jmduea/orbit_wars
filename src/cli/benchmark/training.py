@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
+
 
 def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     import jax
-    from src.jax.benchmark import rollout_group_summary
-    from src.jax.training_benchmark import (
+    from src.benchmark.production import rollout_group_summary
+    from src.benchmark.training import (
         E2E_THROUGHPUT_GATE,
         aggregate_e2e_run_payloads,
         check_baseline_device_match,
@@ -107,9 +107,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
             "planet_flow_emitted_launch_count_delta_vs_control",
         )
         missing = [
-            key
-            for key in required_control_metrics
-            if run_payloads[0].get(key) is None
+            key for key in required_control_metrics if run_payloads[0].get(key) is None
         ]
         if missing:
             print(
@@ -184,4 +182,3 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         )
         return 1
     return 0
-

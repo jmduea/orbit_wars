@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import REPO_ROOT
+
 
 def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
-    from src.jax.preflight_calibration import git_head_sha
-    from src.jax.seed_scheduler_calibration import (
+    from src.benchmark.calibration.seed_scheduler import (
         DEFAULT_OPPONENTS,
         analyze_seed_sched_run,
         build_seed_scheduler_calibration_report,
@@ -20,6 +18,7 @@ def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
         run_seed_scheduler_sweep,
         write_seed_scheduler_calibration_report,
     )
+    from src.jax.preflight_calibration import git_head_sha
 
     started = __import__("time").perf_counter()
     opponents = tuple(
@@ -110,4 +109,3 @@ def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
     args.out_md.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
     return 0
-

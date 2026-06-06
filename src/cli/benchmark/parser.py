@@ -257,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
         "factorized-sampler",
         help=(
             "Tier-1 factorized shield sampler microbenchmark "
-            "(in-process JAX via src/jax/factorized_sampler_benchmark.py)."
+            "(in-process JAX via src/benchmark/factorized_sampler.py)."
         ),
     )
     factorized_sampler.add_argument("--max-moves-k", type=int, default=3)
@@ -275,7 +275,7 @@ def build_parser() -> argparse.ArgumentParser:
         "encode-turn",
         help=(
             "Tier-1 encode_turn microbenchmark "
-            "(in-process JAX via src/jax/encode_turn_benchmark.py)."
+            "(in-process JAX via src/benchmark/encode_turn.py)."
         ),
     )
     encode_turn.add_argument(
@@ -315,6 +315,32 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
     )
     encode_turn.add_argument("--out", type=Path, default=None)
+
+    policy_path_profile = subparsers.add_parser(
+        "policy-path-profile",
+        help=(
+            "Tier-1 learner policy path microbenchmark: encoder / decoder / "
+            "shield_off vs shield_cheap (src/benchmark/policy_path_profile.py)."
+        ),
+    )
+    policy_path_profile.add_argument("--batch-size", type=int, default=16)
+    policy_path_profile.add_argument("--max-moves-k", type=int, default=2)
+    policy_path_profile.add_argument(
+        "--decoder-carry",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    policy_path_profile.add_argument("--candidate-count", type=int, default=6)
+    policy_path_profile.add_argument(
+        "--shield-modes",
+        nargs="*",
+        choices=["off", "cheap"],
+        default=None,
+        help="Shield modes to compare (default: off and cheap).",
+    )
+    policy_path_profile.add_argument("--warmup", type=int, default=5)
+    policy_path_profile.add_argument("--repeats", type=int, default=30)
+    policy_path_profile.add_argument("--out", type=Path, default=None)
 
     from src.cli.benchmark.env_parity_ab import add_env_parity_ab_parser
 

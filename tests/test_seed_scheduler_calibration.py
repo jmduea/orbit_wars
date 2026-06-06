@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.jax.seed_scheduler_calibration import (
+from src.benchmark.calibration.seed_scheduler import (
     SEED_SCHED_TRAIN_BASE,
     SeedSchedRunSnapshot,
     count_distinct_reseed_seeds,
@@ -20,7 +20,7 @@ def test_seed_sched_train_base_logs_every_update() -> None:
 
 
 def test_run_seed_scheduler_sweep_dry_run_prints_arm_plan(capsys) -> None:
-    from src.jax.seed_scheduler_calibration import run_seed_scheduler_sweep
+    from src.benchmark.calibration.seed_scheduler import run_seed_scheduler_sweep
 
     run_seed_scheduler_sweep(
         opponents=("noop_only",),

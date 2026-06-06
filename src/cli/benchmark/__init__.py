@@ -15,8 +15,8 @@ from src.cli.benchmark.common import (
     _init_benchmark_runtime,
     print_benchmark_help,
 )
-from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.encode_turn import run_encode_turn_cli
+from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.factorized import run_factorized_sampler_cli
 from src.cli.benchmark.gate import run_gate_cli
 from src.cli.benchmark.learn_proof import run_learn_proof_cli
@@ -25,6 +25,7 @@ from src.cli.benchmark.planet_flow import (
     run_planet_flow_noop_smoke_cli,
     run_shortlist_planet_flow_sweep_cli,
 )
+from src.cli.benchmark.policy_path_profile import run_policy_path_profile_cli
 from src.cli.benchmark.rollout_phase_breakdown import run_rollout_phase_breakdown_cli
 from src.cli.benchmark.rollout_phase_profile import run_rollout_phase_profile_cli
 from src.cli.benchmark.sanity import run_sanity_cli
@@ -44,6 +45,7 @@ __all__ = [
     "run_env_parity_ab_cli",
     "run_encode_turn_cli",
     "run_factorized_sampler_cli",
+    "run_policy_path_profile_cli",
     "run_admission_throughput_cli",
     "run_rollout_phase_breakdown_cli",
     "run_rollout_phase_profile_cli",
@@ -89,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_encode_turn_cli(args)
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
+        case "policy-path-profile":
+            return run_policy_path_profile_cli(args)
         case "env-parity-ab":
             return run_env_parity_ab_cli(args)
         case "gate":

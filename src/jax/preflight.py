@@ -10,7 +10,6 @@ from typing import Literal
 
 from src.jax.preflight_calibration import (
     WINDOW_UPDATES,
-    default_calibration_json_path,
     run_ow_train,
 )
 
@@ -405,7 +404,7 @@ def run_preflight_gate(
         *spec.train_overrides,
         *extra_train_overrides,
     ]
-    from src.jax.benchmark_progress import (
+    from src.benchmark.progress import (
         emit_benchmark_progress,
         emit_benchmark_progress_ts,
         total_updates_from_overrides,

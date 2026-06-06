@@ -22,6 +22,7 @@ add_worker_cuda_library_path()
 # Defensive guard: older packaged helpers used JAX_PLATFORMS=gpu on NVIDIA,
 # which makes JAX attempt ROCm on Kaggle.  Calibration must use CUDA explicitly.
 import os  # noqa: E402
+
 if os.environ.get("KAGGLE_ACCELERATOR_ID", "").strip().lower().startswith("nvidia"):
     os.environ.pop("JAX_PLATFORM_NAME", None)
     os.environ["JAX_PLATFORMS"] = "cuda,cpu"
@@ -30,11 +31,11 @@ import argparse
 import json
 from copy import deepcopy
 
-from src.config import compose_hydra_train_config  # noqa: E402
-from src.jax.benchmark import (  # noqa: E402
+from src.benchmark.production import (  # noqa: E402
     production_benchmark_payload,
     run_production_benchmark,
 )
+from src.config import compose_hydra_train_config  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

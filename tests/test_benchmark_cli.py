@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.benchmark.training import TrainingBenchmarkResult
 from src.cli import benchmark as benchmark_cli
 from src.cli.benchmark import build_parser
-from src.jax.training_benchmark import TrainingBenchmarkResult
 
 
 def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
@@ -89,6 +89,23 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert encode_turn.sweep_defaults is True
     assert encode_turn.out == Path("/tmp/encode_turn.json")
     assert encode_turn.batch_size == 8
+
+    policy_path = parser.parse_args(
+        [
+            "policy-path-profile",
+            "--batch-size",
+            "8",
+            "--shield-modes",
+            "off",
+            "cheap",
+            "--out",
+            "/tmp/policy_path.json",
+        ]
+    )
+    assert policy_path.command == "policy-path-profile"
+    assert policy_path.batch_size == 8
+    assert policy_path.shield_modes == ["off", "cheap"]
+    assert policy_path.out == Path("/tmp/policy_path.json")
 
     held_out = parser.parse_args(
         [
@@ -188,7 +205,7 @@ def test_planet_flow_training_benchmark_requires_control_metrics(
 
     monkeypatch.setattr(benchmark_cli, "_init_benchmark_runtime", lambda: None)
     monkeypatch.setattr(
-        "src.jax.training_benchmark.run_training_benchmark",
+        "src.benchmark.training.run_training_benchmark",
         lambda *args, **kwargs: result,
     )
 
@@ -233,4 +250,3 @@ def test_makefile_e2e_throughput_target_uses_baseline_assert() -> None:
     training_help = training_parser.format_help()
     assert "primary" in training_help
     assert "shield_cheap" in training_help
-

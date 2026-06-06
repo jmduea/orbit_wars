@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from src.cli import benchmark as benchmark_cli
-from src.jax.admission_throughput import (
+from src.benchmark.admission_throughput import (
     ThroughputWindow,
     extract_throughput_from_records,
     resolve_log_path_from_input,
 )
+from src.cli import benchmark as benchmark_cli
 
 
 def _timing_record(

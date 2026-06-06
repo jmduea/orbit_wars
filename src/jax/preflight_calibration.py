@@ -95,7 +95,7 @@ def run_ow_train(
     label: str | None = None,
     command_echo: str | None = None,
 ) -> None:
-    from src.jax.benchmark_progress import emit_benchmark_progress
+    from src.benchmark.progress import emit_benchmark_progress
 
     cmd = ["uv", "run", "ow", "train", *overrides]
     echo = command_echo or " ".join(cmd)
@@ -720,7 +720,9 @@ def refresh_agents_md_thresholds(
         if marker not in content:
             return False
         line_end = content.index("\n", content.index(marker))
-        updated = content[: line_end + 1] + "\n" + new_block + "\n" + content[line_end + 1 :]
+        updated = (
+            content[: line_end + 1] + "\n" + new_block + "\n" + content[line_end + 1 :]
+        )
     if updated == content:
         return False
     path.write_text(updated, encoding="utf-8")

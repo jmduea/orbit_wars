@@ -6,7 +6,7 @@ import argparse
 
 
 def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
-    from src.jax.factorized_sampler_benchmark import run_factorized_sampler_benchmark
+    from src.benchmark.factorized_sampler import run_factorized_sampler_benchmark
 
     return run_factorized_sampler_benchmark(
         max_moves_k=int(args.max_moves_k),
@@ -16,4 +16,3 @@ def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
         repeats=int(args.repeats),
         assert_max_ms=args.assert_max_ms,
     )
-

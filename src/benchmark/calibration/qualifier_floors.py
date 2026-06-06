@@ -6,8 +6,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CALIBRATION_JSON = REPO_ROOT / "docs" / "benchmarks" / "qualifier-seed-calibration.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_CALIBRATION_JSON = (
+    REPO_ROOT / "docs" / "benchmarks" / "qualifier-seed-calibration.json"
+)
 
 STAGE_LEGS: dict[int, tuple[str, ...]] = {
     1: ("random",),
@@ -69,15 +71,16 @@ def load_qualifier_calibration(
             except (TypeError, ValueError):
                 continue
             stages[stage_id] = {
-                str(opponent): float(rate)
-                for opponent, rate in legs.items()
+                str(opponent): float(rate) for opponent, rate in legs.items()
             }
     if not stages:
         stages = {k: dict(v) for k, v in INTERIM_MIN_WIN_RATE.items()}
     return QualifierCalibration(enforcement=enforcement, stages=stages)
 
 
-def default_qualifier_calibration_stub(*, enforcement: bool = False) -> dict[str, object]:
+def default_qualifier_calibration_stub(
+    *, enforcement: bool = False
+) -> dict[str, object]:
     return {
         "enforcement": enforcement,
         "stages": {

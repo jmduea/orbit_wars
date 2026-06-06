@@ -38,7 +38,7 @@ def test_legacy_reset_and_noop_steps_smoke() -> None:
 
 @pytest.mark.jax
 def test_env_parity_ab_payload_shape() -> None:
-    from src.jax.env_parity_benchmark import run_env_parity_ab_benchmark
+    from src.benchmark.env_parity import run_env_parity_ab_benchmark
 
     payload = run_env_parity_ab_benchmark(
         batch_size=2,

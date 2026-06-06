@@ -6,7 +6,7 @@ import argparse
 
 
 def run_encode_turn_cli(args: argparse.Namespace) -> int:
-    from src.jax.encode_turn_benchmark import run_encode_turn_benchmark
+    from src.benchmark.encode_turn import run_encode_turn_benchmark
 
     edge_rank_modes: list[str] | None = None
     if args.edge_rank_mode is not None:

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from src.benchmark.admission_throughput import run_throughput_gate
+from src.benchmark.training import load_e2e_baseline
 from src.cli import benchmark as benchmark_cli
 from src.cli.benchmark_gates import (
     DEFAULT_ADMISSION_THROUGHPUT_BASELINE,
@@ -16,8 +18,6 @@ from src.cli.benchmark_gates import (
 )
 from src.jax.preflight_config_summary import format_gate_train_config_summary
 from src.jax.preflight_gate_loader import build_gate_spec
-from src.jax.admission_throughput import run_throughput_gate
-from src.jax.training_benchmark import load_e2e_baseline
 
 
 def _timing_record(

@@ -6,7 +6,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import jax.numpy as jnp
-import numpy as np
 
 import jax
 from src.artifacts.checkpoint_compat import (
@@ -14,12 +13,12 @@ from src.artifacts.checkpoint_compat import (
     validate_checkpoint_config_compatibility,
     validate_checkpoint_feature_compatibility,
 )
+from src.benchmark.calibration.qualifier_floors import legs_for_stage
 from src.config import TrainConfig
 from src.game.constants import MAX_STEPS
 from src.jax.env import JaxEnvState, reset, step
 from src.jax.features import encode_turn
 from src.jax.policy import build_jax_policy
-from src.jax.qualifier_calibration import legs_for_stage
 from src.jax.rollout.types import JaxTrainState
 from src.jax.tournament_qualifiers.metrics import (
     final_ship_scores,
@@ -56,9 +55,7 @@ def held_out_eval_seeds(cfg: TrainConfig) -> tuple[int, ...]:
             f"overlap={sorted(overlap)}"
         )
     if int(cfg.seed) in reserved:
-        raise ValueError(
-            f"training.seed={cfg.seed} must not appear in eval_seed_set"
-        )
+        raise ValueError(f"training.seed={cfg.seed} must not appear in eval_seed_set")
     return tuple(sorted(reserved))
 
 
@@ -181,9 +178,7 @@ def run_qualifier_game(
             cfg.reward,
         )
         if bool(jax.device_get(result.done.reshape(()))):
-            scores = final_ship_scores(
-                env_state.game, int(cfg.task.player_count)
-            )
+            scores = final_ship_scores(env_state.game, int(cfg.task.player_count))
             learner_player = int(jax.device_get(env_state.learner_player.reshape(())))
             return learner_won_from_final_scores(scores, learner_player)
         batch = result.batch

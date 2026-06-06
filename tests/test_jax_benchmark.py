@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from src.config import compose_hydra_train_config
-from src.jax.benchmark import (
+from src.benchmark.production import (
     ProductionBenchmarkResult,
     production_benchmark_payload,
     rollout_group_summary,
 )
-from src.jax.training_benchmark import resolve_benchmark_overrides
+from src.benchmark.training import resolve_benchmark_overrides
+from src.config import compose_hydra_train_config
 
 
 def test_rollout_group_summary_uses_training_derived_env_counts() -> None:

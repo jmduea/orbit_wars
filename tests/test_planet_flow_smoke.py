@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from src.jax.planet_flow_smoke import run_planet_flow_noop_smoke
 
+from src.benchmark.planet_flow.smoke import run_planet_flow_noop_smoke
 from src.jax.preflight import GateEvaluation, PreflightVerdict
 
 
@@ -60,13 +60,19 @@ def test_smoke_marks_pass_when_beat_noop_verified(tmp_path: Path) -> None:
     )
 
     with (
-        patch("src.jax.planet_flow_smoke.run_ow_train"),
-        patch("src.jax.planet_flow_smoke.latest_run_dir", return_value=tmp_path / "run"),
+        patch("src.benchmark.planet_flow.smoke.run_ow_train"),
         patch(
-            "src.jax.planet_flow_smoke.evaluate_gate_records",
+            "src.benchmark.planet_flow.smoke.latest_run_dir",
+            return_value=tmp_path / "run",
+        ),
+        patch(
+            "src.benchmark.planet_flow.smoke.evaluate_gate_records",
             return_value=verified,
         ),
-        patch("src.jax.planet_flow_smoke.read_jsonl_records", return_value=[{"update": 1}]),
+        patch(
+            "src.benchmark.planet_flow.smoke.read_jsonl_records",
+            return_value=[{"update": 1}],
+        ),
     ):
         report = run_planet_flow_noop_smoke(
             shortlist,
@@ -87,10 +93,13 @@ def test_smoke_fails_on_kl_gate_reasons(tmp_path: Path) -> None:
     )
 
     with (
-        patch("src.jax.planet_flow_smoke.run_ow_train"),
-        patch("src.jax.planet_flow_smoke.latest_run_dir", return_value=tmp_path / "run"),
+        patch("src.benchmark.planet_flow.smoke.run_ow_train"),
         patch(
-            "src.jax.planet_flow_smoke.evaluate_gate_records",
+            "src.benchmark.planet_flow.smoke.latest_run_dir",
+            return_value=tmp_path / "run",
+        ),
+        patch(
+            "src.benchmark.planet_flow.smoke.evaluate_gate_records",
             return_value=GateEvaluation(
                 gate_id="beat_noop",
                 verdict=PreflightVerdict.NOT_VERIFIED,
@@ -108,7 +117,10 @@ def test_smoke_fails_on_kl_gate_reasons(tmp_path: Path) -> None:
                 evaluation_mode="learning_signal",
             ),
         ),
-        patch("src.jax.planet_flow_smoke.read_jsonl_records", return_value=[{"update": 1}]),
+        patch(
+            "src.benchmark.planet_flow.smoke.read_jsonl_records",
+            return_value=[{"update": 1}],
+        ),
     ):
         report = run_planet_flow_noop_smoke(
             shortlist,

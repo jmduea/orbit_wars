@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.jax.planet_flow_shortlist import rank_eligible_entries
+from src.benchmark.planet_flow.shortlist import rank_eligible_entries
 from src.jax.preflight import (
     PreflightVerdict,
     _gate_specs,
@@ -81,8 +81,12 @@ def run_planet_flow_noop_smoke(
     shortlist = _load_shortlist(shortlist_path)
     eligible = shortlist.get("eligible")
     if not isinstance(eligible, list) or not eligible:
-        raise ValueError("Shortlist has no eligible entries; re-run shortlist or sweep v3.")
-    ranked = rank_eligible_entries([dict(entry) for entry in eligible if isinstance(entry, dict)])
+        raise ValueError(
+            "Shortlist has no eligible entries; re-run shortlist or sweep v3."
+        )
+    ranked = rank_eligible_entries(
+        [dict(entry) for entry in eligible if isinstance(entry, dict)]
+    )
     finalists = ranked[: max(int(top_k), 1)]
     specs = _gate_specs(
         "planet_flow_target_heatmap",

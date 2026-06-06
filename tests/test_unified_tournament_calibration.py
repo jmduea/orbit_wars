@@ -11,7 +11,8 @@ from src.artifacts.tournament.unified.reporting import (
     UnifiedStageResult,
 )
 from src.artifacts.tournament.unified.scoring import UnifiedOpponentScore
-from src.jax.unified_tournament_calibration import (
+from src.benchmark.calibration.unified_tournament import (
+    UnifiedCalibrationPlan,
     UnifiedCalSnapshot,
     build_calibrated_unified_section,
     build_unified_calibration_report,
@@ -22,7 +23,6 @@ from src.jax.unified_tournament_calibration import (
     unified_cal_campaign,
     verification_passes_at_derived_floors,
 )
-from src.jax.unified_tournament_calibration import UnifiedCalibrationPlan
 
 
 def _snapshot(
@@ -179,8 +179,9 @@ def test_build_unified_calibration_report_dry_run(tmp_path: Path) -> None:
 
 
 def test_calibrate_unified_tournament_cli_dry_run(tmp_path: Path) -> None:
-    from src.cli.benchmark import run_calibrate_unified_tournament_cli
     import argparse
+
+    from src.cli.benchmark import run_calibrate_unified_tournament_cli
 
     ckpt = tmp_path / "jax_ckpt_last.pkl"
     ckpt.write_bytes(b"ckpt")
@@ -198,11 +199,11 @@ def test_calibrate_unified_tournament_cli_dry_run(tmp_path: Path) -> None:
     assert (tmp_path / "artifact.json").is_file()
 
 
-@patch("src.jax.unified_tournament_calibration.run_unified_ladder")
+@patch("src.benchmark.calibration.unified_tournament.run_unified_ladder")
 def test_run_unified_calibration_arm_records_scores(
     mock_ladder: object, tmp_path: Path
 ) -> None:
-    from src.jax.unified_tournament_calibration import run_unified_calibration_arm
+    from src.benchmark.calibration.unified_tournament import run_unified_calibration_arm
 
     mock_ladder.return_value = UnifiedLadderVerdict(
         passed=True,

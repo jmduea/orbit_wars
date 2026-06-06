@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.jax.planet_flow_shortlist import (
+from src.benchmark.planet_flow.shortlist import (
     ShortlistRunInput,
     build_shortlist_report,
     evaluate_shortlist_run,

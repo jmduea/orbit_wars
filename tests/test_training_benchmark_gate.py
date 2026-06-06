@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.jax.training_benchmark import (
+from src.benchmark.training import (
     DEFAULT_E2E_WITHIN_PCT,
     E2E_THROUGHPUT_GATE,
     aggregate_e2e_run_payloads,
@@ -157,7 +157,9 @@ def test_committed_e2e_baseline_artifact_is_valid() -> None:
     assert "pass_band" in loaded
     gap = loaded.get("gap_assessment")
     assert gap is not None
-    assert gap.get("ablation_artifact") == "docs/benchmarks/launch-hygiene-ablation.json"
+    assert (
+        gap.get("ablation_artifact") == "docs/benchmarks/launch-hygiene-ablation.json"
+    )
 
 
 _ABLATION_VERDICT_RANK = {"VERIFIED": 2, "NOT_VERIFIED": 1, "INCONCLUSIVE": 0}
@@ -180,7 +182,12 @@ def test_committed_launch_hygiene_ablation_artifact() -> None:
     path = Path("docs/benchmarks/launch-hygiene-ablation.json")
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["gate"] == "launch_hygiene_learner_ablation"
-    for field in ("hot_path_status", "phase_b_status", "thresholds_source", "tier2_status"):
+    for field in (
+        "hot_path_status",
+        "phase_b_status",
+        "thresholds_source",
+        "tier2_status",
+    ):
         value = payload.get(field)
         assert isinstance(value, str) and value.strip(), f"missing or empty {field}"
     assert Path(payload["thresholds_source"]).is_file()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.jax.qualifier_calibration import (
+from src.benchmark.calibration.qualifier_floors import (
     default_calibration_json_path,
     load_qualifier_calibration,
 )

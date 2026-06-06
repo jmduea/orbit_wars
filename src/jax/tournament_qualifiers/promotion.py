@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import jax.numpy as jnp
 
-from src.jax.qualifier_calibration import (
+from src.benchmark.calibration.qualifier_floors import (
     QualifierCalibration,
     legs_for_stage,
     load_qualifier_calibration,
