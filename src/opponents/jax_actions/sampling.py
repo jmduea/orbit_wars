@@ -63,6 +63,48 @@ def _slice_env_axis(tree: object, env_index: jax.Array) -> object:
     return jax.tree.map(slice_leaf, tree)
 
 
+def _masked_env_sort_order(mask: jax.Array) -> jax.Array:
+    """Sort env axis so masked rows are leading (JIT-safe, no dynamic slice sizes)."""
+
+    sort_key = jnp.where(mask, 0, 1)
+    return jnp.argsort(sort_key)
+
+
+def _reorder_env_axis(tree: object, order: jax.Array, env_count: int) -> object:
+    """Reorder leading env axis; static ``env_count`` keeps slice sizes concrete."""
+
+    def reorder_leaf(value):
+        if (
+            isinstance(value, jax.Array)
+            and value.ndim > 0
+            and value.shape[0] == env_count
+        ):
+            return jnp.take(value, order, axis=0)
+        return value
+
+    return jax.tree.map(reorder_leaf, tree)
+
+
+def _merge_reordered_family_action(
+    full_action: JaxAction,
+    partial_action: JaxAction,
+    mask: jax.Array,
+    order: jax.Array,
+) -> JaxAction:
+    """Merge family sampler output back into the original env order."""
+
+    inv_order = jnp.argsort(order)
+
+    def merge_leaf(full, partial):
+        if isinstance(full, jax.Array) and full.ndim > 0:
+            restored = jnp.take(partial, inv_order, axis=0)
+            expanded_mask = mask.reshape((mask.shape[0],) + (1,) * (full.ndim - 1))
+            return jnp.where(expanded_mask, restored, full)
+        return full
+
+    return jax.tree.map(merge_leaf, full_action, partial_action)
+
+
 def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
     """Stack per-player batched actions into batched_step_multi_player layout."""
 
@@ -123,6 +165,34 @@ OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
     "opponent_slots_turtle",
     "opponent_slots_opportunistic",
 )
+
+
+def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
+    """Host-side mirror of single-family noop detection used in rollout scan."""
+
+    probs = [float(value) for value in list(stage_view.family_probs)]
+    family_ids = [int(value) for value in list(stage_view.family_ids)]
+    active_indices = [index for index, prob in enumerate(probs) if prob > 0.0]
+    if len(active_indices) != 1:
+        return False
+    family_id = family_ids[active_indices[0]]
+    has_historical = any(bool(value) for value in list(stage_view.snapshot_valid_mask))
+    if family_id == OPPONENT_HISTORICAL and not has_historical:
+        family_id = int(stage_view.fallback_family_id)
+    return family_id == OPPONENT_NOOP
+
+
+def should_skip_opponent_batch_refresh_2p(
+    cfg: TrainConfig,
+    stage_view: StageView,
+) -> bool:
+    """Skip 2p opponent re-encode when opponents ignore edge semantics (noop paths)."""
+
+    if cfg.task.player_count != 2:
+        return False
+    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+        return True
+    return is_single_family_noop_stage_view(stage_view)
 
 
 def _single_stage_family_id(stage_view: StageView) -> jax.Array:
@@ -331,21 +401,27 @@ def _sample_mixed_opponent_2p_action(
     historical_params_pool: dict | None,
 ) -> JaxAction:
     env_count = int(slot_type.shape[0])
-    env_indices = jnp.arange(env_count, dtype=jnp.int32)
-    per_env = jax.vmap(
-        lambda env_index: _sample_single_family_2p_action(
-            jax.random.fold_in(opp_key, env_index),
-            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
-            _slice_env_axis(opp_game, env_index),
-            _slice_env_axis(opp_batch_cache, env_index),
-            train_state,
-            policy,
-            cfg,
-            stage_view,
-            historical_params_pool,
-        )
-    )(env_indices)
-    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)
+    merged = build_noop_action_from_edge_batch(opp_game, opp_batch_cache, cfg)
+    for family_id in range(OPPONENT_NOOP + 1):
+        mask = slot_type == family_id
+
+        def sample_branch(_: None) -> JaxAction:
+            order = _masked_env_sort_order(mask)
+            sub_action = _sample_single_family_2p_action(
+                jax.random.fold_in(opp_key, family_id),
+                jnp.asarray(family_id, dtype=jnp.int32),
+                _reorder_env_axis(opp_game, order, env_count),
+                _reorder_env_axis(opp_batch_cache, order, env_count),
+                train_state,
+                policy,
+                cfg,
+                stage_view,
+                historical_params_pool,
+            )
+            return _merge_reordered_family_action(merged, sub_action, mask, order)
+
+        merged = jax.lax.cond(jnp.any(mask), sample_branch, lambda _: merged, None)
+    return merged
 
 
 def _sample_opponent_2p_action(
@@ -524,23 +600,29 @@ def _sample_mixed_player_4p_action(
     historical_params_pool: dict | None,
 ) -> JaxAction:
     env_count = int(slot_type.shape[0])
-    env_indices = jnp.arange(env_count, dtype=jnp.int32)
-    per_env = jax.vmap(
-        lambda env_index: _sample_single_family_4p_action(
-            jax.random.fold_in(player_key, env_index),
-            jnp.asarray(slot_type[env_index], dtype=jnp.int32),
-            player_id,
-            _slice_env_axis(player_game, env_index),
-            _slice_env_axis(player_batch, env_index),
-            train_state,
-            policy,
-            cfg,
-            opponent_params_by_player,
-            stage_view,
-            historical_params_pool,
-        )
-    )(env_indices)
-    return jax.tree.map(lambda x: jnp.squeeze(x, axis=1), per_env)
+    merged = build_noop_action_from_edge_batch(player_game, player_batch, cfg)
+    for family_id in range(OPPONENT_NOOP + 1):
+        mask = slot_type == family_id
+
+        def sample_branch(_: None) -> JaxAction:
+            order = _masked_env_sort_order(mask)
+            sub_action = _sample_single_family_4p_action(
+                jax.random.fold_in(player_key, family_id),
+                jnp.asarray(family_id, dtype=jnp.int32),
+                player_id,
+                _reorder_env_axis(player_game, order, env_count),
+                _reorder_env_axis(player_batch, order, env_count),
+                train_state,
+                policy,
+                cfg,
+                opponent_params_by_player,
+                stage_view,
+                historical_params_pool,
+            )
+            return _merge_reordered_family_action(merged, sub_action, mask, order)
+
+        merged = jax.lax.cond(jnp.any(mask), sample_branch, lambda _: merged, None)
+    return merged
 
 
 def _four_player_step_action(
