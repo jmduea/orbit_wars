@@ -27,7 +27,6 @@ from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
-    is_noop_jax_training_opponent_mode,
     validate_jax_training_opponent_mode,
 )
 from src.opponents.jax_actions.builders import (
@@ -43,6 +42,7 @@ from src.opponents.jax_actions.sampling import (
     _opponent_count_metrics,
     _sample_opponent_2p_action,
     _single_stage_family_id,
+    should_skip_opponent_batch_refresh_2p,
 )
 from src.opponents.pool import sample_opponent_type_ids_jax
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
@@ -83,17 +83,16 @@ def collect_rollout_jax(
             f"got {cfg.task.player_count}."
         )
     validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
-    # Opponent noop actions ignore edge features; skip per-step opponent re-encode.
-    skip_opp_batch_refresh = (
-        cfg.task.player_count == 2
-        and is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent)
-    )
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
         env_index_offset, dtype=jnp.int32
     )
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
+    # Noop opponents ignore edge features; skip per-step opponent re-encode (mode or stage).
+    skip_opp_batch_refresh = should_skip_opponent_batch_refresh_2p(
+        cfg, active_stage_view
+    )
     carry_enabled = decoder_carry_enabled(cfg)
     fresh_decoder_hidden = (
         empty_decoder_hidden(env_count, cfg.model.hidden_size)

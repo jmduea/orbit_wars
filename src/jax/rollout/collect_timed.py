@@ -61,20 +61,32 @@ from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
 @dataclass
 class _PhaseAccumulator:
     policy: float = 0.0
-    opponent: float = 0.0
+    opponent_sample: float = 0.0
+    opponent_encode: float = 0.0
     env_step: float = 0.0
     reset: float = 0.0
     post_step: float = 0.0
 
+    @property
+    def opponent(self) -> float:
+        return self.opponent_sample + self.opponent_encode
+
     def as_metric_dict(self) -> dict[str, jnp.ndarray]:
+        opponent_total = self.opponent
         total = (
-            self.policy + self.opponent + self.env_step + self.reset + self.post_step
+            self.policy + opponent_total + self.env_step + self.reset + self.post_step
         )
         total = max(total, 1e-9)
         return {
             "rollout_phase_policy_seconds": jnp.asarray(self.policy, dtype=jnp.float32),
             "rollout_phase_opponent_seconds": jnp.asarray(
-                self.opponent, dtype=jnp.float32
+                opponent_total, dtype=jnp.float32
+            ),
+            "rollout_phase_opponent_sample_seconds": jnp.asarray(
+                self.opponent_sample, dtype=jnp.float32
+            ),
+            "rollout_phase_opponent_encode_seconds": jnp.asarray(
+                self.opponent_encode, dtype=jnp.float32
             ),
             "rollout_phase_env_step_seconds": jnp.asarray(
                 self.env_step, dtype=jnp.float32
@@ -90,7 +102,13 @@ class _PhaseAccumulator:
                 self.policy / total, dtype=jnp.float32
             ),
             "rollout_phase_opponent_fraction": jnp.asarray(
-                self.opponent / total, dtype=jnp.float32
+                opponent_total / total, dtype=jnp.float32
+            ),
+            "rollout_phase_opponent_sample_fraction": jnp.asarray(
+                self.opponent_sample / total, dtype=jnp.float32
+            ),
+            "rollout_phase_opponent_encode_fraction": jnp.asarray(
+                self.opponent_encode / total, dtype=jnp.float32
             ),
             "rollout_phase_env_step_fraction": jnp.asarray(
                 self.env_step / total, dtype=jnp.float32
@@ -395,7 +413,7 @@ def collect_rollout_jax_timed(
         if cfg.task.player_count == 2:
             opponent_action = _timed_call(
                 phases,
-                "opponent",
+                "opponent_sample",
                 opponent_phase_2p,
                 opp_key,
                 state,
@@ -414,11 +432,15 @@ def collect_rollout_jax_timed(
                 opponent_action,
             )
         else:
-            post_start = time.perf_counter()
+            encode_start = time.perf_counter()
             player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
             player_games, player_batches = _encode_four_player_turn_batches(
                 state, cfg.task, env_count
             )
+            _sync(player_batches)
+            phases.opponent_encode += time.perf_counter() - encode_start
+
+            sample_start = time.perf_counter()
             per_player_action = jax.vmap(
                 lambda player_id: _four_player_step_action(
                     player_id,
@@ -442,7 +464,7 @@ def collect_rollout_jax_timed(
                 lambda x: jnp.moveaxis(x, 0, 1), per_player_action
             )
             _sync(multi_player_action)
-            phases.opponent += time.perf_counter() - post_start
+            phases.opponent_sample += time.perf_counter() - sample_start
 
             next_state, result = _timed_call(
                 phases,
@@ -512,7 +534,7 @@ def collect_rollout_jax_timed(
             encode_start = time.perf_counter()
             opp_batch_cache = opp_encode_2p(next_state)
             _sync(opp_batch_cache)
-            phases.opponent += time.perf_counter() - encode_start
+            phases.opponent_encode += time.perf_counter() - encode_start
 
         if carry_enabled:
             decoder_hidden = next_state.decoder_hidden

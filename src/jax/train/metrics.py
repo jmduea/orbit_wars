@@ -39,6 +39,20 @@ def finalize_rollout_phase_timing_metrics(
         ),
     ):
         metrics[fraction_key] = metrics.get(key, 0.0) / total
+    opponent_sample_s = metrics.get("rollout_phase_opponent_sample_seconds", 0.0)
+    opponent_encode_s = metrics.get("rollout_phase_opponent_encode_seconds", 0.0)
+    if (
+        "rollout_phase_opponent_sample_seconds" in metrics
+        or "rollout_phase_opponent_encode_seconds" in metrics
+    ):
+        metrics["rollout_phase_opponent_seconds"] = (
+            opponent_sample_s + opponent_encode_s
+        )
+        metrics["rollout_phase_opponent_fraction"] = (
+            metrics["rollout_phase_opponent_seconds"] / total
+        )
+        metrics["rollout_phase_opponent_sample_fraction"] = opponent_sample_s / total
+        metrics["rollout_phase_opponent_encode_fraction"] = opponent_encode_s / total
     return metrics
 
 

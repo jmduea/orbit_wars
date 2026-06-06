@@ -331,6 +331,16 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "Rollout collect wall time in opponent action sampling and feature encode.",
     ),
     _metric(
+        "rollout_phase_opponent_sample_seconds",
+        "rollout_phase_timing",
+        "Opponent phase wall time in action sampling (shield, family dispatch, neural forwards).",
+    ),
+    _metric(
+        "rollout_phase_opponent_encode_seconds",
+        "rollout_phase_timing",
+        "Opponent phase wall time in encode_turn cache refresh (2p post-step; 4p inline).",
+    ),
+    _metric(
         "rollout_phase_env_step_seconds",
         "rollout_phase_timing",
         "Rollout collect wall time in batched env step (includes learner encode in _finish_step).",
@@ -359,6 +369,16 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "rollout_phase_opponent_fraction",
         "rollout_phase_timing",
         "opponent_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_opponent_sample_fraction",
+        "rollout_phase_timing",
+        "opponent_sample_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_opponent_encode_fraction",
+        "rollout_phase_timing",
+        "opponent_encode_seconds / measured_total_seconds.",
     ),
     _metric(
         "rollout_phase_env_step_fraction",
