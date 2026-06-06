@@ -8,6 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 LEARN_PROOF_PRIMITIVES: tuple[str, ...] = (
+    "ow benchmark gate run admission",
     "ow benchmark gate run beat_noop",
     "ow benchmark gate run beat_random",
     "ow benchmark gate run curriculum_staged",
@@ -53,6 +54,8 @@ def print_benchmark_help() -> None:
         "  make preflight-learn-proof\n"
         "  uv run ow benchmark calibrate --analyze-only --analyze-campaigns\n"
         "  uv run ow benchmark gate --list\n"
+        "  uv run ow benchmark gate run admission --out /tmp/admission.json\n"
+        "  make gate-admission REPO_ROOT=/path/to/worktree\n"
         "  uv run ow benchmark gate run beat_noop --dry-run --verbose\n"
         "  uv run ow benchmark gate beat_random --dry-run\n"
         "  uv run ow benchmark admission-throughput outputs/.../anchor_learn_proof.json \\\n"

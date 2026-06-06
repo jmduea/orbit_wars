@@ -28,6 +28,8 @@ help:
 	@echo ""
 	@echo "Preflight (GPU for learn-proof; see docs/operator-runbook.md):"
 	@echo "  preflight-sanity, preflight-learn-proof, preflight-calibrate"
+	@echo "  gate-admission            learning + throughput (one JSON)"
+	@echo "  sweep-ppo-admission       3-seed admission sweep (ADMISSION_SEEDS, REPO_ROOT)"
 	@echo ""
 	@echo "Launch hygiene throughput (tier-1 CPU-safe; tier-2 GPU):"
 	@echo "  test-launch-hygiene-throughput      tier-1 sampler microbench"
@@ -139,4 +141,29 @@ preflight-learn-proof:
 
 preflight-calibrate:
 	uv run ow benchmark calibrate --analyze-only --analyze-campaigns
+
+# Cherry-pick admission: beat_noop learning + throughput extract in one gate JSON.
+ADMISSION_BASELINE ?= docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
+ADMISSION_OUT ?= outputs/benchmarks/admission/gate.json
+ADMISSION_SEEDS ?= 42 43 44
+
+gate-admission:
+	@mkdir -p $(dir $(ADMISSION_OUT))
+	uv run ow benchmark gate run admission \
+	  --out $(ADMISSION_OUT) \
+	  --throughput-baseline $(ADMISSION_BASELINE) \
+	  $(if $(REPO_ROOT),--repo-root $(REPO_ROOT),)
+
+# Simple 3-run PPO admission sweep; pass REPO_ROOT for anchor worktree gates.
+sweep-ppo-admission:
+	@set -e; \
+	mkdir -p outputs/benchmarks/admission; \
+	for seed in $(ADMISSION_SEEDS); do \
+	  echo "=== admission seed=$$seed ==="; \
+	  uv run ow benchmark gate run admission \
+	    --out outputs/benchmarks/admission/seed_$${seed}.json \
+	    --train-overrides seed=$$seed \
+	    --throughput-baseline $(ADMISSION_BASELINE) \
+	    $(if $(REPO_ROOT),--repo-root $(REPO_ROOT),); \
+	done
 

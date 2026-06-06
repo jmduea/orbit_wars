@@ -115,6 +115,7 @@ def test_learn_proof_print_primitives(capsys) -> None:
     assert benchmark_cli.main(["learn-proof", "--print-primitives"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["prefer_primitives"] is True
+    assert "ow benchmark gate run admission" in payload["primitives"]
     assert "ow benchmark gate run beat_noop" in payload["primitives"]
 
 

@@ -263,3 +263,36 @@ def test_hydra_output_root_relative_for_worktree(tmp_path) -> None:
     assert _hydra_output_root(outputs, repo) == "outputs"
     assert _hydra_output_root(Path("outputs"), repo) == "outputs"
     assert _resolve_output_root(Path("outputs"), repo) == outputs.resolve()
+
+
+def test_format_gate_train_config_summary_uses_resolved_values() -> None:
+    from src.jax.preflight_config_summary import format_gate_train_config_summary
+
+    spec = _gate_specs("transformer_factorized_small")["beat_noop"]
+    lines = format_gate_train_config_summary(list(spec.train_overrides))
+    text = "\n".join(lines)
+
+    assert "Resolved gate training config:" in text
+    assert "lr=6e-05" in text or "lr=0.00006" in text
+    assert "clip_coef=0.15" in text
+    assert "epochs=1" in text
+    assert "reseed_every_updates=50" in text
+    assert "opponents: noop_only" in text
+    assert "training group: 2p_16" in text
+
+
+def test_run_preflight_gate_dry_run_emits_resolved_summary(
+    tmp_path, capsys
+) -> None:
+    run_preflight_gate(
+        "beat_noop",
+        model="transformer_factorized_small",
+        output_root=tmp_path / "outputs",
+        repo_root=tmp_path,
+        dry_run=True,
+    )
+    captured = capsys.readouterr()
+    assert "Resolved gate training config:" in captured.err
+    assert "lr=6e-05" in captured.err or "lr=0.00006" in captured.err
+    assert "training.lr=0.0003" not in captured.err
+

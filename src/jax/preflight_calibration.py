@@ -93,16 +93,18 @@ def run_ow_train(
     repo_root: Path,
     dry_run: bool = False,
     label: str | None = None,
+    command_echo: str | None = None,
 ) -> None:
     from src.jax.benchmark_progress import emit_benchmark_progress
 
     cmd = ["uv", "run", "ow", "train", *overrides]
+    echo = command_echo or " ".join(cmd)
     if dry_run:
-        emit_benchmark_progress(" ".join(cmd))
+        emit_benchmark_progress(echo)
         return
     banner = label or "ow train"
     emit_benchmark_progress(f"\n=== {banner} ===")
-    emit_benchmark_progress(" ".join(cmd))
+    emit_benchmark_progress(echo)
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     proc = subprocess.Popen(

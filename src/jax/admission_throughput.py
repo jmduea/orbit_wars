@@ -219,3 +219,41 @@ def default_within_pct_for_assert(
     if assert_within_pct is not None:
         return float(assert_within_pct)
     return DEFAULT_E2E_WITHIN_PCT
+
+
+def throughput_verdict_from_payload(payload: Mapping[str, object]) -> str:
+    """Map throughput extract + optional baseline compare to a gate verdict."""
+
+    if payload.get("gate_passed") is True:
+        return "VERIFIED"
+    if payload.get("gate_passed") is False:
+        return "NOT_VERIFIED"
+    if payload.get("baseline_path") is None:
+        return "INCONCLUSIVE"
+    return "NOT_VERIFIED"
+
+
+def run_throughput_gate(
+    log_path: Path,
+    *,
+    baseline_path: Path | None = None,
+    within_pct: float | None = None,
+    window: ThroughputWindow | None = None,
+) -> tuple[dict[str, object], int]:
+    """Extract throughput from a gate JSONL and optionally compare to baseline."""
+
+    payload = extract_throughput_from_log(log_path, window=window)
+    resolved_within_pct = default_within_pct_for_assert(
+        baseline_path=baseline_path,
+        assert_within_pct=within_pct,
+    )
+    if baseline_path is not None:
+        payload, passed = apply_baseline_comparison(
+            payload,
+            baseline_path=baseline_path,
+            within_pct=resolved_within_pct,
+        )
+        payload["verdict"] = throughput_verdict_from_payload(payload)
+        return payload, 0 if passed else 1
+    payload["verdict"] = "INCONCLUSIVE"
+    return payload, 0

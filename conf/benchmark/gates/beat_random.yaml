@@ -9,7 +9,6 @@ primitive: ow benchmark gate run beat_random
 train:
   default:
     model_from_cli: true
-    apply_ppo_profile: true
     train_overrides:
       - training=2p_16
       - training.rollout_steps=128

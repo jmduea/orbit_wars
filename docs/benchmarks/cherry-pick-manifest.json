@@ -7,7 +7,7 @@
     "name": "learning_first_unified",
     "status": "operator_locked",
     "locked_date": "2026-06-05",
-    "description": "One training recipe for both checks: the agent must show a real learning signal against the do-nothing opponent, and training must stay fast enough on the same model, opponents, shield, and rollout geometry. Speed is measured from the same 200-update learning run (updates 3–20 of the gate JSONL) — no separate 20-update GPU job.",
+    "description": "One training recipe for both checks: the agent must show a real learning signal against the do-nothing opponent, and training must stay fast enough on the same model, opponents, shield, and rollout geometry. Speed is measured from the same 200-update learning run (updates 3\u201320 of the gate JSONL) \u2014 no separate 20-update GPU job.",
     "locked_recipe_summary": "Operator locked admission from picker preset beat_noop_core with deltas: mixed 2-player and 4-player rollouts (50/50), 32 parallel envs, 256 rollout steps, 3 planet candidates per turn, Weights & Biases logging (group preflight), replay artifacts off. Uses small factorized transformer, cheap shield, noop-only opponents, curriculum off.",
     "user_direction": "Proof of learning beats raw throughput. Reject the prior split where speed used self-play + full model while learning used noop + small model. Capture a new speed baseline from this unified recipe (replacing the old primary-preset framing).",
     "prior_recommendation_superseded": {
@@ -26,7 +26,7 @@
       "regenerate": "uv run python scripts/build_config_frozen_defaults_picker.py",
       "open": "xdg-open docs/tools/config-frozen-defaults-picker.html",
       "purpose": "Browser form over the default Hydra composition. Adjust leaves, fix cross-field warnings, copy Hydra overrides or YAML diff for conf/ updates. Regenerate after conf/ or schema.py changes.",
-      "operator_note": "Start from beat_noop defaults below; only change model/opponents/training geometry with explicit recalibration intent. Default beat_noop model (transformer_factorized_small) is calibrated — upgrading model size requires new threshold calibration."
+      "operator_note": "Start from beat_noop defaults below; only change model/opponents/training geometry with explicit recalibration intent. Default beat_noop model (transformer_factorized_small) is calibrated \u2014 upgrading model size requires new threshold calibration."
     },
     "operator_locked_overrides": {
       "picker_preset": "beat_noop_core",
@@ -70,23 +70,26 @@
         "num_envs": 32,
         "rollout_steps": 256,
         "rollout_microbatch_envs": 16,
-        "format_weights": { "2": 0.5, "4": 0.5 },
+        "format_weights": {
+          "2": 0.5,
+          "4": 0.5
+        },
         "candidate_count": 3,
         "wandb_enabled": true,
         "wandb_group": "preflight"
       },
       "changes_vs_beat_noop_default": [
-        "2-player only → 50/50 mixed 2-player and 4-player rollouts",
-        "16 envs × 128 steps → 32 envs × 256 steps (~4× env-steps per update)",
-        "6 planet candidates → 3 (smaller action space)",
-        "wandb off → on (group preflight)",
+        "2-player only \u2192 50/50 mixed 2-player and 4-player rollouts",
+        "16 envs \u00d7 128 steps \u2192 32 envs \u00d7 256 steps (~4\u00d7 env-steps per update)",
+        "6 planet candidates \u2192 3 (smaller action space)",
+        "wandb off \u2192 on (group preflight)",
         "replay artifacts explicitly disabled (artifact pipeline still off)"
       ],
       "threshold_recalibration": {
         "learning_signal": "use_with_caution",
         "reason": "beat_noop thresholds in preflight-calibration.json were measured on 2-player-only, 16 envs, 128 steps, candidate_count=6. Mixed format and longer rollouts change win-rate dynamics and PPO batch geometry; recalibrate with ow benchmark calibrate before treating failures as regressions.",
         "throughput_baseline": "required",
-        "throughput_reason": "Env-steps per update and per-format compile cost differ from the prior 2p_16×128 proposal; capture a new launch-hygiene-e2e-baseline-learning-first.json on this locked recipe before ±10% gating."
+        "throughput_reason": "Env-steps per update and per-format compile cost differ from the prior 2p_16\u00d7128 proposal; capture a new launch-hygiene-e2e-baseline-learning-first.json on this locked recipe before \u00b110% gating."
       }
     },
     "proposed_core_overrides": {
@@ -104,10 +107,10 @@
         "seed=42",
         "training.log_every=1"
       ],
-      "ppo_profile_note": "beat_noop gate applies transformer_factorized_small PPO overrides automatically (lr, clip_coef, ent_coef, vf_coef, max_grad_norm, epochs, update_chunk_rows, reseed_every_updates=0). Throughput capture must include the same PPO bundle — use gate dry-run output or append profile overrides from docs/benchmarks/preflight-profiles.json.",
+      "ppo_profile_note": "beat_noop gate applies transformer_factorized_small PPO overrides automatically (lr, clip_coef, ent_coef, vf_coef, max_grad_norm, epochs, update_chunk_rows, reseed_every_updates=0). Throughput capture must include the same PPO bundle \u2014 use gate dry-run output or append profile overrides from docs/benchmarks/preflight-profiles.json.",
       "throughput_extract": {
         "mode": "single_run_hybrid",
-        "description": "After beat_noop (200 updates), extract env_steps_per_sec and seconds_per_update_mean from the gate JSONL using updates 3–20 (skip JIT warmup updates 1–2). Matches launch-hygiene measurement window without a second training job.",
+        "description": "After beat_noop (200 updates), extract env_steps_per_sec and seconds_per_update_mean from the gate JSONL using updates 3\u201320 (skip JIT warmup updates 1\u20132). Matches launch-hygiene measurement window without a second training job.",
         "cli": "uv run ow benchmark admission-throughput",
         "gate_compose": "uv run ow benchmark gate run beat_noop --also-throughput --throughput-baseline <baseline.json>",
         "window": {
@@ -128,7 +131,7 @@
           "training.total_updates": 20,
           "warmup": 2,
           "repeats_capture": 3,
-          "purpose": "One-time baseline JSON only (ow benchmark training or 3× gate+log extract after picker locks recipe). Not required for every cherry-pick once baseline exists.",
+          "purpose": "One-time baseline JSON only (ow benchmark training or 3\u00d7 gate+log extract after picker locks recipe). Not required for every cherry-pick once baseline exists.",
           "suggested_output": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json"
         },
         "learn_proof": {
@@ -141,7 +144,7 @@
     },
     "verify_resolved_config": "uv run ow train print_resolved_config=true model=transformer_factorized_small task=shield_cheap training=2p4p_32_split training.rollout_steps=256 task.candidate_count=3 opponents=noop_only curriculum=off telemetry.wandb.enabled=true telemetry.wandb.group=preflight artifacts.artifact_pipeline.enabled=false artifacts.replay.enabled=false telemetry.metric_groups.action_decision=true seed=42 training.log_every=1 training.lr=0.0003 training.clip_coef=0.2 training.ent_coef=0.005 training.vf_coef=0.5 training.max_grad_norm=0.5 training.epochs=2 training.update_chunk_rows=1024 training.reseed_every_updates=0",
     "capture_throughput_baseline": {
-      "description": "Capture a reference baseline JSON from the unified recipe (3×20-update runs OR 3 gate runs with admission-throughput extract). Cherry-pick admission then compares each candidate's gate JSONL extract against this file.",
+      "description": "Capture a reference baseline JSON from the unified recipe (3\u00d720-update runs OR 3 gate runs with admission-throughput extract). Cherry-pick admission then compares each candidate's gate JSONL extract against this file.",
       "suggested_output": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
       "command_template_training": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --overrides <core+PPO overrides from picker/gate dry-run> --label learning_first_capture --updates 20 --warmup 2 --repeats 3 --detailed-timing --out docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
       "command_template_hybrid": "uv run ow benchmark gate run beat_noop --out /tmp/gate.json && uv run ow benchmark admission-throughput /tmp/gate.json",
@@ -187,11 +190,11 @@
         "seconds_per_update_mean_ceiling": 1.659083309335319
       },
       "baseline_superseded": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
-      "baseline_superseded_note": "Old baseline used primary preset (self-play, full transformer, 32 envs × 500 steps). Locked admission recipe is noop, small model, mixed 2p/4p, 32 envs × 256 steps. Numbers are not comparable — do not gate new captures against the old JSON or the earlier 2p_16×128 proposal.",
+      "baseline_superseded_note": "Old baseline used primary preset (self-play, full transformer, 32 envs \u00d7 500 steps). Locked admission recipe is noop, small model, mixed 2p/4p, 32 envs \u00d7 256 steps. Numbers are not comparable \u2014 do not gate new captures against the old JSON or the earlier 2p_16\u00d7128 proposal.",
       "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_unified.json",
       "verdict": "baseline_captured",
       "anchor_gate_extract": {
-        "source": "admission-throughput on anchor_learn_proof.json gate JSONL (updates 3–20)",
+        "source": "admission-throughput on anchor_learn_proof.json gate JSONL (updates 3\u201320)",
         "run_date": "2026-06-06",
         "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
         "log_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T021830Z_jax.jsonl",
@@ -200,7 +203,7 @@
         "rollout_seconds_per_update_mean": 1.151900956117768,
         "ppo_seconds_per_update_mean": 0.5027232608893731,
         "verdict": "PASS",
-        "note": "Within ±10% of learning-first baseline (env_steps floor 4888.79, seconds ceiling 1.659). --also-throughput skipped because learn_proof exit_code=1; extracted post-hoc from gate JSONL."
+        "note": "Within \u00b110% of learning-first baseline (env_steps floor 4888.79, seconds ceiling 1.659). --also-throughput skipped because learn_proof exit_code=1; extracted post-hoc from gate JSONL."
       },
       "prior_capture": {
         "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_2p.json",
@@ -236,7 +239,8 @@
           "min_entropy": 0.0001
         }
       },
-      "interpretation": "Borderline win-rate delta and elevated KL likely reflect threshold geometry mismatch (calibrated 2p-only/16env/128 steps vs locked mixed 2p/4p/32env/256 steps), not necessarily a bad anchor cherry-pick. Recalibrate before blocking Phase 2."
+      "interpretation": "Borderline win-rate delta and elevated KL likely reflect threshold geometry mismatch (calibrated 2p-only/16env/128 steps vs locked mixed 2p/4p/32env/256 steps), not necessarily a bad anchor cherry-pick. Recalibrate before blocking Phase 2.",
+      "admission_gate_note": "Use ow benchmark gate run admission (or make gate-admission REPO_ROOT=anchor) for blocking learn+speed; beat_noop-only JSON superseded for admission blocking."
     },
     "parity": {
       "command": "make test-kaggle-parity",
@@ -246,7 +250,7 @@
       "result": "15 passed, 1 deselected in 18.77s"
     }
   },
-  "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), training throughput within ±10% of the learning-first unified baseline (once captured), and learn-proof beat_noop VERIFIED at calibrated thresholds — all on the same core training recipe.",
+  "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), training throughput within \u00b110% of the learning-first unified baseline (once captured), and learn-proof beat_noop VERIFIED at calibrated thresholds \u2014 all on the same core training recipe.",
   "throughput_gate_contract": {
     "blocking_profile": "learning_first_unified",
     "blocking_metrics": [
@@ -273,7 +277,7 @@
         "override": "training=2p4p_32_split",
         "blocking": true,
         "phase": "admission_locked",
-        "notes": "Operator locked 50/50 mixed format as the admission recipe (2026-06-05). Learning thresholds still calibrated on 2p-only — treat gate results as provisional until recalibration."
+        "notes": "Operator locked 50/50 mixed format as the admission recipe (2026-06-05). Learning thresholds still calibrated on 2p-only \u2014 treat gate results as provisional until recalibration."
       }
     ]
   },
@@ -284,5 +288,5 @@
     "last_integrated_sha": null,
     "integration_status": "building"
   },
-  "decision": "Anchor gate run 2026-06-06: throughput PASS (~4951 env-steps/s, ~1.65 s/update within ±10% of learning-first baseline); learn_proof NOT_VERIFIED (win_rate_delta 0.049, approx_kl 2.34). Treat learning failure as provisional until beat_noop thresholds recalibrated for mixed 2p/4p 32×256 recipe. Phase 2 env-parity cherry-picks blocked until learn_proof VERIFIED or operator accepts recalibrated floors. Parity test status: see baseline_gates.parity."
+  "decision": "Admission gate 2026-06-06 (unified admission recipe on anchor via --repo-root): admission_passed true \u2014 learning VERIFIED and throughput within \u00b110% of launch-hygiene-e2e-baseline-learning-first.json on the same 200-update run. Prior anchor_learn_proof.json under beat_noop-only thresholds was NOT_VERIFIED (borderline win_rate_delta / high KL vs 2p-only calibration geometry). Phase 2 env-parity cherry-picks onto throughput-baseline-integration @ 79162a2 may proceed: build ordered env_parity queue from merge-base\u2192main, cherry-pick one commit at a time, gate each with make test-kaggle-parity; re-run make gate-admission on integration head after parity stack is green."
 }

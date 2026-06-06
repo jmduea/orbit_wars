@@ -456,7 +456,10 @@ def build_parser() -> argparse.ArgumentParser:
         "tokens",
         nargs="*",
         default=[],
-        help="`list`, `run <id>`, or legacy `<id>` (beat_noop, beat_random, curriculum_staged).",
+        help=(
+            "`list`, `run <id>`, or legacy `<id>` "
+            "(admission, beat_noop, beat_random, curriculum_staged)."
+        ),
     )
     gate.add_argument(
         "--list",
@@ -509,8 +512,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--also-throughput",
         action="store_true",
         help=(
-            "After a successful learning run, extract throughput from the gate "
-            "JSONL (updates 3–20) without a second GPU job."
+            "After the learning run, extract throughput from the gate JSONL "
+            "(updates 3–20) and merge into --out JSON. Prefer `gate run admission`."
         ),
     )
     gate.add_argument(

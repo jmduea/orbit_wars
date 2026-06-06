@@ -583,7 +583,13 @@ def validate_e2e_baseline_artifact(baseline: Mapping[str, object]) -> list[str]:
     if not isinstance(aggregate, dict):
         errors.append("aggregate must be an object")
     else:
-        for metric in E2E_THROUGHPUT_METRICS:
+        required_metrics = E2E_THROUGHPUT_METRICS
+        pass_band = baseline.get("pass_band")
+        if isinstance(pass_band, dict):
+            authority = pass_band.get("gate_authority_metrics")
+            if isinstance(authority, list) and authority:
+                required_metrics = tuple(str(metric) for metric in authority)
+        for metric in required_metrics:
             stats = aggregate.get(metric)
             if not isinstance(stats, dict) or "mean" not in stats:
                 errors.append(f"aggregate.{metric}.mean is required")

@@ -364,6 +364,7 @@ def run_preflight_gate(
     model: str = "transformer_factorized_small",
     output_root: Path = Path("outputs"),
     repo_root: Path | None = None,
+    campaign_gate_id: str | None = None,
     dry_run: bool = False,
     verbose: bool = False,
     thresholds_path: Path | None = None,
@@ -379,7 +380,7 @@ def run_preflight_gate(
         raise ValueError(f"Unknown preflight gate: {gate_id!r}")
     spec = specs[gate_id]
     root = repo_root or _repo_root()
-    campaign = preflight_campaign(gate_id)
+    campaign = preflight_campaign(campaign_gate_id or gate_id)
     resolved_output_root = _resolve_output_root(output_root, root)
     if spec.needs_calibration_reason is not None:
         return GateEvaluation(
@@ -418,10 +419,19 @@ def run_preflight_gate(
         f"preflight gate {gate_id!r}: model={model!r}, campaign={campaign!r}"
         f"{updates_note}, dry_run={dry_run}"
     )
-    if verbose:
-        emit_benchmark_progress(
-            "Gate train overrides: " + " ".join(overrides)
+    from src.jax.preflight_config_summary import format_gate_train_config_summary
+
+    for line in format_gate_train_config_summary(overrides):
+        emit_benchmark_progress(line)
+    command_echo = (
+        " ".join(["uv", "run", "ow", "train", *overrides])
+        if verbose
+        else (
+            f"uv run ow train … ({len(overrides)} Hydra overrides; "
+            "pass --verbose for full command)"
         )
+    )
+    if verbose or dry_run:
         emit_benchmark_progress(
             "Progress streams on stderr (child ow train + log_every lines). "
             "First update may stall during JAX compile. "
@@ -432,6 +442,7 @@ def run_preflight_gate(
         repo_root=root,
         dry_run=dry_run,
         label=f"preflight gate {gate_id} campaign={campaign}",
+        command_echo=command_echo,
     )
     if dry_run:
         return GateEvaluation(

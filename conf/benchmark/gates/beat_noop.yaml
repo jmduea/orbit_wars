@@ -9,10 +9,8 @@ primitive: ow benchmark gate run beat_noop
 train:
   default:
     model_from_cli: true
-    apply_ppo_profile: true
     train_overrides:
-      - training=2p_16
-      - training.rollout_steps=128
+      - training=2p4p_32_split
       - training.total_updates=200
       - opponents=noop_only
       - curriculum=off
