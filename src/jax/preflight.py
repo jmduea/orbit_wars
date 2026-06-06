@@ -83,6 +83,26 @@ def preflight_campaign(gate_id: str) -> str:
     return f"preflight_{gate_id}"
 
 
+def _resolve_output_root(output_root: Path, repo_root: Path) -> Path:
+    """Resolve filesystem output root for run discovery (may be absolute)."""
+    if output_root.is_absolute():
+        return output_root.expanduser().resolve()
+    return (repo_root / output_root).expanduser().resolve()
+
+
+def _hydra_output_root(output_root: Path, repo_root: Path) -> str:
+    """Hydra ``output.root`` must be repo-relative (see ``_orbit_safe_rel``)."""
+    resolved_out = _resolve_output_root(output_root, repo_root)
+    resolved_repo = repo_root.expanduser().resolve()
+    try:
+        return resolved_out.relative_to(resolved_repo).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            f"output_root must lie under repo_root for Hydra output.root "
+            f"(got output_root={output_root!r}, repo_root={repo_root!r})"
+        ) from exc
+
+
 def read_jsonl_records(path: Path) -> list[dict[str, object]]:
     if not path.is_file():
         return []
@@ -360,6 +380,7 @@ def run_preflight_gate(
     spec = specs[gate_id]
     root = repo_root or _repo_root()
     campaign = preflight_campaign(gate_id)
+    resolved_output_root = _resolve_output_root(output_root, root)
     if spec.needs_calibration_reason is not None:
         return GateEvaluation(
             gate_id=gate_id,
@@ -379,7 +400,7 @@ def run_preflight_gate(
         )
     overrides = [
         f"output.campaign={campaign}",
-        f"output.root={output_root.as_posix()}",
+        f"output.root={_hydra_output_root(output_root, root)}",
         *spec.train_overrides,
         *extra_train_overrides,
     ]
@@ -430,7 +451,7 @@ def run_preflight_gate(
             evaluation_mode="learning_signal",
         )
 
-    run_dir = latest_run_dir(campaign=campaign, output_root=output_root)
+    run_dir = latest_run_dir(campaign=campaign, output_root=resolved_output_root)
     log_files = sorted((run_dir / "logs").glob("*_jax.jsonl"))
     if not log_files:
         return evaluate_gate_records(

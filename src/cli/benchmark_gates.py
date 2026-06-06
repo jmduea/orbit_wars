@@ -57,6 +57,7 @@ def run_gate_cli(
     *,
     model: str | None = None,
     output_root: Path,
+    repo_root: Path | None = None,
     dry_run: bool = False,
     verbose: bool = False,
     thresholds_path: Path | None = None,
@@ -72,12 +73,14 @@ def run_gate_cli(
     )
 
     recipe = load_gate_recipe(gate_id)
-    resolved_model = model or str(recipe.get("default_model") or "transformer_factorized_small")
+    resolved_model = model or str(
+        recipe.get("default_model") or "transformer_factorized_small"
+    )
     evaluation = run_preflight_gate(
         gate_id,
         model=resolved_model,
         output_root=output_root,
-        repo_root=REPO_ROOT,
+        repo_root=repo_root or REPO_ROOT,
         dry_run=dry_run,
         verbose=verbose,
         thresholds_path=thresholds_path,

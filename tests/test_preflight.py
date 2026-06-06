@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.jax.preflight import (
     PreflightGateSpec,
     PreflightVerdict,
     _gate_specs,
+    _hydra_output_root,
+    _resolve_output_root,
     evaluate_gate_records,
     read_jsonl_records,
     run_preflight_gate,
@@ -249,3 +253,13 @@ def test_planet_flow_preflight_uses_calibrated_thresholds(tmp_path) -> None:
     assert spec.needs_calibration_reason is None
     assert spec.window_updates == 4
     assert spec.min_win_rate_delta == 0.2
+
+
+def test_hydra_output_root_relative_for_worktree(tmp_path) -> None:
+    repo = tmp_path / "anchor"
+    repo.mkdir()
+    outputs = repo / "outputs"
+    outputs.mkdir()
+    assert _hydra_output_root(outputs, repo) == "outputs"
+    assert _hydra_output_root(Path("outputs"), repo) == "outputs"
+    assert _resolve_output_root(Path("outputs"), repo) == outputs.resolve()

@@ -19,7 +19,8 @@ def _resolve_gate_id(args: argparse.Namespace) -> str | None:
 
 
 def run_gate_cli(args: argparse.Namespace) -> int:
-    from src.cli.benchmark_gates import list_gate_recipes, run_gate_cli as run_gate
+    from src.cli.benchmark_gates import list_gate_recipes
+    from src.cli.benchmark_gates import run_gate_cli as run_gate
 
     gate_id = _resolve_gate_id(args)
     if gate_id is None:
@@ -36,6 +37,7 @@ def run_gate_cli(args: argparse.Namespace) -> int:
         gate_id,
         model=args.model,
         output_root=args.output_root,
+        repo_root=args.repo_root,
         dry_run=bool(args.dry_run),
         verbose=bool(args.verbose),
         thresholds_path=args.thresholds_path,

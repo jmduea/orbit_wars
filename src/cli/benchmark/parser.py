@@ -479,6 +479,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("outputs"),
     )
+    gate.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help=(
+            "Run ``ow train`` in another checkout (e.g. a git worktree) while gate "
+            "recipes and thresholds load from this repo."
+        ),
+    )
     gate.add_argument("--dry-run", action="store_true")
     gate.add_argument(
         "--verbose",
