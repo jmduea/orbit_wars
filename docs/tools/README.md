@@ -18,7 +18,7 @@ Source of truth: [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requiremen
 
 ## Frozen defaults picker
 
-Interactive editor for editable leaves in the default Hydra composition (`uv run ow train print_resolved_config=true`). Omits volatile or opt-in-only keys (e.g. `output.run_id`, `task.env_parity_mode` — see `EXCLUDE_PATHS` in the build script). Layout follows the [feature-flags editor pattern](https://thariqs.github.io/html-effectiveness/19-editor-feature-flags.html): grouped panels, change diff sidebar, copy/export, reset.
+Interactive editor for resolved Hydra training config. **Load preset** (e.g. beat-noop learning proof) or pick a **config group** (`model=…`, `task=…`) to refresh values from pre-composed YAML bundles at build time. Each field shows approximate provenance (`conf/model/base.yaml`, `schema.py default`, etc.). Omits volatile keys (`output.run_id`, `task.env_parity_mode`). Layout follows the [feature-flags editor pattern](https://thariqs.github.io/html-effectiveness/19-editor-feature-flags.html): grouped panels, change diff sidebar, copy/export, reset.
 
 | File | Role |
 | --- | --- |

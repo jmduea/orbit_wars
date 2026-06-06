@@ -55,7 +55,11 @@ def _cwd_under_repo(cwd_raw: str, repo_root: Path) -> bool:
 
 
 def active_terminal_commands(repo_root: Path, *, home: Path | None = None) -> list[str]:
-    """Active commands in Cursor terminals whose cwd is inside repo_root."""
+    """Active commands in Cursor terminals whose cwd is inside repo_root.
+
+    Includes light and heavy commands; use ``active_heavy_terminal_commands`` for
+    GPU-contention policy.
+    """
     projects_root = (home or Path.home()) / ".cursor" / "projects"
     if not projects_root.is_dir():
         return []
@@ -88,6 +92,13 @@ def active_terminal_commands(repo_root: Path, *, home: Path | None = None) -> li
     return active
 
 
+def active_heavy_terminal_commands(
+    repo_root: Path, *, home: Path | None = None
+) -> list[str]:
+    """Active GPU-contention commands in repo terminals (excludes light servers, git, etc.)."""
+    return [cmd for cmd in active_terminal_commands(repo_root, home=home) if is_heavy_command(cmd)]
+
+
 def is_heavy_command(command: str) -> bool:
     return bool(HEAVY.search(command))
 
@@ -98,23 +109,24 @@ def evaluate(
     *,
     home: Path | None = None,
 ) -> dict[str, str]:
-    active = active_terminal_commands(repo_root, home=home)
-    if not active or not is_heavy_command(command):
+    active_heavy = active_heavy_terminal_commands(repo_root, home=home)
+    if not active_heavy or not is_heavy_command(command):
         return {"permission": "allow", "user_message": "", "agent_message": ""}
 
-    summary = "; ".join(active[:3])
-    if len(active) > 3:
-        summary += f" (+{len(active) - 3} more)"
+    summary = "; ".join(active_heavy[:3])
+    if len(active_heavy) > 3:
+        summary += f" (+{len(active_heavy) - 3} more)"
     terminals_hint = str((home or Path.home()) / ".cursor" / "projects")
     user_message = (
-        "Another Cursor agent has an active terminal in this project. "
+        "Another Cursor agent is running GPU-heavy work in this project. "
         f"Check {terminals_hint} for GPU contention before running shell commands. "
         f"{GPU_HINT}"
     )
     agent_message = (
-        f"Blocked GPU/contention-heavy command because {len(active)} terminal session(s) "
-        f"are still running in this repo: {summary}. Check terminals under "
-        f"{terminals_hint} before ow train / pytest / wandb agent. {GPU_HINT}"
+        f"Blocked GPU/contention-heavy command because {len(active_heavy)} terminal "
+        f"session(s) are still running GPU-heavy commands in this repo: {summary}. "
+        f"Check terminals under {terminals_hint} before ow train / pytest / wandb agent. "
+        f"{GPU_HINT}"
     )
     return {
         "permission": "deny",

@@ -1,96 +1,191 @@
 # Session handoff: nuclear cherry-pick manifest (2026-06-05)
 
-Handoff for starting a fresh session on Orbit Wars cherry-pick manifest / throughput-anchor work.
+Handoff for continuing Orbit Wars cherry-pick manifest work.
 
-## Current git state
+## Decision locked this session
 
-| Location | Branch | SHA | Notes |
-|----------|--------|-----|-------|
-| **main** (`/home/jmduea/projects/orbit_wars`) | `main` | `46d4812b975edb89907ce5c471c2fb2e1f7d2013` | Recent: manifest updates, `artifact_pipeline.enabled` kill switch, gate metrics fixes, compound solution doc |
-| **throughput anchor worktree** (`/home/jmduea/projects/orbit_wars-throughput-anchor`) | `throughput-baseline` | `52dfdb02ffa9a45e7fcfef41aa065509111c4076` | Tracks `origin/throughput-baseline`; learn-proof metrics fix |
-| **integration branch** (main repo) | `throughput-baseline-integration` | `79162a2088160b8ed05c3e3a050e064c7f6c9556` | Pre-hygiene anchor (PR #163 parent) |
+**Learning proof comes first; one training recipe gates both checks.**
 
-Recent commits on `main`:
+The prior assistant recommendation used **two different training setups** (self-play for speed, noop for learning). **You rejected that.** Both gates must use the **same core training config**.
 
-- `46d4812` — fix(artifacts): honor `pipeline.enabled` kill switch; sync 2p anchor gate
-- `8d84ebc` — fix(benchmark): resolve gate metrics from multi-repeat aggregate
-- `b9499b8` — docs(benchmarks): clarify tier-2 gate metrics and format coverage
-- `f05ae76` — docs(solutions): compound cherry-pick manifest baseline-first workflow
-- `9cdc8fe` — docs: record U1 anchor throughput gate pass in cherry-pick manifest
+**New speed check:** After the 200-update learning run finishes, read training speed from the same log file — updates 3 through 20 only (skip the first two updates while JAX compiles). No second GPU job for a short speed-only run during cherry-pick admission.
 
-## Completed this session
+The old speed baseline (`launch-hygiene-e2e-baseline.json`, self-play / full model) is **superseded**. Capture a **new baseline** from the locked admission recipe below.
 
-- **Ideation & docs on main:** nomenclature RFC, PR #219 docs consolidation
-- **Cherry-pick manifest:** requirements doc + implementation plan (`2026-06-05-002`)
-- **Integration scaffolding:** `throughput-baseline-integration` branch, `throughput-baseline` anchor worktree (`orbit_wars-throughput-anchor`), harness copy for gate capture
-- **U1 anchor work (worktree @ 52dfdb0):**
-  - 2p throughput captured — manifest now **FAIL** (~7755 `env_steps_per_sec` vs ~8799 floor); earlier PASS (~9628) recorded at different measured commit
-  - Learn-proof metrics fixed on anchor (`52dfdb0`)
-- **`artifact_pipeline.enabled`:** global kill switch (`46d4812` on main)
-- **Gate contract clarified:**
-  - Blocking metrics: `env_steps_per_sec`, `seconds_per_update_mean` only
-  - `samples_per_sec` recorded but **not gated**
-  - `repeats=3` in gate CLI vs Makefile `repeats=1` — documented mismatch
-- **Benchmark fixes on main:**
-  - Repeats aggregate gate (multi-repeat JSON resolution)
-  - Flat `log_prob` on anchor worktree
-  - Single-group win rate finalize
+## Operator-locked admission recipe (2026-06-05)
 
-## Open decisions (PRIORITY for next session)
+Locked from picker preset **Beat noop learning proof (core recipe)** with these edits:
 
-### Agreed
+| Setting | Default beat_noop | Locked |
+|---------|-------------------|--------|
+| Game formats | 2-player only | 50% 2-player, 50% 4-player |
+| Parallel envs | 16 | 32 |
+| Rollout steps | 128 | 256 |
+| Planet candidates | 6 | 3 |
+| Weights & Biases | off | on (`group=preflight`) |
+| Replay artifacts | on (default) | off |
 
-**One admission profile must gate BOTH throughput and minimal learn-proof.** If throughput and learn-proof use different Hydra presets/overrides, the dual gate is meaningless — a commit could pass one and fail the other under incomparable training paths.
+**Microbatch note:** The picker diff showed `rollout_microbatch_envs=32`. With mixed format and 32 total envs, each format group gets 16 envs, so the resolved microbatch is **16** (32 would fail validation).
 
-### Not resolved (user ≠ assistant)
+### Full Hydra overrides (train / verify)
 
-**What Hydra preset + overrides constitute the default admission profile?**
+Append PPO lines when not using the gate (gate adds them automatically):
 
-- Assistant leaned toward: `primary` preset → `shield_cheap` + `transformer_factorized` + self-play-only 2p (`training_format: 2p_only`)
-- User has a **different vision** — **do not assume** the assistant's lean. Next session must brainstorm and decide explicitly.
+```text
+model=transformer_factorized_small
+task=shield_cheap
+training=2p4p_32_split
+training.rollout_steps=256
+task.candidate_count=3
+opponents=noop_only
+curriculum=off
+telemetry.wandb.enabled=true
+telemetry.wandb.group=preflight
+artifacts.artifact_pipeline.enabled=false
+artifacts.replay.enabled=false
+telemetry.metric_groups.action_decision=true
+seed=42
+training.log_every=1
+training.lr=0.0003
+training.clip_coef=0.2
+training.ent_coef=0.005
+training.vf_coef=0.5
+training.max_grad_norm=0.5
+training.epochs=2
+training.update_chunk_rows=1024
+training.reseed_every_updates=0
+```
 
-## Agreed direction (not yet implemented)
+Verify (expect 32 envs, 256 steps, format_weights 0.5/0.5, candidate_count 3, wandb on):
 
-- Align `make preflight-learn-proof` / `PREFLIGHT_TRAIN_BASE` with the **chosen** admission profile (not `transformer_factorized_small` ceiling unless explicitly diagnostic)
-- Manifest should record an `admission_profile` field (preset + overrides) on every gate capture
-- **Advisory only:** 4p-only and 2p+4p characterization runs stay non-blocking until baselines exist
+```bash
+cd /home/jmduea/projects/orbit_wars
+uv run ow train print_resolved_config=true \
+  model=transformer_factorized_small task=shield_cheap training=2p4p_32_split \
+  training.rollout_steps=256 task.candidate_count=3 opponents=noop_only curriculum=off \
+  telemetry.wandb.enabled=true telemetry.wandb.group=preflight \
+  artifacts.artifact_pipeline.enabled=false artifacts.replay.enabled=false \
+  telemetry.metric_groups.action_decision=true seed=42 training.log_every=1 \
+  training.lr=0.0003 training.clip_coef=0.2 training.ent_coef=0.005 \
+  training.vf_coef=0.5 training.max_grad_norm=0.5 training.epochs=2 \
+  training.update_chunk_rows=1024 training.reseed_every_updates=0
+```
 
-## Blockers before Phase 2 env-parity cherry-picks
+Picker preset `admission_locked` in `scripts/build_config_frozen_defaults_picker.py` matches this bundle (regenerate HTML after pulling).
 
-1. **Resolve admission profile definition** (see open decision above)
-2. **Re-run dual gate** on anchor @ `52dfdb0` under the unified admission profile
-3. **2p throughput FAIL vs earlier PASS** — may need fair re-benchmark after profile is locked (measured commits differ; gate contract / repeats fixes landed since first PASS)
-4. **U1 parity + learn_proof manifest fields** still `pending` — require user runs on anchor worktree
+### Threshold / baseline warnings
+
+- **Learning gate (`beat_noop`):** Floors in `preflight-calibration.json` were measured on **2-player-only**, 16 envs, 128 steps, 6 candidates. Mixed format and longer rollouts change the learning signal — use existing thresholds **provisionally**; run `ow benchmark calibrate` if results are borderline or failures look like geometry mismatch, not regressions.
+- **Throughput baseline:** Required on this recipe before ±10% gating. ~4× more env-steps per update than the old 2p_16×128 proposal; do not compare to `launch-hygiene-e2e-baseline.json` or uncaptured 2p-only baselines.
+
+## Step-by-step commands (operator)
+
+### 1. Verify config (already locked — re-run if conf/ changed)
+
+```bash
+cd /home/jmduea/projects/orbit_wars
+uv run python scripts/build_config_frozen_defaults_picker.py   # optional: refresh HTML + admission_locked preset
+# verify command above
+```
+
+### 2. Capture speed baseline (GPU — one-time, check terminals first)
+
+Gate dry-run shows full override list including PPO. **Do not pipe to tail.**
+
+```bash
+env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 \
+  uv run ow benchmark training \
+  --overrides model=transformer_factorized_small task=shield_cheap training=2p4p_32_split \
+    training.rollout_steps=256 task.candidate_count=3 opponents=noop_only curriculum=off \
+    telemetry.wandb.enabled=true telemetry.wandb.group=preflight \
+    artifacts.artifact_pipeline.enabled=false artifacts.replay.enabled=false \
+    telemetry.metric_groups.action_decision=true seed=42 training.log_every=1 \
+    training.lr=0.0003 training.clip_coef=0.2 training.ent_coef=0.005 training.vf_coef=0.5 \
+    training.max_grad_norm=0.5 training.epochs=2 training.update_chunk_rows=1024 \
+    training.reseed_every_updates=0 \
+  --label learning_first_capture \
+  --updates 20 --warmup 2 --repeats 3 --detailed-timing \
+  --out docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
+```
+
+After approval, point `Makefile` `test-launch-hygiene-e2e-throughput` at this JSON.
+
+### 3. Learning proof + speed extract (one GPU run)
+
+On the throughput comparison branch, append locked deltas after gate defaults:
+
+```bash
+cd /home/jmduea/projects/orbit_wars-throughput-anchor
+uv run ow benchmark gate run beat_noop --dry-run --verbose \
+  --train-overrides training=2p4p_32_split training.rollout_steps=256 task.candidate_count=3 \
+  telemetry.wandb.enabled=true telemetry.wandb.group=preflight artifacts.replay.enabled=false
+
+uv run ow benchmark gate run beat_noop \
+  --train-overrides training=2p4p_32_split training.rollout_steps=256 task.candidate_count=3 \
+  telemetry.wandb.enabled=true telemetry.wandb.group=preflight artifacts.replay.enabled=false \
+  --out outputs/benchmarks/cherry-pick/anchor_learn_proof.json
+```
+
+Then extract speed from the same run:
+
+```bash
+uv run ow benchmark admission-throughput \
+  outputs/benchmarks/cherry-pick/anchor_learn_proof.json \
+  --baseline docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json \
+  --assert-within-pct 10
+```
+
+**One-shot alternative:**
+
+```bash
+uv run ow benchmark gate run beat_noop \
+  --train-overrides training=2p4p_32_split training.rollout_steps=256 task.candidate_count=3 \
+  telemetry.wandb.enabled=true telemetry.wandb.group=preflight artifacts.replay.enabled=false \
+  --out outputs/benchmarks/cherry-pick/anchor_learn_proof.json \
+  --also-throughput \
+  --throughput-baseline docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json \
+  --throughput-within-pct 10
+```
+
+### 4. Kaggle parity (before env-parity cherry-picks)
+
+```bash
+make test-kaggle-parity
+```
+
+### 5. Then env-parity cherry-picks
+
+Only after unified speed baseline captured, learning proof VERIFIED (or recalibrated), throughput within ±10% of baseline, and parity green — cherry-pick env-parity commits onto `throughput-baseline-integration`.
+
+## Git state (unchanged infrastructure)
+
+| Location | Branch | Notes |
+|----------|--------|-------|
+| Main repo | `main` | Manifest + handoff live here |
+| Throughput comparison worktree | `throughput-baseline` @ `52dfdb0` | `/home/jmduea/projects/orbit_wars-throughput-anchor` |
+| Integration branch | `throughput-baseline-integration` @ pre-hygiene anchor | Env-parity integration target |
+
+## Blockers
+
+1. **GPU time** — baseline capture (3×20 updates) + one learning proof (200 updates) + parity tests; one heavy GPU job at a time.
+2. **Threshold recalibration** — mixed-format learning proof may need `ow benchmark calibrate` before hard gating.
+3. **Makefile / manifest wiring** — after baseline JSON lands, update `test-launch-hygiene-e2e-throughput` to use locked overrides + new baseline path.
 
 ## Key paths
 
 | Artifact | Path |
 |----------|------|
 | Manifest | `docs/benchmarks/cherry-pick-manifest.json` |
-| Plan | `docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md` |
-| Requirements | `docs/brainstorms/2026-06-05-nuclear-cherry-pick-manifest-requirements.md` |
-| Compound solution | `docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md` |
-| Anchor 2p throughput JSON | `orbit_wars-throughput-anchor/outputs/benchmarks/cherry-pick/anchor_throughput_2p.json` |
-| E2E baseline | `docs/benchmarks/launch-hygiene-e2e-baseline.json` |
-| Nomenclature RFC | `docs/nomenclature-rfc.md` |
+| Config picker | `docs/tools/config-frozen-defaults-picker.html` |
+| Old speed baseline (superseded framing) | `docs/benchmarks/launch-hygiene-e2e-baseline.json` |
+| New baseline (pending capture) | `docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json` |
+| Learning thresholds | `docs/benchmarks/preflight-calibration.json` |
+| Throughput extract CLI | `uv run ow benchmark admission-throughput` |
 
-## Worktrees / branches quick reference
-
-```bash
-# Main repo
-cd /home/jmduea/projects/orbit_wars
-
-# Anchor worktree (throughput-baseline @ 52dfdb0)
-cd /home/jmduea/projects/orbit_wars-throughput-anchor
-
-# Integration branch (from main repo)
-git checkout throughput-baseline-integration  # @ 79162a2
-```
-
-## Next session starter prompt
-
-Copy the block below verbatim into a new chat:
+## Next session starter
 
 ```
-Orbit Wars cherry-pick manifest session — continue from docs/session-handoff/2026-06-05-cherry-pick-manifest.md. PRIORITY: brainstorm and lock the single admission profile (preset + Hydra overrides) used for BOTH tier-2 throughput gate AND minimal learn-proof on throughput-baseline anchor @ 52dfdb0 (worktree orbit_wars-throughput-anchor). User and assistant previously disagreed on what that profile should be — do not assume shield_cheap + transformer_factorized + 2p_only without explicit agreement. After profile is chosen: re-run dual gate under unified profile, update manifest admission_profile field, reconcile U1 2p FAIL (~7755) vs earlier PASS, then capture pending learn_proof + parity on anchor before Phase 2 env-parity cherry-picks onto throughput-baseline-integration @ 79162a2.
+Continue cherry-pick manifest from docs/session-handoff/2026-06-05-cherry-pick-manifest.md.
+Admission recipe locked 2026-06-05 (mixed 2p/4p, 32×256, candidate_count=3, wandb preflight).
+Run: capture launch-hygiene-e2e-baseline-learning-first.json → beat_noop --train-overrides → admission-throughput → parity → env-parity cherry-picks.
 ```

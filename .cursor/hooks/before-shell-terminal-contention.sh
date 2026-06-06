@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# beforeShellExecution: block GPU-heavy shell when another agent terminal is active.
+# beforeShellExecution: block GPU-heavy shell when another agent runs GPU-heavy work.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

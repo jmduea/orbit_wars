@@ -9,9 +9,6 @@
     "continual-learning": {
       "enabled": true
     },
-    "pstack": {
-      "enabled": true
-    },
     "docs-canvas": {
       "enabled": true
     },

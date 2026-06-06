@@ -173,6 +173,47 @@ def test_before_shell_denies_via_shell_wrapper_when_terminal_active(
     assert "GPU contention" in payload["user_message"]
 
 
+def test_before_shell_allows_heavy_when_other_terminal_is_light_server(
+    tmp_path: Path,
+) -> None:
+    """HTTP config picker and similar light servers must not block GPU-heavy work."""
+    repo_root = Path(__file__).resolve().parents[1]
+    tc = _load_terminal_contention()
+    fake_home = tmp_path / "home-light-server"
+    cwd = str(repo_root.resolve())
+    project_terminals = (
+        fake_home / ".cursor" / "projects" / "test-project" / "terminals"
+    )
+    project_terminals.mkdir(parents=True)
+    (project_terminals / "103.txt").write_text(
+        f'---\ncwd: "{cwd}"\npid: 1\n'
+        f'command: "python3 -m http.server 8765"\n'
+        f"running_for_ms: 120000\n---\n",
+        encoding="utf-8",
+    )
+    payload = tc.evaluate("make test-fast", repo_root, home=fake_home)
+    assert payload["permission"] == "allow"
+
+
+def test_before_shell_allows_heavy_when_other_terminal_is_git(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    tc = _load_terminal_contention()
+    fake_home = tmp_path / "home-git"
+    cwd = str(repo_root.resolve())
+    project_terminals = (
+        fake_home / ".cursor" / "projects" / "test-project" / "terminals"
+    )
+    project_terminals.mkdir(parents=True)
+    (project_terminals / "2.txt").write_text(
+        f'---\ncwd: "{cwd}"\npid: 1\n'
+        f'command: "git status"\n'
+        f"running_for_ms: 500\n---\n",
+        encoding="utf-8",
+    )
+    payload = tc.evaluate("uv run ow train training.total_updates=10", repo_root, home=fake_home)
+    assert payload["permission"] == "allow"
+
+
 def test_before_shell_allows_agent_context_when_terminal_active(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     tc = _load_terminal_contention()

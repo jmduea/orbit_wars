@@ -71,15 +71,15 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 
 - Prefer unified v2-only feature encoding and full rework over shims when simplifying encoding, rollout, training, or refactors — remove legacy v1 paths; no backward-compat re-export modules, `_underscore` aliases, or parallel APIs for module moves/renames; update call sites instead.
 - Daily dev loop: `make test-fast` or a domain Makefile target — not bare full `pytest` and not slow/JAX-compile smokes unless explicitly requested; use `make test-fast-parallel` / `make test-jax-parallel` for CPU xdist only — never xdist on slow/sweep or with GPU pytest.
-- Commit verified work locally without asking; **do not push** to remote unless the user explicitly requests it.
+- **Do not commit** unless the user explicitly asks; **do not push** to remote unless the user explicitly requests it.
 - Check terminals / `make agent-context` `gpu_contention` before GPU work; respect `.cursor/hooks` `beforeShellExecution` denial when another repo terminal is active; never run multiple concurrent `wandb agent` processes on one GPU.
 - **Long `ow` commands:** never pipe to `tail`, `head`, or `2>&1 | tail` — the pipe hides progress until exit and looks hung. Gate/calibration train output streams on **stderr**; keep stdout for final JSON or use `--out path.json`. Prefer `ow benchmark gate run <id> --verbose --out /tmp/gate.json`, `ow runs watch`, `ow eval status --watch`, or `tail -f outputs/campaigns/<c>/runs/<id>/logs/*_jax.jsonl` for live metrics.
 - New train/eval/benchmark capabilities belong in the `ow` CLI (`src/cli/<module>.py` + dispatch in `src/cli/__init__.py`), not standalone `scripts/*.py`; defer heavy imports (JAX) until command execution, not module load. For agent loops prefer **primitive** subcommands (`ow runs`, `ow eval status`, `ow eval jobs cancel`, `ow benchmark gate run`, `ow benchmark tournament-proof`, `ow sweep`) over workflow wrappers (`learn-proof`, hybrid promotion train); task prompts in `docs/AGENT_CAPABILITIES.md`.
-- Parallel multi-agent work: at most one full pytest/Makefile suite repo-wide; executor agents run targeted tests only; coordinator runs `make test-fast` after integration.
 - Prefer `task=shield_cheap` or `task=shield_off` for training experiments; avoid `shield_tiered` unless explicitly requested.
-- When the user attaches PR diff context or cites a PR number, fetch with `gh pr view` / `gh pr diff` — do not rely on inline diff blobs alone.
+- User-facing summaries and docs: plain language; avoid internal jargon (tier/U1/rank labels, raw SHAs) — internal names OK in manifests/agent context; see `docs/nomenclature-rfc.md` for term mappings.
+- Learning proof outranks throughput for admission gates; use **one unified training config** for both the learning check and speed extract — do not assume different configs for each.
+- `agent-browser` and similar automation must surface pages to the user (`open_resource` in Glass, `xdg-open`, or a visible browser) — not headless agent-only sessions the user cannot see.
 - Submit-valid paths: run Docker/packaging validation before any `kaggle_environments` tournament ladder — do not spend tournament compute on checkpoints that would fail Kaggle upload (packaging errors, agent timeouts).
-- After requirements/brainstorm doc review, commit the doc locally and defer implementation planning to a separate agent (`/ce-plan` or LFG) unless asked to implement in the same pass.
 - `.audit/` and `.cursor/hooks/state/` are gitignored; keep audit trails and hook state local, not in commits.
 
 ## Learned Workspace Facts
@@ -102,4 +102,4 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
   uv run ow benchmark training --preset primary --label gate --updates 20 --warmup 2 \
     --out /tmp/gate.json --baseline docs/benchmarks/launch-hygiene-e2e-baseline.json --assert-within-pct 10
   ```
-- **Throughput bisect (validation preset):** Apples-to-apples bisect via `scripts/issues_jax_30update_benchmark.py --preset validation` — do not conflate with `ssot_preflight` / multitask smokes; see `docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md`.
+  Cherry-pick admission (learning-first): same Hydra recipe for learning proof and speed extract — `ow benchmark gate run beat_noop` then `ow benchmark admission-throughput` on gate JSON or `logs/*_jax.jsonl` (updates 3–20); lock overrides via `docs/tools/config-frozen-defaults-picker.html`; manifest `docs/benchmarks/cherry-pick-manifest.json`.

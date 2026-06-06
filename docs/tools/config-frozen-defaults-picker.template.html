@@ -120,6 +120,10 @@
   }
   .group.hidden { display: none; }
   .group-head {
+    width: 100%;
+    margin: 0;
+    border: none;
+    background: transparent;
     font-family: var(--mono);
     font-size: 11px;
     letter-spacing: 0.08em;
@@ -129,9 +133,36 @@
     border-bottom: 1.5px solid var(--gray-50);
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .group-head:hover { background: var(--gray-50); }
+  .group-head:focus-visible {
+    outline: 2px solid var(--slate);
+    outline-offset: -2px;
+  }
+  .group.collapsed .group-head { border-bottom: none; }
+  .group-head-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
   }
   .group-head .name { color: var(--gray-800); }
+  .group-chevron {
+    flex: none;
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid var(--gray-500);
+    transition: transform 160ms ease;
+  }
+  .group:not(.collapsed) .group-chevron { transform: rotate(90deg); }
+  .group-body { display: block; }
+  .group.collapsed .group-body { display: none; }
   .flag {
     display: flex;
     align-items: flex-start;
@@ -176,6 +207,63 @@
     padding: 1px 7px 2px;
   }
   .flag-desc { color: var(--gray-500); font-size: 12.5px; margin-top: 2px; }
+  .flag-source {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--gray-500);
+    margin-top: 4px;
+    opacity: 0.9;
+  }
+  .flag-source code {
+    font-size: 10.5px;
+    color: var(--gray-800);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .selector-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    align-items: flex-end;
+  }
+  .selector-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 140px;
+    flex: 1 1 160px;
+  }
+  .selector-field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+  }
+  .selector-field select {
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: var(--white);
+    color: var(--slate);
+  }
+  .compose-banner {
+    grid-column: 1 / -1;
+    display: none;
+    padding: 10px 14px;
+    border: 1.5px solid var(--gray-200);
+    background: var(--gray-50);
+    color: var(--gray-800);
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .compose-banner.show { display: block; }
   .warn-chip {
     display: none;
     margin-top: 7px;
@@ -204,6 +292,7 @@
     outline-offset: 1px;
   }
   .toggle {
+    display: inline-block;
     position: relative;
     width: 38px;
     height: 22px;
@@ -322,16 +411,28 @@
   <header>
     <div class="eyebrow">Orbit Wars / conf / frozen-defaults</div>
     <h1>Resolved training config</h1>
-    <p class="sub">Form editor for every leaf in the default Hydra composition
-      (<code>uv run ow train print_resolved_config=true</code>). Adjust values,
-      fix cross-field warnings, then copy Hydra overrides or YAML for the
-      frozen <code>conf/*/base.yaml</code> keys you want to change.</p>
+    <p class="sub">Form editor for resolved Hydra training config. Pick a
+      <strong>preset</strong> or change a <strong>config group</strong> (e.g.
+      <code>model=transformer_factorized_small</code>) to load values from that
+      YAML bundle. Each field shows which file last set it (approximate). Adjust
+      leaves, fix warnings, then copy Hydra overrides or YAML diff.</p>
     <div class="toolbar">
       <input class="search" id="search" type="search"
         placeholder="Filter keys (e.g. training.lr, shield)" aria-label="Filter config keys" />
       <button type="button" class="filter-chip active" data-filter="all">All</button>
       <button type="button" class="filter-chip" data-filter="changed">Changed only</button>
     </div>
+    <div class="selector-row" id="selectorRow">
+      <div class="selector-field">
+        <label for="presetSelect">Load preset</label>
+        <select id="presetSelect" aria-label="Load named preset composition"></select>
+      </div>
+    </div>
+    <p class="meta-note" style="margin-top:10px">Compositions are pre-built at
+      generate time (no live Hydra server). Multi-group combos work when that
+      exact bundle was embedded — otherwise use a preset or regenerate the HTML.
+      Verify before long runs:
+      <code>uv run ow train print_resolved_config=true …</code></p>
   </header>
 
   <div class="layout">
@@ -339,6 +440,7 @@
       <span>&#9888;</span>
       <span id="bannerText"></span>
     </div>
+    <div class="compose-banner" id="composeBanner"></div>
 
     <div class="form-col" id="formCol"></div>
 
@@ -348,8 +450,8 @@
         <div class="side-count" id="sideCount">0 changed</div>
       </div>
       <pre class="diff" id="diff"><span class="empty">// no changes yet</span></pre>
-      <p class="meta-note">Baseline is the repo default composition at build time.
-        Regenerate after editing <code>conf/</code> or <code>schema.py</code>.</p>
+      <p class="meta-note" id="baselineNote">Baseline: repo default at build time.
+        Regenerate after <code>conf/</code> or <code>schema.py</code> changes.</p>
       <div class="btn-stack">
         <button class="btn primary" id="copyHydra" disabled>Copy Hydra overrides</button>
         <button class="btn ghost" id="copyYaml" disabled>Copy YAML diff</button>
@@ -366,17 +468,21 @@
 const CONFIG = __CONFIG_DATA__;
 const GROUPS = CONFIG.groups;
 const WARN_RULES = CONFIG.warnRules || [];
+const CONFIG_GROUPS = CONFIG.configGroups || {};
+const COMPOSITION_INDEX = CONFIG.compositionIndex || {};
+const PRESETS = CONFIG.presets || [{ id: "", label: "Repo default" }];
 
 const FIELDS = {};
 const INITIAL = {};
-GROUPS.forEach(g => g.fields.forEach(f => {
-  FIELDS[f.key] = f;
-  INITIAL[f.key] = cloneValue(f.value);
-}));
+const SOURCES = {};
+let currentCompositionKey = "";
+let currentCompositionLabel = "Repo default";
+GROUPS.forEach(g => g.fields.forEach(f => { FIELDS[f.key] = f; }));
 
 const formCol = document.getElementById("formCol");
 const banner = document.getElementById("banner");
 const bannerTxt = document.getElementById("bannerText");
+const composeBanner = document.getElementById("composeBanner");
 const sideCount = document.getElementById("sideCount");
 const diffEl = document.getElementById("diff");
 const copyHydraBtn = document.getElementById("copyHydra");
@@ -384,7 +490,12 @@ const copyYamlBtn = document.getElementById("copyYaml");
 const copyJsonBtn = document.getElementById("copyJson");
 const resetBtn = document.getElementById("reset");
 const searchEl = document.getElementById("search");
+const presetSelect = document.getElementById("presetSelect");
+const selectorRow = document.getElementById("selectorRow");
+const baselineNote = document.getElementById("baselineNote");
 let filterMode = "all";
+const groupExpanded = {};
+const groupSelections = {};
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, c =>
@@ -438,7 +549,7 @@ function parseFieldValue(field, raw) {
 
 function hydraOverride(key, value) {
   if (value === null) return "+" + key + "=null";
-  if (typeof value === "bool") return key + "=" + (value ? "true" : "false");
+  if (typeof value === "boolean") return key + "=" + (value ? "true" : "false");
   if (typeof value === "number") return key + "=" + value;
   if (typeof value === "string") {
     if (/^[A-Za-z0-9_.-]+$/.test(value)) return key + "=" + value;
@@ -450,7 +561,7 @@ function hydraOverride(key, value) {
 
 function yamlScalar(value, indent) {
   if (value === null) return "null";
-  if (typeof value === "bool") return value ? "true" : "false";
+  if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return String(value);
   if (typeof value === "string") {
     if (value === "" || /[:#\[\]{}&*!|>'"%@`]/.test(value) || /^\s|\s$/.test(value)) {
@@ -489,15 +600,20 @@ function yamlPathLines(key, value) {
   return lines.join("\n");
 }
 
+function fieldValue(key) {
+  return cloneValue(INITIAL[key]);
+}
+
 function buildControl(field) {
   const wrap = document.createElement("div");
   wrap.className = "flag-control";
+  const value = fieldValue(field.key);
   const t = field.type;
   if (t === "bool") {
     wrap.innerHTML =
       '<label class="toggle">' +
         '<input type="checkbox" data-key="' + esc(field.key) + '"' +
-          (field.value ? " checked" : "") +
+          (value ? " checked" : "") +
           ' aria-label="' + esc(field.key) + '">' +
         '<span class="track"></span>' +
       '</label>';
@@ -510,7 +626,7 @@ function buildControl(field) {
       const opt = document.createElement("option");
       opt.value = choice;
       opt.textContent = choice;
-      if (valuesEqual(choice, field.value)) opt.selected = true;
+      if (valuesEqual(choice, value)) opt.selected = true;
       sel.appendChild(opt);
     }
     wrap.appendChild(sel);
@@ -519,7 +635,7 @@ function buildControl(field) {
   if (t === "list" || t === "dict") {
     const ta = document.createElement("textarea");
     ta.dataset.key = field.key;
-    ta.value = JSON.stringify(field.value, null, 0);
+    ta.value = JSON.stringify(value, null, 0);
     wrap.appendChild(ta);
     return wrap;
   }
@@ -527,10 +643,26 @@ function buildControl(field) {
   input.dataset.key = field.key;
   if (t === "int" || t === "float") input.type = "number";
   else input.type = "text";
-  input.value = field.value === null ? "" : String(field.value);
+  input.value = value === null ? "" : String(value);
   if (t === "float") input.step = "any";
   wrap.appendChild(input);
   return wrap;
+}
+
+function isGroupExpanded(groupId) {
+  return groupExpanded[groupId] !== false;
+}
+
+function setGroupExpanded(panel, expanded) {
+  const groupId = panel.dataset.group;
+  groupExpanded[groupId] = expanded;
+  panel.classList.toggle("collapsed", !expanded);
+  const head = panel.querySelector(".group-head");
+  if (head) head.setAttribute("aria-expanded", expanded ? "true" : "false");
+}
+
+function toggleGroup(panel) {
+  setGroupExpanded(panel, !isGroupExpanded(panel.dataset.group));
 }
 
 function buildForm() {
@@ -539,13 +671,27 @@ function buildForm() {
     const panel = document.createElement("section");
     panel.className = "group";
     panel.dataset.group = g.id;
+    if (groupExpanded[g.id] === undefined) groupExpanded[g.id] = true;
 
-    const head = document.createElement("div");
+    const bodyId = "group-body-" + g.id;
+    const head = document.createElement("button");
+    head.type = "button";
     head.className = "group-head";
+    head.setAttribute("aria-expanded", isGroupExpanded(g.id) ? "true" : "false");
+    head.setAttribute("aria-controls", bodyId);
     head.innerHTML =
-      '<span class="name">' + esc(g.label) + '</span>' +
+      '<span class="group-head-left">' +
+        '<span class="group-chevron" aria-hidden="true"></span>' +
+        '<span class="name">' + esc(g.label) + '</span>' +
+      '</span>' +
       '<span class="meta" data-meta></span>';
+    head.addEventListener("click", () => toggleGroup(panel));
     panel.appendChild(head);
+    panel.classList.toggle("collapsed", !isGroupExpanded(g.id));
+
+    const body = document.createElement("div");
+    body.className = "group-body";
+    body.id = bodyId;
 
     for (const f of g.fields) {
       const row = document.createElement("div");
@@ -558,12 +704,14 @@ function buildForm() {
         '<div class="flag-key"><span class="dot"></span><span>' + esc(f.key) + '</span>' +
           '<span class="type-badge">' + esc(f.type) + '</span></div>' +
         '<div class="flag-desc">' + esc(f.desc) + '</div>' +
+        '<div class="flag-source" data-source></div>' +
         '<div class="warn-chip" data-warn></div>';
 
       row.appendChild(buildControl(f));
       row.appendChild(info);
-      panel.appendChild(row);
+      body.appendChild(row);
     }
+    panel.appendChild(body);
     formCol.appendChild(panel);
   }
 }
@@ -675,10 +823,169 @@ function matchesFilter(key, changed) {
   return key.toLowerCase().includes(q);
 }
 
+function formatSource(source) {
+  if (!source) return "";
+  if (source.startsWith("override:")) {
+    return "Set by " + esc(source.slice("override:".length).trim());
+  }
+  if (source === "schema.py default") {
+    return "From <code>schema.py</code> default";
+  }
+  if (source === "composed") {
+    return "Composed / derived (not a single yaml leaf)";
+  }
+  return "From <code>" + esc(source) + "</code>";
+}
+
+function updateSources() {
+  for (const key of Object.keys(FIELDS)) {
+    const row = formCol.querySelector('.flag[data-key="' + CSS.escape(key) + '"]');
+    if (!row) continue;
+    const el = row.querySelector("[data-source]");
+    const source = SOURCES[key] || "";
+    el.innerHTML = source ? formatSource(source) : "";
+  }
+}
+
+function compositionKeyFromSelections(overrides) {
+  const groupOverrides = overrides.filter(o => o.includes("=") && !o.split("=")[0].includes("."));
+  const leafOverrides = overrides.filter(o => !groupOverrides.includes(o));
+  return groupOverrides.sort().concat(leafOverrides.sort()).join("|");
+}
+
+function overridesFromGroupSelections() {
+  const overrides = [];
+  for (const [group, meta] of Object.entries(CONFIG_GROUPS)) {
+    const selected = groupSelections[group];
+    const repoDefault = meta.defaultSelection || "default";
+    if (selected && selected !== repoDefault) {
+      overrides.push(group + "=" + selected);
+    }
+  }
+  return overrides;
+}
+
+function applyComposition(key, label, options) {
+  const opts = options || {};
+  const entry = COMPOSITION_INDEX[key] || COMPOSITION_INDEX[""];
+  if (!entry) {
+    composeBanner.textContent =
+      "Composition not embedded. Regenerate the picker or use a preset.";
+    composeBanner.classList.add("show");
+    return false;
+  }
+  currentCompositionKey = key;
+  currentCompositionLabel = label || entry.label || "Composition";
+  for (const k of Object.keys(FIELDS)) {
+    INITIAL[k] = cloneValue(entry.values[k]);
+    SOURCES[k] = entry.sources[k] || "";
+  }
+  if (!opts.skipControls) {
+    for (const g of GROUPS) {
+      for (const f of g.fields) {
+        const row = formCol.querySelector('.flag[data-key="' + CSS.escape(f.key) + '"]');
+        const controlWrap = row.querySelector(".flag-control");
+        const next = buildControl(f);
+        controlWrap.replaceWith(next);
+      }
+    }
+    updateSources();
+  }
+  composeBanner.classList.remove("show");
+  baselineNote.textContent =
+    "Baseline: " + currentCompositionLabel + ". Regenerate after conf/ changes.";
+  if (!opts.silent) update();
+  return true;
+}
+
+function tryLoadGroupComposition() {
+  const overrides = overridesFromGroupSelections();
+  const key = compositionKeyFromSelections(overrides);
+  if (COMPOSITION_INDEX[key]) {
+    presetSelect.value = "";
+    return applyComposition(key, COMPOSITION_INDEX[key].label);
+  }
+  if (overrides.length === 0) {
+    presetSelect.value = "repo_default";
+    return applyComposition("", "Repo default");
+  }
+  if (overrides.length === 1) {
+    const only = overrides[0];
+    const singleKey = compositionKeyFromSelections([only]);
+    if (COMPOSITION_INDEX[singleKey]) {
+      presetSelect.value = "";
+      return applyComposition(singleKey, COMPOSITION_INDEX[singleKey].label);
+    }
+  }
+  composeBanner.innerHTML =
+    "Combination <code>" + esc(overrides.join(" ")) + "</code> was not pre-composed. " +
+    "Try a preset, change one group at a time, or regenerate with that bundle embedded.";
+  composeBanner.classList.add("show");
+  return false;
+}
+
+function buildSelectors() {
+  PRESETS.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.label;
+    presetSelect.appendChild(opt);
+  });
+  for (const group of Object.keys(CONFIG_GROUPS).sort()) {
+    const meta = CONFIG_GROUPS[group];
+    const field = document.createElement("div");
+    field.className = "selector-field";
+    const label = document.createElement("label");
+    label.setAttribute("for", "group-" + group);
+    label.textContent = group;
+    const sel = document.createElement("select");
+    sel.id = "group-" + group;
+    sel.dataset.group = group;
+    const repoDefault = meta.defaultSelection || "default";
+    groupSelections[group] = repoDefault;
+    for (const option of meta.options) {
+      const opt = document.createElement("option");
+      opt.value = option.id;
+      const suffix = option.id === repoDefault ? " (repo default)" : "";
+      opt.textContent = option.id + suffix;
+      if (option.id === repoDefault) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", () => {
+      groupSelections[group] = sel.value;
+      presetSelect.value = "";
+      tryLoadGroupComposition();
+    });
+    field.appendChild(label);
+    field.appendChild(sel);
+    selectorRow.appendChild(field);
+  }
+  presetSelect.addEventListener("change", () => {
+    const presetId = presetSelect.value;
+    if (!presetId) return;
+    const entry = COMPOSITION_INDEX[presetId] || COMPOSITION_INDEX[""];
+    for (const [group, meta] of Object.entries(CONFIG_GROUPS)) {
+      const repoDefault = meta.defaultSelection || "default";
+      let selected = repoDefault;
+      for (const override of (entry.overrides || [])) {
+        if (override.startsWith(group + "=")) {
+          selected = override.split("=", 2)[1];
+          break;
+        }
+      }
+      groupSelections[group] = selected;
+      const sel = document.getElementById("group-" + group);
+      if (sel) sel.value = selected;
+    }
+    applyComposition(presetId === "repo_default" ? "" : presetId, entry.label);
+  });
+}
+
 function update() {
   const state = currentState();
   const warnings = collectWarnings(state);
   const lines = computeDiff(state);
+  updateSources();
 
   for (const g of GROUPS) {
     let visible = 0;
@@ -700,7 +1007,10 @@ function update() {
     const panel = formCol.querySelector('.group[data-group="' + g.id + '"]');
     panel.classList.toggle("hidden", visible === 0);
     const meta = panel.querySelector("[data-meta]");
-    meta.textContent = g.fields.length + " fields, " + changedCount + " changed";
+    meta.textContent = visible + " fields, " + changedCount + " changed";
+    if (visible > 0 && changedCount > 0) {
+      setGroupExpanded(panel, true);
+    }
   }
 
   if (lines.length === 0) {
@@ -778,15 +1088,7 @@ copyJsonBtn.addEventListener("click", () => {
 });
 
 resetBtn.addEventListener("click", () => {
-  for (const g of GROUPS) {
-    for (const f of g.fields) {
-      const row = formCol.querySelector('.flag[data-key="' + CSS.escape(f.key) + '"]');
-      f.value = cloneValue(INITIAL[f.key]);
-      const controlWrap = row.querySelector(".flag-control");
-      const next = buildControl(f);
-      controlWrap.replaceWith(next);
-    }
-  }
+  applyComposition(currentCompositionKey || "", currentCompositionLabel, { silent: true });
   update();
 });
 
@@ -807,7 +1109,9 @@ document.querySelectorAll(".filter-chip").forEach(btn => {
   });
 });
 
+applyComposition("", "Repo default", { skipControls: true, silent: true });
 buildForm();
+buildSelectors();
 update();
 </script>
 </body>

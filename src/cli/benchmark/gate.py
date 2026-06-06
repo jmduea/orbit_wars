@@ -32,7 +32,7 @@ def run_gate_cli(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    return run_gate(
+    exit_code = run_gate(
         gate_id,
         model=args.model,
         output_root=args.output_root,
@@ -43,3 +43,22 @@ def run_gate_cli(args: argparse.Namespace) -> int:
         train_overrides=tuple(args.train_overrides),
         out=args.out,
     )
+    if exit_code != 0 or not args.also_throughput or args.dry_run:
+        return exit_code
+    if args.out is None:
+        print(
+            "--also-throughput requires --out so the gate JSON path is known",
+            file=sys.stderr,
+        )
+        return 2
+    from src.cli.benchmark.admission_throughput import run_admission_throughput_cli
+
+    throughput_args = argparse.Namespace(
+        input=args.out,
+        baseline=args.throughput_baseline,
+        assert_within_pct=args.throughput_within_pct,
+        warmup=2,
+        max_measured_update=20,
+    )
+    throughput_code = run_admission_throughput_cli(throughput_args)
+    return max(exit_code, throughput_code)

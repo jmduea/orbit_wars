@@ -60,7 +60,7 @@ Agents cold-start faster when session context is loaded automatically. Cursor se
 | Hook | Script | Behavior |
 |------|--------|----------|
 | `sessionStart` | `.cursor/hooks/session-start-agent-context.sh` | Runs `make agent-context` → `additional_context` |
-| `beforeShellExecution` | `.cursor/hooks/before-shell-terminal-contention.sh` | **Denies GPU-heavy shell** when another agent has a terminal whose `cwd` is under this repo and the terminal file still has `running_for_ms:` (no `exit_code:` footer). Matches `ow train`, `make test*`, `pytest`, `wandb agent`, calibration, tier-2 launch-hygiene e2e, etc. Light commands (`git status`, `make agent-context`) still run. Design and pitfalls: [`docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md`](solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md). |
+| `beforeShellExecution` | `.cursor/hooks/before-shell-terminal-contention.sh` | **Denies GPU-heavy shell** when another agent has a terminal whose `cwd` is under this repo, the terminal file still has `running_for_ms:` (no `exit_code:` footer), **and** that terminal’s `command:` is also GPU-heavy (`ow train`, `make test*`, `pytest`, `wandb agent`, calibration, etc.). Light background work (`python -m http.server`, `git status`, `make agent-context`) does not block. Design and pitfalls: [`docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md`](solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md). |
 
 Manual alternative — **Cursor Settings → Hooks → Session Start**:
 

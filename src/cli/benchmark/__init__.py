@@ -16,6 +16,7 @@ from src.cli.benchmark.common import (
 )
 from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.factorized import run_factorized_sampler_cli
+from src.cli.benchmark.admission_throughput import run_admission_throughput_cli
 from src.cli.benchmark.gate import run_gate_cli
 from src.cli.benchmark.learn_proof import run_learn_proof_cli
 from src.cli.benchmark.parser import build_parser
@@ -39,6 +40,7 @@ __all__ = [
     "run_calibrate_unified_tournament_cli",
     "run_env_parity_ab_cli",
     "run_factorized_sampler_cli",
+    "run_admission_throughput_cli",
     "run_gate_cli",
     "run_learn_proof_cli",
     "run_planet_flow_noop_smoke_cli",
@@ -82,6 +84,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_env_parity_ab_cli(args)
         case "gate":
             return run_gate_cli(args)
+        case "admission-throughput":
+            return run_admission_throughput_cli(args)
         case "tournament-proof":
             return run_tournament_proof_cli(args)
         case _:

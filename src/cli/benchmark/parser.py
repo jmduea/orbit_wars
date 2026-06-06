@@ -496,6 +496,68 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Extra Hydra overrides appended after gate overrides.",
     )
+    gate.add_argument(
+        "--also-throughput",
+        action="store_true",
+        help=(
+            "After a successful learning run, extract throughput from the gate "
+            "JSONL (updates 3–20) without a second GPU job."
+        ),
+    )
+    gate.add_argument(
+        "--throughput-baseline",
+        type=Path,
+        default=None,
+        help="Baseline JSON for --also-throughput comparison (with --throughput-within-pct).",
+    )
+    gate.add_argument(
+        "--throughput-within-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help="Exit non-zero when extracted throughput is outside baseline band (default 10).",
+    )
+
+    admission_throughput = subparsers.add_parser(
+        "admission-throughput",
+        help=(
+            "Extract env-steps/s and seconds/update from a gate result JSON or "
+            "*_jax.jsonl (updates 3–20 after warmup)."
+        ),
+    )
+    admission_throughput.add_argument(
+        "input",
+        type=Path,
+        help="Gate result JSON (reads stage.log_path) or logs/*_jax.jsonl path.",
+    )
+    admission_throughput.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Launch-hygiene baseline JSON for --assert-within-pct comparison.",
+    )
+    admission_throughput.add_argument(
+        "--assert-within-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help=(
+            "Fail when measured env_steps/s or seconds/update is outside the "
+            f"baseline band (default {10}%% when --baseline is set)."
+        ),
+    )
+    admission_throughput.add_argument(
+        "--warmup",
+        type=int,
+        default=2,
+        help="Skip this many initial updates before measuring (default 2).",
+    )
+    admission_throughput.add_argument(
+        "--max-measured-update",
+        type=int,
+        default=20,
+        help="Last update index included in the throughput window (default 20).",
+    )
 
     tournament_proof = subparsers.add_parser(
         "tournament-proof",

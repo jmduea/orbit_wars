@@ -36,7 +36,7 @@ related_components:
 
 Orbit Wars runs on **one GPU**. Multiple Cursor agents can run shells in parallel; prose in `AGENTS.md` and `make agent-context` (`gpu_contention`) is advisory only. Operators and agents were still starting `ow train`, `pytest`, and `make test*` while another session had an active terminal in the same repo.
 
-This session shipped a **project hook** that denies **GPU-heavy** incoming shell commands when another Cursor terminal snapshot shows work still running under this repo’s `cwd`. The same branch also refactored `src/jax/action_sampling.py` shield diagnostics (#197); that refactor is documented in `docs/plans/2026-06-04-005-refactor-action-sampling-scan-scaffolding-plan.md` — not duplicated here.
+This session shipped a **project hook** that denies **GPU-heavy** incoming shell commands when another Cursor terminal snapshot shows **GPU-heavy** work still running under this repo’s `cwd`. Light background processes (e.g. `python -m http.server` for the config picker) do not trigger contention. The same branch also refactored `src/jax/action_sampling.py` shield diagnostics (#197); that refactor is documented in `docs/plans/2026-06-04-005-refactor-action-sampling-scan-scaffolding-plan.md` — not duplicated here.
 
 (session history) Prior work documented duplicate `wandb agent` contention in `AGENTS.md` and “check terminals folder” in merge-orchestration docs, but nothing enforced policy at shell time.
 
@@ -76,11 +76,18 @@ if "running_for_ms:" not in meta:
 # cwd must be under repo_root.resolve()
 ```
 
-### Deny only heavy commands
+### Deny only when both sides are GPU-heavy
 
-When `active_terminal_commands(repo_root)` is non-empty **and** `HEAVY.search(command)` matches, return `permission: deny` with GPU-contention messaging. Otherwise **allow** (fail-open on JSON parse errors).
+Block only when **both** hold:
 
-Heavy patterns include: `ow train`, `ow benchmark`, `ow sweep`, `make test` / `make test-*`, `pytest`, `wandb agent`, calibration commands, `test-launch-hygiene-e2e`, `test-jax`, `test-full`, etc. Light commands such as `git status` and `make agent-context` stay allowed.
+1. Incoming command matches `HEAVY` (GPU/contention patterns below).
+2. At least one other active repo terminal’s `command:` also matches `HEAVY`.
+
+`active_heavy_terminal_commands()` filters `active_terminal_commands()` with the same `HEAVY` regex. Light running processes — `python -m http.server`, `git`, `make agent-context`, `make help`, `curl`, etc. — do **not** count as contention even when `running_for_ms:` is present.
+
+Otherwise **allow** (fail-open on JSON parse errors).
+
+Heavy patterns include: `ow train`, `ow benchmark`, `ow sweep`, `make test` / `make test-*`, `pytest`, `wandb agent`, calibration commands, `test-launch-hygiene-e2e`, `test-jax`, `test-full`, etc.
 
 ### Testing
 
@@ -118,6 +125,13 @@ assert payload["permission"] == "deny"
 ```python
 # Active terminal command is pytest; incoming command is make agent-context
 assert evaluate("make agent-context", repo_root, home=fake_home)["permission"] == "allow"
+```
+
+**Allow heavy work while config picker HTTP server runs elsewhere:**
+
+```python
+# Active terminal: python3 -m http.server 8765; incoming: make test-fast
+assert evaluate("make test-fast", repo_root, home=fake_home)["permission"] == "allow"
 ```
 
 **Stale file must not block (regression):**
