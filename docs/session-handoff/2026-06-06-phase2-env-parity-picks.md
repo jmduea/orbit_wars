@@ -1,89 +1,108 @@
-# Session handoff: Phase 2 env-parity picks (2026-06-06)
+# Session handoff — Phase 2 env-parity cherry-picks
 
-**Start here** for the next session.
+**Date:** 2026-06-06  
+**Audience:** Operator starting a fresh agent session on Orbit Wars cherry-pick integration.
 
-## Phase 1 complete
+---
 
-- **Admission passed** on throughput-anchor worktree (`admission_passed: true` — learning + throughput on one recipe).
-- **Main** has unified `admission` gate (`make gate-admission`), PPO from `base.yaml` (not profile pins), resolved config on stderr, `--repo-root` worktree harness.
-- **Parity** on anchor: `make test-kaggle-parity` PASS (15 tests).
-- **Docs:** `docs/solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md`
+## Start here
 
-## Phase 2 goal
+You are continuing the **nuclear cherry-pick manifest** program after **Phase 1** (anchor admission) is complete.
 
-Build **Kaggle mechanics parity** on `throughput-baseline-integration` using **granular file/hunk picks** — not whole commits. Do **not** run tier-2 e2e or full `make gate-admission` after every hunk.
+**Read first (in order):**
 
-## Worktrees
+1. [cherry-pick-admission-gate-unified-learn-throughput.md](../solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md) — unified learning + throughput gate, PPO config source of truth, `--repo-root`
+2. [nuclear-cherry-pick-manifest-baseline-integration.md](../solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md) — worktree roles, Phase 2 granularity, manifest updates
+3. [cherry-pick-manifest.json](../benchmarks/cherry-pick-manifest.json) — baseline gates, empty `candidates[]` ready for Phase 2 entries
 
-| Location | Role |
-|----------|------|
-| `~/projects/orbit_wars` (`main`) | Gate harness, manifest, docs |
-| `~/projects/orbit_wars-throughput-anchor` | Admission-passed training code (`throughput-baseline`) |
-| `~/projects/orbit_wars-integration` (create) | Cherry-pick target on `throughput-baseline-integration` |
+**Your goal (Phase 2):** Cherry-pick **env-parity substrate** from merge-base → `main` onto **`throughput-baseline-integration`** at **file or hunk** granularity (not whole commits). Preserve anchor throughput; do not run 30-minute tier-2 e2e after every hunk.
+
+**Worktrees:**
+
+| Role | Path / branch | Notes |
+|------|----------------|-------|
+| Gate harness | `main` @ recent commits (unified admission gate, worktree `--repo-root`) | Training conf resolves in target worktree; harness CLI stays on main |
+| Phase 1 anchor (admission passed) | `../orbit_wars-throughput-anchor` — branch `throughput-baseline` | `admission_passed: true` on unified recipe; `make test-kaggle-parity` green (15 passed) |
+| Phase 2 integration | Create/use `throughput-baseline-integration` worktree | Fork from anchor: `git branch throughput-baseline-integration throughput-baseline` then `git worktree add ../orbit_wars-throughput-baseline-integration throughput-baseline-integration` if not already present |
+| Pre-hygiene reference | `../orbit_wars-pre-hygiene` @ pre-hygiene integration point | Baseline SHA anchor for manifest |
+
+**Pick order (human-readable themes — use `git log` / `git diff` merge-base..main to find SHAs, then apply hunks):**
+
+1. Offline game reference libs — comet/planet generation under `src/game/`
+2. `encode_learner_turn` / feature path in `src/jax/features.py` if needed for parity
+3. Env mechanics hunks in `src/jax/env.py` (and related) — **no** comet mega-path or Kaggle callbacks yet
+4. Comet + Kaggle paths **with** train vs Kaggle env split — **reject** landing a single “comet mega-commit” without the split
+5. Legacy comet mode hunks needed to **preserve throughput** on the anchor recipe
+6. Parity tests (`tests/test_jax_env_parity.py` and related)
+
+**Fast gates per pick (not tier-2 every time):**
+
+- `make test-kaggle-parity` (~20s)
+- `make test-jax-trace-hygiene`
+- Optional: `uv run ow benchmark env-parity-ab` (if investigating A/B)
+- Short smoke: 5-update validation preset train (not full admission)
+- **`make gate-admission REPO_ROOT=<integration-worktree>`** only at milestones (stack green, before Phase 3 learning picks)
+
+**Reject criteria — record in manifest `candidates[]`:**
+
+- `parity_fail` — `make test-kaggle-parity` red after pick
+- `trace_hygiene_fail` — JAX trace tier gate fails
+- `throughput_regression` — milestone admission or extract shows env_steps below learning-first floor (see manifest `baseline_gates.throughput_e2e`)
+- `hygiene_change_without_ablation` — within-turn launch dedup masks touched without learner ablation (see launch-hygiene learner ablation gate doc)
+- `wrong_pick_granularity` — whole commit landed when split required (e.g. comet without train/kaggle split)
+
+Each candidate entry should include: `sha` or `subject` (human name), `phase: env_parity`, `cherry_pick_order`, gate artifacts under `outputs/`, `verdict` (`admit` | `reject` | `pending`), `reject_reasons[]`.
+
+**Phase 1 done (do not redo unless regression):**
+
+- Unified admission on anchor: `admission_passed: true` (learning VERIFIED + throughput within ±10% of learning-first baseline JSON)
+- Main includes: learning-first admission throughput, worktree `--repo-root` for gates, unified admission gate feature
+- Compound docs for admission gate + refreshed nuclear baseline-integration doc
+- Manifest: parity PASS on anchor; `learn_proof` beat_noop-only marked NOT_VERIFIED (superseded by unified admission)
+
+**Phase 3 (later):** Topological **learning** cherry-picks onto integration head after parity stack is green — full gate sequence per manifest R8.
+
+---
+
+## First commands for new session
 
 ```bash
-cd ~/projects/orbit_wars
-git worktree add ../orbit_wars-integration throughput-baseline-integration
-cd ../orbit_wars-integration
-make test-kaggle-parity   # baseline before first pick
-```
+cd /home/jmduea/projects/orbit_wars
+make agent-context
+git worktree list
 
-## Pick order (human names — SHAs only in git blocks)
+# Confirm anchor still green (fast)
+cd /home/jmduea/projects/orbit_wars-throughput-anchor
+make test-kaggle-parity
 
-1. **Offline reference libs** — `src/game/planet_generation.py`, `src/game/comet_generation.py`, constants (zero hot-path risk).
-2. **Encoding contract** — `encode_learner_turn` in `src/jax/features.py` if env picks need it.
-3. **Env mechanics hunks** — rotation, launch validation, combat (no comet, no `pure_callback`).
-4. **Comet + kaggle paths** — only together with **Train/kaggle env split** (never land the Comet parity mega-commit without the split that removes `pure_callback` from the default train path).
-5. **Legacy comet mode** — throughput preservation (`env_parity_mode=legacy` / shield config).
-6. **Parity tests + schema** — `tests/test_jax_env_parity.py`, `env_parity_mode` in schema.
+# Ensure integration line exists
+cd /home/jmduea/projects/orbit_wars
+git show-ref throughput-baseline-integration || git branch throughput-baseline-integration throughput-baseline
+test -d ../orbit_wars-throughput-baseline-integration || \
+  git worktree add ../orbit_wars-throughput-baseline-integration throughput-baseline-integration
 
-**Never cherry-pick whole:** Comet parity mega-commit (kitchen-sink PR) — use `git cherry-pick -n` + `git add -p` / path-limited `git add`.
+# Survey env-parity-related history (adjust merge-base if manifest updates)
+cd /home/jmduea/projects/orbit_wars
+git merge-base throughput-baseline main
+git log --oneline --no-merges $(git merge-base throughput-baseline main)..main -- src/game/ src/jax/env.py src/jax/planet_generation.py src/jax/comet_generation.py tests/test_jax_env_parity.py
 
-Named commits for git (oldest first when whole-file picking):
-
-| Human name | SHA |
-|------------|-----|
-| Comet parity mega-commit | `33b56e2` |
-| Env step refactor | `0cfd762` |
-| Train/kaggle env split | `b11b9b0` |
-| Legacy comet mode + A/B bench | `4ebe96e` |
-
-## Fast gates per pick (~1–3 min, not 30 min)
-
-```bash
+# After each hunk on integration worktree:
+cd /home/jmduea/projects/orbit_wars-throughput-baseline-integration
 make test-kaggle-parity
 make test-jax-trace-hygiene
-# optional:
-uv run ow benchmark env-parity-ab --modes legacy,train --batch-size 32 --steps 32 --warmup 1 --repeats 2 --out /tmp/ep-ab.json
-# 5-update smoke (validation preset) — compare to integration head baseline
+
+# Milestone only (from main, training in integration tree):
+cd /home/jmduea/projects/orbit_wars
+make gate-admission REPO_ROOT=/home/jmduea/projects/orbit_wars-throughput-baseline-integration
+jq '{admission_passed, verdict, throughput_verdict}' outputs/benchmarks/admission/gate.json
 ```
 
-**Milestone only:** `make gate-admission REPO_ROOT=<integration-worktree>`
+Update `docs/benchmarks/cherry-pick-manifest.json` `candidates[]` and `integration_state` as picks land; run `make test-fast` on main if you edit the manifest schema fields.
 
-## Reject if
+---
 
-- Parity or trace-hygiene fails
-- `legacy` arm in env-parity-ab drops >10% vs pre-pick baseline
-- Comet/callback code lands without Train/kaggle env split
+## Escalation
 
-Record each trial in `docs/benchmarks/cherry-pick-manifest.json` → `candidates[]` with `phase: env_parity`, human `id`, `pick_granularity`, `verdict`.
-
-## Read first
-
-1. `docs/solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md`
-2. `docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md`
-3. `docs/benchmarks/cherry-pick-manifest.json`
-
-## New session prompt (copy-paste)
-
-```
-Start here: docs/session-handoff/2026-06-06-phase2-env-parity-picks.md
-
-Phase 1 admission is done (admission_passed on throughput-anchor). Begin Phase 2:
-granular file/hunk env-parity cherry-picks onto throughput-baseline-integration.
-
-Use integration worktree at ../orbit_wars-integration. First pick: offline game
-reference libs. Fast gates per pick (parity + trace hygiene), not tier-2 e2e.
-Update cherry-pick-manifest.json candidates[] as we go. Human-readable names
-for commits in prose; SHAs only in git commands.
-```
+- GPU contention: check terminals / `make agent-context` before long trains
+- Do not pipe long `ow` commands through `tail`/`head` — use `--out`, `ow runs watch`, or `tail -f` on run logs
+- Human merges integration → `main`; agents propose `ordered_shas` and conflict notes only
