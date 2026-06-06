@@ -404,7 +404,20 @@
           "verdict": "FAIL",
           "misconfigured_gate": true,
           "seconds_per_update_mean": 3.037,
-          "env_steps_per_sec": 5268
+          "env_steps_per_sec": 5268,
+          "note": "Wrong recipe (500/6); superseded by locked-recipe pass 060248Z \u2014 see integration_state.admission_integration"
+        },
+        "picks12_locked_recipe_pass": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
+          "integration_head_sha": "3f88f1b",
+          "verdict": "PASS",
+          "full_admission_passed": true,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.173,
+          "env_steps_per_sec": 5419,
+          "seconds_per_update_mean": 1.512
         }
       },
       "verdict": "reject",
@@ -428,7 +441,12 @@
       "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)"
     ],
     "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
-    "last_integrated_note": "Picks #1\u20132 only after pick #3 revert (2026-06-06): game reference libs (test-only) + encode_learner_turn; env mechanics deferred to pure-JAX planned picks #4\u2013#6 (no callbacks)",
+    "last_integrated_note": "Picks #1\u20132 only after pick #3 revert (2026-06-06): game reference libs (test-only) + encode_learner_turn; admission VERIFIED at locked recipe 2026-06-06; env mechanics deferred to pure-JAX planned picks #4\u2013#6 (no callbacks)",
+    "integration_head_sha": "3f88f1b",
+    "integration_head_note": "Integration worktree HEAD after locked-recipe admission pass (52dfdb0 branch base + picks #1\u20132)",
+    "admission_passed": true,
+    "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+    "admission_log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
     "integration_status": "building",
     "branch_base_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
     "branch_base_branch": "throughput-baseline",
@@ -529,7 +547,50 @@
         "Do not revert pick #2 before apples-to-apples re-gate; pick #1 is offline-only; pick #2 parity/trace gates passed.",
         "Wire operator_locked gate_train_overrides into conf/benchmark/gates/admission.yaml or gate CLI so dry-run geometry matches anchor pass.",
         "Treat learning threshold caution per manifest until recalibrated on locked mixed recipe."
-      ]
+      ],
+      "superseded_by": "integration_state.admission_integration (2026-06-06 locked-recipe pass)"
+    },
+    "admission_integration": {
+      "run_date": "2026-06-06",
+      "gate": "admission",
+      "profile": "learning_first_unified",
+      "harness_repo": "/home/jmduea/projects/orbit_wars",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "integration_head_sha": "3f88f1b",
+      "branch_base_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+      "picks_applied": "1-2 only (pick 3 reverted)",
+      "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+      "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/checkpoints/jax_ckpt_last.pkl",
+      "admission_passed": true,
+      "learning": {
+        "verdict": "VERIFIED",
+        "win_rate_delta": 0.173,
+        "thresholds": {
+          "min_win_rate_delta": 0.05,
+          "max_approx_kl": 0.15,
+          "min_entropy": 0.0001
+        },
+        "note": "Strong learning signal on locked mixed 2p/4p recipe; thresholds still calibrated on 2p-only geometry per manifest caution."
+      },
+      "throughput": {
+        "verdict": "VERIFIED",
+        "env_steps_per_sec": 5419,
+        "seconds_per_update_mean": 1.512,
+        "baseline_floor_env_steps_per_sec": 4888.786588437074,
+        "baseline_ceiling_seconds_per_update_mean": 1.659083309335319,
+        "pass_band_within_pct": 10.0,
+        "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json"
+      },
+      "contrast_wrong_recipe_run": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+        "admission_passed": false,
+        "misconfigured_gate": true,
+        "geometry": "beat_noop default rollout_steps=500, candidate_count=6 (no operator_locked overrides)",
+        "seconds_per_update_mean": 3.037,
+        "env_steps_per_sec": 5268,
+        "note": "Failed run is not evidence against picks #1\u20132 \u2014 recipe mismatch vs locked admission profile."
+      }
     }
   },
   "user_constraint": {
@@ -538,7 +599,7 @@
     "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
     "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
   },
-  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (2026-06-06 throughput_regression). Prior pick #4 plan (kaggle-only env_parity_mode + pure_callback comet/planet reset) is REJECTED under user_constraint jax_only_hot_path_no_callbacks. Integration worktree keeps anchor parallel _launch_fleets + picks #1\u20132; main branch callback/comet code must not be cherry-picked as-is (fails tier-A static rg). Next: (A) port src/jax/planet_generation.py + comet_generation.py as pure JAX; (B) delete callback/_reference_/env_parity_mode branches from env.py on main; (C) fix slot-order/rotation/combat parity with throughput-safe vectorized launch (not full pick #3 lax.scan+concat bundle); (D) milestone gate-admission REPO_ROOT=integration after stack green.",
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT (2026-06-06 throughput_regression). Integration admission VERIFIED at operator-locked recipe on 52dfdb0+picks1\u20132 (integration_head 3f88f1b): learning win_rate_delta 0.173, throughput env_steps_per_sec 5419 / seconds_per_update 1.512 (within \u00b110% of learning-first baseline). Contrast: 053609Z run FAILED on wrong recipe (500 rollout steps / 6 candidates) \u2014 not comparable. Prior kaggle-only env_parity_mode + pure_callback plan REJECTED under user_constraint jax_only_hot_path_no_callbacks. Next: JAX-only planned picks #4\u20135 (pure JAX planet/comet generation ports, then throughput-safe mechanics hunks; no callbacks on hot path). Defer gate-admission until picks #4\u20135 parity/trace gates green.",
   "planned_picks": [
     {
       "cherry_pick_order": 4,
