@@ -9,6 +9,7 @@ from hydra.core.config_store import ConfigStore
 @dataclass(slots=True)
 class TaskConfig:
     """Environment and feature-shape configuration shared by all backends."""
+
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
@@ -30,6 +31,8 @@ class TaskConfig:
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
+    map_pool_path: str | None = None
+    map_pool_sha256: str | None = None
 
 
 @dataclass(slots=True)
@@ -128,6 +131,7 @@ class MetricGroupsConfig:
     historical_pool: bool = False
     events: bool = True
     debug: bool = False
+    rollout_phase_timing: bool = False
 
 
 @dataclass(slots=True)

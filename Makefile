@@ -47,7 +47,7 @@ test-launch-hygiene-e2e-throughput:
 
 # Kaggle-relevant JAX env parity (mechanics + 4p); runs in test-jax tier, not slow.
 test-kaggle-parity:
-	$(PYTEST_CPU) tests/test_jax_env_parity.py tests/test_jax_env.py tests/test_jax_env_dispatch.py -m "jax and not slow"
+	$(PYTEST_CPU) tests/test_jax_env_parity.py tests/test_jax_env.py tests/test_jax_env_dispatch.py tests/test_map_pool_reset.py -m "jax and not slow"
 
 # Fast + jax tiers in parallel (~75s wall vs ~140s serial).
 test-daily:

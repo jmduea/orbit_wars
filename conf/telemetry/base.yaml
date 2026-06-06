@@ -10,6 +10,7 @@ metric_groups:
   historical_pool: false
   events: true
   debug: false
+  rollout_phase_timing: false
 
 wandb:
   enabled: true

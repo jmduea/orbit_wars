@@ -18,6 +18,7 @@ _jax_env = importlib.import_module("src.jax." + "env")
 JaxFleetState = _jax_env.JaxFleetState
 JaxGameState = _jax_env.JaxGameState
 JaxPlanetState = _jax_env.JaxPlanetState
+from src.jax.map_pool.comets import empty_comet_state
 
 
 def _cfg(**kwargs) -> TaskConfig:
@@ -63,8 +64,8 @@ def _two_planet_game(
     y = jnp.full((MAX_PLANETS,), 50.0, dtype=jnp.float32)
     x = x.at[0].set(x0).at[1].set(x1)
     y = y.at[0].set(y0).at[1].set(y1)
-    radius = jnp.full((MAX_PLANETS,), 1.0, dtype=jnp.float32).at[0].set(r0).at[1].set(
-        r1
+    radius = (
+        jnp.full((MAX_PLANETS,), 1.0, dtype=jnp.float32).at[0].set(r0).at[1].set(r1)
     )
     planets = JaxPlanetState(
         id=planet_ids,
@@ -84,12 +85,15 @@ def _two_planet_game(
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
+        comets=empty_comet_state(),
     )
 
 
 def _edge_scalar(batch, feature_name: str, src_row: int = 0, slot: int = 0) -> float:
     feature_slice = EDGE_FEATURE_SCHEMA.base_slice(feature_name)
-    return float(np.asarray(batch.edge_features[src_row, slot, feature_slice]).reshape(-1)[0])
+    return float(
+        np.asarray(batch.edge_features[src_row, slot, feature_slice]).reshape(-1)[0]
+    )
 
 
 def _edge_pair(batch, feature_name: str, src_row: int = 0, slot: int = 0) -> np.ndarray:

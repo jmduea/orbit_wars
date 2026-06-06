@@ -16,15 +16,22 @@ from src.game.types import parse_observation
 from src.jax.decoder_carry import empty_decoder_hidden
 from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import TurnBatch
+from src.jax.map_pool.comets import empty_comet_state
 
 AgentActFn = Callable[[object], list[list[float | int]]]
 
 
-def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -> JaxGameState:
+def jax_game_from_observation(
+    obs: Any, *, max_fleet_slots: int | None = None
+) -> JaxGameState:
     """Convert a Kaggle observation into a single-env ``JaxGameState``."""
 
     game = parse_observation(obs)
-    fleet_slots = int(max_fleet_slots if max_fleet_slots is not None else max(256, len(game.fleets) * 4))
+    fleet_slots = int(
+        max_fleet_slots
+        if max_fleet_slots is not None
+        else max(256, len(game.fleets) * 4)
+    )
 
     planet_ids = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
     owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
@@ -110,7 +117,9 @@ def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -
         fleet_x = fleet_x.at[slot_idx].set(float(fleet.x))
         fleet_y = fleet_y.at[slot_idx].set(float(fleet.y))
         fleet_angle = fleet_angle.at[slot_idx].set(float(fleet.angle))
-        fleet_from_planet = fleet_from_planet.at[slot_idx].set(int(fleet.from_planet_id))
+        fleet_from_planet = fleet_from_planet.at[slot_idx].set(
+            int(fleet.from_planet_id)
+        )
         fleet_ships = fleet_ships.at[slot_idx].set(float(fleet.ships))
         fleet_active = fleet_active.at[slot_idx].set(True)
         next_fleet_id = max(next_fleet_id, int(fleet.id) + 1)
@@ -134,9 +143,8 @@ def jax_game_from_observation(obs: Any, *, max_fleet_slots: int | None = None) -
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
-
-
 
 
 def apply_feature_metadata_to_model_config(
@@ -152,6 +160,7 @@ def apply_feature_metadata_to_model_config(
         cfg.model.pointer_decoder = str(stored_decoder)
     return cfg
 
+
 def batch_game(game: JaxGameState) -> JaxGameState:
     """Add a leading batch dimension to a single-env game state."""
 
@@ -165,6 +174,7 @@ def batch_game(game: JaxGameState) -> JaxGameState:
             lambda value: value[None, ...], game.initial_planets
         ),
         fleets=jax.tree_util.tree_map(lambda value: value[None, ...], game.fleets),
+        comets=jax.tree_util.tree_map(lambda value: value[None, ...], game.comets),
     )
 
 
@@ -181,8 +191,6 @@ def batch_turn(batch: TurnBatch) -> TurnBatch:
         global_features=batch.global_features[None, ...],
         theta_ref=batch.theta_ref[None],
     )
-
-
 
 
 def empty_submission_decoder_hidden(cfg: TrainConfig) -> jax.Array | None:
@@ -286,7 +294,6 @@ def select_runtime_shielded_policy_actions(
         deterministic_eval=deterministic_eval,
     )
     return action
-
 
 
 def compile_shielded_policy_act(
@@ -432,6 +439,7 @@ def _jax_game_from_parsed(game, *, fleet_slots: int) -> JaxGameState:
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
+        comets=empty_comet_state(),
     )
 
 
@@ -444,7 +452,9 @@ def jax_game_from_observation_fast(
 
     game = parse_observation(obs)
     fleet_slots = int(
-        max_fleet_slots if max_fleet_slots is not None else max(256, len(game.fleets) * 4)
+        max_fleet_slots
+        if max_fleet_slots is not None
+        else max(256, len(game.fleets) * 4)
     )
     return _jax_game_from_parsed(game, fleet_slots=fleet_slots)
 
@@ -550,7 +560,9 @@ def build_submission_ready_agent(
     return SubmissionReadyAgent(act_fn=act, reset_episode=reset_episode, warmup=warmup)
 
 
-def moves_from_jax_action(action: JaxAction, *, env_index: int = 0) -> list[list[float | int]]:
+def moves_from_jax_action(
+    action: JaxAction, *, env_index: int = 0
+) -> list[list[float | int]]:
     """Convert a ``JaxAction`` buffer into Kaggle move lists."""
 
     source_ids = jax.device_get(action.source_id[env_index])

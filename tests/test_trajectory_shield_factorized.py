@@ -12,8 +12,9 @@ from src.config import TaskConfig, TrainConfig
 from src.features.registry import edge_k
 from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import FactoredPolicyOutput
-from src.jax.env import reset
+from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, reset
 from src.jax.features import encode_turn
+from src.jax.map_pool.comets import empty_comet_state
 from src.jax.shield import (
     apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
@@ -112,13 +113,30 @@ def _two_planet_game(
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
+        comets=empty_comet_state(),
     )
 
 
 def _three_planet_sun_cross_game() -> JaxGameState:
     planet_ids = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
-    owner = jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32).at[0].set(0).at[1].set(1).at[2].set(1)
-    active = jnp.zeros((MAX_PLANETS,), dtype=bool).at[0].set(True).at[1].set(True).at[2].set(True)
+    owner = (
+        jnp.full((MAX_PLANETS,), -1, dtype=jnp.int32)
+        .at[0]
+        .set(0)
+        .at[1]
+        .set(1)
+        .at[2]
+        .set(1)
+    )
+    active = (
+        jnp.zeros((MAX_PLANETS,), dtype=bool)
+        .at[0]
+        .set(True)
+        .at[1]
+        .set(True)
+        .at[2]
+        .set(True)
+    )
 
     x = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
     y = jnp.zeros((MAX_PLANETS,), dtype=jnp.float32)
@@ -145,6 +163,7 @@ def _three_planet_sun_cross_game() -> JaxGameState:
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
+        comets=empty_comet_state(),
     )
 
 
@@ -180,12 +199,21 @@ class FakeFactorizedRuntimePolicy:
         decoder_hidden=None,
         **kwargs,
     ) -> FactoredPolicyOutput:
-        del player_count, rng, deterministic, target_slot_sequence, decoder_hidden, kwargs
+        del (
+            player_count,
+            rng,
+            deterministic,
+            target_slot_sequence,
+            decoder_hidden,
+            kwargs,
+        )
         env_count = batch.planet_features.shape[0]
         k = batch.edge_mask.shape[-1]
         seq_k = 1 if source_sequence is None else int(source_sequence.shape[1])
         source_count = batch.planet_features.shape[1]
-        source_logits = jnp.full((env_count, seq_k, source_count), -10.0, dtype=jnp.float32)
+        source_logits = jnp.full(
+            (env_count, seq_k, source_count), -10.0, dtype=jnp.float32
+        )
         target_logits = jnp.full((env_count, seq_k, k), -10.0, dtype=jnp.float32)
         unsafe_src, unsafe_slot = divmod(self.unsafe_flat, k)
         safe_src, safe_slot = divmod(self.safe_flat, k)
@@ -205,7 +233,9 @@ class FakeFactorizedRuntimePolicy:
             ship_logits=ship_logits,
             value=jnp.zeros((env_count,), dtype=jnp.float32),
             decoded_source_sequence=jnp.full((env_count, seq_k), -1, dtype=jnp.int32),
-            decoded_target_slot_sequence=jnp.full((env_count, seq_k), -1, dtype=jnp.int32),
+            decoded_target_slot_sequence=jnp.full(
+                (env_count, seq_k), -1, dtype=jnp.int32
+            ),
             decoded_stop_sequence=jnp.zeros((env_count, seq_k), dtype=jnp.int32),
         )
 
@@ -322,7 +352,9 @@ def _flat_edge_for_target(batch, target_id: int, *, src_row: int = 0) -> int:
     raise AssertionError(f"target {target_id} not found on source row {src_row}")
 
 
-@pytest.mark.skip(reason="End-to-end runtime shield selection needs full factorized sequence-scan integration; sun-cross blocking covered by v2 batch shield and reason parity tests.")
+@pytest.mark.skip(
+    reason="End-to-end runtime shield selection needs full factorized sequence-scan integration; sun-cross blocking covered by v2 batch shield and reason parity tests."
+)
 def test_runtime_selector_chooses_safe_target_over_unsafe_high_logit() -> None:
     task_cfg = _task_cfg(
         candidate_count=4,

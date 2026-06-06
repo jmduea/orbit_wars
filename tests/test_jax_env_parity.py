@@ -1,9 +1,11 @@
 import math
+from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
+import jax
 from src.config import RewardConfig, TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.jax.env import (
@@ -16,9 +18,11 @@ from src.jax.env import (
     empty_action,
     max_fleets,
     reset,
+    reset_with_pool,
     step,
     step_multi_player,
 )
+from src.jax.map_pool.comets import empty_comet_state
 
 
 def _cfg(*, player_count=2, max_fleets=16):
@@ -100,6 +104,7 @@ def _state(
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,
+        comets=empty_comet_state(),
     )
     return JaxEnvState(
         game=game,
@@ -474,3 +479,73 @@ def test_four_player_step_allows_simultaneous_four_way_combat_from_actions():
         np.asarray(next_state.game.planets.ships[:4]),
         np.array([19.0, 20.0, 18.0, 55.0]),
     )
+
+
+@pytest.fixture(scope="module")
+def tiny_map_pool():
+    from src.jax.map_pool.bake import bake_one_entry, stack_entries
+    from src.jax.map_pool.load import map_pool_constants_from_numpy
+
+    entries = [bake_one_entry(seed) for seed in (0, 1, 2)]
+    stacked = stack_entries(entries)
+    return map_pool_constants_from_numpy(stacked)
+
+
+def test_pool_reset_produces_valid_planet_group_count(tiny_map_pool):
+    cfg = _cfg()
+    key = jax.random.PRNGKey(0)
+    state, batch = reset_with_pool(
+        key, cfg, tiny_map_pool, jnp.array(0, dtype=jnp.int32)
+    )
+    active = int(np.asarray(state.game.planets.active).sum())
+    group_count = active // 4
+    assert 5 <= group_count <= 10
+    assert batch.planet_mask.ndim >= 1
+
+
+def test_pool_comet_spawn_keeps_initial_planets_synced_after_fifty_steps():
+    from src.jax.map_pool.load import load_map_pool
+
+    cfg = _cfg()
+    pool = load_map_pool("data/jax_map_pool/default_v1.npz")
+    state, _ = reset_with_pool(
+        jax.random.PRNGKey(0), cfg, pool, jnp.array(0, dtype=jnp.int32)
+    )
+    baseline_active = int(np.asarray(state.game.planets.active).sum())
+    for _ in range(50):
+        state, _ = _advance(state, cfg)
+    active = np.asarray(state.game.planets.active)
+    init_active = np.asarray(state.game.initial_planets.active)
+    assert int(state.game.comets.group_active.sum()) >= 1
+    assert int(active.sum()) == int(init_active.sum())
+    assert int(active.sum()) > baseline_active
+
+
+def test_pool_reset_mid_game_state_remains_valid_after_hundred_steps():
+    from src.jax.map_pool.load import load_map_pool
+
+    cfg = _cfg()
+    pool = load_map_pool("data/jax_map_pool/default_v1.npz")
+    state, _ = reset_with_pool(
+        jax.random.PRNGKey(7), cfg, pool, jnp.array(3, dtype=jnp.int32)
+    )
+    for _ in range(100):
+        state, _ = _advance(state, cfg)
+    active = np.asarray(state.game.planets.active)
+    assert int(active.sum()) >= 20
+    assert int(np.asarray(state.game.step)) == 100
+
+
+def test_eval_paths_do_not_import_map_pool_loader():
+    repo = Path(__file__).resolve().parents[1]
+    eval_modules = [
+        repo / "src/jax/submission_runtime.py",
+        repo / "src/cli/eval.py",
+        repo / "src/artifacts/tournament/eval.py",
+    ]
+    forbidden = ("load_map_pool", "map_pool.load")
+    for path in eval_modules:
+        assert path.is_file(), f"missing eval module: {path}"
+        text = path.read_text(encoding="utf-8")
+        for needle in forbidden:
+            assert needle not in text, f"{path.name} must not reference {needle!r}"

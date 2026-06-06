@@ -9,9 +9,16 @@ import jax.numpy as jnp
 import jax
 from src.config import TrainConfig
 from src.config.rollout_allocation import resolve_rollout_group_specs
-from src.jax.env import JaxEnvState, assign_learner_players, batched_reset
+from src.jax.env import (
+    JaxEnvState,
+    assign_learner_players,
+    batched_reset,
+    batched_reset_with_pool,
+)
 from src.jax.features import TurnBatch
+from src.jax.map_pool.load import MapPoolConstants, load_map_pool
 from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.rollout.collect_timed import collect_rollout_jax_timed
 from src.jax.rollout.types import JaxTransitionBatch
 from src.jax.train.metrics import (
     finalize_cross_chunk_rate_metrics,
@@ -29,6 +36,20 @@ class JaxRolloutGroup:
     env_state: JaxEnvState
     turn_batch: TurnBatch
     collect_fn: Callable
+    map_pool: MapPoolConstants | None = None
+
+
+def _load_shared_map_pool(
+    cfg: TrainConfig,
+) -> tuple[TrainConfig, MapPoolConstants | None]:
+    path = cfg.task.map_pool_path
+    if not path:
+        return cfg, None
+    pool = load_map_pool(path)
+    if cfg.task.map_pool_sha256 is None and pool.sha256 is not None:
+        cfg = deepcopy(cfg)
+        cfg.task.map_pool_sha256 = pool.sha256
+    return cfg, pool
 
 
 def _copy_config_for_rollout_group(
@@ -104,10 +125,13 @@ def _collect_rollout_microbatched(
     historical_params_pool=None,
     update=jnp.asarray(0, dtype=jnp.int32),
     norm_state=None,
+    map_pool: MapPoolConstants | None = None,
+    timed_collect: bool = False,
 ) -> tuple[jax.Array, JaxEnvState, TurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
     env_count = int(cfg.training.num_envs)
     micro = int(microbatch_envs)
     chunk_count = env_count // micro
+    collect_impl = collect_rollout_jax_timed if timed_collect else collect_rollout_jax
 
     def collect_chunk(chunk_index: jax.Array):
         chunk_key = jax.random.fold_in(rollout_key, chunk_index * 9973 + 17)
@@ -124,7 +148,7 @@ def _collect_rollout_microbatched(
             next_batch,
             chunk_transitions,
             chunk_metrics,
-        ) = collect_rollout_jax(
+        ) = collect_impl(
             chunk_key,
             chunk_state,
             chunk_batch,
@@ -136,6 +160,7 @@ def _collect_rollout_microbatched(
             update=update,
             env_index_offset=start,
             norm_state=norm_state,
+            map_pool=map_pool,
         )
         return next_state, next_batch, chunk_transitions, chunk_metrics
 
@@ -207,6 +232,8 @@ def _init_rollout_group(
     name: str,
     player_count: int,
     num_envs: int,
+    map_pool: MapPoolConstants | None = None,
+    timed_collect: bool = False,
 ) -> JaxRolloutGroup:
     """Initialize env state and a dedicated compiled collector for one format."""
 
@@ -215,9 +242,17 @@ def _init_rollout_group(
     )
     microbatch_envs = _resolve_rollout_microbatch_envs(group_cfg)
     reset_keys = jax.random.split(key, group_cfg.training.num_envs)
-    env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
     env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
     episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)
+    if map_pool is not None:
+        map_ids = (episode_counts + env_indices) % jnp.asarray(
+            map_pool.pool_size, dtype=jnp.int32
+        )
+        env_state, turn_batch = batched_reset_with_pool(
+            reset_keys, group_cfg.task, map_pool, map_ids
+        )
+    else:
+        env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
     env_state, turn_batch = assign_learner_players(
         env_state,
         env_indices,
@@ -225,6 +260,8 @@ def _init_rollout_group(
         group_cfg.task,
         group_cfg.opponents.mode.alternate_player_sides,
     )
+
+    collect_impl = collect_rollout_jax_timed if timed_collect else collect_rollout_jax
 
     def collect_fn(
         rollout_key,
@@ -237,7 +274,7 @@ def _init_rollout_group(
         norm_state=None,
     ):
         if microbatch_envs >= group_cfg.training.num_envs:
-            return collect_rollout_jax(
+            return collect_impl(
                 rollout_key,
                 state,
                 batch,
@@ -248,6 +285,7 @@ def _init_rollout_group(
                 historical_params_pool=historical_params_pool,
                 update=update_idx,
                 norm_state=norm_state,
+                map_pool=map_pool,
             )
         return _collect_rollout_microbatched(
             rollout_key,
@@ -261,15 +299,19 @@ def _init_rollout_group(
             historical_params_pool=historical_params_pool,
             update=update_idx,
             norm_state=norm_state,
+            map_pool=map_pool,
+            timed_collect=timed_collect,
         )
 
-    collect_fn = jax.jit(collect_fn)
+    if not timed_collect:
+        collect_fn = jax.jit(collect_fn)
     return JaxRolloutGroup(
         name=name,
         cfg=group_cfg,
         env_state=env_state,
         turn_batch=turn_batch,
         collect_fn=collect_fn,
+        map_pool=map_pool,
     )
 
 
@@ -278,6 +320,25 @@ def init_rollout_groups(
 ) -> tuple[jax.Array, list[JaxRolloutGroup]]:
     """Create separate JAX rollout groups for all configured static formats."""
 
+    return _init_rollout_groups_impl(key, cfg, policy, timed_collect=False)
+
+
+def init_profile_rollout_groups(
+    key: jax.Array, cfg: TrainConfig, policy: object
+) -> tuple[jax.Array, list[JaxRolloutGroup]]:
+    """Rollout groups for offline phase profiling (host-timed collect, no outer jit)."""
+
+    return _init_rollout_groups_impl(key, cfg, policy, timed_collect=True)
+
+
+def _init_rollout_groups_impl(
+    key: jax.Array,
+    cfg: TrainConfig,
+    policy: object,
+    *,
+    timed_collect: bool,
+) -> tuple[jax.Array, list[JaxRolloutGroup]]:
+    cfg, map_pool = _load_shared_map_pool(cfg)
     specs = configured_rollout_groups(cfg)
     key, *group_keys = jax.random.split(key, len(specs) + 1)
     groups = [
@@ -288,6 +349,8 @@ def init_rollout_groups(
             name=str(spec["name"]),
             player_count=int(spec["player_count"]),
             num_envs=int(spec["num_envs"]),
+            map_pool=map_pool,
+            timed_collect=timed_collect,
         )
         for group_key, spec in zip(group_keys, specs, strict=True)
     ]

@@ -14,10 +14,12 @@ from src.jax.env import (
     JaxEnvState,
     assign_learner_players,
     batched_reset,
+    batched_reset_with_pool,
     batched_step,
     batched_step_multi_player,
 )
 from src.jax.features import TurnBatch, encode_turn
+from src.jax.map_pool.load import MapPoolConstants
 from src.jax.normalization import ObservationNormState, normalize_turn_batch
 from src.jax.ppo_update import gae_returns_and_advantages
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
@@ -35,7 +37,6 @@ from src.opponents.jax_actions.sampling import (
     _single_stage_family_id,
 )
 from src.opponents.pool import sample_opponent_type_ids_jax
-from src.telemetry.metric_registry import rollout_collection_enabled_groups
 from src.training.curriculum import StageView, default_stage_view
 
 from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
@@ -64,6 +65,7 @@ def collect_rollout_jax(
     update: int = 0,
     env_index_offset: int | jax.Array = 0,
     norm_state: ObservationNormState | None = None,
+    map_pool: MapPoolConstants | None = None,
 ):
     del update
     if cfg.task.player_count not in (2, 4):
@@ -255,8 +257,16 @@ def collect_rollout_jax(
 
         def reset_branch(_):
             reset_keys = jax.random.split(reset_key, env_count)
-            reset_states, reset_batches = batched_reset(reset_keys, cfg.task)
             reset_episode_counts = state.episode_count + result.done.astype(jnp.int32)
+            if map_pool is not None:
+                map_ids = (reset_episode_counts + env_indices) % jnp.asarray(
+                    map_pool.pool_size, dtype=jnp.int32
+                )
+                reset_states, reset_batches = batched_reset_with_pool(
+                    reset_keys, cfg.task, map_pool, map_ids
+                )
+            else:
+                reset_states, reset_batches = batched_reset(reset_keys, cfg.task)
             reset_states, reset_batches = assign_learner_players(
                 reset_states,
                 env_indices,

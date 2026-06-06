@@ -11,6 +11,7 @@ from src.game.shield import trajectory_shield_reason_for_launch
 from src.game.types import GameState, PlanetState
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import encode_turn
+from src.jax.map_pool.comets import empty_comet_state
 from src.jax.policy import JaxPolicyOutput
 from src.jax.shield import (
     apply_trajectory_shield_to_turn_batch_v2,
@@ -112,6 +113,7 @@ def _jax_game(
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,
+        comets=empty_comet_state(),
     )
 
 
@@ -142,14 +144,22 @@ def test_python_and_jax_launch_reasons_match_for_sun_and_hit_modes() -> None:
         ),
         (
             _cfg(),
-            [_planet(0, 0, 20.0, 20.0), _planet(1, 1, 80.0, 20.0), _planet(2, -1, 50.0, 20.0)],
+            [
+                _planet(0, 0, 20.0, 20.0),
+                _planet(1, 1, 80.0, 20.0),
+                _planet(2, -1, 50.0, 20.0),
+            ],
             0,
             1,
             "unintended_hit",
         ),
         (
             _cfg(trajectory_shield_hit_mode="non_friendly"),
-            [_planet(0, 0, 20.0, 20.0), _planet(1, 1, 80.0, 20.0), _planet(2, -1, 50.0, 20.0)],
+            [
+                _planet(0, 0, 20.0, 20.0),
+                _planet(1, 1, 80.0, 20.0),
+                _planet(2, -1, 50.0, 20.0),
+            ],
             0,
             1,
             "safe",
@@ -199,7 +209,9 @@ def test_v2_shield_hit_mode_blocks_unintended_hits_but_non_friendly_allows() -> 
     assert bool(non_friendly_shielded.batch.edge_mask[0, target_slot])
 
 
-def test_mask_policy_output_for_shield_v2_applies_bucket_masks_to_all_pointer_steps() -> None:
+def test_mask_policy_output_for_shield_v2_applies_bucket_masks_to_all_pointer_steps() -> (
+    None
+):
     edge_count = 3
     bucket_count = 4
     target_logits = jnp.asarray(
@@ -290,6 +302,7 @@ def test_v2_batch_shield_recomputes_bucket_legality_from_remaining_ships() -> No
     assert not bool(later.ship_bucket_mask[flat_edge, 1])
     assert bool(later.ship_bucket_mask[flat_edge, 2])
 
+
 def test_v2_batch_shield_reports_blocked_metrics_for_sun_crossing() -> None:
     cfg = _cfg()
     planets = [_planet(0, 0, 80.0, 50.0, ships=40), _planet(1, 1, 20.0, 50.0)]
@@ -302,4 +315,3 @@ def test_v2_batch_shield_reports_blocked_metrics_for_sun_crossing() -> None:
 
     assert float(shielded.diagnostics.blocked_count) >= 1.0
     assert not bool(shielded.batch.edge_mask[0, target_slot])
-

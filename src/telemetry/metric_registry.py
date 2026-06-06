@@ -23,6 +23,7 @@ METRIC_GROUPS: tuple[str, ...] = (
     "historical_pool",
     "events",
     "debug",
+    "rollout_phase_timing",
 )
 
 DEFAULT_ENABLED_GROUPS: frozenset[str] = frozenset(
@@ -318,6 +319,61 @@ _METRICS: tuple[MetricDefinition, ...] = (
         "rollout_seconds_4p",
         "debug",
         "Wall-clock seconds spent collecting 4-player rollout groups.",
+    ),
+    _metric(
+        "rollout_phase_policy_seconds",
+        "rollout_phase_timing",
+        "Rollout collect wall time in learner policy+shield sampling (measured path).",
+    ),
+    _metric(
+        "rollout_phase_opponent_seconds",
+        "rollout_phase_timing",
+        "Rollout collect wall time in opponent action sampling and feature encode.",
+    ),
+    _metric(
+        "rollout_phase_env_step_seconds",
+        "rollout_phase_timing",
+        "Rollout collect wall time in batched env step (includes learner encode in _finish_step).",
+    ),
+    _metric(
+        "rollout_phase_reset_seconds",
+        "rollout_phase_timing",
+        "Rollout collect wall time in episode-done reset branches (map pool gather when enabled).",
+    ),
+    _metric(
+        "rollout_phase_post_step_seconds",
+        "rollout_phase_timing",
+        "Rollout collect wall time in post-step bookkeeping (carry, opp cache refresh).",
+    ),
+    _metric(
+        "rollout_phase_measured_total_seconds",
+        "rollout_phase_timing",
+        "Sum of rollout phase timers (host-measured; use vs rollout_seconds for gap).",
+    ),
+    _metric(
+        "rollout_phase_policy_fraction",
+        "rollout_phase_timing",
+        "policy_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_opponent_fraction",
+        "rollout_phase_timing",
+        "opponent_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_env_step_fraction",
+        "rollout_phase_timing",
+        "env_step_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_reset_fraction",
+        "rollout_phase_timing",
+        "reset_seconds / measured_total_seconds.",
+    ),
+    _metric(
+        "rollout_phase_post_step_fraction",
+        "rollout_phase_timing",
+        "post_step_seconds / measured_total_seconds.",
     ),
     _metric(
         "env_steps_per_sec_2p",
@@ -988,7 +1044,9 @@ def rollout_compute_scalar_keys(cfg: Any | None) -> frozenset[str]:
     """Rollout scalar keys to materialize during collection and merge paths."""
 
     enabled_groups = rollout_collection_enabled_groups(cfg)
-    required = set(required_rollout_scalar_names(cfg)) - set(FINALIZED_ROLLOUT_RATE_KEYS)
+    required = set(required_rollout_scalar_names(cfg)) - set(
+        FINALIZED_ROLLOUT_RATE_KEYS
+    )
     keys = set(_ROLLOUT_ALWAYS_COMPUTE_KEYS)
     keys.update(required)
 
@@ -1006,8 +1064,6 @@ def rollout_compute_scalar_keys(cfg: Any | None) -> frozenset[str]:
 
     keys.difference_update(FINALIZED_ROLLOUT_RATE_KEYS)
     return frozenset(keys)
-
-
 
 
 def rollout_merge_scalar_keys(cfg: Any | None) -> frozenset[str]:
