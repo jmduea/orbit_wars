@@ -476,11 +476,14 @@ def _launch_fleets(
     cfg: TaskConfig,
 ):
     source_idx = jnp.clip(action.source_id, 0, MAX_PLANETS - 1)
+    planet_id_at = jnp.take(planets.id, source_idx)
     source_owner = jnp.take(planets.owner, source_idx)
     source_active = jnp.take(planets.active, source_idx)
     source_ships = jnp.take(planets.ships, source_idx)
     valid = (
         action.valid
+        & (action.source_id >= 0)
+        & (action.source_id == planet_id_at)
         & source_active
         & (source_owner == player)
         & (action.ships > 0.0)
@@ -540,9 +543,9 @@ def _move_and_resolve(
     orbit_radius = jnp.sqrt(init_dx * init_dx + init_dy * init_dy)
     rotates = (orbit_radius + planets.radius < ROTATION_RADIUS_LIMIT) & planets.active
     init_angle = jnp.arctan2(init_dy, init_dx)
-    cur_angle = init_angle + previous_game.angular_velocity * (
-        previous_game.step + 1
-    ).astype(jnp.float32)
+    cur_angle = init_angle + previous_game.angular_velocity * previous_game.step.astype(
+        jnp.float32
+    )
     new_px = jnp.where(
         rotates, BOARD_CENTER[0] + orbit_radius * jnp.cos(cur_angle), planets.x
     )
@@ -550,7 +553,9 @@ def _move_and_resolve(
         rotates, BOARD_CENTER[1] + orbit_radius * jnp.sin(cur_angle), planets.y
     )
 
-    speed = fleet_speed(fleets.ships, MAX_FLEET_SPEED)
+    speed = fleet_speed(
+        fleets.ships, float(getattr(cfg, "ship_speed", MAX_FLEET_SPEED))
+    )
     old_fx, old_fy = fleets.x, fleets.y
     new_fx = fleets.x + jnp.cos(fleets.angle) * speed
     new_fy = fleets.y + jnp.sin(fleets.angle) * speed
@@ -568,7 +573,8 @@ def _move_and_resolve(
     )
     hits = hits & fleets.active[:, None] & planets.active[None, :]
     hit_any = hits.any(axis=1)
-    hit_idx = jnp.argmax(hits, axis=1)
+    planet_order = jnp.arange(MAX_PLANETS, dtype=jnp.int32)
+    hit_idx = jnp.min(jnp.where(hits, planet_order[None, :], MAX_PLANETS), axis=1)
     out = (
         (new_fx < 0.0) | (new_fx > BOARD_SIZE) | (new_fy < 0.0) | (new_fy > BOARD_SIZE)
     )
