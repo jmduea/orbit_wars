@@ -1,6 +1,7 @@
 ---
 title: Nuclear cherry-pick manifest — baseline-first integration with worktree gate capture
 date: 2026-06-05
+last_updated: 2026-06-06
 category: workflow-issues
 module: benchmarks
 problem_type: workflow_issue
@@ -24,6 +25,7 @@ related_components:
   - docs/nomenclature-rfc.md
   - tests/test_training_benchmark_gate.py
   - docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md
+  - docs/solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md
 ---
 
 # Nuclear cherry-pick manifest — baseline-first integration with worktree gate capture
@@ -34,7 +36,7 @@ After PR #163 (within-turn launch dedup masks / launch hygiene), **production tr
 
 Session consolidation (docs PR #219 → `main`, stale branch cleanup, `throughput-baseline-integration` fork) established the **primary integration strategy**: pin `throughput-baseline` at `79162a2088160b8ed05c3e3a050e064c7f6c9556`, layer env-parity substrate on `throughput-baseline-integration`, then admit only learning commits that pass **both** the production training throughput gate and the learning proof ladder. Semantic rollout redesign stays **halted**; SSOT train-spine handoff is a **deferred parallel** track — not a substitute for manifest gates.
 
-Phase 1 U1 completed in commit `9cdc8fe`: `baseline_gates.throughput_e2e.verdict: admit` at ~9628 `env_steps_per_sec` vs `launch-hygiene-e2e-baseline.json`. Learn-proof ceiling and parity captures remain `pending` before env-parity cherry-picks.
+Phase 1 anchor admission **passed** (2026-06-06): unified `admission` gate on the throughput-anchor worktree returned `admission_passed: true` — learning VERIFIED and throughput within ±10% of `launch-hygiene-e2e-baseline-learning-first.json` on one 200-update run ([cherry-pick-admission-gate-unified-learn-throughput.md](cherry-pick-admission-gate-unified-learn-throughput.md)). An earlier `beat_noop`-only capture was **NOT_VERIFIED** (borderline win-rate delta, elevated `approx_kl` from stale PPO pins in `preflight-profiles.json` overriding `conf/training/base.yaml`); removing `apply_ppo_profile` from gate YAML and re-running the unified admission gate fixed both checks. Kaggle mechanics parity on the anchor is green (`make test-kaggle-parity`: 15 passed). Phase 2 env-parity cherry-picks onto `throughput-baseline-integration` may proceed.
 
 ## Guidance
 
@@ -42,11 +44,13 @@ Phase 1 U1 completed in commit `9cdc8fe`: `baseline_gates.throughput_e2e.verdict
 
 | Phase | Branch | Goal | Gate authority |
 | --- | --- | --- | --- |
-| 1 | `throughput-baseline` @ `79162a2` | Prove anchor throughput + record learn-proof ceiling | `baseline_gates` in manifest |
-| 2 | `throughput-baseline-integration` | Cherry-pick env-parity fixes until parity green | `make test-kaggle-parity` |
-| 3 | integration head | Topological learning cherry-picks | parity → tier-2 throughput → learn-proof |
+| 1 | `throughput-baseline` @ pre-hygiene anchor | Unified admission (learning + throughput, one recipe) | `make gate-admission` / `ow benchmark gate run admission` with `--repo-root` |
+| 2 | `throughput-baseline-integration` | Granular env-parity hunks (file-level, not whole commits) | `make test-kaggle-parity` per hunk; fast validation smoke — **not** tier-2 e2e per pick |
+| 3 | integration head | Topological learning cherry-picks | parity → unified admission on integration head |
 
-Advance `throughput-baseline-integration` only on manifest **`admit`**; human merge to `main` when `integration_status: ready_for_main`. Do not use stagger smokes, `ssot_preflight`, or validation-preset bisect as tier-2 pass/fail — those answer different questions (see [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)).
+Advance `throughput-baseline-integration` only when manifest gates pass (`admission_passed` on anchor, then parity per hunk in Phase 2); human merge to `main` when `integration_status: ready_for_main`. Re-run `make gate-admission` on the integration head after the parity stack is green. Do not use stagger smokes, `ssot_preflight`, or validation-preset bisect as tier-2 pass/fail — those answer different questions (see [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)).
+
+Phase 2 picks env-parity substrate from merge-base→`main` at **file or hunk** granularity — not whole commits — so each step stays small and gateable. Fast gates (`make test-kaggle-parity`, short validation smoke) suffice per pick; reserve tier-2 e2e for integration-head admission, not every hunk.
 
 ### Worktree + harness copy (anchor capture)
 
@@ -85,7 +89,7 @@ jq '{
 }' outputs/benchmarks/cherry-pick/anchor_throughput.json
 ```
 
-U1 anchor reference (manifest `9cdc8fe`): `env_steps_per_sec` ≈ **9628**, `gate_passed: true`, `verdict: admit`. `measured_commit_sha` may differ from `baseline_sha` when the harness on `main` is newer than the anchor tree — manifest records both.
+An earlier primary-preset anchor capture (“record U1 anchor throughput gate pass in cherry-pick manifest”) measured ~9628 `env_steps_per_sec` vs `launch-hygiene-e2e-baseline.json` — **obsolete** under the learning-first unified admission profile. Blocking admission now uses `launch-hygiene-e2e-baseline-learning-first.json` and the unified `admission` gate (`admission_passed: true` on anchor, 2026-06-06). `measured_commit_sha` may differ from `baseline_sha` when the harness on `main` is newer than the anchor tree — manifest records both. Operator details: [cherry-pick-admission-gate-unified-learn-throughput.md](cherry-pick-admission-gate-unified-learn-throughput.md).
 
 ### Two parallel tracks (nomenclature)
 
@@ -117,18 +121,15 @@ Baseline-first integration is the **primary** path; redesign and SSOT migration 
 
 ## Examples
 
-**Manifest baseline_gates after U1 (committed):**
+**Manifest `baseline_gates` after Phase 1 anchor admission (2026-06-06):**
 
 ```json
-"throughput_e2e": {
-  "preset": "tier2_primary",
-  "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
-  "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput.json",
-  "verdict": "admit",
-  "gate_passed": true,
-  "env_steps_per_sec": 9627.62
-}
+"learn_proof": { "verdict": "NOT_VERIFIED", "note": "superseded — beat_noop-only, stale PPO profile pins" },
+"parity": { "verdict": "PASS", "result": "15 passed" },
+"decision": "admission_passed true — learning VERIFIED + throughput within ±10% on unified recipe"
 ```
+
+Inspect the worktree artifact: `jq '{admission_passed, verdict, throughput_verdict}' outputs/benchmarks/admission/gate.json`
 
 **Wrong — treating validation bisect as manifest admission:**
 
@@ -147,6 +148,7 @@ ls outputs/benchmarks/cherry-pick/anchor_throughput.json  # worktree-local, giti
 
 ## Related
 
+- Unified admission gate (PPO source, `--repo-root`, resolved config): [cherry-pick-admission-gate-unified-learn-throughput.md](cherry-pick-admission-gate-unified-learn-throughput.md)
 - Validation-preset bisect (orthogonal measurement frame): [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)
 - Tier-2 gate semantics and ablation tiebreaker: [launch-hygiene-learner-ablation-gate.md](../tooling-decisions/launch-hygiene-learner-ablation-gate.md)
 - Requirements: `docs/brainstorms/2026-06-05-nuclear-cherry-pick-manifest-requirements.md`

@@ -106,6 +106,7 @@ ow: error: invalid choice: 'gate'
 
 ## Related
 
+- [cherry-pick-admission-gate-unified-learn-throughput.md](cherry-pick-admission-gate-unified-learn-throughput.md) — unified `admission` gate, PPO source of truth, resolved config display
 - [nuclear-cherry-pick-manifest-baseline-integration.md](nuclear-cherry-pick-manifest-baseline-integration.md)
 - [cursor-before-shell-gpu-terminal-contention.md](../developer-experience/cursor-before-shell-gpu-terminal-contention.md) — light `http.server` no longer blocks gate commands
 - `docs/benchmarks/cherry-pick-manifest.json` — `admission_profile`, baseline JSON path
