@@ -58,7 +58,8 @@ def format_gate_train_config_summary(overrides: list[str]) -> tuple[str, ...]:
         (
             f"    rollout_steps={training.rollout_steps}  "
             f"total_updates={training.total_updates}  "
-            f"candidate_count={cfg.task.candidate_count}"
+            f"candidate_count={cfg.task.candidate_count}  "
+            f"max_moves_k={cfg.model.max_moves_k}"
         ),
         "  PPO:",
         (

@@ -9,10 +9,13 @@ from src.cli import benchmark as benchmark_cli
 from src.cli.benchmark_gates import (
     DEFAULT_ADMISSION_THROUGHPUT_BASELINE,
     list_gate_recipes,
+    load_gate_recipe,
     resolve_learning_gate_id,
     resolve_throughput_options,
     run_gate_cli,
 )
+from src.jax.preflight_config_summary import format_gate_train_config_summary
+from src.jax.preflight_gate_loader import build_gate_spec
 from src.jax.admission_throughput import run_throughput_gate
 from src.jax.training_benchmark import load_e2e_baseline
 
@@ -70,16 +73,29 @@ def test_resolve_throughput_options_uses_learning_first_baseline() -> None:
 
 
 def test_admission_gate_recipe_includes_operator_locked_overrides() -> None:
-    from src.cli.benchmark_gates import load_gate_recipe
-
     recipe = load_gate_recipe("admission")
     overrides = recipe.get("train_overrides")
     assert isinstance(overrides, list)
+    assert "model.max_moves_k=2" in overrides
     assert "training.rollout_steps=256" in overrides
     assert "task.candidate_count=3" in overrides
     assert "telemetry.wandb.enabled=true" in overrides
     assert "telemetry.wandb.group=preflight" in overrides
     assert "artifacts.replay.enabled=false" in overrides
+
+
+def test_admission_gate_dry_run_resolves_max_moves_k_two() -> None:
+    recipe = load_gate_recipe("admission")
+    learning_gate_id = resolve_learning_gate_id(recipe, "admission")
+    spec = build_gate_spec(learning_gate_id, model="transformer_factorized_small")
+    overrides = [
+        "output.campaign=preflight_admission",
+        "output.root=outputs",
+        *spec.train_overrides,
+        *recipe.get("train_overrides", []),
+    ]
+    summary = "\n".join(format_gate_train_config_summary(overrides))
+    assert "max_moves_k=2" in summary
 
 
 def test_admission_gate_dry_run_cli(capsys) -> None:

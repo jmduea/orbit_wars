@@ -7,6 +7,7 @@ primitive: ow benchmark gate run admission
 
 # Operator-locked recipe (docs/benchmarks/cherry-pick-manifest.json admission_profile).
 train_overrides:
+  - model.max_moves_k=2
   - training=2p4p_32_split
   - training.rollout_steps=256
   - task.candidate_count=3

@@ -44,6 +44,7 @@
       "picker_note": "YAML diff is deltas vs beat_noop_core only. Picker showed rollout_microbatch_envs=32; with 50/50 mixed format and 32 envs each format group gets 16 envs, so microbatch resolves to 16 (32 is invalid). Canonical runnable form uses training=2p4p_32_split instead of training=2p_16 plus leaf format/env overrides.",
       "shared": [
         "model=transformer_factorized_small",
+        "model.max_moves_k=2",
         "task=shield_cheap",
         "training=2p4p_32_split",
         "training.rollout_steps=256",
@@ -59,6 +60,7 @@
         "training.log_every=1"
       ],
       "gate_train_overrides": [
+        "model.max_moves_k=2",
         "training=2p4p_32_split",
         "training.rollout_steps=256",
         "task.candidate_count=3",
@@ -75,6 +77,7 @@
           "4": 0.5
         },
         "candidate_count": 3,
+        "max_moves_k": 2,
         "wandb_enabled": true,
         "wandb_group": "preflight"
       },
