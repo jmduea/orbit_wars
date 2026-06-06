@@ -1,6 +1,7 @@
 ---
 title: Profile production training throughput before optimizing JAX hot paths
 date: 2026-06-01
+last_updated: 2026-06-06
 category: developer-experience
 module: jax-training
 problem_type: developer_experience
@@ -99,6 +100,27 @@ uv run ow benchmark training \
 JAX tracing can add significant overhead or stall while writing trace artifacts,
 so start with timing buckets first. A stalled trace is less useful than a small,
 completed timing split.
+
+### Next level: rollout phase breakdown inside collect
+
+When `rollout_collect_seconds_per_update_mean` dominates but the bucket is still
+opaque, use **offline** phase profiling — not inline telemetry on `ow train`:
+
+```bash
+uv run ow benchmark rollout-phase-profile \
+  --repo-root /path/to/orbit_wars-integration \
+  --preset admission \
+  --train-overrides task=map_pool \
+  --updates 3 \
+  --warmup 2
+```
+
+`--detailed-timing` answers rollout vs PPO vs host; `rollout-phase-profile`
+answers policy vs opponent vs env_step vs reset vs post_step inside collect.
+Do not enable `telemetry=rollout_phase_timing` on gate-spine `ow train` at
+32×256 — host per-step sync stalls first updates for 20+ minutes.
+
+See [offline-rollout-phase-profile-decoupled-from-jit-collect.md](offline-rollout-phase-profile-decoupled-from-jit-collect.md).
 
 ### Complementary: validation bisect benchmark
 
