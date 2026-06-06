@@ -23,7 +23,7 @@ from src.jax.env import (
     batched_step,
     batched_step_multi_player,
 )
-from src.jax.features import TurnBatch, encode_turn
+from src.jax.features import TurnBatch
 from src.jax.map_pool.load import MapPoolConstants
 from src.jax.normalization import ObservationNormState
 from src.jax.ppo_update import gae_returns_and_advantages
@@ -42,7 +42,10 @@ from src.opponents.jax_actions.builders import (
     owned_planet_ships,
 )
 from src.opponents.jax_actions.sampling import (
+    _encode_four_player_turn_batches,
+    _encode_opponent_turn_batch_2p,
     _four_player_step_action,
+    _initial_opponent_batch_cache_2p,
     _maybe_effective_single_family_id,
     _opponent_count_metrics,
     _sample_opponent_2p_action,
@@ -306,10 +309,9 @@ def collect_rollout_jax_timed(
 
     @jax.jit
     def opp_encode_2p(next_state):
-        opp_game = next_state.game._replace(
-            player=(1 - next_state.learner_player).astype(jnp.int32)
+        return _encode_opponent_turn_batch_2p(
+            next_state.game, next_state.learner_player, cfg.task
         )
-        return jax.vmap(lambda game: encode_turn(game, cfg.task))(opp_game)
 
     @jax.jit
     def env_step_4p(state_in, multi_player_action):
@@ -324,15 +326,12 @@ def collect_rollout_jax_timed(
     decoder_hidden = initial_decoder_hidden
 
     if cfg.task.player_count == 2:
-        if skip_opp_batch_refresh:
-            opp_batch_cache = batch
-        else:
-            initial_opp_game = state.game._replace(
-                player=(1 - state.learner_player).astype(jnp.int32)
-            )
-            opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-                initial_opp_game
-            )
+        opp_batch_cache = _initial_opponent_batch_cache_2p(
+            env_state=state,
+            turn_batch=batch,
+            task=cfg.task,
+            skip_opp_batch_refresh=skip_opp_batch_refresh,
+        )
     else:
         opp_batch_cache = batch
 
@@ -417,21 +416,8 @@ def collect_rollout_jax_timed(
         else:
             post_start = time.perf_counter()
             player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
-            player_games = jax.vmap(
-                lambda player_id: state.game._replace(
-                    player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
-                )
-            )(player_ids)
-            flat_player_games = jax.tree.map(
-                lambda x: x.reshape((cfg.task.player_count * env_count,) + x.shape[2:]),
-                player_games,
-            )
-            flat_player_batch = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-                flat_player_games
-            )
-            player_batches = jax.tree.map(
-                lambda x: x.reshape((cfg.task.player_count, env_count) + x.shape[1:]),
-                flat_player_batch,
+            player_games, player_batches = _encode_four_player_turn_batches(
+                state, cfg.task, env_count
             )
             per_player_action = jax.vmap(
                 lambda player_id: _four_player_step_action(

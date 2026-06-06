@@ -3,13 +3,13 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import jax
-from src.config import TrainConfig
+from src.config import TaskConfig, TrainConfig
 from src.jax.action_sampling import (
     _sample_policy_action,
     _sample_policy_action_with_params,
 )
 from src.jax.env import JaxAction
-from src.jax.features import TurnBatch
+from src.jax.features import TurnBatch, encode_turn
 from src.jax.policy import edge_action_count
 from src.jax.rollout.types import JaxTrainState
 from src.jax.shield import apply_trajectory_shield_to_turn_batch_v2
@@ -32,6 +32,58 @@ from src.opponents.jax_actions.builders import (
     build_turtle_action_from_edge_batch,
 )
 from src.training.curriculum import StageView
+
+
+def _encode_opponent_turn_batch_2p(
+    game,
+    learner_player: jax.Array,
+    task: TaskConfig,
+) -> TurnBatch:
+    """Encode turn batches from each env's non-learner player perspective (2p)."""
+
+    opp_game = game._replace(player=(1 - learner_player).astype(jnp.int32))
+    return jax.vmap(lambda encoded_game: encode_turn(encoded_game, task))(opp_game)
+
+
+def _initial_opponent_batch_cache_2p(
+    *,
+    env_state,
+    turn_batch: TurnBatch,
+    task: TaskConfig,
+    skip_opp_batch_refresh: bool,
+) -> TurnBatch:
+    if skip_opp_batch_refresh:
+        return turn_batch
+    return _encode_opponent_turn_batch_2p(
+        env_state.game, env_state.learner_player, task
+    )
+
+
+def _encode_four_player_turn_batches(
+    state,
+    task: TaskConfig,
+    env_count: int,
+) -> tuple[object, object]:
+    """Build per-player games and encoded turn batches for 4p opponent phase."""
+
+    player_ids = jnp.arange(task.player_count, dtype=jnp.int32)
+    player_games = jax.vmap(
+        lambda player_id: state.game._replace(
+            player=jnp.full_like(state.game.step, player_id, dtype=jnp.int32)
+        )
+    )(player_ids)
+    flat_player_games = jax.tree.map(
+        lambda x: x.reshape((task.player_count * env_count,) + x.shape[2:]),
+        player_games,
+    )
+    flat_player_batch = jax.vmap(lambda encoded_game: encode_turn(encoded_game, task))(
+        flat_player_games
+    )
+    player_batches = jax.tree.map(
+        lambda x: x.reshape((task.player_count, env_count) + x.shape[1:]),
+        flat_player_batch,
+    )
+    return player_games, player_batches
 
 
 def _select_env_action(
