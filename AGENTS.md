@@ -27,6 +27,7 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 |------|------|
 | `src/config/` | Dataclass schema + Hydra composition |
 | `src/jax/` | Training loop, env, features, PPO, rollout |
+| `src/benchmark/` | `ow benchmark` implementations (training, production, factorized_sampler, map_pool, rollout_phase_profile) |
 | `src/features/` | Registry + extractor (planet-edge encoding) |
 | `src/game/` | Reference Python game logic |
 | `conf/` | Hydra responsibility groups |
