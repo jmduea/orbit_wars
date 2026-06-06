@@ -1,7 +1,7 @@
 ---
 title: "fix: Pick #4 JAX planet/comet mechanical fidelity on integration"
 type: fix
-status: active
+status: completed
 date: 2026-06-06
 origin: docs/session-handoff/2026-06-06-phase2-env-parity-picks-continued.md
 ---
@@ -143,9 +143,9 @@ Valid `randint(0, num_groups-1)` only.
 
 Parametrized noop stepping at milestones 50/85/150/200.
 
-### U9. Manifest and handoff update — **pending operator merge**
+### U9. Manifest and handoff update — **done**
 
-Record mechanical fidelity green + integration HEAD SHA after commit.
+Integration fix HEAD `0eb349e`; manifest `mechanical_fidelity_fix_head` updated.
 
 ***
 
