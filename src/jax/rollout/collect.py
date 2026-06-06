@@ -35,12 +35,12 @@ from src.opponents.jax_actions.builders import (
 )
 from src.opponents.jax_actions.sampling import (
     _encode_four_player_turn_batches,
-    _encode_opponent_turn_batch_2p,
     _four_player_step_action,
     _initial_opponent_batch_cache_2p,
     _maybe_effective_single_family_id,
     _opponent_count_metrics,
     _sample_opponent_2p_action,
+    _select_opp_batch_cache_2p,
     _single_stage_family_id,
     should_skip_opponent_batch_refresh_2p,
 )
@@ -293,12 +293,12 @@ def collect_rollout_jax(
             operand=None,
         )
         if cfg.task.player_count == 2:
-            if skip_opp_batch_refresh:
-                next_opp_batch_cache = opp_batch_cache
-            else:
-                next_opp_batch_cache = _encode_opponent_turn_batch_2p(
-                    next_state.game, next_state.learner_player, cfg.task
-                )
+            next_opp_batch_cache = _select_opp_batch_cache_2p(
+                skip_refresh=skip_opp_batch_refresh,
+                cached=opp_batch_cache,
+                env_state=next_state,
+                task=cfg.task,
+            )
         else:
             next_opp_batch_cache = opp_batch_cache
 

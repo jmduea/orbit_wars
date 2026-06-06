@@ -45,17 +45,37 @@ def _encode_opponent_turn_batch_2p(
     return jax.vmap(lambda encoded_game: encode_turn(encoded_game, task))(opp_game)
 
 
+def _select_opp_batch_cache_2p(
+    *,
+    skip_refresh: jax.Array,
+    cached: TurnBatch,
+    env_state,
+    task: TaskConfig,
+) -> TurnBatch:
+    """Pick cached or freshly encoded opponent batch (JIT-safe skip predicate)."""
+
+    return jax.lax.cond(
+        skip_refresh,
+        lambda _: cached,
+        lambda _: _encode_opponent_turn_batch_2p(
+            env_state.game, env_state.learner_player, task
+        ),
+        operand=None,
+    )
+
+
 def _initial_opponent_batch_cache_2p(
     *,
     env_state,
     turn_batch: TurnBatch,
     task: TaskConfig,
-    skip_opp_batch_refresh: bool,
+    skip_opp_batch_refresh: jax.Array,
 ) -> TurnBatch:
-    if skip_opp_batch_refresh:
-        return turn_batch
-    return _encode_opponent_turn_batch_2p(
-        env_state.game, env_state.learner_player, task
+    return _select_opp_batch_cache_2p(
+        skip_refresh=skip_opp_batch_refresh,
+        cached=turn_batch,
+        env_state=env_state,
+        task=task,
     )
 
 
