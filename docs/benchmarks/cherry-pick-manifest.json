@@ -546,7 +546,9 @@
           "env.py post-move expire drops initial_planets updates (desync step 85)"
         ],
         "fix_before": "pick_5_or_admission",
-        "parity_criterion": "make test-kaggle-parity — mechanical validity invariants + env sync tests, not coordinate goldens vs reference"
+        "parity_criterion": "make test-kaggle-parity — mechanical validity invariants + env sync tests, not coordinate goldens vs reference",
+        "mechanical_fidelity_fix_head": "0eb349e",
+        "mechanical_fidelity_gates": "51 passed make test-kaggle-parity; tier-A rg 0 matches integration src/jax; 10 pytest trace hygiene"
       }
     },
     "admission_passed": true,
