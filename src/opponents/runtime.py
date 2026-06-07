@@ -72,7 +72,7 @@ class KaggleRandomOpponent:
 
 
 class NoopOpponent:
-    """Pass/no-launch baseline (matches JAX ``noop_only`` training profile)."""
+    """Pass/no-launch baseline (matches JAX ``opponents.mode.opponent=noop``)."""
 
     def act(self, observation: Any) -> list[list[float | int]]:
         del observation

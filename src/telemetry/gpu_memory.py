@@ -53,12 +53,12 @@ class GpuMemoryTracker:
 
 
 def probe_gpu_memory() -> GpuMemorySnapshot | None:
-    """Return current GPU memory use, preferring ``nvidia-smi`` over JAX stats."""
+    """Return current GPU memory use, preferring JAX stats over ``nvidia-smi``."""
 
-    smi_snapshot = _probe_nvidia_smi()
-    if smi_snapshot is not None:
-        return smi_snapshot
-    return _probe_jax_memory_stats()
+    jax_snapshot = _probe_jax_memory_stats()
+    if jax_snapshot is not None:
+        return jax_snapshot
+    return _probe_nvidia_smi()
 
 
 def _probe_nvidia_smi() -> GpuMemorySnapshot | None:
@@ -113,7 +113,7 @@ def _probe_jax_memory_stats() -> GpuMemorySnapshot | None:
         return None
     try:
         stats = memory_stats()
-    except Exception:
+    except (RuntimeError, AttributeError, TypeError):
         return None
     bytes_in_use = stats.get("bytes_in_use")
     bytes_limit = stats.get("bytes_limit")

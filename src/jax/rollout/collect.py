@@ -42,7 +42,6 @@ from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import validate_jax_training_opponent_mode
 from src.opponents.jax_actions.builders import build_action_from_factored_batch
 from src.opponents.jax_actions.sampling import (
-    _initial_opponent_batch_cache_2p,
     _select_opp_batch_cache_2p,
     should_skip_opponent_batch_refresh_2p,
 )
@@ -123,7 +122,9 @@ def collect_rollout_jax(
         ship_fraction = None
         shield_diagnostics = None
         if is_planet_flow_pointer_decoder(cfg.model):
-            player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
+            player_count = jnp.full(
+                (env_count,), cfg.task.player_count, dtype=jnp.int32
+            )
             output = policy.apply(
                 train_state.params,
                 policy_batch,
@@ -299,11 +300,11 @@ def collect_rollout_jax(
         ), transition
 
     if cfg.task.player_count == 2:
-        initial_opp_batch_cache = _initial_opponent_batch_cache_2p(
+        initial_opp_batch_cache = _select_opp_batch_cache_2p(
+            skip_refresh=skip_opp_batch_refresh,
+            cached=turn_batch,
             env_state=env_state,
-            turn_batch=turn_batch,
             task=cfg.task,
-            skip_opp_batch_refresh=skip_opp_batch_refresh,
         )
     else:
         initial_opp_batch_cache = turn_batch

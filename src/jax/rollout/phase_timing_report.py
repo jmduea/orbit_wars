@@ -14,7 +14,7 @@ from src.jax.admission_throughput import (
     _record_update,
     resolve_log_path_from_input,
 )
-from src.jax.preflight import read_jsonl_records
+from src.jax.preflight_calibration import read_jsonl_records
 
 PHASE_NAMES: tuple[str, ...] = (
     "policy",

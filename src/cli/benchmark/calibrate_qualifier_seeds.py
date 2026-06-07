@@ -5,18 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
+import time
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
-from src.jax.qualifier_calibration import (
-    default_calibration_json_path,
-    default_qualifier_calibration_stub,
-)
+from src.cli.benchmark.common import REPO_ROOT, _init_benchmark_runtime
+from src.jax.preflight_calibration import git_head_sha
+from src.jax.qualifier_calibration import default_qualifier_calibration_stub
 
 
 def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
     _init_benchmark_runtime()
-    started = __import__("time").perf_counter()
+    started = time.perf_counter()
 
     if args.write_stub:
         payload = default_qualifier_calibration_stub(enforcement=bool(args.enforcement))
@@ -26,8 +24,8 @@ def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
             "ok": True,
             "mode": "write_stub",
             "written_calibration_path": str(args.out),
-            "git_head": _git_head_sha(REPO_ROOT),
-            "seconds_total": __import__("time").perf_counter() - started,
+            "git_head": git_head_sha(REPO_ROOT),
+            "seconds_total": time.perf_counter() - started,
         }
         print(json.dumps(report, indent=2))
         return 0
@@ -60,5 +58,3 @@ def run_calibrate_qualifier_seeds_cli(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 1
-
-

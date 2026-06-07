@@ -62,6 +62,23 @@ def _ensure_bucket_mask_has_choice(
     return jnp.where(use_original[:, None, None], ship_bucket_mask, noop_mask)
 
 
+def _zero_rejected_launch(
+    stop: jax.Array,
+    bucket: jax.Array,
+    ship_fraction: jax.Array,
+    launched: jax.Array,
+    reject_launch: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Convert rejected launches to stop/no-op for replay-aligned log-prob."""
+    stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
+    bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
+    ship_fraction = jnp.where(
+        reject_launch, jnp.zeros_like(ship_fraction), ship_fraction
+    )
+    launched = jnp.where(reject_launch, 0.0, launched)
+    return stop, bucket, ship_fraction, launched
+
+
 def _mask_noop_targets_for_eval_deterministic(
     target_logits: jax.Array,
     ship_bucket_mask: jax.Array,
@@ -164,19 +181,18 @@ def _sample_step_from_logits(
                 noop_idx=noop_idx,
             )
         ship_log_probs = jax.nn.log_softmax(selected_ship_logits, axis=-1)
-        ship_probs = jax.nn.softmax(selected_ship_logits, axis=-1)
         ship_lp = jnp.take_along_axis(ship_log_probs, bucket[:, None], axis=-1).squeeze(
             -1
         )
-        ship_entropy = -(ship_probs * ship_log_probs).sum(axis=-1)
+        ship_entropy = -jnp.sum(jnp.exp(ship_log_probs) * ship_log_probs, axis=-1)
         ship_fraction = jnp.zeros_like(ship_lp)
 
     target_log_probs = jax.nn.log_softmax(target_logits, axis=-1)
-    target_probs = jax.nn.softmax(target_logits, axis=-1)
     target_lp = jnp.take_along_axis(target_log_probs, target[:, None], axis=-1).squeeze(
         -1
     )
-    entropy = -(target_probs * target_log_probs).sum(axis=-1) - ship_entropy
+    target_entropy = -jnp.sum(jnp.exp(target_log_probs) * target_log_probs, axis=-1)
+    entropy = target_entropy - ship_entropy
     return target, bucket, target_lp + ship_lp, entropy, ship_fraction
 
 
@@ -519,14 +535,9 @@ def _sample_shielded_factored_sequence_with_params(
                 sequence_active,
             )
             reject_launch = launch_valid & (~cheap_safe)
-            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
-            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
-            ship_fraction = jnp.where(
-                reject_launch,
-                jnp.zeros_like(ship_fraction),
-                ship_fraction,
+            stop, bucket, ship_fraction, launched = _zero_rejected_launch(
+                stop, bucket, ship_fraction, launched, reject_launch
             )
-            launched = jnp.where(reject_launch, 0.0, launched)
             launch_valid = launch_valid & cheap_safe
 
         # Tiered mode: cheap mask for sampling, exact check only the sampled launch.
@@ -558,15 +569,9 @@ def _sample_shielded_factored_sequence_with_params(
                 sequence_active,
             )
             reject_launch = launch_valid & (~exact_safe)
-
-            stop = jnp.where(reject_launch, jnp.ones_like(stop), stop)
-            bucket = jnp.where(reject_launch, jnp.zeros_like(bucket), bucket)
-            ship_fraction = jnp.where(
-                reject_launch,
-                jnp.zeros_like(ship_fraction),
-                ship_fraction,
+            stop, bucket, ship_fraction, launched = _zero_rejected_launch(
+                stop, bucket, ship_fraction, launched, reject_launch
             )
-            launched = jnp.where(reject_launch, 0.0, launched)
             launch_valid = launch_valid & exact_safe
 
         # Tiered exact reject runs before hygiene carry update: rejected launches
@@ -688,10 +693,9 @@ def _sample_shielded_factored_sequence_with_params(
             include_value=False,
         )
         decoder_hidden_out = final_output.decoder_hidden
-    tiered_revalidate = (
-        trajectory_shield_mode(cfg.task) == "tiered"
-        and trajectory_shield_final_validate_selected(cfg.task)
-    )
+    tiered_revalidate = trajectory_shield_mode(
+        cfg.task
+    ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)
     selected_validate_replay = (
         rollout_factorized_sampling_mode(cfg.task) == "selected_validate"
     )
@@ -842,15 +846,6 @@ def _sample_shielded_sequence_with_params(
             + step_diagnostics.original_non_noop_count,
             legal_non_noop_rate=diagnostic_zero,
         )
-        edge_action_mask = jnp.concatenate(
-            [
-                shielded.batch.edge_mask.reshape(
-                    env_count, MAX_PLANETS * edge_k(cfg.task)
-                ),
-                jnp.ones((env_count, 1), dtype=bool),
-            ],
-            axis=1,
-        )
         step_bucket_mask = shielded.ship_bucket_mask.reshape(
             env_count, edge_count, cfg.task.ship_bucket_count
         )
@@ -979,6 +974,8 @@ def _sample_shielded_sequence_with_params(
         decoder_hidden_out=decoder_hidden_out if carry_enabled else None,
         ship_fraction=ship_fraction_sequence if continuous else None,
     )
+
+
 def _sample_policy_action_with_params(
     key: jax.Array,
     game,

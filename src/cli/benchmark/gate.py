@@ -6,9 +6,7 @@ import argparse
 import json
 import sys
 
-KNOWN_GATE_IDS = frozenset(
-    {"admission", "beat_noop", "beat_random", "curriculum_staged"}
-)
+from src.jax.preflight_gate_loader import GATES_DIR
 
 
 def _resolve_gate_id(args: argparse.Namespace) -> str | None:
@@ -31,9 +29,9 @@ def run_gate_cli(args: argparse.Namespace) -> int:
         payload = {"gates": list_gate_recipes()}
         print(json.dumps(payload, indent=2))
         return 0
-    if gate_id not in KNOWN_GATE_IDS:
+    if not (GATES_DIR / f"{gate_id}.yaml").is_file():
         print(
-            f"Unknown gate id {gate_id!r}. Use: ow benchmark gate run admission",
+            f"Unknown gate id {gate_id!r}. Use: ow benchmark gate list",
             file=sys.stderr,
         )
         return 2

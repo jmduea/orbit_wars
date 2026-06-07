@@ -64,21 +64,6 @@ def _select_opp_batch_cache_2p(
     )
 
 
-def _initial_opponent_batch_cache_2p(
-    *,
-    env_state,
-    turn_batch: TurnBatch,
-    task: TaskConfig,
-    skip_opp_batch_refresh: jax.Array,
-) -> TurnBatch:
-    return _select_opp_batch_cache_2p(
-        skip_refresh=skip_opp_batch_refresh,
-        cached=turn_batch,
-        env_state=env_state,
-        task=task,
-    )
-
-
 def _encode_four_player_turn_batches(
     state,
     task: TaskConfig,
@@ -124,17 +109,6 @@ def _select_env_action(
     )
 
 
-def _slice_env_axis(tree: object, env_index: jax.Array) -> object:
-    """Slice leading env axis to a single row (keeps batch dim size 1)."""
-
-    def slice_leaf(value):
-        if isinstance(value, jax.Array) and value.ndim > 0:
-            return jax.lax.dynamic_index_in_dim(value, env_index, axis=0, keepdims=True)
-        return value
-
-    return jax.tree.map(slice_leaf, tree)
-
-
 def _masked_env_sort_order(mask: jax.Array) -> jax.Array:
     """Sort env axis so masked rows are leading (JIT-safe, no dynamic slice sizes)."""
 
@@ -177,15 +151,20 @@ def _merge_reordered_family_action(
     return jax.tree.map(merge_leaf, full_action, partial_action)
 
 
-def _stack_player_actions(player_actions: tuple[JaxAction, ...]) -> JaxAction:
-    """Stack per-player batched actions into batched_step_multi_player layout."""
-
-    return jax.tree.map(lambda *xs: jnp.stack(xs, axis=1), *player_actions)
-
-
 def _gather_action_by_env(pool_action: JaxAction, indices: jax.Array) -> JaxAction:
     env_indices = jnp.arange(indices.shape[0], dtype=jnp.int32)
     return jax.tree.map(lambda field: field[indices, env_indices], pool_action)
+
+
+_OPPONENT_SLOT_COUNT_SPECS: tuple[tuple[str, int], ...] = (
+    ("opponent_slots_latest", OPPONENT_LATEST),
+    ("opponent_slots_historical", OPPONENT_HISTORICAL),
+    ("opponent_slots_random", OPPONENT_RANDOM),
+    ("opponent_slots_noop", OPPONENT_NOOP),
+    ("opponent_slots_nearest_sniper", OPPONENT_NEAREST_SNIPER),
+    ("opponent_slots_turtle", OPPONENT_TURTLE),
+    ("opponent_slots_opportunistic", OPPONENT_OPPORTUNISTIC),
+)
 
 
 def _opponent_count_metrics(
@@ -194,49 +173,14 @@ def _opponent_count_metrics(
 ) -> dict[str, jax.Array]:
     player_ids = jnp.arange(effective_type_ids.shape[1], dtype=jnp.int32)
     slot_mask = player_ids[None, :] != learner_player[:, None]
-    slot_values = slot_mask.astype(jnp.float32)
-    return {
-        "opponent_slots_total": slot_values.sum(),
-        "opponent_slots_latest": ((effective_type_ids == OPPONENT_LATEST) & slot_mask)
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_historical": (
-            (effective_type_ids == OPPONENT_HISTORICAL) & slot_mask
-        )
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_random": ((effective_type_ids == OPPONENT_RANDOM) & slot_mask)
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_noop": ((effective_type_ids == OPPONENT_NOOP) & slot_mask)
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_nearest_sniper": (
-            (effective_type_ids == OPPONENT_NEAREST_SNIPER) & slot_mask
-        )
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_turtle": ((effective_type_ids == OPPONENT_TURTLE) & slot_mask)
-        .astype(jnp.float32)
-        .sum(),
-        "opponent_slots_opportunistic": (
-            (effective_type_ids == OPPONENT_OPPORTUNISTIC) & slot_mask
-        )
-        .astype(jnp.float32)
-        .sum(),
+    metrics: dict[str, jax.Array] = {
+        "opponent_slots_total": slot_mask.astype(jnp.float32).sum(),
     }
-
-
-OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
-    "opponent_slots_total",
-    "opponent_slots_latest",
-    "opponent_slots_historical",
-    "opponent_slots_random",
-    "opponent_slots_noop",
-    "opponent_slots_nearest_sniper",
-    "opponent_slots_turtle",
-    "opponent_slots_opportunistic",
-)
+    for key, family_id in _OPPONENT_SLOT_COUNT_SPECS:
+        metrics[key] = (
+            ((effective_type_ids == family_id) & slot_mask).astype(jnp.float32).sum()
+        )
+    return metrics
 
 
 def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
@@ -330,16 +274,17 @@ def _shielded_scripted_edge_action(
     builder,
 ) -> JaxAction:
     env_count = batch.planet_features.shape[0]
-    edge_count = edge_action_count(cfg.task)
     shielded = jax.vmap(
         lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
             game_row, batch_row, cfg.task
         )
     )(game, batch)
-    bucket_mask = shielded.ship_bucket_mask.reshape(
-        env_count, edge_count, cfg.task.ship_bucket_count
+    return builder(
+        game,
+        shielded.batch,
+        cfg,
+        _edge_bucket_mask(shielded, cfg, env_count=env_count),
     )
-    return builder(game, shielded.batch, cfg, bucket_mask)
 
 
 def _sample_historical_action(

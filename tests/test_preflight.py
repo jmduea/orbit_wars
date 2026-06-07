@@ -11,9 +11,9 @@ from src.jax.preflight import (
     _hydra_output_root,
     _resolve_output_root,
     evaluate_gate_records,
-    read_jsonl_records,
     run_preflight_gate,
 )
+from src.jax.preflight_calibration import read_jsonl_records
 
 
 def _records(
@@ -281,9 +281,7 @@ def test_format_gate_train_config_summary_uses_resolved_values() -> None:
     assert "training group: 2p_16" in text
 
 
-def test_run_preflight_gate_dry_run_emits_resolved_summary(
-    tmp_path, capsys
-) -> None:
+def test_run_preflight_gate_dry_run_emits_resolved_summary(tmp_path, capsys) -> None:
     run_preflight_gate(
         "beat_noop",
         model="transformer_factorized_small",
@@ -295,4 +293,3 @@ def test_run_preflight_gate_dry_run_emits_resolved_summary(
     assert "Resolved gate training config:" in captured.err
     assert "lr=6e-05" in captured.err or "lr=0.00006" in captured.err
     assert "training.lr=0.0003" not in captured.err
-

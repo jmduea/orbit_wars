@@ -21,7 +21,17 @@ OPPONENT_FAMILY_NAMES: tuple[str, ...] = (
 OPPONENT_FAMILY_COUNT = len(OPPONENT_FAMILY_NAMES)
 CURRICULUM_OPPONENT_FAMILIES = frozenset(OPPONENT_FAMILY_NAMES)
 
-_JAX_TRAINING_OPPONENT_MODES = frozenset({"self", "random", "noop", "no_op"})
+OPPONENT_FAMILY_ID_ORDER: tuple[int, ...] = (
+    OPPONENT_LATEST,
+    OPPONENT_HISTORICAL,
+    OPPONENT_NEAREST_SNIPER,
+    OPPONENT_TURTLE,
+    OPPONENT_OPPORTUNISTIC,
+    OPPONENT_RANDOM,
+    OPPONENT_NOOP,
+)
+
+_JAX_TRAINING_OPPONENT_MODES = frozenset({"self", "random", "noop"})
 
 
 def normalize_jax_training_opponent_mode(opponent: str) -> str:
@@ -39,7 +49,7 @@ def is_noop_jax_training_opponent_mode(opponent: str) -> bool:
 
 def validate_jax_training_opponent_mode(opponent: str) -> None:
     normalized = normalize_jax_training_opponent_mode(opponent)
-    if normalized not in {"self", "random", "noop"}:
+    if normalized not in _JAX_TRAINING_OPPONENT_MODES:
         raise ValueError(
             "JAX training supports opponent='self', opponent='random', "
             "opponent='noop', or opponent='no_op', "

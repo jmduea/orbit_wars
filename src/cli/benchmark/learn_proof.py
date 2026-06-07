@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from pathlib import Path
+import time
 
 from src.cli.benchmark.common import LEARN_PROOF_PRIMITIVES, REPO_ROOT, _git_head_sha
 from src.cli.benchmark.tournament_proof import run_tournament_proof_cli
+
 
 def _learn_proof_primitive_payload() -> dict[str, object]:
     return {
@@ -26,9 +26,7 @@ def _resolve_learn_proof_gates(args: argparse.Namespace) -> tuple[str, ...]:
         if args.gate is not None or args.through is not None:
             raise SystemExit("Use only one of --steps, --gate, or --through.")
         requested = tuple(
-            item.strip()
-            for item in str(args.steps).split(",")
-            if item.strip()
+            item.strip() for item in str(args.steps).split(",") if item.strip()
         )
         if not requested:
             raise SystemExit("--steps requires at least one gate id.")
@@ -69,13 +67,14 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     selected_gates = _resolve_learn_proof_gates(args)
 
     extra_train_overrides = tuple(args.train_overrides)
-    started = __import__("time").perf_counter()
+    started = time.perf_counter()
     evaluations = []
     overall_verdict = PreflightVerdict.VERIFIED
     for gate_id in selected_gates:
         gate_model = (
             "transformer_factorized"
-            if gate_id == "curriculum_staged" and args.model != "planet_flow_target_heatmap"
+            if gate_id == "curriculum_staged"
+            and args.model != "planet_flow_target_heatmap"
             else args.model
         )
         evaluation = run_preflight_gate(
@@ -97,7 +96,7 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     report: dict[str, object] = {
         "gate": "learn_proof",
         "commit_sha": _git_head_sha(),
-        "seconds_total": __import__("time").perf_counter() - started,
+        "seconds_total": time.perf_counter() - started,
         "verdict": overall_verdict.value,
         "through": args.through or args.gate or ",".join(selected_gates),
         "steps": list(selected_gates),
@@ -109,4 +108,3 @@ def run_learn_proof_cli(args: argparse.Namespace) -> int:
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
     return 0 if overall_verdict == PreflightVerdict.VERIFIED else 1
-

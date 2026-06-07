@@ -21,11 +21,12 @@ class TelemetryLogger:
         self._log_model_every = max(int(cfg.telemetry.wandb.log_model_every), 1)
         self._last_wandb_step: int | None = None
         self._run_metadata = dict(run_metadata or {})
-        self._init(run_metadata or {})
+        self._init()
 
-    def _init(self, run_metadata: dict[str, Any]) -> None:
+    def _init(self) -> None:
         if not self._enabled:
             return
+        run_metadata = self._run_metadata
         wandb_dir = run_metadata.get("wandb_dir")
         wandb_artifact_dir = run_metadata.get("wandb_artifact_dir")
         wandb_data_dir = run_metadata.get("wandb_data_dir")
@@ -135,20 +136,11 @@ class TelemetryLogger:
         self._run.log_artifact(artifact, aliases=aliases)
 
     def log_checkpoint(self, path: str | Path, *, update: int) -> None:
-        metadata = {
-            "update": int(update),
-            "run_name": self._cfg.run_name,
-            "campaign": self._run_metadata.get("campaign"),
-            "run_id": self._run_metadata.get("run_id"),
-            "wandb_run_id": getattr(self._run, "id", None),
-        }
         self.log_artifact(
             path,
             name=f"checkpoint-u{update}",
             artifact_type="checkpoint",
-            metadata={
-                key: value for key, value in metadata.items() if value is not None
-            },
+            metadata=self._checkpoint_metadata(update=update),
             aliases=["latest", f"update-{int(update)}"],
         )
 
@@ -162,24 +154,37 @@ class TelemetryLogger:
     ) -> None:
         """Upload a promoted checkpoint with best/promoted aliases."""
 
-        metadata = {
-            "update": int(update),
-            "run_name": self._cfg.run_name,
-            "campaign": self._run_metadata.get("campaign"),
-            "run_id": self._run_metadata.get("run_id"),
-            "metric_name": metric_name,
-            "metric_value": float(metric_value),
-            "wandb_run_id": getattr(self._run, "id", None),
-        }
         self.log_artifact(
             path,
             name=f"checkpoint-promoted-u{update}",
             artifact_type="checkpoint",
-            metadata={
-                key: value for key, value in metadata.items() if value is not None
-            },
+            metadata=self._checkpoint_metadata(
+                update=update,
+                metric_name=metric_name,
+                metric_value=float(metric_value),
+            ),
             aliases=["best", "promoted", f"update-{int(update)}"],
         )
+
+    def _checkpoint_metadata(
+        self,
+        *,
+        update: int,
+        metric_name: str | None = None,
+        metric_value: float | None = None,
+    ) -> dict[str, object]:
+        metadata: dict[str, object] = {
+            "update": int(update),
+            "run_name": self._cfg.run_name,
+            "campaign": self._run_metadata.get("campaign"),
+            "run_id": self._run_metadata.get("run_id"),
+            "wandb_run_id": getattr(self._run, "id", None),
+        }
+        if metric_name is not None:
+            metadata["metric_name"] = metric_name
+        if metric_value is not None:
+            metadata["metric_value"] = metric_value
+        return {key: value for key, value in metadata.items() if value is not None}
 
     def log_replay(self, path: str | Path, *, update: int) -> None:
         self.log_artifact(path, name=f"replay-u{update}", artifact_type="replay")
@@ -189,9 +194,3 @@ class TelemetryLogger:
             return
         self._run.finish()
         self._run = None
-
-
-def build_telemetry(
-    cfg: TrainConfig, run_metadata: dict[str, Any] | None = None
-) -> TelemetryLogger:
-    return TelemetryLogger(cfg, run_metadata=run_metadata)

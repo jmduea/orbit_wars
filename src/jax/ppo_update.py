@@ -161,9 +161,7 @@ def _flatten_state_scalars(value: jax.Array, env_rows: int) -> jax.Array:
     return flat[:env_rows]
 
 
-def _actor_advantages_from_state(
-    advantages: jax.Array, sequence_k: int
-) -> jax.Array:
+def _actor_advantages_from_state(advantages: jax.Array, sequence_k: int) -> jax.Array:
     """Broadcast per-state advantages for per-sub-action PPO objectives."""
 
     if advantages.ndim == 1:
@@ -302,9 +300,7 @@ def _value_loss_per_state(
                 "Distributional value head requires value_logits in policy output."
             )
         support = value_support(cfg.model.value_bins, cfg.model.value_max)
-        return sparse_categorical_value_cross_entropy(
-            value_logits, returns, support
-        )
+        return sparse_categorical_value_cross_entropy(value_logits, returns, support)
     return 0.5 * (returns - value) ** 2
 
 
@@ -417,7 +413,6 @@ def _ppo_update_factorized_jax(
     old_log_prob = replay.log_prob.reshape(env_rows, sequence_k)
     returns_state = _flatten_state_scalars(batch.returns, env_rows)
     advantages_state = _flatten_state_scalars(batch.advantages, env_rows)
-    advantages_actor = _actor_advantages_from_state(advantages_state, sequence_k)
     advantage_mean = jnp.mean(advantages_state)
     advantages_state = (advantages_state - advantage_mean) / jnp.sqrt(
         jnp.mean((advantages_state - advantage_mean) ** 2) + 1e-8
@@ -439,7 +434,6 @@ def _ppo_update_factorized_jax(
     total_rows = mask.shape[0]
     minibatch_size = min(max(int(cfg.training.update_chunk_rows), 1), total_rows)
     minibatch_count = (total_rows + minibatch_size - 1) // minibatch_size
-    pad_rows = minibatch_count * minibatch_size - total_rows
 
     source_mask = ship_bucket_mask[..., 1:].any(axis=(-2, -1))
     launch_active = mask * (1.0 - stop_flag)
@@ -454,39 +448,29 @@ def _ppo_update_factorized_jax(
     debug_metrics: dict[str, jax.Array] = {}
     if debug_group_enabled:
         debug_metrics = {
-        "debug_step_mask_sum": mask.sum(),
-        "debug_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
-            jnp.float32
-        ),
-        "debug_returns_finite": jnp.all(jnp.isfinite(returns_state)).astype(
-            jnp.float32
-        ),
-        "debug_advantages_finite": jnp.all(jnp.isfinite(advantages_state)).astype(
-            jnp.float32
-        ),
-        "debug_ship_bucket_mask_any_min": per_step_bucket_counts.min(),
-        "debug_ship_bucket_mask_all_false": (per_step_bucket_counts == 0)
-        .sum()
-        .astype(jnp.float32),
-        "debug_source_mask_all_false": (source_mask.sum(axis=-1) == 0)
-        .sum()
-        .astype(jnp.float32),
-        "debug_active_launch_all_false_bucket": (
-            launch_active * (per_step_bucket_counts == 0)
-        )
-        .sum()
-        .astype(jnp.float32),
-    }
-    parity_batch = TurnBatch(
-        planet_features=turn_batch.planet_features,
-        planet_mask=turn_batch.planet_mask,
-        edge_features=turn_batch.edge_features,
-        edge_mask=turn_batch.edge_mask,
-        edge_src_ids=turn_batch.edge_src_ids,
-        edge_tgt_ids=turn_batch.edge_tgt_ids,
-        global_features=turn_batch.global_features,
-        theta_ref=turn_batch.theta_ref,
-    )
+            "debug_step_mask_sum": mask.sum(),
+            "debug_old_log_prob_finite": jnp.all(jnp.isfinite(old_log_prob)).astype(
+                jnp.float32
+            ),
+            "debug_returns_finite": jnp.all(jnp.isfinite(returns_state)).astype(
+                jnp.float32
+            ),
+            "debug_advantages_finite": jnp.all(jnp.isfinite(advantages_state)).astype(
+                jnp.float32
+            ),
+            "debug_ship_bucket_mask_any_min": per_step_bucket_counts.min(),
+            "debug_ship_bucket_mask_all_false": (per_step_bucket_counts == 0)
+            .sum()
+            .astype(jnp.float32),
+            "debug_source_mask_all_false": (source_mask.sum(axis=-1) == 0)
+            .sum()
+            .astype(jnp.float32),
+            "debug_active_launch_all_false_bucket": (
+                launch_active * (per_step_bucket_counts == 0)
+            )
+            .sum()
+            .astype(jnp.float32),
+        }
     if cfg.training.debug_replay_parity:
         parity_fraction = ship_fraction
         parity_hidden = decoder_hidden
@@ -494,7 +478,7 @@ def _ppo_update_factorized_jax(
             factored_logprob_parity_metrics(
                 train_state.params,
                 policy,
-                parity_batch,
+                turn_batch,
                 cfg,
                 player_count=player_count,
                 source_index=source,
@@ -725,9 +709,9 @@ def _ppo_update_factorized_jax(
                 format_mask = minibatch["mask"] * (
                     minibatch["player_count"][:, None] == format_player_count
                 ).astype(jnp.float32)
-                state_mask = (
-                    minibatch["player_count"] == format_player_count
-                ).astype(jnp.float32)
+                state_mask = (minibatch["player_count"] == format_player_count).astype(
+                    jnp.float32
+                )
                 format_policy_loss = -masked_mean(policy_objective, format_mask)
                 format_value_loss = masked_mean(value_error, state_mask)
                 format_entropy = masked_mean(entropy, format_mask)

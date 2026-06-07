@@ -34,10 +34,10 @@ from src.opponents.jax_actions.builders import (
     build_action_from_factored_batch,
 )
 from src.opponents.jax_actions.sampling import (
-    _encode_opponent_turn_batch_2p,
     _encode_four_player_turn_batches,
+    _encode_opponent_turn_batch_2p,
     _four_player_step_action,
-    _initial_opponent_batch_cache_2p,
+    _select_opp_batch_cache_2p,
     should_skip_opponent_batch_refresh_2p,
 )
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
@@ -261,11 +261,11 @@ def collect_rollout_jax_timed(
     decoder_hidden = initial_decoder_hidden
 
     if cfg.task.player_count == 2:
-        opp_batch_cache = _initial_opponent_batch_cache_2p(
+        opp_batch_cache = _select_opp_batch_cache_2p(
+            skip_refresh=skip_opp_batch_refresh,
+            cached=batch,
             env_state=state,
-            turn_batch=batch,
             task=cfg.task,
-            skip_opp_batch_refresh=skip_opp_batch_refresh,
         )
     else:
         opp_batch_cache = batch

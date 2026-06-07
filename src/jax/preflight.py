@@ -6,15 +6,18 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
 
 from src.jax.preflight_calibration import (
     WINDOW_UPDATES,
-    default_calibration_json_path,
+    _best_rolling_mean,
+    _launches_key,
+    _window_mean,
+    _window_mean_first,
+    find_latest_checkpoint,
+    latest_run_dir,
+    read_jsonl_records,
     run_ow_train,
 )
-
-Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
 
 GATE_ORDER: tuple[str, ...] = ("beat_noop", "beat_random", "curriculum_staged")
 
@@ -103,65 +106,6 @@ def _hydra_output_root(output_root: Path, repo_root: Path) -> str:
         ) from exc
 
 
-def read_jsonl_records(path: Path) -> list[dict[str, object]]:
-    if not path.is_file():
-        return []
-    records: list[dict[str, object]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped:
-            records.append(json.loads(stripped))
-    return records
-
-
-def _launches_key(records: list[dict[str, object]]) -> str | None:
-    for key in ("mean_active_launches_per_turn", "stop_utilization_ratio"):
-        if any(key in record for record in records):
-            return key
-    return None
-
-
-def _window_mean(
-    records: list[dict[str, object]], key: str, *, last_n: int
-) -> float | None:
-    tail = records[-last_n:] if last_n > 0 else records
-    values = [
-        float(record[key])
-        for record in tail
-        if key in record and record[key] is not None
-    ]
-    if not values:
-        return None
-    return sum(values) / len(values)
-
-
-def _window_mean_first(
-    records: list[dict[str, object]], key: str, *, first_n: int
-) -> float | None:
-    head = records[:first_n] if first_n > 0 else records
-    values = [
-        float(record[key])
-        for record in head
-        if key in record and record[key] is not None
-    ]
-    if not values:
-        return None
-    return sum(values) / len(values)
-
-
-def _best_rolling_mean(
-    records: list[dict[str, object]], key: str, *, window_n: int
-) -> float | None:
-    if not records or window_n <= 0:
-        return None
-    rolling = [
-        _window_mean(records[: index + 1], key, last_n=window_n)
-        for index in range(window_n - 1, len(records))
-    ]
-    values = [value for value in rolling if value is not None]
-    return max(values) if values else None
-
-
 def _count_curriculum_promotions(records: list[dict[str, object]]) -> int:
     count = 0
     for record in records:
@@ -175,26 +119,6 @@ def _count_curriculum_promotions(records: list[dict[str, object]]) -> int:
             ):
                 count += 1
     return count
-
-
-def latest_run_dir(*, campaign: str, output_root: Path) -> Path:
-    runs_root = output_root / "campaigns" / campaign / "runs"
-    if not runs_root.is_dir():
-        raise FileNotFoundError(
-            f"No runs directory for campaign {campaign!r}: {runs_root}"
-        )
-    candidates = [path for path in runs_root.iterdir() if path.is_dir()]
-    if not candidates:
-        raise FileNotFoundError(f"No runs under campaign {campaign!r}: {runs_root}")
-    return max(candidates, key=lambda path: path.stat().st_mtime)
-
-
-def find_latest_checkpoint(run_dir: Path) -> Path | None:
-    ckpt_dir = run_dir / "checkpoints"
-    if not ckpt_dir.is_dir():
-        return None
-    paths = sorted(ckpt_dir.glob("jax_ckpt_*.pkl"))
-    return paths[-1] if paths else None
 
 
 def evaluate_gate_records(

@@ -17,6 +17,8 @@ from src.telemetry.metrics.game_state import _GAME_STATE_BY_NAME
 from src.telemetry.metrics.historical_pool import _HISTORICAL_POOL_BY_NAME
 from src.telemetry.metrics.losses import _LOSSES_BY_NAME
 from src.telemetry.metrics.opponent_composition import _OPPONENT_COMPOSITION_BY_NAME
+from src.telemetry.metrics.rollout_phase_timing import _ROLLOUT_PHASE_TIMING_BY_NAME
+from src.telemetry.metrics.ssot import _SSOT_BY_NAME
 from src.telemetry.metrics.timing import _TIMING_BY_NAME
 from src.telemetry.metrics.trajectory_shield_debug import (
     _TRAJECTORY_SHIELD_DEBUG_BY_NAME,
@@ -90,6 +92,21 @@ _REGISTRY_ASSEMBLY_ORDER: tuple[str, ...] = (
     "rollout_samples_per_sec_4p",
     "update_time_rollout_fraction",
     "update_time_ppo_fraction",
+    "rollout_phase_policy_seconds",
+    "rollout_phase_opponent_seconds",
+    "rollout_phase_opponent_sample_seconds",
+    "rollout_phase_opponent_encode_seconds",
+    "rollout_phase_env_step_seconds",
+    "rollout_phase_reset_seconds",
+    "rollout_phase_post_step_seconds",
+    "rollout_phase_measured_total_seconds",
+    "rollout_phase_policy_fraction",
+    "rollout_phase_opponent_fraction",
+    "rollout_phase_opponent_sample_fraction",
+    "rollout_phase_opponent_encode_fraction",
+    "rollout_phase_env_step_fraction",
+    "rollout_phase_reset_fraction",
+    "rollout_phase_post_step_fraction",
     "gpu_memory_used_gb",
     "gpu_memory_total_gb",
     "gpu_memory_peak_gb",
@@ -118,6 +135,18 @@ _REGISTRY_ASSEMBLY_ORDER: tuple[str, ...] = (
     "planet_flow_sweep_score",
     "preflight_sweep_score",
     "ssot_preflight_sweep_score",
+    "ssot_qualifier_phase",
+    "ssot_qualifier_stage",
+    "ssot_rollout_family_prob_latest",
+    "ssot_rollout_family_prob_historical",
+    "ssot_rollout_family_prob_random",
+    "ssot_rollout_family_prob_noop",
+    "ssot_rollout_family_prob_nearest_sniper",
+    "ssot_rollout_family_prob_turtle",
+    "ssot_rollout_family_prob_opportunistic",
+    "ssot_qualifier_win_rate_random",
+    "ssot_qualifier_win_rate_noop",
+    "ssot_qualifier_win_rate_nearest_sniper",
     "stop_utilization_ratio",
     "mean_ships_per_launch",
     "survival_time",
@@ -182,6 +211,8 @@ def _definitions_by_name() -> dict[str, MetricDefinition]:
         **_GAME_STATE_BY_NAME,
         **_TRAJECTORY_SHIELD_DEBUG_BY_NAME,
         **_HISTORICAL_POOL_BY_NAME,
+        **_SSOT_BY_NAME,
+        **_ROLLOUT_PHASE_TIMING_BY_NAME,
     }
 
 

@@ -107,7 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     root_default = parser.get_default("output_root")
 
-    show = subparsers.add_parser("show", help="Print promoted/current_best/manifest.json.")
+    show = subparsers.add_parser(
+        "show", help="Print promoted/current_best/manifest.json."
+    )
     show.add_argument("--output-root", type=Path, default=root_default)
     show.add_argument("--campaign", required=True, help="Campaign slug.")
     show.add_argument(
@@ -164,7 +166,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def print_promote_help() -> None:
+    print(
+        "ow promote — inspect and roll back campaign promotion\n\n"
+        "Subcommands:\n"
+        "  show --campaign <name>\n"
+        "  history --campaign <name> [--limit N]\n"
+        "  demote --campaign <name> [--to-previous] [--dry-run]\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
+    if not argv:
+        print_promote_help()
+        return 0
     parser = build_parser()
     args = parser.parse_args(argv)
     return int(args.handler(args))

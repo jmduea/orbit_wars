@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from src.jax.preflight import read_jsonl_records
 from src.benchmark.training import (
     DEFAULT_E2E_WITHIN_PCT,
     E2E_THROUGHPUT_METRICS,
@@ -17,6 +16,7 @@ from src.benchmark.training import (
     resolve_e2e_measured_for_gate,
     resolve_e2e_pass_band,
 )
+from src.jax.preflight_calibration import read_jsonl_records
 
 ADMISSION_THROUGHPUT_GATE = "admission_throughput"
 DEFAULT_WARMUP = 2

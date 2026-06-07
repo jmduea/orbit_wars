@@ -87,6 +87,19 @@ def _window_mean_first(
     return sum(values) / len(values)
 
 
+def _best_rolling_mean(
+    records: list[dict[str, object]], key: str, *, window_n: int
+) -> float | None:
+    if not records or window_n <= 0:
+        return None
+    rolling = [
+        _window_mean(records[: index + 1], key, last_n=window_n)
+        for index in range(window_n - 1, len(records))
+    ]
+    values = [value for value in rolling if value is not None]
+    return max(values) if values else None
+
+
 def run_ow_train(
     overrides: list[str],
     *,
@@ -333,14 +346,11 @@ def extract_training_signals(
         if win_first is not None and win_last is not None
         else None
     )
-    rolling_best: float | None = None
-    if metric_rows and window > 0:
-        rolling = [
-            _window_mean(metric_rows[: index + 1], "overall_win_rate", last_n=window)
-            for index in range(window - 1, len(metric_rows))
-        ]
-        rolling_values = [value for value in rolling if value is not None]
-        rolling_best = max(rolling_values) if rolling_values else None
+    rolling_best = (
+        _best_rolling_mean(metric_rows, "overall_win_rate", window_n=window)
+        if window
+        else None
+    )
     win_mean_values = [
         float(record["overall_win_rate"])
         for record in metric_rows
@@ -720,7 +730,9 @@ def refresh_agents_md_thresholds(
         if marker not in content:
             return False
         line_end = content.index("\n", content.index(marker))
-        updated = content[: line_end + 1] + "\n" + new_block + "\n" + content[line_end + 1 :]
+        updated = (
+            content[: line_end + 1] + "\n" + new_block + "\n" + content[line_end + 1 :]
+        )
     if updated == content:
         return False
     path.write_text(updated, encoding="utf-8")

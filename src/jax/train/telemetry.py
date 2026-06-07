@@ -10,8 +10,15 @@ import jax
 from src.config import TrainConfig
 from src.jax.train.checkpoint import HistoricalSnapshotPool, append_jsonl
 from src.telemetry.metric_registry import (
+    ROLLOUT_INTERNAL_REQUIRED_METRIC_NAMES,
     ROLLOUT_OUTPUT_METRIC_NAMES,
+    enabled_metric_groups,
     filter_update_record,
+    metric_groups_cfg_from_config,
+)
+
+_UPDATE_RECORD_CORE_ROLLOUT_KEYS = ROLLOUT_INTERNAL_REQUIRED_METRIC_NAMES | frozenset(
+    {"average_placement_4p"}
 )
 
 
@@ -71,25 +78,11 @@ def rollout_metrics_for_update_record(
 ) -> dict[str, float]:
     """Merge optional rollout scalars selected by metric-group filtering."""
 
-    core_keys = frozenset(
-        {
-            "samples",
-            "env_steps",
-            "episode_done",
-            "average_reward",
-            "episode_reward_mean",
-            "win_rate_2p",
-            "first_place_rate_4p",
-            "average_placement_4p",
-            "overall_win_rate",
-            "survival_time",
-            "score_share",
-        }
-    )
     metrics = {
         key: float(rollout_scalars[key])
         for key in rollout_scalars
-        if key in ROLLOUT_OUTPUT_METRIC_NAMES and key not in core_keys
+        if key in ROLLOUT_OUTPUT_METRIC_NAMES
+        and key not in _UPDATE_RECORD_CORE_ROLLOUT_KEYS
     }
     if "mean_active_launches_per_turn" in rollout_scalars:
         metrics["stop_utilization_ratio"] = float(
@@ -147,7 +140,7 @@ def build_update_record(
     episode_reward_mean = float(rollout_scalars["episode_reward_mean"])
     overall_win_rate = float(rollout_scalars["overall_win_rate"])
 
-    return {
+    record: dict[str, object] = {
         "update": update,
         "total_env_steps": total_env_steps,
         "completed_episodes": completed_episodes,
@@ -174,12 +167,16 @@ def build_update_record(
         "seed_scheduler_plateau_metric": plateau_metric,
         "reseed_events": reseed_events,
         **curriculum_telemetry,
-        "historical_pool_size": int(jax.device_get(historical_pool.valid_mask).sum()),
-        "historical_pool_capacity": int(historical_pool.valid_mask.shape[0]),
         **{name: float(value) for name, value in metrics_host.items()},
         "curriculum_phase_events": list(update_events),
         **gpu_update_metrics,
     }
+    if "historical_pool" in enabled_metric_groups(metric_groups_cfg_from_config(cfg)):
+        record["historical_pool_size"] = int(
+            jax.device_get(historical_pool.valid_mask).sum()
+        )
+        record["historical_pool_capacity"] = int(historical_pool.valid_mask.shape[0])
+    return record
 
 
 def write_filtered_update_records(

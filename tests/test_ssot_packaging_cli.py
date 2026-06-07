@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +15,7 @@ def test_package_cli_forwards_ssot_packaging_flags(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     args = Namespace(
         checkpoint=ckpt,
+        wandb_run=None,
         output_dir=out_dir,
         validate_docker=True,
         packaging_seed=0,
@@ -40,6 +40,7 @@ def test_package_cli_omits_packaging_kwargs_when_flags_unset(tmp_path: Path) -> 
     out_dir = tmp_path / "out"
     args = Namespace(
         checkpoint=ckpt,
+        wandb_run=None,
         output_dir=out_dir,
         validate_docker=False,
         packaging_seed=None,

@@ -75,6 +75,27 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert factorized.max_moves_k == 5
     assert factorized.assert_max_ms == 3.22
 
+    rollout_profile = parser.parse_args(
+        [
+            "rollout-phase-profile",
+            "--preset",
+            "admission",
+            "--updates",
+            "5",
+            "--full-geometry",
+            "--train-overrides",
+            "task=map_pool",
+            "--out",
+            "/tmp/profile.json",
+        ]
+    )
+    assert rollout_profile.command == "rollout-phase-profile"
+    assert rollout_profile.preset == "admission"
+    assert rollout_profile.updates == 5
+    assert rollout_profile.full_geometry is True
+    assert rollout_profile.train_overrides == ["task=map_pool"]
+    assert rollout_profile.out == Path("/tmp/profile.json")
+
     encode_turn = parser.parse_args(
         [
             "encode-turn",
@@ -233,4 +254,3 @@ def test_makefile_e2e_throughput_target_uses_baseline_assert() -> None:
     training_help = training_parser.format_help()
     assert "primary" in training_help
     assert "shield_cheap" in training_help
-

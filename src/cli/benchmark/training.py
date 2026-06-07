@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
+
 
 def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     import jax
@@ -44,6 +44,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
 
     run_payloads: list[dict[str, object]] = []
     repeats = max(int(args.repeats), 1)
+    commit_sha = _git_head_sha()
     for repeat_idx in range(repeats):
         label = args.label if repeats == 1 else f"{args.label}_r{repeat_idx + 1}"
         result = run_training_benchmark(
@@ -59,7 +60,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         payload = training_benchmark_payload(result)
         payload.update(
             {
-                "commit_sha": _git_head_sha(),
+                "commit_sha": commit_sha,
                 "tier": args.tier,
                 "jax_version": jax.__version__,
                 "format": format_profile_name(overrides),
@@ -89,7 +90,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         output_payload = {
             "gate": E2E_THROUGHPUT_GATE,
             "label": args.label,
-            "commit_sha": _git_head_sha(),
+            "commit_sha": commit_sha,
             "jax_version": jax.__version__,
             "overrides": overrides,
             "updates": updates,
@@ -107,9 +108,7 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
             "planet_flow_emitted_launch_count_delta_vs_control",
         )
         missing = [
-            key
-            for key in required_control_metrics
-            if run_payloads[0].get(key) is None
+            key for key in required_control_metrics if run_payloads[0].get(key) is None
         ]
         if missing:
             print(
@@ -184,4 +183,3 @@ def run_training_benchmark_cli(args: argparse.Namespace) -> int:
         )
         return 1
     return 0
-

@@ -21,64 +21,21 @@ from src.jax.action_codec import (
     action_log_prob_and_entropy,
     ensure_policy_sequence,
 )
-from src.jax.decoders.planet_flow import PlanetFlowTargetDemandHead
 from src.jax.decoders.factorized_topk_pointer import (
     FactorizedDecodeCarry,
     FactorizedStepLogits,
     FactorizedTopKPointerDecoder,
 )
+from src.jax.decoders.planet_flow import PlanetFlowTargetDemandHead
 from src.jax.distributional_value import (
     expected_value_from_logits,
     value_support,
 )
-from src.jax.encoders import EncoderOutput
 from src.jax.encoders.planet_encoder_common import PlanetEdgeEncoderOutput
 from src.jax.encoders.planet_graph_transformer import PlanetGraphTransformerEncoder
 from src.jax.features import TurnBatch
 
 # --- Decoders ---
-
-
-class FeedForwardActionDecoder(nn.Module):
-    """Single-step target and ship-bucket decoder for non-autoregressive policies."""
-
-    ship_bucket_count: int
-    hidden_size: int = 128
-
-    @nn.compact
-    def __call__(
-        self,
-        encoder_out: EncoderOutput,
-        candidate_mask: jax.Array,
-        target_sequence: jax.Array | None = None,
-        rng: jax.Array | None = None,
-        deterministic: bool = False,
-    ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        del target_sequence, rng, deterministic
-
-        expanded_context = jnp.broadcast_to(
-            encoder_out.context_query[:, None, :],
-            encoder_out.attended_candidates.shape[:-1]
-            + (encoder_out.context_query.shape[-1],),
-        )
-        joint = jnp.concatenate(
-            [expanded_context, encoder_out.attended_candidates], axis=-1
-        )
-        target_hidden = nn.relu(nn.Dense(self.hidden_size, name="target_dense")(joint))
-        target_logits = nn.Dense(1, name="target_out")(target_hidden).squeeze(-1)
-        target_logits = jnp.where(
-            candidate_mask, target_logits, jnp.finfo(jnp.float32).min
-        )
-        ship_hidden = nn.relu(nn.Dense(self.hidden_size, name="ship_dense")(joint))
-        ship_logits = nn.Dense(self.ship_bucket_count, name="ship_out")(ship_hidden)
-        decoded_target_sequence = jnp.full(
-            (target_logits.shape[0], 1), -1, dtype=jnp.int32
-        )
-        return (
-            target_logits[:, None, :],
-            ship_logits[:, None, :, :],
-            decoded_target_sequence,
-        )
 
 
 class ValueHeadOutput(NamedTuple):
@@ -657,9 +614,7 @@ def build_planet_graph_transformer_policy(cfg: TrainConfig) -> nn.Module:
         return ComposablePlanetFlowPolicy(
             encoder_module=encoder_module,
             demand_head_module=PlanetFlowTargetDemandHead(
-                pressure_bucket_count=len(
-                    cfg.model.planet_flow.pressure_bucket_values
-                ),
+                pressure_bucket_count=len(cfg.model.planet_flow.pressure_bucket_values),
                 hidden_size=hidden,
             ),
             value_head_module=value_head_module,

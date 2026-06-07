@@ -18,13 +18,7 @@ from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
 from src.jax.decoder_carry import empty_decoder_hidden
-from src.jax.env import (
-    JaxAction,
-    JaxFleetState,
-    JaxGameState,
-    JaxPlanetState,
-    empty_comet_state,
-)
+from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import TurnBatch
 from src.jax.map_pool.comets import empty_comet_state
 

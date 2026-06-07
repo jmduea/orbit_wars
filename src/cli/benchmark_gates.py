@@ -145,16 +145,12 @@ def _append_throughput_section(
 
 
 def _finalize_admission_report(report: dict[str, object]) -> int:
-    learning_verdict = str(report.get("verdict", "INCONCLUSIVE"))
-    throughput_verdict = str(report.get("throughput_verdict", "INCONCLUSIVE"))
-    learning_passed = learning_verdict == "VERIFIED"
-    throughput_passed = throughput_verdict == "VERIFIED"
+    learning_passed = str(report.get("verdict", "INCONCLUSIVE")) == "VERIFIED"
+    throughput_passed = (
+        str(report.get("throughput_verdict", "INCONCLUSIVE")) == "VERIFIED"
+    )
     report["admission_passed"] = learning_passed and throughput_passed
-    if learning_passed and throughput_passed:
-        return 0
-    if not learning_passed and not throughput_passed:
-        return 1
-    return 1
+    return 0 if report["admission_passed"] else 1
 
 
 def run_gate_cli(
@@ -218,11 +214,10 @@ def run_gate_cli(
     if learning_gate_id != gate_id:
         report["learning_gate"] = learning_gate_id
 
-    throughput_exit = 0
     if throughput_enabled and not dry_run:
         stage = report.get("stage")
         log_path = stage.get("log_path") if isinstance(stage, dict) else None
-        throughput_exit = _append_throughput_section(
+        _append_throughput_section(
             report,
             log_path=str(log_path) if log_path else None,
             baseline_path=baseline_path,

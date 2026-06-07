@@ -58,43 +58,6 @@ def print_eval_help() -> None:
     )
 
 
-def _eval_export(name: str):
-    """Resolve a lazily exported CLI dependency (patchable on ``src.cli.eval``)."""
-
-    exported = globals().get(name)
-    if exported is not None:
-        return exported
-    value = __getattr__(name)
-    globals()[name] = value
-    return value
-
-
-def print_eval_help() -> None:
-    print(
-        "ow eval — tournament, artifact worker, Kaggle package/submit\n\n"
-        "Subcommands:\n"
-        "  tournament   Head-to-head eval in Kaggle env\n"
-        "  worker       Process queue/optional_jobs for a run\n"
-        "  status       Summarize queue jobs and promotion for a run\n"
-        "  bracket      Campaign bracket state (status|show)\n"
-        "  results      List or show evaluation manifests under a run\n"
-        "  jobs         Queue job operations (cancel)\n"
-        "  package      Build submission.tar.gz from checkpoint\n"
-        "  submit       Upload package to Kaggle competition\n\n"
-        "Examples:\n"
-        "  uv run ow eval status --run outputs/campaigns/<c>/runs/<id> --watch\n"
-        "  uv run ow eval results show --run <path> --result checkpoint_eval_u000010_<id>\n"
-        "  uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl \\\n"
-        "    --output-dir /tmp/kaggle_submit --validate-docker\n"
-        "  uv run ow eval jobs cancel --run <path> --all-queued --dry-run\n"
-        "  uv run ow eval worker --run outputs/campaigns/<c>/runs/<id> --verbose\n"
-        "  uv run ow eval bracket status --campaign <name>\n"
-        "  uv run ow eval tournament --checkpoint outputs/.../jax_ckpt_last.pkl\n\n"
-        "Submit-valid: hybrid poll + results show (validation_ok), or package --validate-docker.\n"
-        "More: uv run ow eval package --help | ow eval tournament --help\n"
-    )
-
-
 def build_parser() -> argparse.ArgumentParser:
     from src.artifacts.kaggle_submission import DEFAULT_COMPETITION
 
@@ -579,7 +542,9 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
-    output_dir = args.output_dir or _default_output_dir(str(args.campaign), str(args.output_root))
+    output_dir = args.output_dir or _default_output_dir(
+        str(args.campaign), str(args.output_root)
+    )
     result = _eval_export("run_tournament")(
         tuple(candidates),
         cfg=cfg.artifacts.tournament,
@@ -669,11 +634,17 @@ def run_bracket_cli(args: argparse.Namespace) -> int:
 
     output_root = args.output_root.resolve()
     if args.bracket_command == "status":
-        payload = summarize_bracket(campaign=str(args.campaign), output_root=output_root)
+        payload = summarize_bracket(
+            campaign=str(args.campaign), output_root=output_root
+        )
     elif args.bracket_command == "show":
-        payload = bracket_show_payload(campaign=str(args.campaign), output_root=output_root)
+        payload = bracket_show_payload(
+            campaign=str(args.campaign), output_root=output_root
+        )
     else:
-        raise SystemExit("Unknown bracket command. Use: ow eval bracket status|show --help")
+        raise SystemExit(
+            "Unknown bracket command. Use: ow eval bracket status|show --help"
+        )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -748,15 +719,22 @@ def run_package_cli(args: argparse.Namespace) -> int:
         package_kwargs["seed"] = int(args.packaging_seed)
     if args.packaging_player_count is not None:
         package_kwargs["player_count"] = str(args.packaging_player_count)
+    if args.wandb_run:
+        from src.artifacts.tournament.resolve import resolve_checkpoint_from_wandb_run
+
+        cache_dir = args.output_dir.resolve() / "wandb_checkpoints"
+        checkpoint = resolve_checkpoint_from_wandb_run(args.wandb_run, cache_dir)
+    else:
+        checkpoint = args.checkpoint.resolve()
     package_path = _eval_export("package_checkpoint_submission")(
-        args.checkpoint.resolve(),
+        checkpoint,
         args.output_dir.resolve(),
         **package_kwargs,
     )
     print(f"package_path={package_path}")
     if args.validate_docker:
         print(json.dumps({"ok": True, "package_path": str(package_path)}))
-    if not args.validate_docker:
+    else:
         print(
             "docker_validation=skipped (packaging only; does not prove competition compatibility)",
             file=sys.stderr,
@@ -822,7 +800,9 @@ def main(argv: list[str] | None = None) -> int:
             return run_results_list_cli(args)
         if args.results_command == "show":
             return run_results_show_cli(args)
-        raise SystemExit("Unknown results command. Use: ow eval results list|show --help")
+        raise SystemExit(
+            "Unknown results command. Use: ow eval results list|show --help"
+        )
     if args.command == "jobs":
         if args.jobs_command == "cancel":
             return run_jobs_cancel_cli(args)

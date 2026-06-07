@@ -66,6 +66,13 @@ def test_benchmark_gate_beat_random_dry_run(capsys) -> None:
     assert payload["stage"]["reasons"] == ["dry_run"]
 
 
+def test_benchmark_gate_unknown_id_exits_2(capsys) -> None:
+    assert benchmark_cli.main(["gate", "run", "not_a_real_gate", "--dry-run"]) == 2
+    err = capsys.readouterr().err
+    assert "Unknown gate id" in err
+    assert "gate list" in err
+
+
 def test_benchmark_gate_curriculum_staged_dry_run(capsys) -> None:
     assert benchmark_cli.main(["gate", "curriculum_staged", "--dry-run"]) == 1
     out = capsys.readouterr().out

@@ -18,6 +18,7 @@ METRIC_GROUPS: tuple[str, ...] = (
     "historical_pool",
     "events",
     "debug",
+    "rollout_phase_timing",
 )
 
 DEFAULT_ENABLED_GROUPS: frozenset[str] = frozenset(
@@ -379,7 +380,9 @@ def rollout_compute_scalar_keys(cfg: Any | None) -> frozenset[str]:
     """Rollout scalar keys to materialize during collection and merge paths."""
 
     enabled_groups = rollout_collection_enabled_groups(cfg)
-    required = set(required_rollout_scalar_names(cfg)) - set(FINALIZED_ROLLOUT_RATE_KEYS)
+    required = set(required_rollout_scalar_names(cfg)) - set(
+        FINALIZED_ROLLOUT_RATE_KEYS
+    )
     keys = set(_ROLLOUT_ALWAYS_COMPUTE_KEYS)
     keys.update(required)
 

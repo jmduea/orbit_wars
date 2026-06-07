@@ -3,28 +3,9 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import jax
-from src.opponents.constants import (
-    OPPONENT_HISTORICAL,
-    OPPONENT_LATEST,
-    OPPONENT_NEAREST_SNIPER,
-    OPPONENT_NOOP,
-    OPPONENT_OPPORTUNISTIC,
-    OPPONENT_RANDOM,
-    OPPONENT_TURTLE,
-)
+from src.opponents.constants import OPPONENT_FAMILY_ID_ORDER
 
-OPPONENT_FAMILY_IDS = jnp.asarray(
-    [
-        OPPONENT_LATEST,
-        OPPONENT_HISTORICAL,
-        OPPONENT_NEAREST_SNIPER,
-        OPPONENT_TURTLE,
-        OPPONENT_OPPORTUNISTIC,
-        OPPONENT_RANDOM,
-        OPPONENT_NOOP,
-    ],
-    dtype=jnp.int32,
-)
+OPPONENT_FAMILY_IDS = jnp.asarray(OPPONENT_FAMILY_ID_ORDER, dtype=jnp.int32)
 
 
 def sample_opponent_type_ids_jax(

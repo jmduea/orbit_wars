@@ -5,15 +5,12 @@ __all__ = [
     for name in globals()
     if not name.startswith("_") and name not in {"logger", "metric_registry"}
 ]
-__all__ += ["TelemetryLogger", "build_telemetry"]
+__all__ += ["TelemetryLogger"]
 
 
 def __getattr__(name: str):
-    if name in {"TelemetryLogger", "build_telemetry"}:
-        from .logger import TelemetryLogger, build_telemetry
+    if name == "TelemetryLogger":
+        from .logger import TelemetryLogger
 
-        return {
-            "TelemetryLogger": TelemetryLogger,
-            "build_telemetry": build_telemetry,
-        }[name]
+        return TelemetryLogger
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -29,7 +29,7 @@ def test_split_debug_update_record_separates_debug_keys() -> None:
 
 def test_build_update_record_applies_rollout_metric_filtering() -> None:
     cfg = SimpleNamespace(model=SimpleNamespace(max_moves_k=4))
-    cfg.telemetry = SimpleNamespace(metric_groups={})
+    cfg.telemetry = SimpleNamespace(metric_groups=SimpleNamespace(historical_pool=True))
     historical_pool = HistoricalSnapshotPool(
         params={"w": jnp.zeros((2, 2))},
         snapshot_ids=jnp.zeros((2,), dtype=jnp.int32),
@@ -138,7 +138,7 @@ def test_write_filtered_update_records_respects_disabled_groups(
     from src.config import TrainConfig
 
     cfg = TrainConfig()
-    cfg.telemetry.metric_groups = {"rollout": False}
+    cfg.telemetry.metric_groups.debug = False
     log_path = tmp_path / "metrics.jsonl"
     debug_log_path = tmp_path / "debug.jsonl"
     telemetry = MagicMock()
