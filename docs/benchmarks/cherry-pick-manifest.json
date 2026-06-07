@@ -1,6 +1,6 @@
 {
   "manifest_id": "nuclear-cherry-pick-throughput-anchor-2026-06-05",
-  "assessed_date": "2026-06-06",
+  "assessed_date": "2026-06-07",
   "baseline_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
   "baseline_branch": "throughput-baseline",
   "admission_profile": {
@@ -712,7 +712,9 @@
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "integration_head_sha": "9762a7f",
+      "notes": "Landed @ 9762a7f (cherry-pick of 2718ba3). Map-pool noop admission PASS on rerun 2026-06-07."
     },
     {
       "id": "integration_fd5f48a",
@@ -727,7 +729,9 @@
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "integration_head_sha": "ec6f617b56de180cc240d34799e275780bc7b076",
+      "notes": "Landed @ ec6f617 (cherry-pick of fd5f48a). Map-pool noop admission PASS 2026-06-07."
     },
     {
       "id": "integration_fe359fd_3c2b76e",
@@ -739,13 +743,14 @@
         "3c2b76e"
       ],
       "sha": "3c2b76e",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "notes": "Queued on main; not yet cherry-picked onto integration @ ec6f617."
     },
     {
       "id": "integration_a46c37e",
@@ -754,13 +759,14 @@
       "direction": "integration_to_main",
       "source_sha": "a46c37e",
       "sha": "a46c37e",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "notes": "Queued on main; not yet cherry-picked onto integration @ ec6f617."
     },
     {
       "id": "integration_894beb0",
@@ -769,13 +775,14 @@
       "direction": "integration_to_main",
       "source_sha": "894beb0",
       "sha": "894beb0",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "notes": "Queued on main; not yet cherry-picked onto integration @ ec6f617."
     },
     {
       "id": "integration_f979c2d",
@@ -784,13 +791,14 @@
       "direction": "integration_to_main",
       "source_sha": "f979c2d",
       "sha": "f979c2d",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
       "blocked_by": [
         "admission_throughput"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "notes": "Queued on main; not yet cherry-picked onto integration @ ec6f617."
     },
     {
       "id": "integration_25efafb0",
@@ -799,13 +807,13 @@
       "direction": "integration_to_main",
       "source_sha": "25efafb0",
       "sha": "25efafb0",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
       "blocked_by": [
         "admission_throughput"
       ],
-      "notes": "Fixes a568e7c crash; post-tracefix: learning PASS, throughput FAIL.",
+      "notes": "Fixes a568e7c crash; post-tracefix: learning PASS, throughput FAIL. Queued on main; not yet cherry-picked onto integration @ ec6f617.",
       "gates": {
         "admission_post_tracefix": {
           "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
@@ -827,10 +835,10 @@
       "direction": "integration_to_main",
       "source_sha": "87e3915",
       "sha": "87e3915",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
-      "notes": "Cleanup only; low risk.",
+      "notes": "Cleanup only; low risk. Queued on main; not yet cherry-picked onto integration @ ec6f617.",
       "reject_reasons": []
     },
     {
@@ -839,10 +847,10 @@
       "direction": "integration_to_main",
       "source_sha": "a568e7c",
       "sha": "a568e7c",
-      "status": "landed_on_integration",
+      "status": "pending_incremental",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "verdict": "pending",
-      "notes": "Docs-only; superseded on main by 6995a8f.",
+      "notes": "Docs-only; superseded on main by 6995a8f. Queued on main; not yet cherry-picked onto integration @ ec6f617.",
       "reject_reasons": []
     },
     {
@@ -1048,7 +1056,7 @@
     "doc": "docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
     "doc_repo": "orbit_wars-integration",
     "main_head_sha": "6995a8f",
-    "integration_head_sha": "795cf1c",
+    "integration_head_sha": "ec6f617b56de180cc240d34799e275780bc7b076",
     "integration_branch": "optimize/opponent-rollout-throughput",
     "merge_base_main_integration": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
     "pr_221": {
@@ -1114,10 +1122,10 @@
       "a568e7c:reconciliation doc (integration)",
       "25efafb0:lax.cond opponent batch cache trace fix"
     ],
-    "last_integrated_sha": "795cf1c",
+    "last_integrated_sha": "ec6f617b56de180cc240d34799e275780bc7b076",
     "last_integrated_note": "Map-pool stack through import fix; admitted with learning waiver. Opponent-stack picks from 2718ba3 onward pending incremental cherry-pick.",
-    "integration_head_sha": "795cf1c",
-    "integration_head_note": "Operator stopped map-pool pursuit 2026-06-07; compile+throughput pass, learning waived. Next pick: 2718ba3.",
+    "integration_head_sha": "ec6f617b56de180cc240d34799e275780bc7b076",
+    "integration_head_note": "Opponent-stack through encode dedupe (fd5f48a \u2192 ec6f617 on integration). Map-pool noop admission gates PASS for 2718ba3 (rerun) and fd5f48a @ task=map_pool baseline.",
     "pick_4_map_pool_attempt_2026_06_06": {
       "verdict": "superseded",
       "implementation": "map_pool_gather_reset",
@@ -1326,16 +1334,15 @@
     },
     "branch_actual": "optimize/opponent-rollout-throughput",
     "next_incremental_pick": {
-      "sha": "2718ba3",
-      "subject": "feat(ce-optimize): opponent rollout ladder infra and measurement harness",
-      "risk": "medium",
-      "rationale": "First opponent-stack commit after map-pool landing; mostly measurement harness + noop JAX path; touches collect.py/sampling.py but excludes family-batched sampling (a46c37e) and H3/H4 shield (f979c2d) that drove throughput FAIL @ 25efafb0.",
+      "sha": "a46c37e",
+      "subject": "feat(opponents): family-batched mixed sampling and encode/sample meters",
+      "risk": "high",
+      "rationale": "Rollout collect hot path; prior full-stack gate @ 25efafb0 throughput FAIL after this family landed.",
       "fast_gates": [
         "make test-kaggle-parity",
-        "make test-jax-trace-hygiene",
-        "pytest tests/test_opponent_ladder_compose.py tests/test_rollout_noop_opponent.py -q"
+        "make test-jax-trace-hygiene"
       ],
-      "gpu_gate_deferred": "make gate-admission REPO_ROOT=integration after operator go/no-go"
+      "gpu_gate_deferred": "make gate-admission REPO_ROOT=integration task=map_pool after operator go/no-go"
     },
     "admission_post_tracefix_2026_06_06": {
       "run_date": "2026-06-06",
@@ -1359,6 +1366,36 @@
         "baseline_floor_env_steps_per_sec": 4888.786588437074,
         "baseline_ceiling_seconds_per_update_mean": 1.659083309335319
       }
+    },
+    "admission_2718ba3_map_pool_noop_2026_06_07": {
+      "integration_head_sha": "9762a7f",
+      "source_sha": "2718ba3",
+      "gate": "admission",
+      "task_override": "task=map_pool",
+      "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+      "artifact_rerun": "outputs/benchmarks/admission/gate-integration-2718ba3-noop-rerun.json",
+      "artifact_first_attempt": "outputs/benchmarks/admission/gate-integration-2718ba3.json",
+      "admission_passed": true,
+      "learning_verdict": "VERIFIED",
+      "win_rate_delta": 0.1406,
+      "throughput_verdict": "VERIFIED",
+      "env_steps_per_sec": 4024.79,
+      "seconds_per_update_mean": 2.035,
+      "note": "First gate run FAIL throughput; rerun PASS on map-pool locked recipe."
+    },
+    "admission_fd5f48a_map_pool_noop_2026_06_07": {
+      "integration_head_sha": "ec6f617b56de180cc240d34799e275780bc7b076",
+      "source_sha": "fd5f48a",
+      "gate": "admission",
+      "task_override": "task=map_pool",
+      "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+      "artifact": "outputs/benchmarks/admission/gate-integration-fd5f48a-noop.json",
+      "admission_passed": true,
+      "learning_verdict": "VERIFIED",
+      "win_rate_delta": 0.1251,
+      "throughput_verdict": "VERIFIED",
+      "env_steps_per_sec": 3792.44,
+      "seconds_per_update_mean": 2.16
     }
   },
   "user_constraint": {
