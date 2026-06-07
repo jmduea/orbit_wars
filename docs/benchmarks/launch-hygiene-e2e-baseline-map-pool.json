@@ -1,33 +1,19 @@
 {
   "gate": "launch_hygiene_e2e_throughput",
-  "label": "capture-map-pool",
+  "label": "capture-map-pool-admission-locked",
   "commit_sha": "795cf1c4bf4d323a0a668820558949654f529eeb",
   "jax_version": "0.10.0",
   "overrides": [
-    "task=shield_cheap",
-    "model=transformer_factorized",
-    "opponents=self_play_only",
-    "curriculum=off",
-    "telemetry.wandb.enabled=false",
-    "artifacts.artifact_pipeline.enabled=false",
-    "seed=42",
-    "task=map_pool"
+    "training.log_every=1"
   ],
   "updates": 20,
   "warmup": 2,
   "repeats": 3,
   "runs": [
     {
-      "label": "capture-map-pool_r1",
+      "label": "capture-map-pool-admission-locked_r1",
       "overrides": [
-        "task=shield_cheap",
-        "model=transformer_factorized",
-        "opponents=self_play_only",
-        "curriculum=off",
-        "telemetry.wandb.enabled=false",
-        "artifacts.artifact_pipeline.enabled=false",
-        "seed=42",
-        "task=map_pool"
+        "training.log_every=1"
       ],
       "updates": 20,
       "warmup": 2,
@@ -38,18 +24,21 @@
       "default_backend": "gpu",
       "num_envs": 32,
       "rollout_steps": 500,
-      "compile_seconds_to_update_3": 283.4855037939851,
-      "seconds_total": 52.6030222280242,
-      "seconds_per_update_mean": 2.63015111140121,
+      "compile_seconds_to_update_3": 254.79052318399772,
+      "seconds_total": 64.84861408107099,
+      "seconds_per_update_mean": 3.2424307040535494,
       "env_steps": 320000,
       "samples": 1600000,
-      "env_steps_per_sec": 6083.300663084722,
-      "samples_per_sec": 30416.50331542361,
-      "policy_loss": -0.012743154703639448,
-      "value_loss": 1.3764693140983582,
-      "approx_kl": 0.011714818038672092,
-      "entropy": 2.3597371578216553,
-      "total_loss": 1.3495677530765533,
+      "env_steps_per_sec": 4934.5696054498485,
+      "samples_per_sec": 24672.848027249245,
+      "rollout_collect_seconds_per_update_mean": 2.609382548001304,
+      "ppo_seconds_per_update_mean": 0.6281616677995772,
+      "host_overhead_seconds_per_update_mean": 0.004886488252668642,
+      "policy_loss": -0.006098843622021377,
+      "value_loss": 1.3226241409778594,
+      "approx_kl": 0.006033151590963825,
+      "entropy": 2.90510556101799,
+      "total_loss": 1.2990946888923645,
       "mean_active_launches_per_turn": 0.0,
       "planet_flow_unreachable_demand_rate": 0.0,
       "planet_flow_held_demand_rate": 0.0,
@@ -70,7 +59,7 @@
       "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
       "planet_flow_small_launch_rate_delta_vs_control": 0.0,
       "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
-      "overall_win_rate": 0.629327292740345,
+      "overall_win_rate": 0.718857741355896,
       "commit_sha": "795cf1c4bf4d323a0a668820558949654f529eeb",
       "tier": "micro",
       "jax_version": "0.10.0",
@@ -83,19 +72,12 @@
         }
       ],
       "rollout_microbatch_envs": 32,
-      "gate": "launch_hygiene_e2e_throughput"
+      "gate": "stability"
     },
     {
-      "label": "capture-map-pool_r2",
+      "label": "capture-map-pool-admission-locked_r2",
       "overrides": [
-        "task=shield_cheap",
-        "model=transformer_factorized",
-        "opponents=self_play_only",
-        "curriculum=off",
-        "telemetry.wandb.enabled=false",
-        "artifacts.artifact_pipeline.enabled=false",
-        "seed=42",
-        "task=map_pool"
+        "training.log_every=1"
       ],
       "updates": 20,
       "warmup": 2,
@@ -106,18 +88,21 @@
       "default_backend": "gpu",
       "num_envs": 32,
       "rollout_steps": 500,
-      "compile_seconds_to_update_3": 142.36076739401324,
-      "seconds_total": 62.39176792296348,
-      "seconds_per_update_mean": 3.119588396148174,
+      "compile_seconds_to_update_3": 118.11770359901129,
+      "seconds_total": 64.30111292697256,
+      "seconds_per_update_mean": 3.2150556463486284,
       "env_steps": 320000,
       "samples": 1600000,
-      "env_steps_per_sec": 5128.881752398989,
-      "samples_per_sec": 25644.408761994946,
-      "policy_loss": -0.014254244603216648,
-      "value_loss": 1.3641281187534333,
-      "approx_kl": 0.013848495915226522,
-      "entropy": 2.3534404039382935,
-      "total_loss": 1.3357532560825347,
+      "env_steps_per_sec": 4976.585714207269,
+      "samples_per_sec": 24882.928571036344,
+      "rollout_collect_seconds_per_update_mean": 2.5789150473472544,
+      "ppo_seconds_per_update_mean": 0.6307769752515014,
+      "host_overhead_seconds_per_update_mean": 0.005363623749872204,
+      "policy_loss": -0.005983124510385096,
+      "value_loss": 1.3225430130958558,
+      "approx_kl": 0.00620542643009685,
+      "entropy": 2.9040853083133698,
+      "total_loss": 1.2991354048252106,
       "mean_active_launches_per_turn": 0.0,
       "planet_flow_unreachable_demand_rate": 0.0,
       "planet_flow_held_demand_rate": 0.0,
@@ -138,7 +123,7 @@
       "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
       "planet_flow_small_launch_rate_delta_vs_control": 0.0,
       "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
-      "overall_win_rate": 0.6275131091475487,
+      "overall_win_rate": 0.7203283280134201,
       "commit_sha": "795cf1c4bf4d323a0a668820558949654f529eeb",
       "tier": "micro",
       "jax_version": "0.10.0",
@@ -151,19 +136,12 @@
         }
       ],
       "rollout_microbatch_envs": 32,
-      "gate": "launch_hygiene_e2e_throughput"
+      "gate": "stability"
     },
     {
-      "label": "capture-map-pool_r3",
+      "label": "capture-map-pool-admission-locked_r3",
       "overrides": [
-        "task=shield_cheap",
-        "model=transformer_factorized",
-        "opponents=self_play_only",
-        "curriculum=off",
-        "telemetry.wandb.enabled=false",
-        "artifacts.artifact_pipeline.enabled=false",
-        "seed=42",
-        "task=map_pool"
+        "training.log_every=1"
       ],
       "updates": 20,
       "warmup": 2,
@@ -174,18 +152,21 @@
       "default_backend": "gpu",
       "num_envs": 32,
       "rollout_steps": 500,
-      "compile_seconds_to_update_3": 137.67902181000682,
-      "seconds_total": 64.10208545799833,
-      "seconds_per_update_mean": 3.2051042728999164,
+      "compile_seconds_to_update_3": 131.29881569198915,
+      "seconds_total": 70.64659510203637,
+      "seconds_per_update_mean": 3.5323297551018187,
       "env_steps": 320000,
       "samples": 1600000,
-      "env_steps_per_sec": 4992.037274819614,
-      "samples_per_sec": 24960.18637409807,
-      "policy_loss": -0.012743154703639448,
-      "value_loss": 1.3764693140983582,
-      "approx_kl": 0.011714818038672092,
-      "entropy": 2.3597371578216553,
-      "total_loss": 1.3495677530765533,
+      "env_steps_per_sec": 4529.588432928965,
+      "samples_per_sec": 22647.942164644825,
+      "rollout_collect_seconds_per_update_mean": 2.8284270087009644,
+      "ppo_seconds_per_update_mean": 0.6983745782476035,
+      "host_overhead_seconds_per_update_mean": 0.00552816815325059,
+      "policy_loss": -0.006098843622021377,
+      "value_loss": 1.3226241409778594,
+      "approx_kl": 0.006033151590963825,
+      "entropy": 2.90510556101799,
+      "total_loss": 1.2990946888923645,
       "mean_active_launches_per_turn": 0.0,
       "planet_flow_unreachable_demand_rate": 0.0,
       "planet_flow_held_demand_rate": 0.0,
@@ -206,7 +187,7 @@
       "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
       "planet_flow_small_launch_rate_delta_vs_control": 0.0,
       "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
-      "overall_win_rate": 0.629327292740345,
+      "overall_win_rate": 0.718857741355896,
       "commit_sha": "795cf1c4bf4d323a0a668820558949654f529eeb",
       "tier": "micro",
       "jax_version": "0.10.0",
@@ -219,30 +200,30 @@
         }
       ],
       "rollout_microbatch_envs": 32,
-      "gate": "launch_hygiene_e2e_throughput"
+      "gate": "stability"
     }
   ],
   "aggregate": {
     "env_steps_per_sec": {
-      "mean": 5401.4065634344415,
-      "stddev": 485.3976205918833
+      "mean": 4813.581250862027,
+      "stddev": 201.54450100321125
     },
     "samples_per_sec": {
-      "mean": 27007.032817172207,
-      "stddev": 2426.988102959417
+      "mean": 24067.906254310135,
+      "stddev": 1007.722505016056
     },
     "seconds_per_update_mean": {
-      "mean": 2.9849479268164334,
-      "stddev": 0.2532966988411586
+      "mean": 3.3299387018346653,
+      "stddev": 0.14354779059724945
     }
   },
   "pass_band": {
     "within_pct": 10.0,
     "floors": {
-      "env_steps_per_sec": 4861.265907090998
+      "env_steps_per_sec": 4332.223125775825
     },
     "ceilings": {
-      "seconds_per_update_mean": 3.283442719498077
+      "seconds_per_update_mean": 3.662932572018132
     }
   }
 }
