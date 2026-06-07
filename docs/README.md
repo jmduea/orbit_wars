@@ -53,7 +53,7 @@ Tracker: GitHub [#205](https://github.com/jmduea/orbit_wars/issues/205). Interac
 | [ideation/](ideation/) | Early exploration before scoped requirements |
 | [plans/](plans/) | Dated feat/fix implementation plans with units |
 | [solutions/](solutions/) | Documented learnings organized by category |
-| [tools/](tools/) | Local maintainer HTML tools (SSOT flowchart, config picker); see [tools/README.md](tools/README.md) |
+| [tools/](tools/) | Local maintainer tools and runbooks (SSOT flowchart, config picker, opponent recovery); see [tools/README.md](tools/README.md) |
 
 ## Root evergreen docs
 

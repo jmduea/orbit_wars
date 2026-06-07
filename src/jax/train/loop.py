@@ -202,7 +202,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     )
     if resume_checkpoint is not None:
         historical_pool = restore_curriculum_artifacts(
-            resume_checkpoint, curriculum, historical_pool
+            resume_checkpoint,
+            curriculum,
+            historical_pool,
+            restore_historical_pool=int(cfg.opponents.snapshot.pool_size) > 0,
         )
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()

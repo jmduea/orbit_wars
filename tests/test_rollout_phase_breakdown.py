@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.jax.rollout.phase_timing_report import (
+    compare_rollout_phase_breakdowns,
     extract_rollout_phase_breakdown_from_input,
     extract_rollout_phase_breakdown_from_records,
     format_rollout_phase_breakdown,
@@ -45,6 +46,25 @@ def test_extract_rollout_phase_breakdown_averages_window() -> None:
     assert phases["env_step"]["fraction_mean"] == pytest.approx(0.3)
 
 
+def test_extract_rollout_phase_breakdown_includes_opponent_details() -> None:
+    payload = extract_rollout_phase_breakdown_from_records(
+        [
+            _record(
+                3,
+                rollout_phase_opponent_sample_seconds=1.5,
+                rollout_phase_opponent_encode_seconds=0.5,
+                rollout_phase_opponent_sample_fraction=0.15,
+                rollout_phase_opponent_encode_fraction=0.05,
+            )
+        ]
+    )
+
+    details = payload["opponent_details"]
+    assert isinstance(details, dict)
+    assert details["opponent_sample"]["seconds_mean"] == pytest.approx(1.5)
+    assert details["opponent_encode"]["fraction_mean"] == pytest.approx(0.05)
+
+
 def test_extract_rollout_phase_breakdown_requires_timing_metrics() -> None:
     with pytest.raises(ValueError, match="rollout-phase-profile"):
         extract_rollout_phase_breakdown_from_records([{"update": 5, "rollout_seconds": 1.0}])
@@ -73,4 +93,23 @@ def test_format_rollout_phase_breakdown_includes_phases(tmp_path: Path) -> None:
     text = format_rollout_phase_breakdown(payload)
     assert "policy" in text
     assert "env_step" in text
+    assert "opponent_sample" in text
     assert "measured total" in text
+
+
+def test_compare_rollout_phase_breakdowns_reports_opponent_drop() -> None:
+    baseline = extract_rollout_phase_breakdown_from_records(
+        [_record(3, rollout_phase_opponent_fraction=0.7)]
+    )
+    candidate = extract_rollout_phase_breakdown_from_records(
+        [_record(3, rollout_phase_opponent_fraction=0.58)]
+    )
+
+    comparison = compare_rollout_phase_breakdowns(
+        baseline,
+        candidate,
+        min_opponent_drop_points=10.0,
+    )
+
+    assert comparison["opponent_fraction_drop_points"] == pytest.approx(12.0)
+    assert comparison["passed"] is True

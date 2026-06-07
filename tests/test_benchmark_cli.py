@@ -96,6 +96,21 @@ def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
     assert rollout_profile.train_overrides == ["task=map_pool"]
     assert rollout_profile.out == Path("/tmp/profile.json")
 
+    rollout_breakdown = parser.parse_args(
+        [
+            "rollout-phase-breakdown",
+            "/tmp/candidate.json",
+            "--baseline",
+            "/tmp/baseline.json",
+            "--min-opponent-drop-points",
+            "5",
+        ]
+    )
+    assert rollout_breakdown.command == "rollout-phase-breakdown"
+    assert rollout_breakdown.input == Path("/tmp/candidate.json")
+    assert rollout_breakdown.baseline == Path("/tmp/baseline.json")
+    assert rollout_breakdown.min_opponent_drop_points == 5.0
+
     encode_turn = parser.parse_args(
         [
             "encode-turn",

@@ -12,6 +12,7 @@ from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
     OPPONENT_RANDOM,
+    is_noop_jax_training_opponent_mode,
     normalize_jax_training_opponent_mode,
 )
 from src.training.curriculum import CurriculumController
@@ -36,8 +37,19 @@ def test_opponent_ladder_rung_composes(rung: str) -> None:
 
 def test_noop_rung_uses_jax_noop_mode() -> None:
     cfg = compose_hydra_train_config(LADDER_RUNG_OVERRIDES["noop"])
-    assert normalize_jax_training_opponent_mode(cfg.opponents.mode.opponent) == "noop"
+    assert is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent)
     assert cfg.curriculum.enabled is False
+    assert cfg.opponents.self_play.enabled is False
+    assert cfg.opponents.snapshot.pool_size == 0
+
+
+def test_recovery_rung_uses_direct_random_mode_without_snapshot_pool() -> None:
+    cfg = compose_hydra_train_config(LADDER_RUNG_OVERRIDES["recovery"])
+    assert normalize_jax_training_opponent_mode(cfg.opponents.mode.opponent) == "random"
+    assert cfg.curriculum.enabled is False
+    assert cfg.opponents.self_play.enabled is False
+    assert cfg.opponents.snapshot.pool_size == 0
+    assert cfg.opponents.snapshot.interval_updates == 0
 
 
 def test_scripted_heavy_stage_view_excludes_latest_and_historical() -> None:
@@ -75,7 +87,7 @@ def test_ladder_stage_views_differ_across_rungs() -> None:
     views = {
         rung: _stage_view_at_update(compose_hydra_train_config(overrides))
         for rung, overrides in LADDER_RUNG_OVERRIDES.items()
-        if rung != "noop"
+        if rung not in {"noop", "recovery"}
     }
     scripted = views["scripted_heavy"].family_probs
     self_play = views["self_play"].family_probs

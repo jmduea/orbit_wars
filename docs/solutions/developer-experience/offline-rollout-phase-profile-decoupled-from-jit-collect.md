@@ -64,11 +64,13 @@ Host-instrumented buckets (each step syncs before accumulating):
 
 - **policy** — learner `_sample_shielded_sequence_with_params` + shield + `build_action_from_factored_batch`
 - **opponent** — opponent action sampling **and** `encode_turn` for opponent feature cache refresh
+  - **opponent_sample** — opponent action sampling subphase
+  - **opponent_encode** — opponent feature cache refresh subphase
 - **env_step** — `batched_step` / `batched_step_multi_player`
 - **reset** — episode-done branch only: `batched_reset_with_pool` (map pool) or `batched_reset`, plus `assign_learner_players`
 - **post_step** — decoder carry bookkeeping and other post-step work outside the above
 
-Emitted keys: `rollout_phase_{policy,opponent,env_step,reset,post_step}_{seconds,fraction}` plus `rollout_phase_measured_total_seconds`.
+Emitted keys: `rollout_phase_{policy,opponent,env_step,reset,post_step}_{seconds,fraction}`, `rollout_phase_{opponent_sample,opponent_encode}_{seconds,fraction}`, plus `rollout_phase_measured_total_seconds`.
 
 ### Geometry modes
 
@@ -93,6 +95,14 @@ uv run ow benchmark rollout-phase-profile \
   --out /tmp/rollout-phase-profile.json
 
 uv run ow benchmark rollout-phase-breakdown /tmp/rollout-phase-profile.json
+```
+
+Compare a candidate profile against a baseline opponent share:
+
+```bash
+uv run ow benchmark rollout-phase-breakdown /tmp/recovery-profile.json \
+  --baseline /tmp/production-profile.json \
+  --min-opponent-drop-points 10
 ```
 
 **Main repo (delegates to integration):**

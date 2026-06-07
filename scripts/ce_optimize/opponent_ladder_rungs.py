@@ -4,12 +4,12 @@ from __future__ import annotations
 
 LADDER_RUNG_OVERRIDES: dict[str, list[str]] = {
     "noop": [
-        "opponents=base",
-        "opponents.mode.opponent=noop",
         "curriculum=off",
-        "opponents.self_play.enabled=false",
-        "opponents.snapshot.pool_size=0",
-        "opponents.snapshot.interval_updates=0",
+        "opponents=throughput_recovery_floor",
+    ],
+    "recovery": [
+        "curriculum=off",
+        "opponents=throughput_recovery",
     ],
     "scripted_heavy": [
         "curriculum=scripted_heavy",
@@ -27,12 +27,13 @@ LADDER_RUNG_OVERRIDES: dict[str, list[str]] = {
     ],
     "production_mix": [
         "opponents=default",
-        "curriculum=default",
+        "curriculum=production_mix",
     ],
 }
 
 LADDER_RUNG_ORDER: tuple[str, ...] = (
     "noop",
+    "recovery",
     "scripted_heavy",
     "self_play",
     "production_mix",

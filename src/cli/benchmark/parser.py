@@ -690,6 +690,21 @@ def build_parser() -> argparse.ArgumentParser:
             "(default 22 = warmup 2 + 20 measured updates)."
         ),
     )
+    rollout_phase_breakdown.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Optional baseline profile/gate JSON or JSONL to compare against.",
+    )
+    rollout_phase_breakdown.add_argument(
+        "--min-opponent-drop-points",
+        type=float,
+        default=None,
+        help=(
+            "Require the candidate opponent share to drop by this many percentage "
+            "points versus --baseline."
+        ),
+    )
 
     tournament_proof = subparsers.add_parser(
         "tournament-proof",

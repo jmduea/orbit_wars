@@ -243,6 +243,31 @@ def test_restore_historical_snapshot_pool_returns_fallback_on_bad_payload() -> N
     assert restored is fallback
 
 
+def test_restore_historical_snapshot_pool_returns_fallback_on_shape_mismatch() -> None:
+    import jax.numpy as jnp
+
+    from src.jax.train.checkpoint import HistoricalSnapshotPool
+
+    fallback = HistoricalSnapshotPool(
+        params={"w": jnp.zeros((1, 2, 2))},
+        snapshot_ids=jnp.zeros((1,), dtype=jnp.int32),
+        snapshot_updates=jnp.zeros((1,), dtype=jnp.int32),
+        valid_mask=jnp.zeros((1,), dtype=bool),
+    )
+    checkpoint_pool = {
+        "params": {"w": jnp.ones((2, 2, 2))},
+        "snapshot_ids": jnp.array([1, 2], dtype=jnp.int32),
+        "snapshot_updates": jnp.array([3, 4], dtype=jnp.int32),
+        "valid_mask": jnp.array([True, True]),
+        "next_slot": 0,
+        "next_id": 3,
+    }
+
+    restored = restore_historical_snapshot_pool(checkpoint_pool, fallback)
+
+    assert restored is fallback
+
+
 def test_checkpoint_payload_builder_includes_curriculum_state() -> None:
     from src.config import TrainConfig
     from src.jax.policy import build_jax_policy

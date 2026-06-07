@@ -1,0 +1,15 @@
+defaults:
+  - base
+  - _self_
+
+metric_groups:
+  losses: false
+  opponent_composition: true
+  action_decision: false
+  game_state: false
+  historical_pool: false
+  rollout_phase_timing: false
+
+wandb:
+  group: opponent_recovery
+  tags: [opponent_recovery, throughput]

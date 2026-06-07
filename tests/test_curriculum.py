@@ -52,12 +52,11 @@ def _curriculum_config(stages):
     return cfg
 
 
-def test_default_hydra_config_uses_new_curriculum_surface():
+def test_default_hydra_config_keeps_curriculum_off_on_integration():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
-    assert cfg.curriculum.enabled is True
-    assert len(cfg.curriculum.stages) == 1
-    assert cfg.curriculum.stages[-1]["id"] == "sp_2p"
+    assert cfg.curriculum.enabled is False
+    assert cfg.curriculum.stages == []
     assert cfg.opponents.snapshot.pool_size == 2
 
 
@@ -174,6 +173,60 @@ def test_checkpoint_payload_roundtrips_curriculum_and_historical_pool():
     assert "curriculum_state" in payload
     assert int(jax.numpy.sum(restored.valid_mask)) == 1
     assert int(restored.snapshot_ids[0]) == 1
+
+
+def test_checkpoint_restore_can_keep_zero_pool_recovery_fallback(tmp_path):
+    import pickle
+
+    from src.jax.train.checkpoint import (
+        checkpoint_payload_builder,
+        restore_curriculum_artifacts,
+    )
+    from src.jax.train.snapshots import (
+        add_historical_snapshot,
+        init_historical_snapshot_pool,
+    )
+
+    cfg = _curriculum_config(
+        [
+            {"id": "first", "opponent_families": {"random": 1.0}},
+            {"id": "second", "opponent_families": {"latest": 1.0}},
+        ]
+    )
+    cfg.task.candidate_count = 4
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    policy = build_jax_policy(cfg=cfg)
+    train_state = init_train_state(jax.random.PRNGKey(124), policy, cfg)
+    controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    controller.stage_index = 1
+    pool = init_historical_snapshot_pool(train_state.params, 1)
+    pool, _event = add_historical_snapshot(pool, train_state.params, update=5)
+    payload = checkpoint_payload_builder(
+        train_state,
+        cfg,
+        key=jax.random.PRNGKey(125),
+        update=5,
+        total_env_steps=8,
+        completed_episodes=2,
+        curriculum=controller,
+        historical_pool=pool,
+    )()
+    checkpoint_path = tmp_path / "jax_ckpt_last.pkl"
+    checkpoint_path.write_bytes(pickle.dumps(payload))
+
+    recovery_controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
+    recovery_pool = init_historical_snapshot_pool(train_state.params, 0)
+    restored = restore_curriculum_artifacts(
+        str(checkpoint_path),
+        recovery_controller,
+        recovery_pool,
+        restore_historical_pool=False,
+    )
+
+    assert recovery_controller.stage_index == 1
+    assert restored is recovery_pool
+    assert int(jax.numpy.sum(restored.valid_mask)) == 0
 
 
 def test_checkpoint_payload_builder_freezes_curriculum_state_for_async_jobs():

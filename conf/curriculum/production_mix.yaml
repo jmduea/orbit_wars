@@ -1,0 +1,17 @@
+defaults:
+  - base
+  - _self_
+
+enabled: true
+stages:
+  - id: production_mix
+    min_updates: 100000
+    cooldown_updates: 0
+    opponent_families:
+      latest: 0.5
+      historical: 0.5
+      random: 0.0
+      noop: 0.0
+      nearest_sniper: 0.0
+      turtle: 0.0
+      opportunistic: 0.0

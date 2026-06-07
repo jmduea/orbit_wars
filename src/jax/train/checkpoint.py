@@ -139,6 +139,8 @@ def restore_historical_snapshot_pool(
 ) -> HistoricalSnapshotPool:
     if not isinstance(payload, dict):
         return fallback
+    if not _historical_snapshot_payload_matches_fallback(payload, fallback):
+        return fallback
     try:
         return HistoricalSnapshotPool(
             params=jax.device_put(payload["params"]),
@@ -152,10 +154,40 @@ def restore_historical_snapshot_pool(
         return fallback
 
 
+def _historical_snapshot_payload_matches_fallback(
+    payload: dict[str, object], fallback: HistoricalSnapshotPool
+) -> bool:
+    required_array_keys = ("snapshot_ids", "snapshot_updates", "valid_mask")
+    for key in required_array_keys:
+        if key not in payload:
+            return False
+        if jax.numpy.asarray(payload[key]).shape != fallback.valid_mask.shape:
+            return False
+    params = payload.get("params")
+    if params is None:
+        return False
+    try:
+        if jax.tree.structure(params) != jax.tree.structure(fallback.params):
+            return False
+        payload_leaves = jax.tree.leaves(params)
+        fallback_leaves = jax.tree.leaves(fallback.params)
+        return all(
+            jax.numpy.asarray(payload_leaf).shape
+            == jax.numpy.asarray(fallback_leaf).shape
+            for payload_leaf, fallback_leaf in zip(
+                payload_leaves, fallback_leaves, strict=True
+            )
+        )
+    except (TypeError, ValueError):
+        return False
+
+
 def restore_curriculum_artifacts(
     checkpoint_path: str,
     curriculum: CurriculumController,
     historical_pool: HistoricalSnapshotPool,
+    *,
+    restore_historical_pool: bool = True,
 ) -> HistoricalSnapshotPool:
     checkpoint = load_checkpoint_payload(checkpoint_path)
     validate_checkpoint_config_compatibility(
@@ -166,6 +198,8 @@ def restore_curriculum_artifacts(
     state = checkpoint.get("curriculum_state")
     if isinstance(state, dict):
         curriculum.load_state_dict(state)
+    if not restore_historical_pool:
+        return historical_pool
     return restore_historical_snapshot_pool(
         checkpoint.get("historical_snapshot_pool"), historical_pool
     )

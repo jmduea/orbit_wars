@@ -32,3 +32,11 @@ xdg-open docs/tools/config-frozen-defaults-picker.html   # or open the path in y
 ```
 
 After you settle values, use **Copy Hydra overrides** for launch commands or **Copy YAML diff** for `conf/<group>/base.yaml` updates.
+
+## Opponent throughput recovery
+
+Short runbook for switching to direct cheap opponents when opponent sampling dominates rollout time.
+
+| File | Role |
+| --- | --- |
+| `opponent-throughput-recovery.md` | Recovery/noop floor profiles, telemetry, and phase-share comparison commands |
