@@ -44,14 +44,25 @@ def run_docker_validation_subprocess(
         "--episode-steps",
         str(episode_steps),
     ]
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        check=False,
-        text=True,
-        capture_output=True,
-        env=dict(os.environ),
+    timeout_seconds = max(
+        120.0,
+        float(episode_steps) * float(per_step_seconds) + float(overage_budget_seconds) + 120.0,
     )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            check=False,
+            text=True,
+            capture_output=True,
+            env=dict(os.environ),
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Docker validation timed out after {timeout_seconds:.0f}s; "
+            f"see {output_dir}"
+        ) from exc
     (output_dir / "stdout.log").write_text(completed.stdout, encoding="utf-8")
     (output_dir / "stderr.log").write_text(completed.stderr, encoding="utf-8")
     if completed.returncode != 0:

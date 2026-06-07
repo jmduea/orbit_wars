@@ -9,12 +9,22 @@ from typing import Any, Callable, Mapping
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import (
+    ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP,
+    POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+)
 from src.config import TrainConfig
 from src.config.schema import TaskConfig
 from src.game.constants import MAX_PLANETS
 from src.game.types import parse_observation
 from src.jax.decoder_carry import empty_decoder_hidden
-from src.jax.env import JaxAction, JaxFleetState, JaxGameState, JaxPlanetState
+from src.jax.env import (
+    JaxAction,
+    JaxFleetState,
+    JaxGameState,
+    JaxPlanetState,
+    empty_comet_state,
+)
 from src.jax.features import TurnBatch
 from src.jax.map_pool.comets import empty_comet_state
 
@@ -140,6 +150,7 @@ def jax_game_from_observation(
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
@@ -150,6 +161,8 @@ def jax_game_from_observation(
 def apply_feature_metadata_to_model_config(
     cfg: TrainConfig,
     feature_metadata: Mapping[str, object] | None,
+    *,
+    allow_planet_flow: bool = False,
 ) -> TrainConfig:
     """Align runtime model config with checkpoint feature metadata."""
 
@@ -158,6 +171,26 @@ def apply_feature_metadata_to_model_config(
     stored_decoder = feature_metadata.get("pointer_decoder")
     if stored_decoder is not None:
         cfg.model.pointer_decoder = str(stored_decoder)
+    if cfg.model.pointer_decoder == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        if not allow_planet_flow:
+            raise ValueError(
+                "Planet Flow checkpoints are not supported by submission, replay, "
+                "or tournament runtime paths in P0. Run train/benchmark proof "
+                "paths with artifacts disabled instead."
+            )
+        stored_layout = feature_metadata.get("action_layout_version")
+        if (
+            not isinstance(stored_layout, int)
+            or stored_layout != ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP
+        ):
+            raise ValueError(
+                "Planet Flow checkpoint metadata has an invalid or missing "
+                "action_layout_version."
+            )
+        if feature_metadata.get("pressure_bucket_values") is None:
+            raise ValueError(
+                "Planet Flow checkpoint metadata is missing pressure_bucket_values."
+            )
     return cfg
 
 
@@ -169,6 +202,7 @@ def batch_game(game: JaxGameState) -> JaxGameState:
         player=game.player[None],
         angular_velocity=game.angular_velocity[None],
         next_fleet_id=game.next_fleet_id[None],
+        episode_seed=game.episode_seed[None],
         planets=jax.tree_util.tree_map(lambda value: value[None, ...], game.planets),
         initial_planets=jax.tree_util.tree_map(
             lambda value: value[None, ...], game.initial_planets
@@ -210,7 +244,6 @@ def select_runtime_shielded_policy_actions_with_carry(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> tuple[JaxAction, jax.Array | None]:
     """Sample shielded actions and return updated decoder carry when enabled."""
@@ -225,7 +258,6 @@ def select_runtime_shielded_policy_actions_with_carry(
         policy,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
         decoder_hidden_in=decoder_hidden_in,
     )
 
@@ -236,7 +268,6 @@ def compile_shielded_policy_act_with_carry(
     cfg: TrainConfig,
     *,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ):
     """Return a JIT-compiled shielded act fn returning ``(action, decoder_hidden)``."""
 
@@ -261,7 +292,6 @@ def compile_shielded_policy_act_with_carry(
             policy,
             cfg,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
             decoder_hidden_in=decoder_hidden_in,
         )
 
@@ -277,7 +307,6 @@ def select_runtime_shielded_policy_actions(
     cfg: TrainConfig,
     *,
     deterministic: bool,
-    deterministic_eval: bool = False,
 ) -> JaxAction:
     """Sample a shielded v2 policy action sequence and decode it to ``JaxAction``."""
 
@@ -291,7 +320,6 @@ def select_runtime_shielded_policy_actions(
         policy,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
     )
     return action
 
@@ -302,7 +330,6 @@ def compile_shielded_policy_act(
     cfg: TrainConfig,
     *,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ):
     """Return a JIT-compiled shielded policy act fn for submission inference."""
 
@@ -321,7 +348,6 @@ def compile_shielded_policy_act(
             policy,
             cfg,
             deterministic=deterministic,
-            deterministic_eval=deterministic_eval,
         )
         return action
 
@@ -436,6 +462,7 @@ def _jax_game_from_parsed(game, *, fleet_slots: int) -> JaxGameState:
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
+        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
@@ -501,7 +528,6 @@ def build_submission_ready_agent(
     *,
     act_seed: int = 0,
     deterministic: bool = True,
-    deterministic_eval: bool = True,
 ) -> SubmissionReadyAgent:
     """Build a submission-style agent with compiled encode/act/history paths."""
 
@@ -516,7 +542,6 @@ def build_submission_ready_agent(
         variables,
         cfg,
         deterministic=deterministic,
-        deterministic_eval=deterministic_eval,
     )
     state: dict[str, object] = {
         "history": empty_feature_history(cfg.task),

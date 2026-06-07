@@ -43,6 +43,13 @@ _RESPONSIBILITY_GROUP_SCHEMAS: dict[str, type] = {
 
 _CURRICULUM_FAMILIES = CURRICULUM_OPPONENT_FAMILIES
 
+_POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
+_POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP = "planet_flow_target_heatmap"
+_SUPPORTED_POINTER_DECODERS = {
+    _POINTER_DECODER_FACTORIZED_TOPK,
+    _POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+}
+
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _SAFE_RELATIVE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/]*$")
 _RUN_ID_CACHE: dict[int, str] = {}
@@ -275,6 +282,15 @@ def _validate_train_config(cfg: TrainConfig) -> None:
             "model.value_head must be 'shared', 'format_routed', or 'distributional'."
         )
 
+    pointer_decoder = str(cfg.model.pointer_decoder).strip().lower()
+    if pointer_decoder not in _SUPPORTED_POINTER_DECODERS:
+        raise ValueError(
+            "model.pointer_decoder must be one of "
+            f"{', '.join(sorted(_SUPPORTED_POINTER_DECODERS))}."
+        )
+    if pointer_decoder == _POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        _validate_planet_flow_profile(cfg)
+
     ship_action_mode = str(task.ship_action_mode).strip().lower()
     if ship_action_mode not in {"buckets", "continuous_fraction"}:
         raise ValueError(
@@ -284,15 +300,22 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     training = cfg.training
     if int(training.update_chunk_rows) <= 0:
         raise ValueError("training.update_chunk_rows must be a positive integer.")
-    if training.rollout_microbatch_envs is not None and int(training.rollout_microbatch_envs) <= 0:
-        raise ValueError("training.rollout_microbatch_envs must be a positive integer when set.")
+    if (
+        training.rollout_microbatch_envs is not None
+        and int(training.rollout_microbatch_envs) <= 0
+    ):
+        raise ValueError(
+            "training.rollout_microbatch_envs must be a positive integer when set."
+        )
     gae_lambda = float(training.gae_lambda)
     if not 0.0 <= gae_lambda <= 1.0:
         raise ValueError("training.gae_lambda must be in [0, 1].")
 
     artifact_pipeline = cfg.artifacts.artifact_pipeline
     if int(artifact_pipeline.checkpoint_queue_size) <= 0:
-        raise ValueError("artifacts.artifact_pipeline.checkpoint_queue_size must be positive.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.checkpoint_queue_size must be positive."
+        )
     for field_name in (
         "checkpoint_timeout_seconds",
         "final_flush_timeout_seconds",
@@ -303,17 +326,25 @@ def _validate_train_config(cfg: TrainConfig) -> None:
         "worker_idle_exit_seconds",
     ):
         if float(getattr(artifact_pipeline, field_name)) <= 0.0:
-            raise ValueError(f"artifacts.artifact_pipeline.{field_name} must be positive.")
+            raise ValueError(
+                f"artifacts.artifact_pipeline.{field_name} must be positive."
+            )
     if artifact_pipeline.replay_backend not in {"docker", "local"}:
-        raise ValueError("artifacts.artifact_pipeline.replay_backend must be 'docker' or 'local'.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.replay_backend must be 'docker' or 'local'."
+        )
     if artifact_pipeline.docker_player_count not in {"2", "4", "both"}:
         raise ValueError(
             "artifacts.artifact_pipeline.docker_player_count must be '2', '4', or 'both'."
         )
     if not str(artifact_pipeline.queue_dir).strip():
-        raise ValueError("artifacts.artifact_pipeline.queue_dir must be a non-empty relative path.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.queue_dir must be a non-empty relative path."
+        )
     if Path(artifact_pipeline.queue_dir).is_absolute():
-        raise ValueError("artifacts.artifact_pipeline.queue_dir must be relative to the run directory.")
+        raise ValueError(
+            "artifacts.artifact_pipeline.queue_dir must be relative to the run directory."
+        )
     _validate_relative_path_fragment(
         str(artifact_pipeline.queue_dir),
         field_name="artifacts.artifact_pipeline.queue_dir",

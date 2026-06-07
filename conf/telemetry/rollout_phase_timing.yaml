@@ -1,4 +1,4 @@
-# Deprecated for ow train: use `ow benchmark rollout-phase-profile` instead.
+# Deprecated on ow train — use `ow benchmark rollout-phase-profile` instead.
 defaults:
   - base
   - _self_

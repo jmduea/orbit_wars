@@ -1,7 +1,7 @@
 ---
 title: "feat: Remaining work closure (gates, proof, bracket worker)"
 type: feat
-status: active
+status: completed
 date: 2026-06-03
 origin: PR #186 merge + operator backlog (Gate 4, Gate 5 proof, Kaggle submit, qualifier_eval worker)
 ---

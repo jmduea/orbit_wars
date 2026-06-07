@@ -16,9 +16,17 @@ import pytest
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
-from src.benchmark.training import (
+from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
+from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
+from src.config.rollout_allocation import (
+    resolve_rollout_group_specs,
+    validate_rollout_allocation,
+)
+from src.jax.training_benchmark import (
+    PRIMARY_E2E_OVERRIDES,
     WORKSTATION_VALIDATION_OVERRIDES,
     compose_benchmark_config,
+    resolve_benchmark_overrides,
 )
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
 from src.config.rollout_allocation import resolve_rollout_group_specs
@@ -53,8 +61,11 @@ PRIMARY_EVAL_PROFILES: dict[str, list[str]] = {
     "tournament_ready": ["artifacts.tournament.enabled=true"],
 }
 
-SACRED_ARCHITECTURES = frozenset({"planet_graph_transformer"})
+SACRED_ARCHITECTURES = frozenset(
+    {"planet_graph_transformer", "planet_graph_transformer_small"}
+)
 SACRED_POINTER_DECODERS = frozenset({"factorized_topk"})
+EXPERIMENTAL_POINTER_DECODERS = frozenset({"planet_flow_target_heatmap"})
 ACCEPTABLE_VALUE_HEADS = frozenset({"shared", "format_routed", "distributional"})
 ACCEPTABLE_SHIP_ACTION_MODES = frozenset({"buckets", "continuous_fraction"})
 ACCEPTABLE_TRAJECTORY_SHIELD_MODES = frozenset({"off", "cheap", "tiered", "exact"})
@@ -75,8 +86,21 @@ def test_responsibility_base_yaml_declares_required_schema_keys() -> None:
     assert missing == []
 
 
+TRAINING_PROFILES = tuple(
+    path.stem
+    for path in sorted(
+        (Path(__file__).resolve().parents[1] / "conf" / "training").glob("*.yaml")
+    )
+    if path.stem != "base"
+)
+
+
 def test_default_train_profile_composes_and_respects_command_critical_sets() -> None:
     cfg = compose_hydra_train_config()
+
+    specs = resolve_rollout_group_specs(cfg)
+    assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
+    assert cfg.training.rollout_microbatch_envs == 16
 
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
@@ -96,6 +120,13 @@ def test_default_train_profile_composes_and_respects_command_critical_sets() -> 
     if cfg.opponents.self_play.enabled:
         assert cfg.opponents.snapshot.pool_size > 0
         assert cfg.opponents.snapshot.interval_updates > 0
+
+
+@pytest.mark.parametrize("profile", TRAINING_PROFILES)
+def test_training_profile_composes(profile: str) -> None:
+    cfg = compose_hydra_train_config([f"training={profile}"])
+    validate_rollout_allocation(cfg)
+    assert resolve_rollout_group_specs(cfg)
 
 
 @pytest.mark.parametrize("name,overrides", PRIMARY_TRAIN_PROFILES.items())
@@ -122,12 +153,102 @@ def test_hybrid_promotion_artifacts_profile_composes() -> None:
     assert not cfg.artifacts.replay.enabled
 
 
+def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=random_only",
+        ]
+    )
+
+    assert cfg.artifacts.artifact_pipeline.enabled
+    assert cfg.artifacts.artifact_pipeline.replay_async
+    assert cfg.artifacts.artifact_pipeline.replay_backend == "local"
+    assert cfg.artifacts.replay.enabled
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert resolve_rollout_group_specs(cfg)
+
+
+def test_planet_flow_target_heatmap_profile_composes_with_proof_guards() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "artifacts=disabled",
+            "curriculum=off",
+            "opponents=random_only",
+        ]
+    )
+
+    assert cfg.model.pointer_decoder in EXPERIMENTAL_POINTER_DECODERS
+    assert tuple(cfg.model.planet_flow.pressure_bucket_values) == (
+        0.0,
+        0.25,
+        0.5,
+        0.75,
+        1.0,
+    )
+    assert not cfg.artifacts.artifact_pipeline.enabled
+    assert not cfg.artifacts.replay.enabled
+    assert not cfg.artifacts.promotion.enabled
+    assert not cfg.artifacts.tournament.enabled
+    assert not cfg.curriculum.enabled
+    assert not cfg.opponents.self_play.enabled
+    assert resolve_rollout_group_specs(cfg)
+
+
+def test_planet_flow_rejects_default_artifact_paths() -> None:
+    with pytest.raises(ValueError, match="only supports local async replay"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "curriculum=off",
+                "opponents=random_only",
+            ]
+        )
+
+
+def test_planet_flow_rejects_latest_or_historical_opponent_paths() -> None:
+    with pytest.raises(ValueError, match="latest or historical"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "artifacts=disabled",
+                "curriculum=off",
+                "opponents=latest_only",
+            ]
+        )
+
+
+def test_planet_flow_rejects_invalid_pressure_buckets() -> None:
+    with pytest.raises(ValueError, match="pressure_bucket_values"):
+        compose_hydra_train_config(
+            [
+                "model=planet_flow_target_heatmap",
+                "model.planet_flow.pressure_bucket_values=[0.25,0.5]",
+                "artifacts=disabled",
+                "curriculum=off",
+                "opponents=random_only",
+            ]
+        )
+
+
 def test_benchmark_sanity_defaults_compose_with_even_2p4p_split() -> None:
     cfg = compose_benchmark_config(list(WORKSTATION_VALIDATION_OVERRIDES))
     specs = resolve_rollout_group_specs(cfg)
     assert not cfg.training.rotate_format_rollouts
     assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
     assert cfg.training.rollout_microbatch_envs <= min(spec.num_envs for spec in specs)
+
+
+def test_benchmark_primary_preset_compose_includes_shield_cheap() -> None:
+    overrides = resolve_benchmark_overrides(preset="primary", overrides=None)
+    assert overrides == list(PRIMARY_E2E_OVERRIDES)
+    cfg = compose_benchmark_config(overrides)
+    assert cfg.task.trajectory_shield_mode == "cheap"
+    assert resolve_rollout_group_specs(cfg)
 
 
 @pytest.mark.parametrize("name,overrides", PRIMARY_EVAL_PROFILES.items())
@@ -207,7 +328,7 @@ def test_output_paths_must_be_relative() -> None:
     ],
 )
 def test_output_paths_reject_traversal(override: str) -> None:
-    with pytest.raises(ValueError, match="\.\.|run_id"):
+    with pytest.raises(ValueError, match=r"\.\.|run_id"):
         compose_hydra_train_config([override])
 
 
@@ -216,6 +337,134 @@ def test_wandb_sweep_yaml_smoke_compose() -> None:
         cfg = compose_hydra_train_config(overrides)
         assert cfg.telemetry.wandb.group
         assert cfg.telemetry.wandb.tags
+
+
+def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
+    from src.config import compose_hydra_train_config
+
+    cfg = compose_hydra_train_config(
+        [
+            "model=planet_flow_target_heatmap",
+            "training=planet_flow",
+            "artifacts=planet_flow_proof",
+            "curriculum=off",
+            "opponents=noop_only",
+        ]
+    )
+
+    assert cfg.training.rollout_steps == 512
+    assert cfg.training.update_chunk_rows == 2048
+    assert cfg.model.max_moves_k == 1
+
+
+def test_multitask_smoke_overrides_compose() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "model.architecture=planet_graph_transformer_small",
+            "task.candidate_count=3",
+            "task.edge_rank_mode=intercept_min",
+            "training.num_envs=2",
+            "training.rollout_microbatch_envs=2",
+            "training.rollout_steps=128",
+            "training.total_updates=20",
+            "training.update_chunk_rows=2048",
+            "opponents.mode.opponent=no_op",
+            "curriculum=off",
+            "output.campaign=multitask_smoke",
+        ]
+    )
+    assert cfg.model.architecture == "planet_graph_transformer_small"
+    assert cfg.opponents.mode.opponent == "no_op"
+    from src.jax.policy import build_jax_policy
+    from src.opponents.constants import validate_jax_training_opponent_mode
+
+    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    policy = build_jax_policy(cfg)
+    assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
+
+
+def test_jax_training_opponent_mode_normalization() -> None:
+    from src.opponents.constants import (
+        is_noop_jax_training_opponent_mode,
+        normalize_jax_training_opponent_mode,
+        validate_jax_training_opponent_mode,
+    )
+
+    for raw in ("no_op", "noop", "NO_OP"):
+        validate_jax_training_opponent_mode(raw)
+        assert normalize_jax_training_opponent_mode(raw) == "noop"
+        assert is_noop_jax_training_opponent_mode(raw)
+    validate_jax_training_opponent_mode("random")
+    with pytest.raises(ValueError, match="JAX training supports"):
+        validate_jax_training_opponent_mode("noop_only")
+
+
+def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(
+    tmp_path: Path,
+) -> None:
+    cfg = compose_sweep_gen(
+        [
+            "wandb_sweep=planet_flow_ppo_signal_short",
+            f"out_dir={tmp_path}",
+        ]
+    )
+
+    assert cfg["name"] == "planet_flow_ppo_signal_short"
+    assert cfg["run_cap"] == 12
+    parameters = cfg["parameters"]
+    assert parameters["training"]["value"] == "planet_flow"
+    assert parameters["training.total_updates"]["value"] == 100
+    assert (
+        parameters["output.campaign"]["value"]
+        == "planet_flow_ppo_signal_sweep_v3_short"
+    )
+    assert (
+        parameters["telemetry.wandb.group"]["value"]
+        == "planet_flow_ppo_signal_v3_short"
+    )
+
+
+def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
+    tmp_path: Path,
+) -> None:
+    cfg = compose_sweep_gen(
+        [
+            "wandb_sweep=planet_flow_ppo_signal",
+            f"out_dir={tmp_path}",
+        ]
+    )
+
+    assert cfg["name"] == "planet_flow_ppo_signal"
+    assert cfg["method"] == "bayes"
+    assert cfg["run_cap"] == 24
+    assert cfg["metric"] == {"name": "planet_flow_sweep_score", "goal": "maximize"}
+
+    parameters = cfg["parameters"]
+    assert parameters["model"]["value"] == "planet_flow_target_heatmap"
+    assert parameters["training"]["value"] == "planet_flow"
+    assert parameters["training.total_updates"]["value"] == 200
+    assert parameters["opponents"]["value"] == "random_only"
+    assert parameters["curriculum"]["value"] == "off"
+    assert parameters["artifacts"]["value"] == "planet_flow_proof"
+    assert parameters["telemetry.metric_groups.action_decision"]["value"] is True
+    assert parameters["telemetry.metric_groups.losses"]["value"] is True
+    assert parameters["training.lr"]["min"] == 0.00001
+    assert parameters["training.ent_coef"]["max"] == 0.003
+    assert parameters["training.update_chunk_rows"]["values"] == [512, 1024, 2048]
+
+    out_path = write_wandb_sweep(cfg)
+    generated = OmegaConf.to_container(OmegaConf.load(out_path), resolve=False)
+    assert isinstance(generated, dict)
+    assert out_path == tmp_path / "planet_flow_ppo_signal.yaml"
+    assert generated["metric"] == {
+        "name": "planet_flow_sweep_score",
+        "goal": "maximize",
+    }
+    assert generated["run_cap"] == 24
+    assert (
+        generated["parameters"]["telemetry.metric_groups.action_decision"]["value"]
+        is True
+    )
 
 
 BOUNDED_SWEEP_SAMPLE_SIZE = 200

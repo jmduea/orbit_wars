@@ -16,6 +16,7 @@ from src.jax.env import (
     JaxGameState,
     JaxPlanetState,
     empty_action,
+    empty_comet_state,
     max_fleets,
     reset,
     reset_with_pool,
@@ -25,9 +26,19 @@ from src.jax.env import (
 from src.jax.map_pool.comets import empty_comet_state
 
 
-def _cfg(*, player_count=2, max_fleets=16):
+def _cfg(
+    *,
+    player_count=2,
+    max_fleets=16,
+    ship_speed=6.0,
+    env_parity_mode: str = "train",
+):
     return TaskConfig(
-        max_fleets=max_fleets, candidate_count=4, player_count=player_count
+        max_fleets=max_fleets,
+        candidate_count=4,
+        player_count=player_count,
+        ship_speed=ship_speed,
+        env_parity_mode=env_parity_mode,
     )
 
 
@@ -101,6 +112,7 @@ def _state(
         player=jnp.array(learner_player, dtype=jnp.int32),
         angular_velocity=jnp.array(angular_velocity, dtype=jnp.float32),
         next_fleet_id=jnp.array(100, dtype=jnp.int32),
+        episode_seed=jnp.array(0, dtype=jnp.int32),
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,
@@ -159,10 +171,11 @@ def _planet_rows(state, count):
 def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
     cfg = _cfg()
     state, _ = reset(jax.random.PRNGKey(11), cfg)
-    planets = _planet_rows(state, MAX_PLANETS)
+    active_count = int(np.asarray(state.game.planets.active).sum())
+    planets = _planet_rows(state, active_count)
 
-    assert len(planets) % 4 == 0
-    for i in range(0, len(planets), 4):
+    assert active_count % 4 == 0
+    for i in range(0, active_count, 4):
         p0 = planets[i]
         p3 = planets[i + 3]
         assert math.isclose(p0[2] + p3[2], 100.0, abs_tol=1e-5)
@@ -172,7 +185,8 @@ def test_reset_generates_fourfold_symmetric_planet_groups_for_two_players():
 
 def test_four_player_reset_home_planets_are_rotationally_symmetric():
     cfg = _cfg(player_count=4)
-    state, _ = reset(jax.random.PRNGKey(42), cfg)
+    for seed in range(50):
+        state, _ = reset(jax.random.PRNGKey(seed), cfg)
     p = state.game.planets
     owned = np.flatnonzero(np.asarray(p.owner) != -1)
 
@@ -189,13 +203,13 @@ def test_four_player_reset_home_planets_are_rotationally_symmetric():
 
 
 def test_fleet_does_not_tunnel_through_rotating_planet():
-    cfg = _cfg()
+    cfg = _cfg(ship_speed=2.0)
     state = _state(
-        [[0, -1, 70.0, 50.0, 2.0, 10, 0]],
-        [[0, 0, 68.0, 50.0, math.pi / 2, 1, 1000]],
+        [[0, -1, 50.0, 52.0, 1.0, 10, 0]],
+        [[0, 0, 49.0, 50.0, 0.0, 1, 1000]],
         cfg=cfg,
-        step_index=0,
-        angular_velocity=math.pi / 2,
+        step_index=1,
+        angular_velocity=math.pi,
     )
 
     next_state, _ = _advance(state, cfg)
@@ -314,6 +328,7 @@ def test_terminal_rewards_match_reference_for_elimination_max_steps_ties_and_fle
         ([[0, 0, 80, 80, 3, 50, 1]], [], 0, 0, 1.0),
         ([[0, -1, 80, 80, 3, 50, 1]], [], 0, 0, -1.0),
         ([[0, 0, 80, 80, 3, 30, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 0, 1.0),
+        ([[0, 0, 80, 80, 3, 30, 1], [1, 1, 20, 20, 3, 30, 1]], [], 497, 1, 1.0),
         (
             [[0, 0, 80, 80, 3, 10, 1], [1, 1, 20, 20, 3, 30, 1]],
             [[0, 0, 50, 30, 0, 0, 50]],
@@ -446,6 +461,20 @@ def test_four_player_step_rejects_actions_from_planets_not_owned_by_that_player(
         np.array([21.0, 21.0, 21.0, 21.0]),
     )
     assert int(np.asarray(next_state.game.fleets.active).sum()) == 0
+
+
+def test_comet_spawn_keeps_initial_planets_synced_after_forty_nine_steps():
+    cfg = _cfg(env_parity_mode="kaggle")
+    state, _ = reset(jax.random.PRNGKey(0), cfg)
+    baseline_active = int(np.asarray(state.game.planets.active).sum())
+    # Spawn fires when (step + 1) == 50, i.e. on the step that ends at game.step == 50.
+    for _ in range(50):
+        state, _ = _advance(state, cfg)
+    active = np.asarray(state.game.planets.active)
+    init_active = np.asarray(state.game.initial_planets.active)
+    assert int(state.game.comets.group_count) >= 1
+    assert int(active.sum()) == int(init_active.sum())
+    assert int(active.sum()) > baseline_active
 
 
 def test_four_player_step_allows_simultaneous_four_way_combat_from_actions():

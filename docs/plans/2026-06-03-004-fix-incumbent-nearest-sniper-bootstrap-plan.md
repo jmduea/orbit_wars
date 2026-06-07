@@ -1,7 +1,7 @@
 ---
 title: "fix: Bootstrap unified incumbent to scripted nearest_sniper"
 type: fix
-status: active
+status: completed
 date: 2026-06-03
 origin: docs/brainstorms/2026-06-03-gate5-unified-tournament-requirements.md
 ---

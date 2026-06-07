@@ -208,19 +208,17 @@ def test_final_ship_scores_strict_max_winner() -> None:
         production=jnp.zeros((MAX_PLANETS,), dtype=jnp.float32),
         active=jnp.array([True, True] + [False] * (MAX_PLANETS - 2), dtype=bool),
     )
-    game_fields = {
-        "step": jnp.array(10, dtype=jnp.int32),
-        "player": jnp.array(0, dtype=jnp.int32),
-        "angular_velocity": jnp.array(0.03, dtype=jnp.float32),
-        "next_fleet_id": jnp.array(0, dtype=jnp.int32),
-        "planets": planets,
-        "initial_planets": planets,
-        "fleets": empty_fleets,
-        "comets": empty_comet_state(),
-    }
-    if "episode_seed" in JaxGameState._fields:
-        game_fields["episode_seed"] = jnp.array(43, dtype=jnp.int32)
-    game = JaxGameState(**game_fields)
+    game = JaxGameState(
+        step=jnp.array(10, dtype=jnp.int32),
+        player=jnp.array(0, dtype=jnp.int32),
+        angular_velocity=jnp.array(0.03, dtype=jnp.float32),
+        next_fleet_id=jnp.array(0, dtype=jnp.int32),
+        episode_seed=jnp.array(43, dtype=jnp.int32),
+        planets=planets,
+        initial_planets=planets,
+        fleets=empty_fleets,
+        comets=empty_comet_state(),
+    )
     scores = final_ship_scores(game, 2)
     assert learner_won_from_final_scores(scores, learner_player=0)
     assert not learner_won_from_final_scores(scores, learner_player=1)

@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Requirements: Pick #4 compile-bounded env parity</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ee;
+      --accent: #2d5a8c;
+      --accent-soft: #e8f0fa;
+      --accent-text: #1e4468;
+      --warn-soft: #fff4e5;
+      --warn-text: #7a4f00;
+      --radius: 8px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .page {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    header.doc-header {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    header.doc-header h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.55rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    header.doc-header .eyebrow {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header.doc-header dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 1.25rem;
+      margin: 1.25rem 0 0;
+      font-size: 0.9rem;
+    }
+
+    header.doc-header dt {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    header.doc-header dd {
+      margin: 0;
+    }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    section h2 {
+      margin: 0 0 1rem;
+      font-size: 1.15rem;
+      font-weight: 650;
+      color: var(--accent-text);
+      border-bottom: 2px solid var(--accent-soft);
+      padding-bottom: 0.4rem;
+    }
+
+    section h3 {
+      margin: 1.25rem 0 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 650;
+      color: var(--text);
+    }
+
+    p,
+    li {
+      max-width: 72ch;
+    }
+
+    p {
+      margin: 0 0 0.85rem;
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ul,
+    ol {
+      margin: 0 0 0.85rem;
+      padding-left: 1.35rem;
+    }
+
+    li {
+      margin-bottom: 0.35rem;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--accent-soft);
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      margin: 0.5rem 0 1rem;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      font-weight: 600;
+    }
+
+    .id-col {
+      width: 3.5rem;
+      white-space: nowrap;
+      font-weight: 600;
+      color: var(--accent-text);
+    }
+
+    .callout {
+      background: var(--warn-soft);
+      border-left: 4px solid #d4a017;
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+      color: var(--warn-text);
+    }
+
+    .callout p {
+      max-width: none;
+      margin: 0;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 5rem 1fr;
+      gap: 0.75rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .flow-step:last-child {
+      border-bottom: none;
+    }
+
+    .flow-id {
+      font-weight: 700;
+      color: var(--accent-text);
+      font-size: 0.85rem;
+    }
+
+    .ae-block {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.15rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .ae-block .ae-id {
+      font-weight: 700;
+      color: var(--accent-text);
+      margin-bottom: 0.35rem;
+    }
+
+    .ae-meta {
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    footer.composition-signal {
+      margin-top: 2rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    svg.diagram {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 1rem auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="doc-header">
+      <div class="eyebrow">Brainstorm requirements</div>
+      <h1>Pick #4 compile-bounded env parity</h1>
+      <dl>
+        <dt>Date</dt>
+        <dd><time datetime="2026-06-06">2026-06-06</time></dd>
+        <dt>Topic</dt>
+        <dd>pick4-compile-parity</dd>
+        <dt>Target</dt>
+        <dd><code>orbit_wars-integration</code> worktree (Phase 2 env-parity)</dd>
+      </dl>
+    </header>
+
+    <section id="summary">
+      <h2>Summary</h2>
+      <p>
+        Split pick #4 into two integration slices: <strong>4a</strong> lands pure JAX planet generation with mechanical
+        validity and a ≤5&nbsp;minute first-compile proof on the benchmark smoke path; <strong>4b</strong> adds comets
+        only after 4a admits. Interim integration training may run without comet physics, explicitly labeled in the
+        cherry-pick manifest so admission results are not misread.
+      </p>
+    </section>
+
+    <section id="problem-frame">
+      <h2>Problem Frame</h2>
+      <p>
+        Phase 2 pick #4 on the integration worktree has failed twice on compile economics, not parity alone. Greenfield
+        pure JAX planet/comet generation at <code>75a7cf2</code> passed fast gates but had mechanical validity defects.
+        A follow-up mechanical fidelity fix at <code>0eb349e</code> passed 51 parity tests and trace hygiene yet caused
+        <strong>10+ minute</strong> JAX first-compile on the smoke/benchmark path — unacceptable for the integration
+        loop. Integration HEAD rolled back to <code>9db50f5</code> (picks #1–2 + 3b only).
+      </p>
+      <p>
+        Root cause is a stacked trace: planet two-phase generation at reset <em>plus</em> comet spawn subgraph inlined
+        or invoked from every <code>step()</code> inside the vmapped rollout trace. Parity pytest does not bound
+        training-loop compile; a separate compile-time reject track is required.
+      </p>
+    </section>
+
+    <section id="key-decisions">
+      <h2>Key Decisions</h2>
+      <ul>
+        <li><strong>Two-phase pick #4 (4a planets, 4b comets).</strong> Defer comets until planet-only compile economics
+          are proven — avoids repeating the big-bang <code>0eb349e</code> pattern.</li>
+        <li><strong>≤5&nbsp;minute compile ceiling.</strong> First-compile on
+          <code>ow benchmark training --updates 3 --warmup 1</code> must stay at or under five minutes for a pick to
+          admit; 10+ minutes is a hard reject (<code>compile_time_regression</code>).</li>
+        <li><strong>Labeled interim training.</strong> Integration may train without comets between 4a and 4b, but
+          manifest must flag <em>planets-only parity</em> so operators do not treat partial physics as full mechanical
+          fidelity.</li>
+        <li><strong>Mechanical fidelity, not seed replay.</strong> JAX must emit valid rules-compliant states; maps and
+          comet paths may differ from <code>kaggle_environments</code> per seed.</li>
+        <li><strong>Pick #4b comets use reset-precompute.</strong> When comets land, precompute all waves at reset;
+          <code>step()</code> only activates precomputed slots — no inline path search in the step trace.</li>
+        <li><strong>Pick #5 blocked until 4b.</strong> Remaining mechanics hunks stay deferred until full planet+comet
+          parity stack is green on compile + parity.</li>
+      </ul>
+    </section>
+
+    <section id="actors">
+      <h2>Actors</h2>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Actor</th>
+            <th>Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="a1">A1.</td>
+            <td>Integration agent</td>
+            <td>Applies pick hunks on <code>orbit_wars-integration</code>; runs per-pick fast gates (parity, trace
+              hygiene) and compile smoke; updates manifest <code>candidates[]</code>.</td>
+          </tr>
+          <tr>
+            <td id="a2">A2.</td>
+            <td>Operator</td>
+            <td>Judges compile wall time; runs <code>make gate-admission</code> at milestones; re-runs admission when
+              full parity stack (4b+) is green.</td>
+          </tr>
+          <tr>
+            <td id="a3">A3.</td>
+            <td>Gate harness (<code>orbit_wars</code> main)</td>
+            <td>Hosts manifest, admission YAML, trace-hygiene tests run against integration <code>src/jax/</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="key-flows">
+      <h2>Key Flows</h2>
+
+      <div class="flow-step">
+        <div class="flow-id" id="f1">F1.</div>
+        <div>
+          <strong>Pick 4a admit path</strong>
+          <ol>
+            <li>Agent lands planet-only pure JAX generation on integration (no comet subsystem in env hot path).</li>
+            <li>Run <code>make test-kaggle-parity</code> on integration — planet tests green; comet parity tests
+              explicitly deferred/skipped with documented rationale.</li>
+            <li>Run <code>make test-jax-trace-hygiene</code> from main harness against integration tree.</li>
+            <li>Run compile smoke:
+              <code>ow benchmark training --preset primary --updates 3 --warmup 1 --label pick4a-compile-check</code>.
+            </li>
+            <li>If compile ≤5&nbsp;min and gates green → manifest admit <code>pick_4a_planets</code>; set
+              <code>env_parity_mode: planets_only</code> (or equivalent manifest flag).</li>
+            <li>If compile &gt;5&nbsp;min → reject <code>compile_time_regression</code>; rollback integration HEAD to
+              last good SHA.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-id" id="f2">F2.</div>
+        <div>
+          <strong>Pick 4b admit path (after 4a)</strong>
+          <ol>
+            <li>Agent adds comet generation with reset-only precompute; step activates precomputed waves only.</li>
+            <li>Full comet mechanical invariants green (spawn sync, <code>initial_planets</code> through expire,
+              reserved comet IDs).</li>
+            <li>Repeat F1 gates including full comet parity tests; compile smoke must stay ≤5&nbsp;min.</li>
+            <li>Manifest admit <code>pick_4b_comets</code>; clear planets-only flag; pick #5 unblocked for planning.
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-id" id="f3">F3.</div>
+        <div>
+          <strong>Compile cliff rollback</strong>
+          <ol>
+            <li>Detect 10m+ or operator-rejected compile on smoke path.</li>
+            <li><code>git reset --hard &lt;last_good_sha&gt;</code> on integration worktree.</li>
+            <li>Update manifest: <code>verdict: reject</code>, <code>reject_reasons: [compile_time_regression]</code>,
+              preserve rejected SHAs in notes.</li>
+          </ol>
+        </div>
+      </div>
+
+      <svg class="diagram" viewBox="0 0 640 200" xmlns="http://www.w3.org/2000/svg" role="img"
+        aria-label="Pick 4a then 4b sequence">
+        <rect x="20" y="70" width="120" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+        <text x="80" y="100" text-anchor="middle" font-size="12" fill="#1e4468">9db50f5</text>
+        <text x="80" y="140" text-anchor="middle" font-size="10" fill="#5c6370">rollback HEAD</text>
+        <path d="M 140 95 L 175 95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+        <rect x="180" y="70" width="130" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+        <text x="245" y="92" text-anchor="middle" font-size="11" fill="#1e4468">Pick 4a</text>
+        <text x="245" y="108" text-anchor="middle" font-size="10" fill="#5c6370">planets + compile ≤5m</text>
+        <path d="M 310 95 L 345 95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+        <rect x="350" y="70" width="130" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+        <text x="415" y="92" text-anchor="middle" font-size="11" fill="#1e4468">Pick 4b</text>
+        <text x="415" y="108" text-anchor="middle" font-size="10" fill="#5c6370">comets reset-precompute</text>
+        <path d="M 480 95 L 515 95" stroke="#2d5a8c" marker-end="url(#arrow)" />
+        <rect x="520" y="70" width="100" height="50" rx="6" fill="#e8f0fa" stroke="#2d5a8c" />
+        <text x="570" y="100" text-anchor="middle" font-size="11" fill="#1e4468">Pick #5</text>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#2d5a8c" />
+          </marker>
+        </defs>
+      </svg>
+    </section>
+
+    <section id="requirements">
+      <h2>Requirements</h2>
+
+      <h3>Compile economics</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r1">R1.</td>
+            <td>Every pick #4 slice (4a and 4b) must pass a compile smoke on the operator benchmark path
+              (<code>ow benchmark training --preset primary --updates 3 --warmup 1</code>) with first-compile wall time
+              ≤5&nbsp;minutes before manifest admit.</td>
+          </tr>
+          <tr>
+            <td id="r2">R2.</td>
+            <td>Compile cost is an independent reject track: green <code>make test-kaggle-parity</code> and trace
+              hygiene do not admit a pick when compile exceeds tolerance. Reject reason:
+              <code>compile_time_regression</code>.</td>
+          </tr>
+          <tr>
+            <td id="r3">R3.</td>
+            <td>On compile reject, integration HEAD rolls back to last good SHA; rejected commit SHAs are preserved in
+              manifest notes for forensics.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Pick 4a — planets only</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r4">R4.</td>
+            <td>4a lands pure JAX planet generation at reset with mechanical validity: 5–10 planet groups (20–40 active
+              planets), four-planet symmetry, at least one orbiting group, no collisions, all planets in bounds.</td>
+          </tr>
+          <tr>
+            <td id="r5">R5.</td>
+            <td>4a does not wire comet spawn, comet movement, or comet lifecycle into the env hot path. Comet-related
+              parity tests are explicitly deferred — not silently skipped.</td>
+          </tr>
+          <tr>
+            <td id="r6">R6.</td>
+            <td>Manifest records 4a as a distinct candidate (e.g. <code>pick_4a_planets</code>) with an explicit
+              <em>planets-only parity</em> label so interim training and gate reads are not confused with full
+              mechanical fidelity.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Pick 4b — comets (after 4a)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r7">R7.</td>
+            <td>4b precomputes all comet waves at reset; <code>step()</code> only activates precomputed groups on spawn
+              steps — no inline path-search subgraph in the per-step trace.</td>
+          </tr>
+          <tr>
+            <td id="r8">R8.</td>
+            <td>Comet mechanical invariants: <code>planets.active == initial_planets.active</code> through spawn and
+              post-move expire (step 50+, step 200+); comet IDs from reserved tail slots; fourfold symmetry; valid
+              bounds and collision rules.</td>
+          </tr>
+          <tr>
+            <td id="r9">R9.</td>
+            <td>4b clears the planets-only manifest flag and unblocks pick #5 for subsequent integration work.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Hot-path invariants (both slices)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">ID</th>
+            <th>Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="r10">R10.</td>
+            <td>JAX-only hot path: no <code>pure_callback</code>, <code>io_callback</code>, <code>_reference_*</code>,
+              or <code>src/game/*</code> imports in reset/step/rollout jit paths (tier-A trace hygiene).</td>
+          </tr>
+          <tr>
+            <td id="r11">R11.</td>
+            <td>No sequential <code>lax.scan</code> in <code>_launch_fleets</code> (pick #3 full bundle remains
+              rejected).</td>
+          </tr>
+          <tr>
+            <td id="r12">R12.</td>
+            <td>Per-pick fast gates pass before compile smoke: <code>make test-kaggle-parity</code> (integration cwd)
+              and <code>make test-jax-trace-hygiene</code> (main harness).</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="acceptance-examples">
+      <h2>Acceptance Examples</h2>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae1">AE1.</div>
+        <div class="ae-meta">Covers R1, R2, R4, R12</div>
+        <p><strong>Trigger:</strong> Agent lands pick 4a; parity green for planet tests; compile smoke completes in 3m
+          40s.</p>
+        <p><strong>Expected:</strong> Manifest admit <code>pick_4a_planets</code> with
+          <code>env_parity_mode: planets_only</code>. Integration HEAD advances. Pick #5 remains blocked.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae2">AE2.</div>
+        <div class="ae-meta">Covers R2, R3, R5</div>
+        <p><strong>Trigger:</strong> Agent lands planet+comet fix in one commit (big-bang); 51/51 parity green; compile
+          smoke still running at 10m+.</p>
+        <p><strong>Expected:</strong> Reject <code>compile_time_regression</code>; rollback to <code>9db50f5</code> or
+          last 4a-admitted SHA. Do not leave integration HEAD on the failing commit.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae3">AE3.</div>
+        <div class="ae-meta">Covers R6, R8</div>
+        <p><strong>Trigger:</strong> Integration at 4a admit; operator runs short training smoke.</p>
+        <p><strong>Expected:</strong> Training proceeds with valid planet boards; episodes after step 50 lack comet
+          physics until 4b. Manifest clearly states planets-only — not interpreted as admission-ready full parity.</p>
+      </div>
+
+      <div class="ae-block">
+        <div class="ae-id" id="ae4">AE4.</div>
+        <div class="ae-meta">Covers R7, R8, R9</div>
+        <p><strong>Trigger:</strong> 4b lands with reset-precompute comets; full parity green; compile ≤5&nbsp;min.</p>
+        <p><strong>Expected:</strong> Manifest admit <code>pick_4b_comets</code>; planets-only flag cleared; pick #5
+          mechanics hunks may proceed.</p>
+      </div>
+    </section>
+
+    <section id="success-criteria">
+      <h2>Success Criteria</h2>
+      <ul>
+        <li>Pick 4a admits on integration with compile ≤5&nbsp;min and planet validity invariants green — proves reset
+          trace economics before comets.</li>
+        <li>Pick 4b admits with full comet mechanical invariants and compile still ≤5&nbsp;min — no repeat of
+          <code>0eb349e</code> cliff.</li>
+        <li>Manifest truthfully represents parity mode at every HEAD (planets-only vs full).</li>
+        <li>Operator can re-run <code>make gate-admission</code> after 4b without compile blocking the milestone.</li>
+      </ul>
+    </section>
+
+    <section id="scope-boundaries">
+      <h2>Scope Boundaries</h2>
+
+      <h3>Deferred for later</h3>
+      <ul>
+        <li>Pick #5 mechanics hunks — until pick 4b admits.</li>
+        <li>Pick #6 callback teardown on main — separate track.</li>
+        <li>Operator <code>make gate-admission</code> re-run — milestone after 4a minimum; full re-run after 4b.</li>
+        <li>Bit-exact seed replay vs <code>kaggle_environments</code>; coordinate goldens; Kaggle comet RNG string
+          bridge; home-group PRNG stream coupling.</li>
+      </ul>
+
+      <h3>Outside this product's identity</h3>
+      <ul>
+        <li>Re-introducing <code>pure_callback</code> or Python reference helpers in the env hot path to dodge compile
+          cost.</li>
+        <li>Sequential <code>lax.scan</code> fleet launch (pick #3 throughput regression).</li>
+        <li>Admitting picks on parity alone when compile smoke fails.</li>
+      </ul>
+    </section>
+
+    <section id="dependencies">
+      <h2>Dependencies &amp; Assumptions</h2>
+      <ul>
+        <li>Integration worktree at <code>9db50f5</code> (picks #1–2 + 3b) is the rollback substrate and 4a base.</li>
+        <li>Admission was verified on picks #1–2; not re-run after 3b or pick #4 attempts — operator discretion for
+          re-run timing.</li>
+        <li>Compile smoke uses same machine/GPU context as operator iteration for comparable wall times.</li>
+        <li>Reference rules in <code>src/game/planet_generation.py</code> and <code>src/game/comet_generation.py</code>
+          anchor tests only — not hot-path imports.</li>
+        <li>Assumption: planet-only reset trace is the dominant compile contributor separable from comet spawn; if 4a
+          still exceeds 5&nbsp;min, bisect planet generation hunks before any comet work.</li>
+      </ul>
+    </section>
+
+    <section id="sources">
+      <h2>Sources &amp; Research</h2>
+      <ul>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md">phase2-pick4-jax-compile-rollback-criteria.md</a>
+          — compile cliff, rollback criteria, re-attempt strategies</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/session-handoff/2026-06-06-phase2-env-parity-rollback-continued.md">2026-06-06-phase2-env-parity-rollback-continued.md</a>
+          — current integration HEAD and handoff state</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md">jax-comet-kaggle-parity-ci-gate.md</a>
+          — mechanical parity invariants, reset-precompute pattern, compile gate</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md">2026-06-06-001-fix-pick4-jax-parity-plan.md</a>
+          — mechanical fidelity plan (fix rolled back at 0eb349e)</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/solutions/conventions/jax-no-kaggle-callbacks.md">jax-no-kaggle-callbacks.md</a>
+          — JAX-only hot path convention</li>
+        <li><a
+            href="https://github.com/jmduea/orbit_wars/blob/main/docs/benchmarks/cherry-pick-manifest.json">cherry-pick-manifest.json</a>
+          — pick state, <code>candidates[]</code>, <code>integration_state</code></li>
+      </ul>
+    </section>
+
+    <footer class="composition-signal">
+      Composed 2026-06-06 by ce-brainstorm from dialogue on pick #4 compile cliff
+    </footer>
+  </div>
+</body>
+
+</html>

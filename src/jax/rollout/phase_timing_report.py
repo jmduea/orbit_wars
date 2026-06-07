@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from src.jax.admission_throughput import (
+    ThroughputWindow,
+    _record_float,
+    _record_update,
+    resolve_log_path_from_input,
+)
 from src.jax.preflight import read_jsonl_records
 
 PHASE_NAMES: tuple[str, ...] = (
@@ -18,28 +24,19 @@ PHASE_NAMES: tuple[str, ...] = (
     "post_step",
 )
 
-OPPONENT_DETAIL_NAMES: tuple[str, ...] = (
-    "opponent_sample",
-    "opponent_encode",
-)
-
 PHASE_SECOND_KEYS: tuple[str, ...] = tuple(
     f"rollout_phase_{name}_seconds" for name in PHASE_NAMES
 )
 PHASE_FRACTION_KEYS: tuple[str, ...] = tuple(
     f"rollout_phase_{name}_fraction" for name in PHASE_NAMES
 )
-OPPONENT_DETAIL_SECOND_KEYS: tuple[str, ...] = tuple(
-    f"rollout_phase_{name}_seconds" for name in OPPONENT_DETAIL_NAMES
-)
-OPPONENT_DETAIL_FRACTION_KEYS: tuple[str, ...] = tuple(
-    f"rollout_phase_{name}_fraction" for name in OPPONENT_DETAIL_NAMES
-)
 MEASURED_TOTAL_KEY = "rollout_phase_measured_total_seconds"
 
 
 @dataclass(frozen=True, slots=True)
 class PhaseTimingWindow:
+    """Update window for steady-state phase averages (launch hygiene convention)."""
+
     warmup: int
     max_measured_update: int
 
@@ -51,20 +48,109 @@ class PhaseTimingWindow:
         return self.first_update <= update <= self.max_measured_update
 
 
-def _record_update(record: Mapping[str, object]) -> int | None:
-    update = record.get("update")
-    if isinstance(update, int):
-        return update
-    if isinstance(update, float) and update.is_integer():
-        return int(update)
-    return None
+def _window_from_throughput(
+    window: ThroughputWindow | PhaseTimingWindow | None,
+) -> PhaseTimingWindow:
+    if window is None:
+        return PhaseTimingWindow(
+            warmup=2,
+            max_measured_update=22,
+        )
+    if isinstance(window, PhaseTimingWindow):
+        return window
+    return PhaseTimingWindow(
+        warmup=window.warmup,
+        max_measured_update=window.max_measured_update,
+    )
 
 
-def _record_float(record: Mapping[str, object], key: str) -> float | None:
-    value = record.get(key)
-    if isinstance(value, int | float):
-        return float(value)
-    return None
+def _has_phase_timing(record: Mapping[str, object]) -> bool:
+    return _record_float(record, PHASE_SECOND_KEYS[0]) is not None
+
+
+def extract_rollout_phase_breakdown_from_records(
+    records: Sequence[Mapping[str, object]],
+    *,
+    window: ThroughputWindow | PhaseTimingWindow | None = None,
+) -> dict[str, object]:
+    """Aggregate per-phase rollout seconds and fractions from JSONL rows."""
+
+    resolved = _window_from_throughput(window)
+    selected: list[Mapping[str, object]] = []
+    for record in records:
+        update = _record_update(record)
+        if update is None or not resolved.includes(update):
+            continue
+        if not _has_phase_timing(record):
+            continue
+        selected.append(record)
+
+    if not selected:
+        raise ValueError(
+            "no rollout phase timing rows in window "
+            f"updates {resolved.first_update}–{resolved.max_measured_update}. "
+            "Run `ow benchmark rollout-phase-profile` (integration worktree), "
+            "then `ow benchmark rollout-phase-breakdown` on the output JSONL."
+        )
+
+    phase_seconds: dict[str, list[float]] = {name: [] for name in PHASE_NAMES}
+    phase_fractions: dict[str, list[float]] = {name: [] for name in PHASE_NAMES}
+    measured_totals: list[float] = []
+    rollout_seconds: list[float] = []
+
+    for record in selected:
+        for name, sec_key, frac_key in zip(
+            PHASE_NAMES, PHASE_SECOND_KEYS, PHASE_FRACTION_KEYS, strict=True
+        ):
+            sec = _record_float(record, sec_key)
+            frac = _record_float(record, frac_key)
+            if sec is not None:
+                phase_seconds[name].append(sec)
+            if frac is not None:
+                phase_fractions[name].append(frac)
+        measured = _record_float(record, MEASURED_TOTAL_KEY)
+        if measured is not None:
+            measured_totals.append(measured)
+        rollout_s = _record_float(record, "rollout_seconds")
+        if rollout_s is not None:
+            rollout_seconds.append(rollout_s)
+
+    def _mean(values: list[float]) -> float:
+        return statistics.fmean(values) if values else 0.0
+
+    phases_payload: dict[str, object] = {}
+    for name in PHASE_NAMES:
+        phases_payload[name] = {
+            "seconds_mean": _mean(phase_seconds[name]),
+            "fraction_mean": _mean(phase_fractions[name]),
+        }
+
+    measured_mean = _mean(measured_totals)
+    rollout_mean = _mean(rollout_seconds)
+    payload: dict[str, object] = {
+        "warmup": resolved.warmup,
+        "max_measured_update": resolved.max_measured_update,
+        "measured_updates": len(selected),
+        "updates_in_window": sorted(
+            u for u in (_record_update(record) for record in selected) if u is not None
+        ),
+        "phases": phases_payload,
+        "rollout_phase_measured_total_seconds_mean": measured_mean,
+        "rollout_seconds_mean": rollout_mean,
+        "rollout_seconds_gap_mean": rollout_mean - measured_mean,
+    }
+    return payload
+
+
+def extract_rollout_phase_breakdown_from_log(
+    log_path: Path,
+    *,
+    window: ThroughputWindow | PhaseTimingWindow | None = None,
+) -> dict[str, object]:
+    records = read_jsonl_records(log_path)
+    payload = extract_rollout_phase_breakdown_from_records(records, window=window)
+    payload["log_path"] = str(log_path)
+    return payload
 
 
 def _profile_records_from_payload(
@@ -80,36 +166,10 @@ def _profile_records_from_payload(
     return records or None
 
 
-def resolve_log_path_from_input(path: Path) -> tuple[Path, Path | None]:
-    if not path.is_file():
-        raise FileNotFoundError(f"input not found: {path}")
-    if path.name.endswith("_jax.jsonl") or path.suffix == ".jsonl":
-        return path, None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"expected JSON object: {path}")
-    if _profile_records_from_payload(payload) is not None:
-        raise ValueError(
-            f"{path} is a rollout-phase-profile summary; "
-            "use extract_rollout_phase_breakdown_from_input()"
-        )
-    stage = payload.get("stage")
-    if isinstance(stage, dict):
-        log_path = stage.get("log_path")
-        if isinstance(log_path, str) and log_path:
-            return Path(log_path), path
-    log_path = payload.get("log_path")
-    if isinstance(log_path, str) and log_path:
-        return Path(log_path), path
-    raise ValueError(
-        f"no log_path in gate result {path}; pass a *_jax.jsonl path directly"
-    )
-
-
 def extract_rollout_phase_breakdown_from_input(
     path: Path,
     *,
-    window: PhaseTimingWindow | None = None,
+    window: ThroughputWindow | PhaseTimingWindow | None = None,
 ) -> dict[str, object]:
     """Load phase rows from profile JSON, gate JSON (via log_path), or JSONL."""
 
@@ -149,123 +209,17 @@ def extract_rollout_phase_breakdown_from_input(
     return breakdown
 
 
-def _has_phase_timing(record: Mapping[str, object]) -> bool:
-    return _record_float(record, PHASE_SECOND_KEYS[0]) is not None
-
-
-def extract_rollout_phase_breakdown_from_records(
-    records: Sequence[Mapping[str, object]],
-    *,
-    window: PhaseTimingWindow | None = None,
-) -> dict[str, object]:
-    resolved = window or PhaseTimingWindow(warmup=2, max_measured_update=20)
-    selected: list[Mapping[str, object]] = []
-    for record in records:
-        update = _record_update(record)
-        if update is None or not resolved.includes(update):
-            continue
-        if not _has_phase_timing(record):
-            continue
-        selected.append(record)
-
-    if not selected:
-        raise ValueError(
-            "no rollout phase timing rows in window "
-            f"updates {resolved.first_update}–{resolved.max_measured_update}. "
-            "Run `ow benchmark rollout-phase-profile`, then "
-            "`ow benchmark rollout-phase-breakdown` on --out JSON."
-        )
-
-    phase_seconds: dict[str, list[float]] = {name: [] for name in PHASE_NAMES}
-    phase_fractions: dict[str, list[float]] = {name: [] for name in PHASE_NAMES}
-    opponent_detail_seconds: dict[str, list[float]] = {
-        name: [] for name in OPPONENT_DETAIL_NAMES
-    }
-    opponent_detail_fractions: dict[str, list[float]] = {
-        name: [] for name in OPPONENT_DETAIL_NAMES
-    }
-    measured_totals: list[float] = []
-    rollout_seconds: list[float] = []
-
-    for record in selected:
-        for name, sec_key, frac_key in zip(
-            PHASE_NAMES, PHASE_SECOND_KEYS, PHASE_FRACTION_KEYS, strict=True
-        ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
-            if sec is not None:
-                phase_seconds[name].append(sec)
-            if frac is not None:
-                phase_fractions[name].append(frac)
-        for name, sec_key, frac_key in zip(
-            OPPONENT_DETAIL_NAMES,
-            OPPONENT_DETAIL_SECOND_KEYS,
-            OPPONENT_DETAIL_FRACTION_KEYS,
-            strict=True,
-        ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
-            if sec is not None:
-                opponent_detail_seconds[name].append(sec)
-            if frac is not None:
-                opponent_detail_fractions[name].append(frac)
-        measured = _record_float(record, MEASURED_TOTAL_KEY)
-        if measured is not None:
-            measured_totals.append(measured)
-        rollout_s = _record_float(record, "rollout_seconds")
-        if rollout_s is not None:
-            rollout_seconds.append(rollout_s)
-
-    def _mean(values: list[float]) -> float:
-        return statistics.fmean(values) if values else 0.0
-
-    phases_payload: dict[str, object] = {}
-    for name in PHASE_NAMES:
-        phases_payload[name] = {
-            "seconds_mean": _mean(phase_seconds[name]),
-            "fraction_mean": _mean(phase_fractions[name]),
-        }
-    opponent_details: dict[str, object] = {}
-    for name in OPPONENT_DETAIL_NAMES:
-        if opponent_detail_seconds[name]:
-            opponent_details[name] = {
-                "seconds_mean": _mean(opponent_detail_seconds[name]),
-                "fraction_mean": _mean(opponent_detail_fractions[name]),
-            }
-
-    measured_mean = _mean(measured_totals)
-    rollout_mean = _mean(rollout_seconds)
-    return {
-        "warmup": resolved.warmup,
-        "max_measured_update": resolved.max_measured_update,
-        "measured_updates": len(selected),
-        "updates_in_window": sorted(
-            u for u in (_record_update(record) for record in selected) if u is not None
-        ),
-        "phases": phases_payload,
-        "opponent_details": opponent_details,
-        "rollout_phase_measured_total_seconds_mean": measured_mean,
-        "rollout_seconds_mean": rollout_mean,
-        "rollout_seconds_gap_mean": rollout_mean - measured_mean,
-    }
-
-
-def extract_rollout_phase_breakdown_from_log(
-    log_path: Path,
-    *,
-    window: PhaseTimingWindow | None = None,
-) -> dict[str, object]:
-    records = read_jsonl_records(log_path)
-    payload = extract_rollout_phase_breakdown_from_records(records, window=window)
-    payload["log_path"] = str(log_path)
-    return payload
+def resolve_input_to_log_path(path: Path) -> tuple[Path, Path | None]:
+    return resolve_log_path_from_input(path)
 
 
 def format_rollout_phase_breakdown(payload: Mapping[str, object]) -> str:
+    """Human-readable table for terminal output."""
+
     lines = [
         (
             f"Rollout phase breakdown "
-            f"(updates {int(payload['warmup']) + 1}–{payload['max_measured_update']}, "
+            f"(updates {payload['warmup'] + 1}–{payload['max_measured_update']}, "
             f"n={payload['measured_updates']})"
         ),
         f"  source: {payload.get('log_path') or payload.get('source_path', '(unknown)')}",
@@ -275,7 +229,6 @@ def format_rollout_phase_breakdown(payload: Mapping[str, object]) -> str:
     ]
     phases = payload.get("phases")
     if isinstance(phases, dict):
-        opponent_details = payload.get("opponent_details")
         for name in PHASE_NAMES:
             entry = phases.get(name)
             if not isinstance(entry, dict):
@@ -283,17 +236,6 @@ def format_rollout_phase_breakdown(payload: Mapping[str, object]) -> str:
             sec = float(entry.get("seconds_mean", 0.0))
             frac = float(entry.get("fraction_mean", 0.0))
             lines.append(f"  {name:<12} {sec:8.3f}  {frac * 100:6.1f}%")
-            if name == "opponent" and isinstance(opponent_details, dict):
-                for detail_name in OPPONENT_DETAIL_NAMES:
-                    detail = opponent_details.get(detail_name)
-                    if not isinstance(detail, dict):
-                        continue
-                    detail_sec = float(detail.get("seconds_mean", 0.0))
-                    detail_frac = float(detail.get("fraction_mean", 0.0))
-                    label = detail_name.removeprefix("opponent_")
-                    lines.append(
-                        f"    {label:<10} {detail_sec:8.3f}  {detail_frac * 100:6.1f}%"
-                    )
     measured = float(payload.get("rollout_phase_measured_total_seconds_mean", 0.0))
     rollout = float(payload.get("rollout_seconds_mean", 0.0))
     gap = float(payload.get("rollout_seconds_gap_mean", 0.0))

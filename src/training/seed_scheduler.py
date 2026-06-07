@@ -26,6 +26,17 @@ class SeedEvent:
     policy: str
 
 
+def resolve_reseed_every_updates(*, configured: int, total_updates: int) -> int:
+    """Map ``training.reseed_every_updates`` to an effective periodic interval.
+
+    ``0`` disables periodic reseed. ``-1`` auto-scales to ``max(25, total_updates // 10)``.
+    """
+
+    if int(configured) == -1:
+        return max(25, int(total_updates) // 10)
+    return int(configured)
+
+
 class SeedScheduler:
     """Adaptive seed scheduling utility for training resets and RNG key updates."""
 

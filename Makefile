@@ -11,6 +11,38 @@ XDIST_ENV := ORBIT_WARS_PYTEST_XDIST=1 JAX_PLATFORMS=cpu
 setup:
 	uv sync --group dev
 
+.PHONY: help agent-context
+
+help:
+	@echo "Orbit Wars Makefile targets"
+	@echo ""
+	@echo "Tests (default: make test = test-fast):"
+	@echo "  test, test-fast          CPU fast tier"
+	@echo "  test-jax                 Lightweight JAX tier"
+	@echo "  test-daily               test-fast + test-jax (parallel)"
+	@echo "  test-premerge            test-daily + test-slow"
+	@echo "  test-sweep               Full W&B sweep grid (pre-release)"
+	@echo "  test-fast-parallel       CPU xdist (ORBIT_WARS_PYTEST_XDIST=1)"
+	@echo "  test-jax-trace-hygiene   tier-A static rg gate + jit import/smoke tests"
+	@echo "  test-domain-{config,features,jax-env,policy,artifacts,curriculum}"
+	@echo ""
+	@echo "Preflight (GPU for learn-proof; see docs/operator-runbook.md):"
+	@echo "  preflight-sanity, preflight-learn-proof, preflight-calibrate"
+	@echo "  gate-admission            learning + throughput (one JSON)"
+	@echo "  sweep-ppo-admission       3-seed admission sweep (ADMISSION_SEEDS, REPO_ROOT)"
+	@echo ""
+	@echo "Launch hygiene throughput (tier-1 CPU-safe; tier-2 GPU):"
+	@echo "  test-launch-hygiene-throughput      tier-1 sampler microbench"
+	@echo "  test-launch-hygiene-e2e-throughput  tier-2 production-path e2e gate"
+	@echo ""
+	@echo "Agents:"
+	@echo "  agent-context            JSON session context for coding agents"
+	@echo "                           RESOLVED=smoke embeds truncated resolved config"
+	@echo "  See docs/AGENT_CAPABILITIES.md and AGENTS.md"
+
+agent-context:
+	uv run python scripts/agent_context.py $(if $(filter smoke,$(RESOLVED)),--resolved smoke,)
+
 # Default dev loop: CPU-only, no slow/JAX-compile smokes (safe on WSL2 + NVIDIA).
 test: test-fast
 
@@ -44,6 +76,10 @@ test-launch-hygiene-e2e-throughput:
 		--out /tmp/launch_hygiene_e2e_gate.json \
 		--baseline docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json \
 		--assert-within-pct 10
+
+test-jax-trace-hygiene:
+	./scripts/jax_trace_hygiene.sh
+	$(PYTEST_CPU) tests/test_jax_trace_hygiene.py -m "jax and not slow and not sweep"
 
 # Kaggle-relevant JAX env parity (mechanics + 4p); runs in test-jax tier, not slow.
 test-kaggle-parity:
@@ -88,7 +124,7 @@ test-domain-policy:
 	$(PYTEST_CPU) tests/test_jax_policy_encoder.py tests/test_jax_ppo.py tests/test_ppo_update.py tests/test_trajectory_shield.py -m "jax and not slow"
 
 test-domain-artifacts:
-	$(PYTEST_CPU) tests/test_artifact_pipeline.py tests/test_promotion.py tests/test_replay.py tests/test_tournament.py tests/test_kaggle_submission_packager.py tests/test_checkpoint_compat.py -m "not slow and not jax"
+	$(PYTEST_CPU) tests/test_artifact_pipeline.py tests/test_promotion.py tests/test_replay.py tests/test_tournament.py tests/test_kaggle_submission_packager.py tests/test_checkpoint_compat.py tests/test_eval_validate_invariant.py -m "not slow and not jax"
 
 test-domain-curriculum:
 	$(PYTEST_CPU) tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"
@@ -97,8 +133,38 @@ preflight-sanity:
 	uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json
 
 preflight-learn-proof:
+	# Gates 2–5 ladder: beat_noop → beat_random (+ optional tournament-proof via learn-proof).
+	# Dry-run first: uv run ow benchmark gate run beat_noop --dry-run
+	# Thresholds: docs/benchmarks/preflight-calibration.json (see docs/operator-runbook.md)
 	uv run ow benchmark learn-proof --through beat_random --out outputs/preflight/learn_proof_report.json
 
 preflight-calibrate:
 	uv run ow benchmark calibrate --analyze-only --analyze-campaigns
+
+# Cherry-pick admission: beat_noop learning + throughput extract in one gate JSON.
+# Map-pool picks: ADMISSION_BASELINE=docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json \
+#   make gate-admission REPO_ROOT=../orbit_wars-integration
+ADMISSION_BASELINE ?= docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
+ADMISSION_OUT ?= outputs/benchmarks/admission/gate.json
+ADMISSION_SEEDS ?= 42 43 44
+
+gate-admission:
+	@mkdir -p $(dir $(ADMISSION_OUT))
+	uv run ow benchmark gate run admission \
+	  --out $(ADMISSION_OUT) \
+	  --throughput-baseline $(ADMISSION_BASELINE) \
+	  $(if $(REPO_ROOT),--repo-root $(REPO_ROOT),)
+
+# Simple 3-run PPO admission sweep; pass REPO_ROOT for anchor worktree gates.
+sweep-ppo-admission:
+	@set -e; \
+	mkdir -p outputs/benchmarks/admission; \
+	for seed in $(ADMISSION_SEEDS); do \
+	  echo "=== admission seed=$$seed ==="; \
+	  uv run ow benchmark gate run admission \
+	    --out outputs/benchmarks/admission/seed_$${seed}.json \
+	    --train-overrides seed=$$seed \
+	    --throughput-baseline $(ADMISSION_BASELINE) \
+	    $(if $(REPO_ROOT),--repo-root $(REPO_ROOT),); \
+	done
 

@@ -5,15 +5,8 @@ import sys
 from pathlib import Path
 
 from src.artifacts.pipeline import write_optional_job
+from src.artifacts.replay_schedule import checkpoint_replay_due
 from src.config import TrainConfig
-
-
-def checkpoint_replay_due(cfg: TrainConfig, update: int) -> bool:
-    if not cfg.artifacts.replay.enabled:
-        return False
-    every_n = max(int(cfg.artifacts.replay.every_n_checkpoints), 1)
-    checkpoint_index = max(update // max(int(cfg.artifacts.checkpoint_every), 1), 1)
-    return checkpoint_index % every_n == 0 or update == cfg.training.total_updates
 
 
 def queue_optional_jobs_if_due(
@@ -115,8 +108,15 @@ def start_artifact_worker_if_needed(
     if not cfg.artifacts.artifact_pipeline.worker_autostart:
         return
     worker = worker_state.get("process")
-    if worker is not None and worker.poll() is None:
-        return
+    if worker is not None:
+        exit_code = worker.poll()
+        if exit_code is None:
+            return
+        print(
+            f"artifact_worker_exited code={exit_code}; restarting",
+            flush=True,
+        )
+        worker_state.pop("process", None)
     queue_dir.mkdir(parents=True, exist_ok=True)
     stdout_path = queue_dir / "worker.stdout.log"
     stderr_path = queue_dir / "worker.stderr.log"
@@ -132,6 +132,7 @@ def start_artifact_worker_if_needed(
     ]
     if result_root is not None:
         command.extend(["--result-root", str(result_root)])
+    command.append("--recover-running")
     from src.artifacts.worker_env import artifact_worker_subprocess_env
 
     stdout = stdout_path.open("a", encoding="utf-8")
@@ -143,4 +144,7 @@ def start_artifact_worker_if_needed(
         stderr=stderr,
         env=artifact_worker_subprocess_env(),
         start_new_session=True,
+    )
+    print(
+        f"artifact_worker_started stdout_log={stdout_path} stderr_log={stderr_path}"
     )

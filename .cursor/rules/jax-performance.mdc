@@ -1,0 +1,32 @@
+---
+description: "JAX/RL performance: profile first, compile/cache, GPU hygiene"
+globs:
+  - "src/jax/**/*.py"
+alwaysApply: false
+---
+
+# JAX / RL performance (Orbit Wars)
+
+Adapted from [cursorrules-collection `practices/performance.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/practices/performance.mdc) — web/DB sections omitted.
+
+## Measure before optimizing
+
+- Profile rollouts/training (update timing in `logs/*_jax.jsonl`, `ow benchmark training`) before micro-optimizing Python.
+- Document before/after: env-steps/s or wall time per update — not “should be faster.”
+- Launch-hygiene gates use calibrated baselines (`docs/benchmarks/launch-hygiene-e2e-baseline.json`); do not invent thresholds.
+
+## JAX-specific
+
+- Treat JIT compile as a cost: avoid reshaping/retracing in hot paths (`src/jax/rollout/collect.py`, `ppo_update.py`).
+- Prefer structural changes in `conf/` + one compile-friendly path over many Python branches inside `jax.lax.scan`.
+- Metric merges use `_merge_metric_dicts` inside scans; finalize rates after the scan (rollout invariant).
+
+## GPU / process hygiene
+
+- One heavy GPU job at a time (train, calibration, Gate 5); check terminals before starting.
+- Do not pipe long `ow train` / gate output through `tail`/`head` — progress on stderr; use `ow runs watch` or `tail -f` on `logs/*_jax.jsonl`.
+
+## When not to optimize
+
+- Do not weaken preflight/tournament floors in `docs/benchmarks/preflight-calibration.json` to make a run pass.
+- Confirm metric denominators before gating (`overall_win_rate` vs noop-only, `binary_win` reward vs win rate).

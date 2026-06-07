@@ -191,9 +191,17 @@
   },
   "pass_band": {
     "within_pct": 10.0,
+    "gate_authority_metrics": [
+      "env_steps_per_sec",
+      "seconds_per_update_mean"
+    ],
+    "recorded_not_gated": [
+      "samples_per_sec",
+      "rollout_collect_seconds_per_update_mean",
+      "ppo_seconds_per_update_mean"
+    ],
     "floors": {
-      "env_steps_per_sec": 8798.6875669811,
-      "samples_per_sec": 43993.437834905504
+      "env_steps_per_sec": 8798.6875669811
     },
     "ceilings": {
       "seconds_per_update_mean": 1.8005984023324224

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+from src.training.seed_scheduler import (
+    SeedScheduleConfig,
+    SeedScheduler,
+    resolve_reseed_every_updates,
+)
 
 
 def test_should_reseed_periodic_at_multiples() -> None:

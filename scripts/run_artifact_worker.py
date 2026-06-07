@@ -13,6 +13,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+if __name__ == "__main__":
+    print(
+        "prefer: uv run ow eval worker --run <run_dir> (agent path for artifact jobs)",
+        file=sys.stderr,
+    )
+
 from src.artifacts.worker_env import bootstrap_artifact_worker_jax_env  # noqa: E402
 
 bootstrap_artifact_worker_jax_env()
@@ -268,9 +274,9 @@ def _run_checkpoint_eval_job(job: dict[str, object]) -> None:
         "completed",
         result_dir=str(result_dir),
         result_manifest_path=str(manifest_path),
-        validation_ok=True,
-        tournament_id=summary["tournament_id"],
-        promoted=bool(summary["promoted"]),
+        validation_ok=bool(summary.get("validation_ok", False)),
+        tournament_id=summary.get("tournament_id"),
+        promoted=bool(summary.get("promoted", False)),
     )
 
 

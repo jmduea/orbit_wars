@@ -293,6 +293,29 @@ def atomic_write_json(path: Path, payload: Mapping[str, object]) -> None:
         tmp_path.unlink(missing_ok=True)
 
 
+def append_produced_artifact(
+    manifest_path: Path,
+    entry: Mapping[str, object],
+) -> None:
+    """Append one artifact record to the run manifest when the path is new."""
+
+    if not manifest_path.is_file():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifacts = manifest.get("produced_artifacts")
+    if not isinstance(artifacts, list):
+        artifacts = []
+    entry_path = str(entry.get("path", "")).strip()
+    if entry_path and any(
+        isinstance(item, dict) and str(item.get("path", "")).strip() == entry_path
+        for item in artifacts
+    ):
+        return
+    artifacts.append(dict(entry))
+    manifest["produced_artifacts"] = artifacts
+    atomic_write_json(manifest_path, manifest)
+
+
 def append_jsonl_atomic(path: Path, record: Mapping[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as file:

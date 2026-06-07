@@ -17,10 +17,16 @@ from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
     FactoredPolicyOutput,
     JaxPolicyOutput,
+    PlanetFlowPolicyOutput,
     action_log_prob_and_entropy,
     ensure_policy_sequence,
 )
-from src.jax.decoders.factorized_topk_pointer import FactorizedTopKPointerDecoder
+from src.jax.decoders.planet_flow import PlanetFlowTargetDemandHead
+from src.jax.decoders.factorized_topk_pointer import (
+    FactorizedDecodeCarry,
+    FactorizedStepLogits,
+    FactorizedTopKPointerDecoder,
+)
 from src.jax.distributional_value import (
     expected_value_from_logits,
     value_support,
@@ -295,6 +301,54 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
             decoder_hidden=decoder_hidden_out if self.decoder_carry else None,
         )
 
+    def decode_init_carry(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        *,
+        decoder_hidden: jax.Array | None = None,
+    ) -> FactorizedDecodeCarry:
+        """Initial GRU carry for incremental factorized decode in rollout scans."""
+
+        return self.decoder_module.init_carry(
+            encoder_out, decoder_hidden_in=decoder_hidden
+        )
+
+    def decode_step(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        carry: FactorizedDecodeCarry,
+        *,
+        teacher_source: jax.Array | None = None,
+        teacher_target_slot: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> tuple[FactorizedStepLogits, FactorizedDecodeCarry]:
+        """One autoregressive decoder step on cached encoder output."""
+
+        step_logits, new_carry, _, _, _ = self.decoder_module.step(
+            encoder_out,
+            carry,
+            teacher_source=teacher_source,
+            teacher_target_slot=teacher_target_slot,
+            rng=rng,
+            deterministic=deterministic,
+        )
+        return step_logits, new_carry
+
+    def decode_advance_carry(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        carry: FactorizedDecodeCarry,
+        *,
+        source: jax.Array,
+        target_slot: jax.Array,
+    ) -> FactorizedDecodeCarry:
+        """Advance decoder input embedding after a committed launch."""
+
+        return self.decoder_module.advance_carry_input(
+            encoder_out, carry, source=source, target_slot=target_slot
+        )
+
     @nn.compact
     def __call__(
         self,
@@ -315,6 +369,77 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
             decoder_hidden=decoder_hidden,
             rng=rng,
             deterministic=deterministic,
+            include_value=True,
+        )
+
+
+class ComposablePlanetFlowPolicy(nn.Module):
+    """Encoder + target-demand pressure head for Planet Flow P0."""
+
+    encoder_module: nn.Module
+    demand_head_module: PlanetFlowTargetDemandHead
+    value_head_module: nn.Module | None = None
+    hidden_size: int = 128
+
+    def _resolve_value_head(self) -> nn.Module:
+        value_head_module = self.value_head_module
+        if value_head_module is None:
+            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
+        return value_head_module
+
+    def encode(self, batch: TurnBatch) -> PlanetEdgeEncoderOutput:
+        """Run the planet graph encoder once per fixed ``TurnBatch``."""
+
+        return self.encoder_module(batch)
+
+    def critic(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        player_count: jax.Array | None = None,
+    ) -> ValueHeadOutput:
+        """Bootstrap value from cached encoder output."""
+
+        return self._resolve_value_head()(
+            encoder_out.value_input, player_count=player_count
+        )
+
+    def decode(
+        self,
+        encoder_out: PlanetEdgeEncoderOutput,
+        *,
+        player_count: jax.Array | None = None,
+        include_value: bool = True,
+    ) -> PlanetFlowPolicyOutput:
+        """Decoder-only forward on cached ``encoder_out``."""
+
+        target_demand_logits = self.demand_head_module(encoder_out)
+        if include_value:
+            value_out = self.critic(encoder_out, player_count=player_count)
+            value = value_out.value
+            value_logits = value_out.value_logits
+        else:
+            batch_size = encoder_out.context_query.shape[0]
+            value = jnp.zeros((batch_size,), dtype=jnp.float32)
+            value_logits = None
+        return PlanetFlowPolicyOutput(
+            target_demand_logits=target_demand_logits,
+            value=value,
+            value_logits=value_logits,
+        )
+
+    @nn.compact
+    def __call__(
+        self,
+        batch: TurnBatch,
+        player_count: jax.Array | None = None,
+        rng: jax.Array | None = None,
+        deterministic: bool = False,
+    ) -> PlanetFlowPolicyOutput:
+        del rng, deterministic
+        encoder_out = self.encode(batch)
+        return self.decode(
+            encoder_out,
+            player_count=player_count,
             include_value=True,
         )
 
@@ -375,6 +500,69 @@ def factorized_decode(
     )
 
 
+def factorized_decode_init_carry(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    *,
+    decoder_hidden: jax.Array | None = None,
+) -> FactorizedDecodeCarry:
+    """Initial decoder carry for incremental rollout sequence scans."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        decoder_hidden=decoder_hidden,
+        method=ComposableFactorizedPlanetPolicy.decode_init_carry,
+    )
+
+
+def factorized_decode_step(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    carry: FactorizedDecodeCarry,
+    *,
+    teacher_source: jax.Array | None = None,
+    teacher_target_slot: jax.Array | None = None,
+    rng: jax.Array | None = None,
+    deterministic: bool = False,
+) -> tuple[FactorizedStepLogits, FactorizedDecodeCarry]:
+    """Single decoder step on cached encoder output (no full K-step replay)."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        carry,
+        teacher_source=teacher_source,
+        teacher_target_slot=teacher_target_slot,
+        rng=rng,
+        deterministic=deterministic,
+        method=ComposableFactorizedPlanetPolicy.decode_step,
+    )
+
+
+def factorized_decode_advance_carry(
+    params: dict,
+    policy: nn.Module,
+    encoder_out: PlanetEdgeEncoderOutput,
+    carry: FactorizedDecodeCarry,
+    *,
+    source: jax.Array,
+    target_slot: jax.Array,
+) -> FactorizedDecodeCarry:
+    """Update decoder input embedding after sampling a launch."""
+
+    return policy.apply(
+        params,
+        encoder_out,
+        carry,
+        source=source,
+        target_slot=target_slot,
+        method=ComposableFactorizedPlanetPolicy.decode_advance_carry,
+    )
+
+
 def edge_action_count(task_cfg) -> int:
     """Flat edge logits including the always-legal NO_OP slot."""
 
@@ -384,9 +572,17 @@ def edge_action_count(task_cfg) -> int:
 def build_pointer_decoder(cfg: TrainConfig) -> FactorizedTopKPointerDecoder:
     """Construct the factorized top-K pointer decoder module."""
 
-    from src.artifacts.checkpoint_compat import pointer_decoder_for_model
+    from src.artifacts.checkpoint_compat import (
+        POINTER_DECODER_FACTORIZED_TOPK,
+        pointer_decoder_for_model,
+    )
 
-    pointer_decoder_for_model(cfg.model)
+    pointer_decoder = pointer_decoder_for_model(cfg.model)
+    if pointer_decoder != POINTER_DECODER_FACTORIZED_TOPK:
+        raise ValueError(
+            "build_pointer_decoder only supports factorized decoders, got "
+            f"{pointer_decoder!r}."
+        )
     hidden = cfg.model.hidden_size
     return FactorizedTopKPointerDecoder(
         ship_bucket_count=cfg.task.ship_bucket_count,
@@ -398,19 +594,35 @@ def build_pointer_decoder(cfg: TrainConfig) -> FactorizedTopKPointerDecoder:
     )
 
 
+_PLANET_GRAPH_TRANSFORMER_ARCHITECTURES = frozenset(
+    {
+        "planet_graph_transformer",
+        "planet_graph_transformer_small",
+    }
+)
+
+
 def build_jax_policy(cfg: TrainConfig) -> nn.Module:
     """Construct the planet-edge policy for the configured architecture."""
     normalized_architecture = cfg.model.architecture.strip().lower()
-    if normalized_architecture == "planet_graph_transformer":
+    if normalized_architecture in _PLANET_GRAPH_TRANSFORMER_ARCHITECTURES:
         return build_planet_graph_transformer_policy(cfg)
     raise ValueError(
         f"Unsupported JAX model architecture '{cfg.model.architecture}'. "
-        "Expected 'planet_graph_transformer'."
+        "Expected one of: "
+        + ", ".join(sorted(_PLANET_GRAPH_TRANSFORMER_ARCHITECTURES))
+        + "."
     )
 
 
 def build_planet_graph_transformer_policy(cfg: TrainConfig) -> nn.Module:
     """Construct the planet graph transformer policy (M2 encoder)."""
+
+    from src.artifacts.checkpoint_compat import (
+        POINTER_DECODER_FACTORIZED_TOPK,
+        POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+        pointer_decoder_for_model,
+    )
 
     hidden = cfg.model.hidden_size
     k_slots = edge_k(cfg.task)
@@ -430,15 +642,30 @@ def build_planet_graph_transformer_policy(cfg: TrainConfig) -> nn.Module:
         edge_k=k_slots,
         gradient_checkpointing=cfg.training.enable_gradient_checkpointing,
     )
-    decoder_module = build_pointer_decoder(cfg)
     value_head_module = build_value_head(cfg)
-    return ComposableFactorizedPlanetPolicy(
-        encoder_module=encoder_module,
-        decoder_module=decoder_module,
-        value_head_module=value_head_module,
-        hidden_size=hidden,
-        decoder_carry=cfg.model.decoder_carry,
-    )
+    pointer_decoder = pointer_decoder_for_model(cfg.model)
+    if pointer_decoder == POINTER_DECODER_FACTORIZED_TOPK:
+        decoder_module = build_pointer_decoder(cfg)
+        return ComposableFactorizedPlanetPolicy(
+            encoder_module=encoder_module,
+            decoder_module=decoder_module,
+            value_head_module=value_head_module,
+            hidden_size=hidden,
+            decoder_carry=cfg.model.decoder_carry,
+        )
+    if pointer_decoder == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        return ComposablePlanetFlowPolicy(
+            encoder_module=encoder_module,
+            demand_head_module=PlanetFlowTargetDemandHead(
+                pressure_bucket_count=len(
+                    cfg.model.planet_flow.pressure_bucket_values
+                ),
+                hidden_size=hidden,
+            ),
+            value_head_module=value_head_module,
+            hidden_size=hidden,
+        )
+    raise ValueError(f"Unsupported pointer_decoder={pointer_decoder!r}.")
 
 
 def make_synthetic_turn_batch(

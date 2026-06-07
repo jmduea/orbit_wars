@@ -3,7 +3,12 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.config import TrainConfig
+from src.jax.action_codec import (
+    PlanetFlowPolicyOutput,
+    sample_planet_flow_pressure_action,
+)
 from src.jax.action_sampling import _sample_shielded_sequence_with_params
 from src.jax.decoder_carry import (
     decoder_carry_enabled,
@@ -21,12 +26,23 @@ from src.jax.env import (
 from src.jax.features import TurnBatch
 from src.jax.map_pool.load import MapPoolConstants
 from src.jax.normalization import ObservationNormState, normalize_turn_batch
+from src.jax.planet_flow import (
+    compile_planet_flow_action,
+    compile_seeded_random_planet_flow_control,
+    planet_flow_sampling_target_mask,
+)
 from src.jax.ppo_update import gae_returns_and_advantages
-from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.rollout.types import (
+    FactorizedActionReplay,
+    JaxTrainState,
+    JaxTransitionBatch,
+    PlanetFlowActionReplay,
+)
 from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
+    is_noop_jax_training_opponent_mode,
     validate_jax_training_opponent_mode,
 )
 from src.opponents.jax_actions.builders import (
@@ -83,6 +99,10 @@ def collect_rollout_jax(
             f"got {cfg.task.player_count}."
         )
     validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    # Opponent noop actions ignore edge features; skip per-step opponent re-encode.
+    skip_opp_batch_refresh = cfg.task.player_count == 2 and is_noop_jax_training_opponent_mode(
+        cfg.opponents.mode.opponent
+    )
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
@@ -117,27 +137,90 @@ def collect_rollout_jax(
         key, state, batch, opp_batch_cache, decoder_hidden = carry
         policy_batch = _policy_turn_batch(batch, norm_state, cfg)
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
-        sample = _sample_shielded_sequence_with_params(
-            learner_key,
-            state.game,
-            policy_batch,
-            train_state.params,
-            policy,
-            cfg,
-            deterministic=False,
-            decoder_hidden_in=decoder_hidden,
-        )
-        learner_action = build_action_from_factored_batch(
-            state.game,
-            batch,
-            sample.source_index,
-            sample.target_slot,
-            sample.ship_bucket,
-            sample.stop_flag,
-            sample.step_mask,
-            cfg,
-            ship_fraction=sample.ship_fraction,
-        )
+        planet_flow_target_bucket = None
+        planet_flow_target_pressure = None
+        planet_flow_target_mask = None
+        planet_flow_diagnostics = None
+        if is_planet_flow_pointer_decoder(cfg.model):
+            player_count = jnp.full((env_count,), cfg.task.player_count, dtype=jnp.int32)
+            output = policy.apply(
+                train_state.params,
+                policy_batch,
+                player_count=player_count,
+            )
+            if not isinstance(output, PlanetFlowPolicyOutput):
+                raise TypeError(
+                    "planet_flow_target_heatmap policy must return "
+                    "PlanetFlowPolicyOutput."
+                )
+            pressure_action = sample_planet_flow_pressure_action(
+                learner_key,
+                output,
+                jnp.asarray(
+                    cfg.model.planet_flow.pressure_bucket_values,
+                    dtype=jnp.float32,
+                ),
+                planet_flow_sampling_target_mask(state.game, batch),
+                deterministic=False,
+            )
+            compile_result = compile_planet_flow_action(
+                state.game,
+                batch,
+                pressure_action.target_pressure,
+                cfg,
+            )
+            control_result = compile_seeded_random_planet_flow_control(
+                jax.random.fold_in(learner_key, 104_729),
+                state.game,
+                batch,
+                cfg,
+            )
+            learner_action = compile_result.action
+            planet_flow_diagnostics = compile_result.diagnostics
+            planet_flow_control_diagnostics = control_result.diagnostics
+            decoder_hidden_out = decoder_hidden
+            log_prob = pressure_action.log_prob
+            value = output.value
+            ship_fraction = None
+            planet_flow_target_bucket = pressure_action.target_bucket
+            planet_flow_target_pressure = pressure_action.target_pressure
+            planet_flow_target_mask = pressure_action.target_mask
+            shield_diagnostics = None
+        else:
+            sample = _sample_shielded_sequence_with_params(
+                learner_key,
+                state.game,
+                policy_batch,
+                train_state.params,
+                policy,
+                cfg,
+                deterministic=False,
+                decoder_hidden_in=decoder_hidden,
+            )
+            learner_action = build_action_from_factored_batch(
+                state.game,
+                batch,
+                sample.source_index,
+                sample.target_slot,
+                sample.ship_bucket,
+                sample.stop_flag,
+                sample.step_mask,
+                cfg,
+                ship_fraction=sample.ship_fraction,
+            )
+            decoder_hidden_out = sample.decoder_hidden_out
+            ship_bucket_mask = sample.ship_bucket_mask
+            target_index = sample.target_index
+            ship_bucket = sample.ship_bucket
+            source_index = sample.source_index
+            target_slot = sample.target_slot
+            stop_flag = sample.stop_flag
+            step_mask = sample.step_mask
+            log_prob = sample.log_prob
+            value = sample.value
+            ship_fraction = sample.ship_fraction
+            shield_diagnostics = sample.diagnostics
+            planet_flow_control_diagnostics = None
 
         single_family_id = _single_stage_family_id(active_stage_view)
         effective_single_family_id = _maybe_effective_single_family_id(
@@ -241,7 +324,7 @@ def collect_rollout_jax(
 
         if carry_enabled:
             next_decoder_hidden = reset_decoder_hidden_on_done(
-                sample.decoder_hidden_out,
+                decoder_hidden_out,
                 result.done,
                 fresh_decoder_hidden,
             )
@@ -293,12 +376,15 @@ def collect_rollout_jax(
             operand=None,
         )
         if cfg.task.player_count == 2:
-            next_opp_batch_cache = _select_opp_batch_cache_2p(
-                skip_refresh=skip_opp_batch_refresh,
-                cached=opp_batch_cache,
-                env_state=next_state,
-                task=cfg.task,
-            )
+            if skip_opp_batch_refresh:
+                next_opp_batch_cache = opp_batch_cache
+            else:
+                next_opp_game = next_state.game._replace(
+                    player=(1 - next_state.learner_player).astype(jnp.int32)
+                )
+                next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                    next_opp_game
+                )
         else:
             next_opp_batch_cache = opp_batch_cache
 
@@ -314,16 +400,8 @@ def collect_rollout_jax(
             "player_count": jnp.full(
                 (env_count,), cfg.task.player_count, dtype=jnp.int32
             ),
-            "ship_bucket_mask": sample.ship_bucket_mask,
-            "target_index": sample.target_index,
-            "ship_bucket": sample.ship_bucket,
-            "source_index": sample.source_index,
-            "target_slot": sample.target_slot,
-            "stop_flag": sample.stop_flag,
-            "step_mask": sample.step_mask,
-            "log_prob": sample.log_prob,
             "initial_planet_ships": owned_planet_ships(state.game),
-            "value": sample.value,
+            "value": value,
             "reward": result.reward,
             "done": result.done,
             "terminal_is_first": result.terminal_is_first,
@@ -332,6 +410,32 @@ def collect_rollout_jax(
             "terminal_score_share": result.terminal_score_share,
             "terminal_ship_differential": result.terminal_ship_differential,
         }
+        if is_planet_flow_pointer_decoder(cfg.model):
+            transition.update(
+                {
+                    "log_prob": log_prob,
+                    "planet_flow_target_bucket": planet_flow_target_bucket,
+                    "planet_flow_target_pressure": planet_flow_target_pressure,
+                    "planet_flow_target_mask": planet_flow_target_mask,
+                }
+            )
+        else:
+            transition.update(
+                {
+                    "ship_bucket_mask": ship_bucket_mask,
+                    "target_index": target_index,
+                    "ship_bucket": ship_bucket,
+                    "source_index": source_index,
+                    "target_slot": target_slot,
+                    "stop_flag": stop_flag,
+                    "step_mask": step_mask,
+                    "log_prob": log_prob,
+                }
+            )
+            if carry_enabled:
+                transition["decoder_hidden"] = decoder_hidden
+            if is_continuous_ship_mode(cfg):
+                transition["ship_fraction"] = ship_fraction
         if include_opponent_metrics:
             transition.update(
                 {
@@ -343,23 +447,70 @@ def collect_rollout_jax(
                     for key in OPPONENT_SLOT_METRIC_KEYS
                 }
             )
-        if include_shield_metrics:
+        if include_shield_metrics and shield_diagnostics is not None:
             transition.update(
                 {
-                    "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
-                    "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
-                    "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
-                    "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
-                    "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
-                    "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
-                    "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
-                    "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
+                    "trajectory_shield_blocked_count": shield_diagnostics.blocked_count,
+                    "trajectory_shield_blocked_sun_count": shield_diagnostics.blocked_sun_count,
+                    "trajectory_shield_blocked_bounds_count": shield_diagnostics.blocked_bounds_count,
+                    "trajectory_shield_blocked_unintended_hit_count": shield_diagnostics.blocked_unintended_hit_count,
+                    "trajectory_shield_blocked_horizon_count": shield_diagnostics.blocked_horizon_count,
+                    "trajectory_shield_fallback_noop_count": shield_diagnostics.fallback_noop_count,
+                    "trajectory_shield_legal_non_noop_count": shield_diagnostics.legal_non_noop_count,
+                    "trajectory_shield_original_non_noop_count": shield_diagnostics.original_non_noop_count,
                 }
             )
-        if carry_enabled:
-            transition["decoder_hidden"] = decoder_hidden
-        if is_continuous_ship_mode(cfg):
-            transition["ship_fraction"] = sample.ship_fraction
+        if is_planet_flow_pointer_decoder(cfg.model):
+            pf_diag = planet_flow_diagnostics
+            pf_control_diag = planet_flow_control_diagnostics
+            assert pf_diag is not None
+            assert pf_control_diag is not None
+            transition.update(
+                {
+                    "planet_flow_demanded_mass_sum": pf_diag.demanded_mass,
+                    "planet_flow_unreachable_demand_mass_sum": (
+                        pf_diag.unreachable_demand_mass
+                    ),
+                    "planet_flow_held_demand_mass_sum": pf_diag.held_demand_mass,
+                    "planet_flow_requested_ship_mass_sum": pf_diag.requested_ship_mass,
+                    "planet_flow_emitted_ship_mass_sum": pf_diag.emitted_ship_mass,
+                    "planet_flow_capacity_dropped_launch_count": (
+                        pf_diag.capacity_dropped_launches
+                    ),
+                    "planet_flow_emitted_launch_count": pf_diag.emitted_launch_count,
+                    "planet_flow_small_launch_count": pf_diag.small_launch_count,
+                    "planet_flow_duplicate_source_target_count": (
+                        pf_diag.duplicate_source_target_count
+                    ),
+                    "planet_flow_control_demanded_mass_sum": (
+                        pf_control_diag.demanded_mass
+                    ),
+                    "planet_flow_control_unreachable_demand_mass_sum": (
+                        pf_control_diag.unreachable_demand_mass
+                    ),
+                    "planet_flow_control_held_demand_mass_sum": (
+                        pf_control_diag.held_demand_mass
+                    ),
+                    "planet_flow_control_requested_ship_mass_sum": (
+                        pf_control_diag.requested_ship_mass
+                    ),
+                    "planet_flow_control_emitted_ship_mass_sum": (
+                        pf_control_diag.emitted_ship_mass
+                    ),
+                    "planet_flow_control_capacity_dropped_launch_count": (
+                        pf_control_diag.capacity_dropped_launches
+                    ),
+                    "planet_flow_control_emitted_launch_count": (
+                        pf_control_diag.emitted_launch_count
+                    ),
+                    "planet_flow_control_small_launch_count": (
+                        pf_control_diag.small_launch_count
+                    ),
+                    "planet_flow_control_duplicate_source_target_count": (
+                        pf_control_diag.duplicate_source_target_count
+                    ),
+                }
+            )
         next_carry_decoder_hidden = next_state.decoder_hidden if carry_enabled else None
         return (
             key,
@@ -370,12 +521,16 @@ def collect_rollout_jax(
         ), transition
 
     if cfg.task.player_count == 2:
-        initial_opp_batch_cache = _initial_opponent_batch_cache_2p(
-            env_state=env_state,
-            turn_batch=turn_batch,
-            task=cfg.task,
-            skip_opp_batch_refresh=skip_opp_batch_refresh,
-        )
+        if skip_opp_batch_refresh:
+            # Noop opponents ignore edge features; learner batch has the right shape.
+            initial_opp_batch_cache = turn_batch
+        else:
+            initial_opp_game = env_state.game._replace(
+                player=(1 - env_state.learner_player).astype(jnp.int32)
+            )
+            initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
+                initial_opp_game
+            )
     else:
         initial_opp_batch_cache = turn_batch
 
@@ -394,32 +549,43 @@ def collect_rollout_jax(
     )
     returns = returns_step
     advantages = advantages_step
-    transition_kwargs = {
-        "planet_features": data["planet_features"],
-        "planet_mask": data["planet_mask"],
-        "edge_features": data["edge_features"],
-        "edge_mask": data["edge_mask"],
-        "edge_src_ids": data["edge_src_ids"],
-        "edge_tgt_ids": data["edge_tgt_ids"],
-        "global_features": data["global_features"],
-        "theta_ref": data["theta_ref"],
-        "player_count": data["player_count"],
-        "ship_bucket_mask": data["ship_bucket_mask"],
-        "target_index": data["target_index"],
-        "ship_bucket": data["ship_bucket"],
-        "log_prob": data["log_prob"],
-        "returns": returns,
-        "advantages": advantages,
-        "source_index": data["source_index"],
-        "target_slot": data["target_slot"],
-        "stop_flag": data["stop_flag"],
-        "step_mask": data["step_mask"],
-        "initial_planet_ships": data["initial_planet_ships"],
-    }
-    if carry_enabled:
-        transition_kwargs["decoder_hidden"] = data["decoder_hidden"]
-    if is_continuous_ship_mode(cfg):
-        transition_kwargs["ship_fraction"] = data["ship_fraction"]
-    transitions = JaxTransitionBatch(**transition_kwargs)
+    if is_planet_flow_pointer_decoder(cfg.model):
+        action_replay = PlanetFlowActionReplay(
+            target_bucket=data["planet_flow_target_bucket"],
+            target_pressure=data["planet_flow_target_pressure"],
+            target_mask=data["planet_flow_target_mask"],
+            log_prob=data["log_prob"],
+        )
+    else:
+        replay_kwargs = {
+            "ship_bucket_mask": data["ship_bucket_mask"],
+            "target_index": data["target_index"],
+            "ship_bucket": data["ship_bucket"],
+            "log_prob": data["log_prob"],
+            "source_index": data["source_index"],
+            "target_slot": data["target_slot"],
+            "stop_flag": data["stop_flag"],
+            "step_mask": data["step_mask"],
+        }
+        if carry_enabled:
+            replay_kwargs["decoder_hidden"] = data["decoder_hidden"]
+        if is_continuous_ship_mode(cfg):
+            replay_kwargs["ship_fraction"] = data["ship_fraction"]
+        action_replay = FactorizedActionReplay(**replay_kwargs)
+    transitions = JaxTransitionBatch(
+        planet_features=data["planet_features"],
+        planet_mask=data["planet_mask"],
+        edge_features=data["edge_features"],
+        edge_mask=data["edge_mask"],
+        edge_src_ids=data["edge_src_ids"],
+        edge_tgt_ids=data["edge_tgt_ids"],
+        global_features=data["global_features"],
+        theta_ref=data["theta_ref"],
+        player_count=data["player_count"],
+        returns=returns,
+        advantages=advantages,
+        action_replay=action_replay,
+        initial_planet_ships=data["initial_planet_ships"],
+    )
     metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     return key, env_state, turn_batch, transitions, metrics

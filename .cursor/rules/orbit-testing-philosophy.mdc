@@ -1,0 +1,35 @@
+---
+description: "Orbit Wars test design: behavior, boundaries, tiers, flakiness"
+globs:
+  - "tests/**/*.py"
+  - "tests/conftest.py"
+alwaysApply: false
+---
+
+# Testing philosophy (Orbit Wars)
+
+Adapted from [cursorrules-collection `practices/testing.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/practices/testing.mdc). Pytest mechanics live in `pytest.mdc`.
+
+## What to assert
+
+- Behavior from the caller’s view: golden `encode_turn` shapes in `tests/test_feature_encoding_golden.py`, not private helper call order.
+- Edge cases: empty pools, zero `pool_size` with curriculum on, invalid Hydra overrides, boundary update counts.
+- Error paths: `ValueError` from config composition, gate failures — not only happy-path rollouts.
+
+## Mocking
+
+- Mock at boundaries: filesystem checkpoints, subprocess Docker/tournament, external HTTP — not internals of PPO or `encode_turn`.
+- Prefer real small fixtures over heavy mocks for game logic in `src/game/`.
+- Fixed seeds for RNG/JAX where flakiness appeared; document seed in the test name or fixture.
+
+## Tiers (mandatory)
+
+- Default: `make test` / `make test-fast` — `-m "not slow and not jax and not sweep"`.
+- JAX compile: `make test-jax` or domain jax tests — not during every edit.
+- **Never** bare `pytest -n` / `-n auto`; use `make test-fast-parallel` only when documented; `tests/conftest.py` blocks undisciplined xdist.
+- Check terminals folder before pytest if another session may be running tests.
+
+## Flaky tests
+
+- Fix or delete; no indefinite `xfail` for race/GPU contention.
+- No `sleep()` for training completion — poll metrics files or use test doubles.

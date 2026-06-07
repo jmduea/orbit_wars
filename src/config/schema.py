@@ -13,6 +13,7 @@ class TaskConfig:
     # TODO: FeatureEngineeringConfig or something more feature-adjacent.
     max_fleets: int = 256
     player_count: int = 2
+    ship_speed: float = 6.0
     max_ships: float = 400.0
     ship_feature_scale: float = 1000.0
     feature_history_steps: int = 1
@@ -21,9 +22,7 @@ class TaskConfig:
     ship_bucket_count: int = 8
     ship_action_mode: str = "buckets"  # continuous_fraction for sigmoid fraction head
     trajectory_shield_mode: str = "cheap"  # off | cheap | tiered | exact
-    rollout_factorized_sampling: str = (
-        "lattice"  # lattice: full cheap shield mask per K-step; selected_validate: unshielded sample + point check
-    )
+    rollout_factorized_sampling: str = "lattice"  # lattice: full cheap shield mask per K-step; selected_validate: unshielded sample + point check
     # off: no trajectory filtering beyond ordinary action legality
     # cheap: feature-derived source/target/bucket mask, no horizon scan
     # exact: current full per-edge/per-bucket trajectory shield
@@ -34,6 +33,10 @@ class TaskConfig:
     trajectory_shield_epsilon: float = 1e-6
     intercept_anchors: tuple[float, ...] = (1.0, 3.0, 6.0)
     edge_rank_mode: str = "snapshot"  # intercept_min for intercept-proximity top-K
+    # train: JAX-native reset/step (no pure_callback); kaggle: reference planet/comet paths
+    env_parity_mode: str = (
+        "train"  # train | kaggle | legacy (legacy = pre-#188 comet-free hot path)
+    )
     map_pool_path: str | None = None
     map_pool_sha256: str | None = None
 
@@ -52,6 +55,13 @@ class RewardConfig:
 
 
 @dataclass(slots=True)
+class PlanetFlowConfig:
+    """Experimental Planet Flow action-layout configuration."""
+
+    pressure_bucket_values: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+@dataclass(slots=True)
 class ModelConfig:
     """Policy architecture and observation-normalization configuration."""
 
@@ -64,12 +74,11 @@ class ModelConfig:
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
-    gnn_k_neighbors: int = 5
-    gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
     pointer_decoder: str = "factorized_topk"
     decoder_carry: bool = False
+    planet_flow: PlanetFlowConfig = field(default_factory=PlanetFlowConfig)
     normalize_observations: bool = True
     obs_norm_clip: float = 10.0
 
@@ -98,11 +107,13 @@ class TrainingConfig:
     lr: float = 6e-5
     max_grad_norm: float = 1.0
     log_every: int = 1  # TODO: telemetry?
-    reseed_every_updates: int = 0  # TODOL curriculum?
-    reseed_on_plateau: bool = False  # TODO: curriculum?
-    plateau_metric: str = "episode_reward_mean"  # TODO: curriculum?
-    plateau_window: int = 10  # TODO: curriculum?
-    plateau_delta: float = 0.0  # TODO: curriculum?
+    reseed_every_updates: int = (
+        50  # 0=off, -1=auto max(25, total_updates//10); default pinned by calibration
+    )
+    reseed_on_plateau: bool = False
+    plateau_metric: str = "episode_reward_mean"
+    plateau_window: int = 10
+    plateau_delta: float = 0.0
     debug_replay_parity: bool = False
 
 
@@ -218,6 +229,7 @@ class OpponentsConfig:
 class ReplayConfig:
     enabled: bool = False
     every_n_checkpoints: int = 1
+    final_checkpoint_only: bool = False
     seed_policy: str = "update"
     max_steps: int = 500
     output_dir: str = "replays"
@@ -275,8 +287,6 @@ class SsotPipelineConfig:
     qualifier_max_env_steps: int = 500_000_000
     qualifier_eval_interval_updates: int = 50
     qualifier_games_per_seed: int = 0
-    require_packaging_validation: bool = True
-    packaging_validation_path: str | None = None
 
 
 @dataclass(slots=True)
@@ -392,9 +402,7 @@ class TrainConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     heldout_eval_seed_set: list[int] = field(default_factory=list)
     training_seed_set: list[int] = field(default_factory=list)
-    eval_seed_set: list[int] = field(
-        default_factory=lambda: [43, 44, 45, 46]
-    )
+    eval_seed_set: list[int] = field(default_factory=lambda: [43, 44, 45, 46])
     print_resolved_config: bool = False
     resume_checkpoint: str | None = None
     from_promoted: str | None = None

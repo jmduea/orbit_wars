@@ -1,0 +1,33 @@
+---
+description: "Preserve meaningful comments during edits (invariants, shapes, rollout)"
+globs:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+  - "scripts/**/*.py"
+alwaysApply: false
+---
+
+# Comment preservation (Orbit Wars)
+
+Adapted from [cursorrules-collection `code-quality/preserve-comments.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/code-quality/preserve-comments.mdc).
+
+## Always keep
+
+- **Why** comments (business logic, invariants, non-obvious behavior) — especially in `src/jax/` (shape constraints, scan carry layout, metric merge timing).
+- **JAX / rollout notes**: `_merge_metric_dicts` inside `jax.lax.scan`, finalize rates after scan, `pure_callback` boundaries, feature-history vs `opp_batch_cache`.
+- **Hydra/runtime mismatches**: when YAML defaults differ from `src/config/schema.py`.
+- **Ticket / review references**: GitHub issue/PR ids, dated deprecations, “do not modify” guards.
+- **Import-layer constraints** from `docs/architecture/README.md`.
+
+## Orbit Wars–specific
+
+- Do not delete comments that document **TurnBatch** dims, `edge_k(task)`, or pointer-decoder modes — agents often “clean up” these during refactors.
+- Preserve step-by-step flow comments in long training/rollout functions unless the code moved and the comment is updated to match.
+
+## OK to remove
+
+- Demonstrably wrong (contradicted by current code).
+- Exact duplicate in the same file.
+- Meaningless auto-generated boilerplate.
+
+When in doubt, **keep** the comment. Prefer updating stale comments over deleting them.

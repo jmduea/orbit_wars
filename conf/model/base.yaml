@@ -2,11 +2,12 @@ architecture: planet_graph_transformer
 pointer_decoder: factorized_topk
 decoder_carry: true
 
+planet_flow:
+  pressure_bucket_values: [0.0, 0.25, 0.5, 0.75, 1.0]
+
 hidden_size: 128
 attention_heads: 4
 max_moves_k: 2
-gnn_k_neighbors: 5
-gnn_message_passing_layers: 2
 planet_transformer_layers: 2
 spatial_attention_bias: true
 

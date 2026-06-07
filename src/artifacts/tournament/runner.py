@@ -65,7 +65,8 @@ def build_checkpoint_agent(
     if isinstance(params, dict) and "params" in params and len(params) == 1:
         params = params["params"]
     cfg = apply_feature_metadata_to_model_config(
-        cfg, checkpoint_feature_metadata(checkpoint)
+        cfg, checkpoint_feature_metadata(checkpoint),
+        allow_planet_flow=True,
     )
     policy = build_jax_policy(cfg=cfg)
     agent = build_submission_ready_agent(
@@ -74,7 +75,6 @@ def build_checkpoint_agent(
         {"params": params},
         act_seed=act_seed,
         deterministic=True,
-        deterministic_eval=True,
     )
     agent.warmup()
     return agent

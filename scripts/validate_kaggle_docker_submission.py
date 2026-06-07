@@ -34,7 +34,9 @@ RUNTIME_FILES = (
     "features/registry.py",
     "features/schema_api.py",
     "game/__init__.py",
+    "game/comet_generation.py",
     "game/constants.py",
+    "game/planet_generation.py",
     "game/shield_config.py",
     "game/shield.py",
     "jax/rewards.py",
@@ -42,9 +44,11 @@ RUNTIME_FILES = (
     "jax/__init__.py",
     "jax/action_codec.py",
     "jax/action_sampling.py",
+    "jax/array_ops.py",
     "jax/decoder_carry.py",
     "jax/decoders/__init__.py",
     "jax/decoders/factorized_topk_pointer.py",
+    "jax/decoders/planet_flow.py",
     "jax/distributional_value.py",
     "jax/encoders/__init__.py",
     "jax/encoders/_types.py",
@@ -53,6 +57,7 @@ RUNTIME_FILES = (
     "jax/encoders/remat.py",
     "jax/factored_sequence_scan.py",
     "jax/launch_hygiene.py",
+    "jax/planet_flow.py",
     "jax/feature_primitives.py",
     "jax/features.py",
     "jax/shield/__init__.py",
@@ -179,10 +184,11 @@ def build_submission_package(args: argparse.Namespace) -> Path:
 
 
 def export_runtime_artifact(checkpoint_path: Path) -> dict[str, Any]:
+    from src.artifacts.checkpoint_compat import load_checkpoint_payload
+
     start = time.perf_counter()
     try:
-        with checkpoint_path.open("rb") as file:
-            checkpoint = pickle.load(file)
+        checkpoint = load_checkpoint_payload(checkpoint_path)
     except Exception as exc:
         raise ValidationError("checkpoint_load_failed", str(exc)) from exc
 
@@ -603,8 +609,6 @@ class ModelConfig:
     hidden_size: int = 128
     attention_heads: int = 4
     max_moves_k: int = 3
-    gnn_k_neighbors: int = 5
-    gnn_message_passing_layers: int = 2
     planet_transformer_layers: int = 2
     spatial_attention_bias: bool = True
     normalize_observations: bool = True
@@ -774,7 +778,6 @@ def _initialize_submission() -> None:
         {"params": state["params"]},
         state["cfg"],
         deterministic=True,
-        deterministic_eval=True,
     )
     _warm_submission_path(state)
     state["ready"] = True
@@ -1092,4 +1095,9 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
+    print(
+        "prefer: uv run ow eval package --checkpoint <pkl> --output-dir <dir> "
+        "--validate-docker (agent submit-valid path)",
+        file=sys.stderr,
+    )
     raise SystemExit(main())

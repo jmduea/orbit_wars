@@ -28,7 +28,7 @@ from src.artifacts.pipeline import (
 )
 from src.artifacts.promotion import promote_if_better
 from src.artifacts.replay import maybe_write_jax_checkpoint_replay
-from src.artifacts.run_paths import RunContext
+from src.artifacts.run_paths import RunContext, append_produced_artifact
 from src.config import TrainConfig
 from src.jax.train.queue import (
     queue_optional_jobs_if_due,
@@ -304,6 +304,16 @@ class CheckpointHandler:
             if not result.committed or result.numbered_path is None:
                 continue
 
+            append_produced_artifact(
+                self.run_context.manifest_path,
+                {
+                    "kind": "checkpoint",
+                    "update": result.update,
+                    "path": str(result.numbered_path.resolve()),
+                    "final": result.final,
+                },
+            )
+
             protected_paths = self.protected_artifact_paths()
             protected_paths.add(result.numbered_path)
             if result.latest_path is not None:
@@ -364,6 +374,12 @@ class CheckpointHandler:
                 run_best_value=self.run_promotion_best,
             )
             if promotion_attempt.promoted:
+                print(
+                    f"Promoted u{result.update} {promotion_attempt.metric_name}="
+                    f"{promotion_attempt.metric_value} -> "
+                    f"{promotion_attempt.promoted_manifest_path}",
+                    flush=True,
+                )
                 append_jsonl(
                     self.log_path,
                     {

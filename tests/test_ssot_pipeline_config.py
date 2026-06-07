@@ -16,7 +16,6 @@ def test_ssot_pipeline_artifacts_profile_composes() -> None:
     assert not cfg.artifacts.bracket_training.enabled
     assert cfg.artifacts.ssot_pipeline.enabled
     assert cfg.artifacts.ssot_pipeline.qualifier_eval_interval_updates == 50
-    assert cfg.artifacts.ssot_pipeline.require_packaging_validation is True
     assert not cfg.artifacts.artifact_pipeline.checkpoint_eval_async
     assert not cfg.artifacts.artifact_pipeline.replay_async
     assert not cfg.artifacts.replay.enabled

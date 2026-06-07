@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.artifacts.replay_schedule import checkpoint_replay_due
 from src.jax.train.checkpoint import (
     CheckpointHandler,
     HistoricalSnapshotPool,
@@ -19,7 +20,6 @@ from src.jax.train.metrics import (
     sum_metric_dicts,
 )
 from src.jax.train.queue import (
-    checkpoint_replay_due,
     queue_optional_jobs_if_due,
     queue_tournament_job_if_eligible,
     start_artifact_worker_if_needed,

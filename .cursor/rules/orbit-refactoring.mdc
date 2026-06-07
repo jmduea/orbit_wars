@@ -1,0 +1,39 @@
+---
+description: "Orbit Wars refactoring: surgical steps, no legacy shims, test-gated"
+globs:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+alwaysApply: false
+---
+
+# Refactoring (Orbit Wars)
+
+Adapted from [cursorrules-collection `practices/refactoring.mdc`](https://github.com/nedcodes-ok/cursorrules-collection/blob/main/rules-mdc/practices/refactoring.mdc).
+
+## Before you change behavior
+
+- Targeted tests first: `make test-fast` or `make test-domain-{config,features,policy,artifacts,curriculum}` for the touched area.
+- Do not run slow/jax/sweep smokes during iteration unless the user asks.
+- One logical refactor per change set — no feature + rename + reformat in one diff.
+
+## Project-specific
+
+- **Unified v2 only:** feature path is `encode_turn` → `TurnBatch`; remove v1 paths and compatibility re-exports — update call sites.
+- **No parallel APIs** for moves/renames; no `_underscore` alias modules.
+- **Hydra:** edit `conf/` groups + `src/config/schema.py`; verify with `uv run ow train print_resolved_config=true`.
+- **CLI:** new capabilities go in `src/cli/<module>.py` + `src/cli/__init__.py`, not `scripts/*.py`.
+
+## Technique
+
+- Guard clauses / early returns; max ~3 indentation levels in Python control flow.
+- Extract when a block needs a comment to explain *what*; keep helpers in the owning package (`src/jax/rollout/`, not a grab-bag util).
+- Smallest step → run targeted tests → next step.
+
+## Anti-patterns
+
+- Refactor without tests on the code path.
+- “Cleanup” that adds shims or dual encoding/rollout paths.
+- Large cross-cutting renames in the same diff as behavior changes.
+- Editing `docs/architecture/` diagrams only when the pipeline boundary actually moved.
+
+**Note:** Test each step; commit only when the user asks (not every refactor step).

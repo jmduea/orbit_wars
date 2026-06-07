@@ -355,3 +355,12 @@ The references most directly relevant to the requested fixes are listed below.
 | JAX device memory profiling | Supports before/after update-step memory validation | citeturn20view1turn20view2 |
 
 Two limitations should be called out clearly for Codex. First, the full intended semantics of continuous ship-fraction sampling are **not fully specified in the provided files**. The replay helpers and transform functions are present, but the stochastic family that would make PPO replay mathematically well-defined is not explicit in the uploaded artifacts, so that fix may require checking non-uploaded sampler code before finalizing the full implementation. Second, the report is based on the uploaded file artifacts at `src/jax/...`; if the actual repo paths differ, Codex should map these findings onto the corresponding in-repo modules before patching. fileciteturn0file9 fileciteturn0file18
+
+## Resolved
+
+### `deterministic_eval` forced all `max_moves_k` launch slots in docker/tournament/submission eval
+
+- **Symptom:** Docker replays showed most turns emitting exactly `max_moves_k` moves (often duplicate 1-ship rows), unlike training rollouts where the learner uses stochastic sampling and the stop head can end the scan early.
+- **Root cause:** `_sample_factored_step_from_logits` in `src/jax/action_sampling.py` set `stop=0` when `deterministic & deterministic_eval & can_launch`. Submission, tournament checkpoint agents, and the docker `MAIN_TEMPLATE` compiled with `deterministic_eval=True` while training rollouts never set that flag.
+- **Fix (2026-06-01):** Removed `deterministic_eval` and the stop override; deleted joint-flat eval-only NOOP/bucket helpers. Eval/submission now use `deterministic=True` with the same stop threshold (`stop_prob >= 0.5`) as frozen self-play opponents. Learner rollouts remain `deterministic=False`.
+- **Verification:** `tests/test_submission_eval_deterministic.py` (stop respected under deterministic sampling), updated factorized replay parity tests, `make test-fast`.

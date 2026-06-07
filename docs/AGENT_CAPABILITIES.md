@@ -115,6 +115,15 @@ uv run ow benchmark gate run curriculum_staged --dry-run
 uv run ow benchmark tournament-proof --eval-checkpoint outputs/.../jax_ckpt_last.pkl --dry-run
 ```
 
+**Anti-pattern:** `... 2>&1 | tail -20` on long gate/calibration/train commands — no output until the process exits (looks hung). Training subprocess lines stream on **stderr**; write reports with `--out` and leave stderr visible. Use `--verbose` for override hints; poll artifacts with `ow runs watch` or `tail -f outputs/campaigns/<campaign>/runs/<run_id>/logs/*_jax.jsonl`.
+
+**Gate 4 example (500 updates, ~GPU time):**
+
+```bash
+env -u JAX_COMPILATION_CACHE_DIR uv run ow benchmark gate run curriculum_staged \
+  --verbose --out /tmp/curriculum_staged.json
+```
+
 Gate recipes: `conf/benchmark/gates/*.yaml` (`beat_noop`, `beat_random`, `curriculum_staged`). **Do not edit tuple tables in `src/jax/preflight.py` for new gates** — extend YAML and `preflight_gate_loader.py`.
 
 **Prefer primitives over `learn-proof` in agent loops:**
@@ -190,6 +199,8 @@ uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoi
 | 1 | Config setup | `uv run ow train print_resolved_config=true` |
 | 2 | Preliminary tests | `make test-fast` (blocks GPU/Docker on failure) |
 | 3 | W&B short preflight | `uv run ow make wandb_sweep=preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml` → `wandb agent …`; objective `preflight_sweep_score` (Gates 2–3 floors from calibration JSON) |
+
+| 3 | W&B short preflight | `uv run ow make wandb_sweep=ssot_preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml` → `wandb agent …`; objective `ssot_preflight_sweep_score` (Gates 2–3 floors from calibration JSON) |
 | 4 | Packaging validation | `uv run ow eval package --checkpoint <sweep_winner.pkl> --output-dir <dir> --validate-docker --packaging-seed 0 --packaging-player-count 4` → stdout JSON `"ok": true` |
 | 5 | Long train | `uv run ow train artifacts=ssot_pipeline telemetry.wandb.enabled=true …` (≤500M env steps; W&B on) |
 | — | Tournament qualifiers (JAX) | *U5 planned* — checkpoint-tick held-out eval on `eval_seed_set` only |
@@ -205,6 +216,8 @@ uv run ow make wandb_sweep=ssot_preflight
 uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml
 # Agent: uv run wandb agent <entity>/<project>/<sweep_id>
 # Pick winner from W&B (Gates 2–3 pass + preflight_sweep_score); no local config registry.
+
+# Pick winner from W&B (Gates 2–3 pass + ssot_preflight_sweep_score); no local config registry.
 ```
 
 **Packaging on sweep winner (step 4) — copy-paste:**

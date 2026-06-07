@@ -10,6 +10,30 @@ import jax
 from src.jax.shield import ShieldDiagnostics
 
 
+class FactorizedActionReplay(NamedTuple):
+    """Stored factorized pointer-decoder actions for PPO replay."""
+
+    ship_bucket_mask: jax.Array
+    target_index: jax.Array
+    ship_bucket: jax.Array
+    log_prob: jax.Array
+    source_index: jax.Array
+    target_slot: jax.Array
+    stop_flag: jax.Array
+    step_mask: jax.Array
+    decoder_hidden: jax.Array | None = None
+    ship_fraction: jax.Array | None = None
+
+
+class PlanetFlowActionReplay(NamedTuple):
+    """Stored Planet Flow pressure actions for PPO replay."""
+
+    target_bucket: jax.Array
+    target_pressure: jax.Array
+    target_mask: jax.Array
+    log_prob: jax.Array
+
+
 class JaxTransitionBatch(NamedTuple):
     """Rollout data for planet-edge encoding."""
 
@@ -22,19 +46,36 @@ class JaxTransitionBatch(NamedTuple):
     global_features: jax.Array
     theta_ref: jax.Array
     player_count: jax.Array
-    ship_bucket_mask: jax.Array
-    target_index: jax.Array
-    ship_bucket: jax.Array
-    log_prob: jax.Array
     returns: jax.Array
     advantages: jax.Array
-    source_index: jax.Array
-    target_slot: jax.Array
-    stop_flag: jax.Array
-    step_mask: jax.Array
-    decoder_hidden: jax.Array | None = None
-    ship_fraction: jax.Array | None = None
+    action_replay: FactorizedActionReplay | PlanetFlowActionReplay
     initial_planet_ships: jax.Array | None = None
+
+
+def transition_env_rows(batch: JaxTransitionBatch) -> int:
+    """Return flattened environment-step count from observation time×env axes."""
+
+    return batch.planet_features.shape[0] * batch.planet_features.shape[1]
+
+
+def require_factorized_replay(batch: JaxTransitionBatch) -> FactorizedActionReplay:
+    """Return factorized replay fields or raise when the batch variant mismatches."""
+
+    if not isinstance(batch.action_replay, FactorizedActionReplay):
+        raise ValueError(
+            "Expected factorized action replay fields on this transition batch."
+        )
+    return batch.action_replay
+
+
+def require_planet_flow_replay(batch: JaxTransitionBatch) -> PlanetFlowActionReplay:
+    """Return Planet Flow replay fields or raise when the batch variant mismatches."""
+
+    if not isinstance(batch.action_replay, PlanetFlowActionReplay):
+        raise ValueError(
+            "Expected Planet Flow action replay fields on this transition batch."
+        )
+    return batch.action_replay
 
 
 @flax.struct.dataclass

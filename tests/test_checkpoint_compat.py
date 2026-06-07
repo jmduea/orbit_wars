@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import pickle
+from types import SimpleNamespace
+
 import pytest
 
 from src.artifacts.checkpoint_compat import (
+    POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
     feature_metadata,
     infer_feature_metadata_from_state_dict,
+    load_checkpoint_payload,
+    validate_checkpoint_config_compatibility,
     validate_checkpoint_encoder_compatibility,
     validate_checkpoint_feature_compatibility,
 )
@@ -154,6 +160,20 @@ def test_feature_metadata_includes_factorized_pointer_decoder() -> None:
     assert metadata["action_layout_version"] == 2
 
 
+def test_feature_metadata_includes_planet_flow_pointer_decoder() -> None:
+    metadata = feature_metadata(
+        _task(),
+        model_cfg=ModelConfig(
+            architecture="planet_graph_transformer",
+            pointer_decoder=POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP,
+        ),
+    )
+
+    assert metadata["pointer_decoder"] == "planet_flow_target_heatmap"
+    assert metadata["action_layout_version"] == 3
+    assert metadata["pressure_bucket_values"] == (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
 def test_validate_rejects_pointer_decoder_mismatch() -> None:
     from src.config import TrainConfig
 
@@ -186,3 +206,134 @@ def test_validate_rejects_action_layout_mismatch() -> None:
     with pytest.raises(ValueError, match="action_layout_version"):
         validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
 
+
+def test_validate_rejects_planet_flow_checkpoint_under_factorized_config() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "factorized_topk"
+    stored = {
+        "pointer_decoder": "planet_flow_target_heatmap",
+        "action_layout_version": 3,
+        "pressure_bucket_values": (0.0, 0.25, 0.5, 0.75, 1.0),
+    }
+
+    with pytest.raises(ValueError, match="pointer_decoder"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_factorized_checkpoint_under_planet_flow_config() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    stored = {
+        "pointer_decoder": "factorized_topk",
+        "action_layout_version": 2,
+    }
+
+    with pytest.raises(ValueError, match="pointer_decoder"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_missing_pointer_decoder_under_planet_flow_config() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored.pop("pointer_decoder")
+
+    with pytest.raises(ValueError, match="missing pointer_decoder"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_missing_action_layout_under_planet_flow_config() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored.pop("action_layout_version")
+
+    with pytest.raises(ValueError, match="action_layout_version"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_planet_flow_pressure_bucket_mismatch() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored["pressure_bucket_values"] = (0.0, 0.5, 1.0)
+
+    with pytest.raises(ValueError, match="pressure_bucket_values"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_validate_rejects_planet_flow_missing_pressure_bucket_metadata() -> None:
+    from src.artifacts.checkpoint_compat import (
+        validate_checkpoint_pointer_decoder_compatibility,
+    )
+    from src.config import TrainConfig
+
+    cfg = TrainConfig()
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    stored = dict(feature_metadata(cfg.task, model_cfg=cfg.model))
+    stored.pop("pressure_bucket_values")
+
+    with pytest.raises(ValueError, match="pressure_bucket_values"):
+        validate_checkpoint_pointer_decoder_compatibility(stored, cfg)
+
+
+def test_load_checkpoint_payload_maps_unpickle_attribute_error(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "stale.pkl"
+    path.write_bytes(b"placeholder")
+
+    def _broken_load(_file):
+        raise AttributeError(
+            "Can't get attribute 'OldTrainConfig' on module 'src.config.schema'"
+        )
+
+    monkeypatch.setattr(pickle, "load", _broken_load)
+    with pytest.raises(ValueError, match="pre-migration legacy config"):
+        load_checkpoint_payload(path)
+
+
+def test_load_checkpoint_payload_then_validate_rejects_legacy_config_fields(
+    tmp_path,
+) -> None:
+    path = tmp_path / "legacy.pkl"
+    legacy = {
+        "config": SimpleNamespace(
+            task=SimpleNamespace(),
+            model=SimpleNamespace(),
+            training=SimpleNamespace(),
+            env=SimpleNamespace(),
+        ),
+        "params": {},
+    }
+    with path.open("wb") as handle:
+        pickle.dump(legacy, handle)
+
+    loaded = load_checkpoint_payload(path)
+    with pytest.raises(ValueError, match="legacy config fields"):
+        validate_checkpoint_config_compatibility(loaded, checkpoint_path=path)

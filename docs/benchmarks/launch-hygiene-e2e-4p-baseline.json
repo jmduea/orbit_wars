@@ -1,0 +1,260 @@
+{
+  "gate": "launch_hygiene_e2e_throughput",
+  "label": "encoding_4p_post_u3",
+  "commit_sha": "544f2ac0191443d7babca8b5fcff781bb5d8aa30",
+  "jax_version": "0.10.0",
+  "overrides": [
+    "task=shield_cheap",
+    "model=transformer_factorized",
+    "opponents=self_play_only",
+    "curriculum=off",
+    "telemetry.wandb.enabled=false",
+    "artifacts.artifact_pipeline.enabled=false",
+    "seed=42",
+    "training=4p_16",
+    "training.rollout_microbatch_envs=16"
+  ],
+  "updates": 20,
+  "warmup": 2,
+  "repeats": 3,
+  "runs": [
+    {
+      "label": "encoding_4p_post_u3_r1",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42",
+        "training=4p_16",
+        "training.rollout_microbatch_envs=16"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 16,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 296.1567953549966,
+      "seconds_total": 169.91709014099615,
+      "seconds_per_update_mean": 8.495854507049808,
+      "env_steps": 160000,
+      "samples": 320000,
+      "env_steps_per_sec": 941.6357110825815,
+      "samples_per_sec": 1883.271422165163,
+      "policy_loss": -0.00910236913478002,
+      "value_loss": 1.4587404310703278,
+      "approx_kl": 0.014592756281490437,
+      "entropy": 2.233540940284729,
+      "total_loss": 1.436236834526062,
+      "mean_active_launches_per_turn": 0.0,
+      "planet_flow_unreachable_demand_rate": 0.0,
+      "planet_flow_held_demand_rate": 0.0,
+      "planet_flow_emitted_ship_mass_rate": 0.0,
+      "planet_flow_small_launch_rate": 0.0,
+      "planet_flow_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count": 0.0,
+      "planet_flow_control_emitted_launch_count": 0.0,
+      "planet_flow_control_unreachable_demand_rate": 0.0,
+      "planet_flow_control_held_demand_rate": 0.0,
+      "planet_flow_control_emitted_ship_mass_rate": 0.0,
+      "planet_flow_control_small_launch_rate": 0.0,
+      "planet_flow_control_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_delta_vs_control": 0.0,
+      "planet_flow_unreachable_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_held_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
+      "planet_flow_small_launch_rate_delta_vs_control": 0.0,
+      "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
+      "overall_win_rate": 0.6125,
+      "commit_sha": "544f2ac0191443d7babca8b5fcff781bb5d8aa30",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "4p_16",
+      "rollout_groups": [
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "launch_hygiene_e2e_throughput"
+    },
+    {
+      "label": "encoding_4p_post_u3_r2",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42",
+        "training=4p_16",
+        "training.rollout_microbatch_envs=16"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 16,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 160.12944341100228,
+      "seconds_total": 176.05826307297684,
+      "seconds_per_update_mean": 8.802913153648841,
+      "env_steps": 160000,
+      "samples": 320000,
+      "env_steps_per_sec": 908.7900630581557,
+      "samples_per_sec": 1817.5801261163115,
+      "policy_loss": -0.00910236913478002,
+      "value_loss": 1.4587404310703278,
+      "approx_kl": 0.014592756281490437,
+      "entropy": 2.233540940284729,
+      "total_loss": 1.436236834526062,
+      "mean_active_launches_per_turn": 0.0,
+      "planet_flow_unreachable_demand_rate": 0.0,
+      "planet_flow_held_demand_rate": 0.0,
+      "planet_flow_emitted_ship_mass_rate": 0.0,
+      "planet_flow_small_launch_rate": 0.0,
+      "planet_flow_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count": 0.0,
+      "planet_flow_control_emitted_launch_count": 0.0,
+      "planet_flow_control_unreachable_demand_rate": 0.0,
+      "planet_flow_control_held_demand_rate": 0.0,
+      "planet_flow_control_emitted_ship_mass_rate": 0.0,
+      "planet_flow_control_small_launch_rate": 0.0,
+      "planet_flow_control_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_delta_vs_control": 0.0,
+      "planet_flow_unreachable_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_held_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
+      "planet_flow_small_launch_rate_delta_vs_control": 0.0,
+      "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
+      "overall_win_rate": 0.6125,
+      "commit_sha": "544f2ac0191443d7babca8b5fcff781bb5d8aa30",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "4p_16",
+      "rollout_groups": [
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "launch_hygiene_e2e_throughput"
+    },
+    {
+      "label": "encoding_4p_post_u3_r3",
+      "overrides": [
+        "task=shield_cheap",
+        "model=transformer_factorized",
+        "opponents=self_play_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "seed=42",
+        "training=4p_16",
+        "training.rollout_microbatch_envs=16"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 16,
+      "rollout_steps": 500,
+      "compile_seconds_to_update_3": 164.7510472110007,
+      "seconds_total": 187.22905353097303,
+      "seconds_per_update_mean": 9.361452676548652,
+      "env_steps": 160000,
+      "samples": 320000,
+      "env_steps_per_sec": 854.5682252969966,
+      "samples_per_sec": 1709.1364505939932,
+      "policy_loss": -0.00910236913478002,
+      "value_loss": 1.4587404310703278,
+      "approx_kl": 0.014592756281490437,
+      "entropy": 2.233540940284729,
+      "total_loss": 1.436236834526062,
+      "mean_active_launches_per_turn": 0.0,
+      "planet_flow_unreachable_demand_rate": 0.0,
+      "planet_flow_held_demand_rate": 0.0,
+      "planet_flow_emitted_ship_mass_rate": 0.0,
+      "planet_flow_small_launch_rate": 0.0,
+      "planet_flow_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count": 0.0,
+      "planet_flow_control_emitted_launch_count": 0.0,
+      "planet_flow_control_unreachable_demand_rate": 0.0,
+      "planet_flow_control_held_demand_rate": 0.0,
+      "planet_flow_control_emitted_ship_mass_rate": 0.0,
+      "planet_flow_control_small_launch_rate": 0.0,
+      "planet_flow_control_duplicate_source_target_rate": 0.0,
+      "planet_flow_emitted_launch_count_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_delta_vs_control": 0.0,
+      "planet_flow_unreachable_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_held_demand_rate_delta_vs_control": 0.0,
+      "planet_flow_emitted_ship_mass_rate_delta_vs_control": 0.0,
+      "planet_flow_small_launch_rate_delta_vs_control": 0.0,
+      "planet_flow_duplicate_source_target_rate_delta_vs_control": 0.0,
+      "overall_win_rate": 0.6125,
+      "commit_sha": "544f2ac0191443d7babca8b5fcff781bb5d8aa30",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "4p_16",
+      "rollout_groups": [
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "launch_hygiene_e2e_throughput"
+    }
+  ],
+  "aggregate": {
+    "env_steps_per_sec": {
+      "mean": 901.6646664792446,
+      "stddev": 35.90046636243809
+    },
+    "samples_per_sec": {
+      "mean": 1803.3293329584892,
+      "stddev": 71.80093272487618
+    },
+    "seconds_per_update_mean": {
+      "mean": 8.886740112415767,
+      "stddev": 0.3583157518372319
+    }
+  },
+  "pass_band": {
+    "within_pct": 10.0,
+    "floors": {
+      "env_steps_per_sec": 811.4981998313201,
+      "samples_per_sec": 1622.9963996626402
+    },
+    "ceilings": {
+      "seconds_per_update_mean": 9.775414123657345
+    }
+  },
+  "device": {
+    "default_backend": "gpu",
+    "devices": ["cuda:0"],
+    "gpu_name": "NVIDIA GeForce RTX 5080"
+  },
+  "capture_note": "Post U3 Phase A (commit 544f2ac); pre-Phase-A 4p snapshot not captured on this branch.",
+  "operator_runbook": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label encoding_4p --repeats 3 --updates 20 --warmup 2 --overrides training=4p_16 training.rollout_microbatch_envs=16 --out docs/benchmarks/launch-hygiene-e2e-4p-baseline.json"
+}

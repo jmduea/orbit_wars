@@ -1,14 +1,6 @@
-from .checkpoint_compat import *
-from .checkpoint_retention import prune_checkpoints
-from .promotion import promote_if_better, resolve_from_promoted
-from .pipeline import *
-from .replay import maybe_write_jax_checkpoint_replay
-from .run_paths import *
+"""Artifact pipeline, checkpoints, tournament eval, and promotion helpers.
 
-__all__ = [
-    name
-    for name in globals()
-    if not name.startswith("_")
-    and name
-    not in {"checkpoint_compat", "checkpoint_retention", "pipeline", "replay", "run_paths"}
-]
+Import submodules directly (for example ``from src.artifacts.pipeline import ...``)
+instead of relying on eager re-exports here — keeps lightweight CLI paths such as
+``ow eval status`` from pulling replay/tournament/JAX subgraphs at package init.
+"""

@@ -1,3 +1,4 @@
+# Canonical production mixed 2p/4p geometry (16+16 envs, microbatch 16).
 defaults:
-  - base
+  - 2p4p_32_split
   - _self_

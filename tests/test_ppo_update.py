@@ -15,7 +15,7 @@ from src.jax.ppo_update import (
     masked_mean,
     ppo_update_jax,
 )
-from src.jax.rollout.types import JaxTransitionBatch
+from src.jax.rollout.types import FactorizedActionReplay, JaxTransitionBatch
 from src.jax.train import init_train_state
 
 
@@ -323,16 +323,18 @@ def _factorized_transition_batch(
         global_features=expand(turn_batch.global_features),
         theta_ref=expand(turn_batch.theta_ref),
         player_count=player_count,
-        ship_bucket_mask=ship_bucket_mask,
-        target_index=flat,
-        ship_bucket=ship_bucket[None, ...],
-        log_prob=log_prob[None, ...],
         returns=returns,
         advantages=advantages,
-        source_index=source_index,
-        target_slot=target_slot,
-        stop_flag=jnp.zeros((rollout_steps, num_envs, sequence_k), dtype=jnp.int32),
-        step_mask=jnp.ones((rollout_steps, num_envs, sequence_k), dtype=jnp.float32),
+        action_replay=FactorizedActionReplay(
+            ship_bucket_mask=ship_bucket_mask,
+            target_index=flat,
+            ship_bucket=ship_bucket[None, ...],
+            log_prob=log_prob[None, ...],
+            source_index=source_index,
+            target_slot=target_slot,
+            stop_flag=jnp.zeros((rollout_steps, num_envs, sequence_k), dtype=jnp.int32),
+            step_mask=jnp.ones((rollout_steps, num_envs, sequence_k), dtype=jnp.float32),
+        ),
     )
 
 
@@ -387,12 +389,16 @@ def _build_factorized_on_policy_transitions(
         value=output.value,
         reward=reward,
     )
+    replay = transitions.action_replay
+    assert isinstance(replay, FactorizedActionReplay)
     return transitions._replace(
-        source_index=source_index[None, ...],
-        target_slot=target_slot[None, ...],
-        stop_flag=stop_flag[None, ...].astype(jnp.int32),
-        step_mask=step_mask[None, ...],
-        ship_bucket_mask=ship_bucket_mask,
+        action_replay=replay._replace(
+            source_index=source_index[None, ...],
+            target_slot=target_slot[None, ...],
+            stop_flag=stop_flag[None, ...].astype(jnp.int32),
+            step_mask=step_mask[None, ...],
+            ship_bucket_mask=ship_bucket_mask,
+        )
     ), output
 
 
@@ -441,6 +447,7 @@ def test_ppo_vf_and_ent_coefs_scale_reported_total_loss() -> None:
 @pytest.mark.jax
 def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
     cfg = _small_factorized_cfg()
+    cfg.training.debug_replay_parity = True
     num_envs = 2
     key = jax.random.PRNGKey(20)
     policy = build_jax_policy(cfg)
@@ -466,6 +473,49 @@ def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
     assert float(metrics["loss_sample_count_2p"]) > 0.0
 
 
+def _small_planet_flow_cfg() -> TrainConfig:
+    cfg = TrainConfig()
+    cfg.model.architecture = "planet_graph_transformer"
+    cfg.model.pointer_decoder = "planet_flow_target_heatmap"
+    cfg.model.hidden_size = 16
+    cfg.model.attention_heads = 2
+    cfg.model.planet_transformer_layers = 1
+    cfg.model.max_moves_k = 1
+    cfg.task.candidate_count = 4
+    cfg.task.max_fleets = 16
+    cfg.training.num_envs = 2
+    cfg.training.rollout_steps = 1
+    cfg.training.update_chunk_rows = 8
+    cfg.opponents.mode.opponent = "random"
+    return cfg
+
+
+@pytest.mark.jax
+def test_ppo_update_planet_flow_path_matches_on_policy_kl() -> None:
+    from src.jax.env import batched_reset
+    from src.jax.rollout.collect import collect_rollout_jax
+
+    cfg = _small_planet_flow_cfg()
+    key = jax.random.PRNGKey(24)
+    reset_keys = jax.random.split(jax.random.fold_in(key, 0), cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, cfg.task)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
+
+    _key, _env_state, _turn_batch, transitions, _rollout_metrics = collect_rollout_jax(
+        jax.random.fold_in(key, 2),
+        env_state,
+        turn_batch,
+        train_state,
+        policy,
+        cfg,
+    )
+    _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert float(metrics["approx_kl"]) == pytest.approx(0.0, abs=1e-5)
+    assert float(metrics["value_loss"]) >= 0.0
+    assert float(metrics["entropy"]) > 0.0
+    assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
 
 
 @pytest.mark.jax
@@ -499,6 +549,7 @@ def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
 @pytest.mark.jax
 def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
     cfg = _small_factorized_cfg()
+    cfg.training.debug_replay_parity = True
     cfg.training.lr = 0.05
     cfg.training.update_chunk_rows = 4
     num_envs = 8

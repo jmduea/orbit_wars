@@ -1,0 +1,6 @@
+defaults:
+  - base
+  - _self_
+
+# Default train path is JAX-native (no pure_callback); same as base.
+env_parity_mode: train

@@ -42,6 +42,7 @@ from src.jax.env import batched_reset
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import ppo_update_jax
 from src.jax.rollout.collect import collect_rollout_jax
+from src.jax.rollout.metrics import rollout_metrics
 from src.jax.train import init_rollout_groups, init_train_state
 from src.jax.rollout.metrics import rollout_metrics
 from src.jax.train.metrics import (
@@ -462,7 +463,11 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
         cfg.training.num_envs,
         MAX_PLANETS,
     )
-    assert transitions.target_index.shape == (
+    from src.jax.rollout.types import FactorizedActionReplay
+
+    replay = transitions.action_replay
+    assert isinstance(replay, FactorizedActionReplay)
+    assert replay.target_index.shape == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         cfg.model.max_moves_k,
@@ -501,7 +506,11 @@ def test_collect_rollout_jax_two_player_static_shapes():
         60,
         transitions.planet_features.shape[-1],
     )
-    assert transitions.target_index.shape == (1, 3, cfg.model.max_moves_k)
+    from src.jax.rollout.types import FactorizedActionReplay
+
+    replay = transitions.action_replay
+    assert isinstance(replay, FactorizedActionReplay)
+    assert replay.target_index.shape == (1, 3, cfg.model.max_moves_k)
     assert float(metrics["env_steps"]) == 3.0
 def test_assign_learner_players_uses_env_index_and_episode_count():
     from src.jax.env import assign_learner_players
@@ -624,9 +633,13 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
         jax.random.PRNGKey(92), env_state, turn_batch, train_state, policy, cfg
     )
 
-    assert transitions.target_index.shape[-1] == cfg.model.max_moves_k
+    from src.jax.rollout.types import FactorizedActionReplay
+
+    replay = transitions.action_replay
+    assert isinstance(replay, FactorizedActionReplay)
+    assert replay.target_index.shape[-1] == cfg.model.max_moves_k
     k = edge_k(cfg.task)
-    assert transitions.ship_bucket_mask.shape[-3:] == (
+    assert replay.ship_bucket_mask.shape[-3:] == (
         MAX_PLANETS,
         k,
         cfg.task.ship_bucket_count,
@@ -687,7 +700,11 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
         4,
         MAX_PLANETS,
     )
-    assert combined.target_index.shape == (
+    from src.jax.rollout.types import FactorizedActionReplay
+
+    combined_replay = combined.action_replay
+    assert isinstance(combined_replay, FactorizedActionReplay)
+    assert combined_replay.target_index.shape == (
         cfg.training.rollout_steps,
         4,
         cfg.model.max_moves_k,

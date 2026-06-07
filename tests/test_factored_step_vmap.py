@@ -32,7 +32,7 @@ def test_sample_factored_step_from_logits_is_vmap_compatible() -> None:
 
     vmapped = jax.vmap(
         _sample_factored_step_from_logits,
-        in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
+        in_axes=(0, 0, 0, 0, 0, 0, 0, None),
     )
     source, target_slot, bucket, stop, log_prob, entropy, _ship_fraction = vmapped(
         keys,
@@ -42,7 +42,6 @@ def test_sample_factored_step_from_logits_is_vmap_compatible() -> None:
         ship_logits,
         source_mask,
         ship_bucket_mask,
-        False,
         False,
     )
 

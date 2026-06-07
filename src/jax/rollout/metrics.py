@@ -8,8 +8,11 @@ from src.jax.rollout.metric_contract import (
     BASE_ROLLOUT_SCALAR_KEYS,
     FINALIZED_ROLLOUT_RATE_KEYS,
     OPPONENT_SLOT_METRIC_KEYS,
+    PLANET_FLOW_CONTROL_COUNT_KEYS,
+    PLANET_FLOW_COUNT_KEYS,
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
+from src.jax.ship_action import ship_count_for_action
 from src.telemetry.metric_registry import (
     prune_scalar_metrics,
     rollout_collection_enabled_groups,
@@ -18,15 +21,11 @@ from src.telemetry.metric_registry import (
 
 ZERO_F32 = jnp.array(0.0, dtype=jnp.float32)
 
-# Backward-compatible alias for train/tests imports.
-_BASE_ROLLOUT_SCALAR_KEYS = BASE_ROLLOUT_SCALAR_KEYS
-
 __all__ = (
     "BASE_ROLLOUT_SCALAR_KEYS",
     "FINALIZED_ROLLOUT_RATE_KEYS",
     "OPPONENT_SLOT_METRIC_KEYS",
     "TRAJECTORY_SHIELD_COUNT_KEYS",
-    "_BASE_ROLLOUT_SCALAR_KEYS",
     "rollout_metrics",
     "trajectory_shield_legal_rate",
 )
@@ -144,6 +143,23 @@ def _core_metric_fields(
             }
         )
 
+    if any(key in compute_keys for key in PLANET_FLOW_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+    if any(key in compute_keys for key in PLANET_FLOW_CONTROL_COUNT_KEYS):
+        metrics.update(
+            {
+                key: data[key].sum()
+                for key in PLANET_FLOW_CONTROL_COUNT_KEYS
+                if key in compute_keys and key in data
+            }
+        )
+
     if any(key in compute_keys for key in TRAJECTORY_SHIELD_COUNT_KEYS):
         metrics.update({key: ZERO_F32 for key in TRAJECTORY_SHIELD_COUNT_KEYS if key in compute_keys})
         if "trajectory_shield_legal_non_noop_count" in compute_keys:
@@ -157,6 +173,10 @@ def _core_metric_fields(
         metrics["stop_rate"] = ZERO_F32
     if "mean_active_launches_per_turn" in compute_keys:
         metrics["mean_active_launches_per_turn"] = ZERO_F32
+    if "launch_ship_count_sum" in compute_keys:
+        metrics["launch_ship_count_sum"] = ZERO_F32
+    if "active_launch_count" in compute_keys:
+        metrics["active_launch_count"] = ZERO_F32
     if "loss_sample_count_2p" in compute_keys:
         metrics["loss_sample_count_2p"] = ZERO_F32
     if "loss_sample_count_4p" in compute_keys:
@@ -204,6 +224,74 @@ def _apply_factorized_metrics(metrics: dict[str, jax.Array], data: dict[str, jax
         metrics["mean_active_launches_per_turn"] = _safe_rate(launch_sum, turn_count)
 
 
+def _apply_planet_flow_metrics(
+    metrics: dict[str, jax.Array],
+    data: dict[str, jax.Array],
+) -> None:
+    emitted_launches = data.get("planet_flow_emitted_launch_count")
+    if emitted_launches is None:
+        return
+    turn_count = jnp.asarray(
+        emitted_launches.shape[0] * emitted_launches.shape[1], dtype=jnp.float32
+    )
+    if "stop_rate" in metrics:
+        metrics["stop_rate"] = ZERO_F32
+    if "mean_active_launches_per_turn" in metrics:
+        metrics["mean_active_launches_per_turn"] = _safe_rate(
+            emitted_launches.sum(), turn_count
+        )
+
+
+def _apply_launch_sizing_metrics(
+    metrics: dict[str, jax.Array],
+    data: dict[str, jax.Array],
+    cfg: TrainConfig,
+) -> None:
+    if "launch_ship_count_sum" not in metrics and "active_launch_count" not in metrics:
+        return
+
+    emitted_launches = data.get("planet_flow_emitted_launch_count")
+    emitted_ship_mass = data.get("planet_flow_emitted_ship_mass_sum")
+    if emitted_launches is not None and emitted_ship_mass is not None:
+        metrics["launch_ship_count_sum"] = emitted_ship_mass.sum()
+        metrics["active_launch_count"] = emitted_launches.sum()
+        return
+
+    source_index = data.get("source_index")
+    initial_planet_ships = data.get("initial_planet_ships")
+    stop_flag = data.get("stop_flag")
+    step_mask = data.get("step_mask")
+    ship_bucket = data.get("ship_bucket")
+    if (
+        source_index is None
+        or initial_planet_ships is None
+        or stop_flag is None
+        or step_mask is None
+        or ship_bucket is None
+    ):
+        return
+
+    active = step_mask.astype(jnp.float32)
+    non_stop = active * (1.0 - stop_flag.astype(jnp.float32))
+    available_ships = jnp.squeeze(
+        jnp.take_along_axis(
+            initial_planet_ships[..., None, :],
+            source_index[..., None],
+            axis=-1,
+        ),
+        axis=-1,
+    )
+    ship_counts = ship_count_for_action(
+        available_ships,
+        ship_bucket,
+        data.get("ship_fraction"),
+        cfg,
+    )
+    launch_active = non_stop * (ship_counts > 0.0).astype(jnp.float32)
+    metrics["launch_ship_count_sum"] = (ship_counts * launch_active).sum()
+    metrics["active_launch_count"] = launch_active.sum()
+
+
 def rollout_metrics(
     *,
     data: dict[str, jax.Array],
@@ -215,7 +303,14 @@ def rollout_metrics(
     compute_keys = rollout_compute_scalar_keys(cfg)
     collection_groups = rollout_collection_enabled_groups(cfg)
     base = _base_episode_metrics(data=data, cfg=cfg)
-    samples = data["target_index"].astype(jnp.float32).size
+    if "planet_flow_target_bucket" in data:
+        samples = jnp.asarray(
+            data["planet_flow_target_bucket"].shape[0]
+            * data["planet_flow_target_bucket"].shape[1],
+            dtype=jnp.float32,
+        )
+    else:
+        samples = jnp.asarray(data["target_index"].size, dtype=jnp.float32)
     metrics = _core_metric_fields(
         base=base,
         cfg=cfg,
@@ -227,5 +322,10 @@ def rollout_metrics(
     if "trajectory_shield_debug" in collection_groups:
         _apply_shield_metrics(metrics, data)
     if "action_decision" in collection_groups:
-        _apply_factorized_metrics(metrics, data)
+        if "planet_flow_target_bucket" in data:
+            _apply_planet_flow_metrics(metrics, data)
+        else:
+            _apply_factorized_metrics(metrics, data)
+    if "debug" in collection_groups:
+        _apply_launch_sizing_metrics(metrics, data, cfg)
     return metrics

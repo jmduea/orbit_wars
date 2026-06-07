@@ -22,6 +22,7 @@ from src.jax.action_codec import (
     _factored_step_log_prob_entropy,
     source_mask_from_bucket_mask_and_ships,
 )
+from src.jax.array_ops import masked_mean
 from src.jax.decoder_carry import decoder_carry_enabled
 from src.jax.features import TurnBatch, ship_feature_scale
 from src.jax.launch_hygiene import (
@@ -168,14 +169,12 @@ def _replay_logprobs_with_prefix_forwards(
             ship_fraction=ship_fraction,
             hygiene_bucket_mask=step_bucket_mask,
         )
-        _, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
+        step_lp, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
             step_output.source_logits[:, step_idx, :],
             step_output.target_logits[:, step_idx, :],
             step_output.stop_logits[:, step_idx],
             step_output.ship_logits[:, step_idx, :, :],
-            jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
-                step_bucket_mask, remaining_ships
-            ),
+            source_mask,
             step_bucket_mask,
             source_index[:, step_idx],
             target_slot[:, step_idx],
@@ -696,13 +695,6 @@ def replay_factored_sequence_logprob(
         decoder_hidden=decoder_hidden,
         encoder_out=encoder_out,
     )
-
-
-def masked_mean(x: jax.Array, mask: jax.Array) -> jax.Array:
-    """Mean over elements where ``mask > 0``."""
-
-    denom = jnp.maximum(mask.sum(), 1.0)
-    return (x * mask).sum() / denom
 
 
 def rollout_replay_parity_summary(

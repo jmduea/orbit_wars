@@ -58,6 +58,7 @@ from src.jax.train.rollout_groups import (
     empty_per_format_rollout_stats,
     init_rollout_groups,
     replace_rollout_group_state,
+    reset_rollout_groups_envs,
 )
 from src.jax.train.snapshots import (
     add_historical_snapshot,
@@ -88,7 +89,11 @@ from src.telemetry.metric_registry import (
     required_rollout_scalar_names,
 )
 from src.training.curriculum import CurriculumController
-from src.training.seed_scheduler import SeedScheduleConfig, SeedScheduler
+from src.training.seed_scheduler import (
+    SeedScheduleConfig,
+    SeedScheduler,
+    resolve_reseed_every_updates,
+)
 
 configure_jax_runtime_for_host()
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.WARNING)
@@ -152,6 +157,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             **(gpu_tracker.run_metadata() if gpu_tracker is not None else {}),
         },
     )
+    wandb_enabled = bool(cfg.telemetry.wandb.enabled)
+    print(
+        f"orbit_train_start run_dir={run_context.run_dir} log_path={log_path} "
+        f"queue_dir={run_context.queue_dir} wandb={'on' if wandb_enabled else 'off'}"
+    )
     telemetry = build_telemetry(
         cfg,
         {
@@ -166,10 +176,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             "wandb_data_dir": str(run_context.wandb_data_dir),
         },
     )
+    effective_reseed_every = resolve_reseed_every_updates(
+        configured=cfg.training.reseed_every_updates,
+        total_updates=cfg.training.total_updates,
+    )
     seed_scheduler = SeedScheduler(
         base_seed=cfg.seed,
         cfg=SeedScheduleConfig(
-            reseed_every_updates=cfg.training.reseed_every_updates,
+            reseed_every_updates=effective_reseed_every,
             reseed_on_plateau=cfg.training.reseed_on_plateau,
             plateau_metric=cfg.training.plateau_metric,
             plateau_window=cfg.training.plateau_window,
@@ -230,6 +244,21 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         checkpoint_pipeline=checkpoint_pipeline,
     )
 
+    wandb_status = "on" if cfg.telemetry.wandb.enabled else "off"
+    print(
+        f"JAX training starting: campaign={run_context.campaign_slug} "
+        f"run_id={run_context.run_id} updates={start_update}-"
+        f"{cfg.training.total_updates} log_every={cfg.training.log_every} "
+        f"wandb={wandb_status} log={log_path}",
+        flush=True,
+    )
+    if not cfg.telemetry.wandb.enabled:
+        print(
+            "Terminal progress: one line per log_every update(s). "
+            "First update may stall during JAX compile.",
+            flush=True,
+        )
+
     completed_training = False
     close_error: Exception | None = None
     try:
@@ -248,6 +277,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             if should_reseed:
                 reseed_event = seed_scheduler.reseed(update, reseed_reason)
                 key = jax.random.PRNGKey(reseed_event.new_seed)
+                key, rollout_groups = reset_rollout_groups_envs(key, rollout_groups)
                 reseed_events.append(
                     {
                         "update": reseed_event.update,
@@ -649,4 +679,10 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             f"checkpoint worker failed at update {first_failure.update}: "
             f"{first_failure.error or first_failure.reason or first_failure.status}"
         )
+    last_ckpt = run_dir / "jax_ckpt_last.pkl"
+    ckpt_hint = str(last_ckpt) if last_ckpt.exists() else "none"
+    print(
+        f"orbit_train_complete updates={cfg.training.total_updates} "
+        f"log_path={log_path} checkpoint={ckpt_hint}"
+    )
     return log_path

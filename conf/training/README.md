@@ -13,6 +13,17 @@ PPO and rollout hyperparameters, including mixed 2p/4p rollout allocation.
 
 Static mix when curriculum stages omit `format_weights` uses `training.format_weights`. Curriculum stages may override mix at runtime via `format_weights`.
 
+## `rollout_microbatch_envs`
+
+PPO rollout collection shards each group's env axis into microbatches. At compose time:
+
+1. `training.rollout_microbatch_envs` must be **≤ each** rollout group's `num_envs`.
+2. Each group's `num_envs` must be **evenly divisible** by the microbatch size.
+
+For **split** presets with 50/50 weights, each format gets `total_envs / 2` parallel envs — set microbatch to that half (e.g. `2p4p_32_split` → 16+16 envs → microbatch **16**, not 32). For **rotate** presets, each active group uses the full `num_envs` budget. Single-format presets (`2p_32`, `4p_16`, …) set microbatch to match that group's env count when maximizing throughput.
+
+`training=default` selects `2p4p_32_split` (canonical mixed production geometry).
+
 ## Presets
 
 | Preset | Parallel envs per update | Notes |
@@ -27,6 +38,8 @@ Static mix when curriculum stages omit `format_weights` uses `training.format_we
 | `2p4p_16_rotate` | 16 active | One format per update |
 
 `update_chunk_rows` sets rows per PPO `lax.scan` step (capped by rollout batch size); minibatch count is `ceil(total_rows / update_chunk_rows)`.
+
+**Seed scheduler:** `reseed_every_updates: -1` (default) auto-scales to `max(25, total_updates // 10)`. Use `0` to disable periodic reseed. Calibrate with `uv run ow benchmark calibrate-seed-scheduler`.
 
 Typical fields:
 

@@ -68,6 +68,7 @@ METADATA_KEYS = (
     "encoder_backbone",
     "pointer_decoder",
     "action_layout_version",
+    "pressure_bucket_values",
 )
 
 POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
@@ -80,7 +81,10 @@ def encoder_backbone_for_architecture(architecture: str) -> str:
     """Map ``model.architecture`` to the checkpoint encoder-backbone slug."""
 
     normalized = architecture.strip().lower()
-    if normalized == "planet_graph_transformer":
+    if normalized in {
+        "planet_graph_transformer",
+        "planet_graph_transformer_small",
+    }:
         return "planet_self_attention"
     raise ValueError(
         f"Unsupported model architecture for encoder_backbone metadata: {architecture!r}"
@@ -132,6 +136,14 @@ def action_layout_version_for_pointer_decoder(pointer_decoder: str) -> int:
     raise ValueError(f"Unsupported pointer_decoder slug: {pointer_decoder!r}")
 
 
+def pressure_bucket_values_for_model(model_cfg: ModelConfig) -> tuple[float, ...]:
+    """Return the normalized pressure bucket values for Planet Flow metadata."""
+
+    planet_flow = getattr(model_cfg, "planet_flow", None)
+    values = getattr(planet_flow, "pressure_bucket_values", ())
+    return tuple(float(value) for value in values)
+
+
 def validate_checkpoint_pointer_decoder_compatibility(
     stored: Mapping[str, object] | None,
     cfg: TrainConfig,
@@ -144,10 +156,17 @@ def validate_checkpoint_pointer_decoder_compatibility(
         return
 
     stored_decoder = stored.get("pointer_decoder")
+    expected = pointer_decoder_for_model(cfg.model)
     if stored_decoder is None:
+        if expected == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} is missing pointer_decoder metadata required "
+                "for Planet Flow checkpoints. Legacy checkpoints without action "
+                "layout metadata are factorized-only."
+            )
         return
 
-    expected = pointer_decoder_for_model(cfg.model)
     if str(stored_decoder) != expected:
         location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
         raise ValueError(
@@ -157,6 +176,12 @@ def validate_checkpoint_pointer_decoder_compatibility(
         )
 
     stored_layout = stored.get("action_layout_version")
+    if stored_layout is None and expected == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+        raise ValueError(
+            f"Checkpoint{location} pointer_decoder={expected!r} is missing "
+            "action_layout_version metadata. Retrain or load a matching checkpoint."
+        )
     if stored_layout is not None:
         expected_layout = action_layout_version_for_pointer_decoder(expected)
         if int(stored_layout) != expected_layout:
@@ -166,6 +191,39 @@ def validate_checkpoint_pointer_decoder_compatibility(
                 f"incompatible with pointer_decoder={expected!r} (expected "
                 f"action_layout_version={expected_layout}). Retrain or load a "
                 "matching checkpoint."
+            )
+
+    if expected == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        stored_buckets = stored.get("pressure_bucket_values")
+        expected_buckets = pressure_bucket_values_for_model(cfg.model)
+        if stored_buckets is None:
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} pointer_decoder={expected!r} is missing "
+                "pressure_bucket_values metadata. Retrain or load a matching "
+                "Planet Flow checkpoint."
+            )
+        if isinstance(stored_buckets, (str, bytes)) or not isinstance(
+            stored_buckets, (list, tuple, np.ndarray)
+        ):
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} pressure_bucket_values metadata is invalid."
+            )
+        try:
+            parsed_buckets = tuple(float(value) for value in stored_buckets)
+        except (TypeError, ValueError) as exc:
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} pressure_bucket_values metadata is invalid."
+            ) from exc
+        if parsed_buckets != expected_buckets:
+            location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
+            raise ValueError(
+                f"Checkpoint{location} pressure_bucket_values={parsed_buckets!r} "
+                f"is incompatible with current model "
+                f"(expected pressure_bucket_values={expected_buckets!r}). Retrain "
+                "or load a matching checkpoint."
             )
     return
 
@@ -269,6 +327,10 @@ def feature_metadata(
         metadata["action_layout_version"] = action_layout_version_for_pointer_decoder(
             pointer_decoder
         )
+        if pointer_decoder == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+            metadata["pressure_bucket_values"] = pressure_bucket_values_for_model(
+                model_cfg
+            )
     return metadata
 
 
@@ -314,7 +376,7 @@ def checkpoint_feature_metadata(
                 parsed[key] = str(value)
             elif key == "action_layout_version":
                 parsed[key] = int(value)
-            elif key == "intercept_anchors":
+            elif key in {"intercept_anchors", "pressure_bucket_values"}:
                 parsed[key] = tuple(float(v) for v in value)
             else:
                 parsed[key] = int(value)

@@ -224,6 +224,37 @@ def _collect_rollout_microbatched(
     )
 
 
+def _fresh_group_env_state(
+    key: jax.Array, group_cfg: TrainConfig
+) -> tuple[JaxEnvState, TurnBatch]:
+    """Reset all vectorized env slots and assign learner sides."""
+
+    reset_keys = jax.random.split(key, group_cfg.training.num_envs)
+    env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
+    env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
+    episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)
+    return assign_learner_players(
+        env_state,
+        env_indices,
+        episode_counts,
+        group_cfg.task,
+        group_cfg.opponents.mode.alternate_player_sides,
+    )
+
+
+def reset_rollout_groups_envs(
+    key: jax.Array, rollout_groups: list[JaxRolloutGroup]
+) -> tuple[jax.Array, list[JaxRolloutGroup]]:
+    """Re-initialize env state for every rollout group from a fresh PRNG key."""
+
+    key, *group_keys = jax.random.split(key, len(rollout_groups) + 1)
+    reset_groups: list[JaxRolloutGroup] = []
+    for group_key, group in zip(group_keys, rollout_groups, strict=True):
+        env_state, turn_batch = _fresh_group_env_state(group_key, group.cfg)
+        reset_groups.append(replace_rollout_group_state(group, env_state, turn_batch))
+    return key, reset_groups
+
+
 def _init_rollout_group(
     key: jax.Array,
     cfg: TrainConfig,

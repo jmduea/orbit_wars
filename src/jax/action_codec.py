@@ -65,6 +65,29 @@ class FactoredPolicyOutput(NamedTuple):
     decoder_hidden: jax.Array | None = None
 
 
+class PlanetFlowPolicyOutput(NamedTuple):
+    """Planet Flow target-demand policy output.
+
+    ``target_demand_logits`` has shape ``(batch, MAX_PLANETS, pressure_buckets)``.
+    Each active planet samples one normalized pressure bucket; inactive planets
+    are forced to bucket zero by the pressure-action contract.
+    """
+
+    target_demand_logits: jax.Array
+    value: jax.Array
+    value_logits: jax.Array | None = None
+
+
+class PlanetFlowPressureAction(NamedTuple):
+    """Sampled Planet Flow pressure action stored for rollout/PPO replay."""
+
+    target_bucket: jax.Array
+    target_pressure: jax.Array
+    log_prob: jax.Array
+    entropy: jax.Array
+    target_mask: jax.Array
+
+
 def _continuous_fraction_log_prob(logit: jax.Array) -> jax.Array:
     """Log density of a logistic ship-fraction draw at ``logit``."""
 
@@ -149,6 +172,92 @@ def ensure_action_sequence(value: jax.Array) -> jax.Array:
     if value.ndim == 1:
         return value[:, None]
     return value
+
+
+def planet_flow_action_log_prob_entropy(
+    output: PlanetFlowPolicyOutput,
+    target_bucket: jax.Array,
+    target_mask: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Replay log-probability and entropy over sampled pressure buckets."""
+
+    logits = output.target_demand_logits
+    target_mask = target_mask.astype(bool)
+    target_bucket = jnp.where(target_mask, target_bucket, jnp.zeros_like(target_bucket))
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], logits.shape)
+    active = target_mask.astype(jnp.float32)
+    log_prob = _safe_categorical_log_prob(
+        logits,
+        bucket_mask,
+        target_bucket.astype(jnp.int32),
+        active=active,
+    )
+    entropy = _safe_categorical_entropy(logits, bucket_mask, active=active)
+    return log_prob.sum(axis=-1), entropy.sum(axis=-1)
+
+
+def planet_flow_categorical_kl(
+    old_output: PlanetFlowPolicyOutput,
+    new_output: PlanetFlowPolicyOutput,
+    target_mask: jax.Array,
+) -> jax.Array:
+    """Exact categorical KL over reachable Planet Flow pressure heads."""
+
+    target_mask = target_mask.astype(bool)
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], old_output.target_demand_logits.shape)
+    old_logits, _ = _safe_masked_logits(old_output.target_demand_logits, bucket_mask)
+    new_logits, _ = _safe_masked_logits(new_output.target_demand_logits, bucket_mask)
+    old_log_probs = jax.nn.log_softmax(old_logits, axis=-1)
+    new_log_probs = jax.nn.log_softmax(new_logits, axis=-1)
+    old_probs = jax.nn.softmax(old_logits, axis=-1)
+    per_target_kl = (old_probs * (old_log_probs - new_log_probs)).sum(axis=-1)
+    return jnp.where(target_mask, per_target_kl, 0.0).sum(axis=-1)
+
+
+def planet_flow_invalid_bucket_count(
+    target_bucket: jax.Array,
+    bucket_count: int,
+    target_mask: jax.Array,
+) -> jax.Array:
+    """Count active target positions whose stored bucket cannot be replayed."""
+
+    invalid = (target_bucket < 0) | (target_bucket >= int(bucket_count))
+    return (invalid & target_mask.astype(bool)).sum()
+
+
+def sample_planet_flow_pressure_action(
+    key: jax.Array,
+    output: PlanetFlowPolicyOutput,
+    pressure_bucket_values: jax.Array,
+    target_mask: jax.Array,
+    *,
+    deterministic: bool,
+) -> PlanetFlowPressureAction:
+    """Sample the target-demand pressure action for Planet Flow P0."""
+
+    logits = output.target_demand_logits
+    target_mask = target_mask.astype(bool)
+    bucket_mask = jnp.broadcast_to(target_mask[..., None], logits.shape)
+    safe_logits, _ = _safe_masked_logits(logits, bucket_mask)
+    sampled = jnp.where(
+        deterministic,
+        jnp.argmax(safe_logits, axis=-1),
+        jax.random.categorical(key, safe_logits, axis=-1),
+    ).astype(jnp.int32)
+    target_bucket = jnp.where(target_mask, sampled, jnp.zeros_like(sampled))
+    bucket_values = jnp.asarray(pressure_bucket_values, dtype=jnp.float32)
+    target_pressure = jnp.take(bucket_values, target_bucket, axis=0)
+    target_pressure = jnp.where(target_mask, target_pressure, 0.0)
+    log_prob, entropy = planet_flow_action_log_prob_entropy(
+        output, target_bucket, target_mask
+    )
+    return PlanetFlowPressureAction(
+        target_bucket=target_bucket,
+        target_pressure=target_pressure,
+        log_prob=log_prob,
+        entropy=entropy,
+        target_mask=target_mask,
+    )
 
 
 def flat_edge_index(src_row: jax.Array, slot: jax.Array, k: int) -> jax.Array:

@@ -56,8 +56,6 @@ def _fake_config() -> SimpleNamespace:
             hidden_size=16,
             attention_heads=4,
             max_moves_k=3,
-            gnn_k_neighbors=3,
-            gnn_message_passing_layers=1,
             normalize_observations=True,
             obs_norm_clip=10.0,
         ),
@@ -180,7 +178,7 @@ def test_embedded_runtime_templates_compile() -> None:
     assert "jitted_encode" in MAIN_TEMPLATE
     assert "_initialize_submission()" in MAIN_TEMPLATE
     assert "compile_batched_feature_encode" in MAIN_TEMPLATE
-    assert "deterministic_eval=True" in MAIN_TEMPLATE
+    assert "deterministic=True" in MAIN_TEMPLATE
     assert "import_submission_kaggle_exec" in IN_CONTAINER_VALIDATOR
     assert "StepTimingBudget" in IN_CONTAINER_VALIDATOR
 

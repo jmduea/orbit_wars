@@ -1,0 +1,1118 @@
+<!-- Orbit Wars — frozen training defaults picker (generated; do not hand-edit CONFIG_DATA) -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Orbit Wars — frozen defaults</title>
+<style>
+  :root {
+    --ivory: #FAF9F5;
+    --slate: #141413;
+    --clay: #D97757;
+    --clay-d: #B85C3E;
+    --oat: #E3DACC;
+    --olive: #788C5D;
+    --gray-50: #F0EEE6;
+    --gray-200: #D1CFC5;
+    --gray-500: #87867F;
+    --gray-800: #3D3D3A;
+    --white: #ffffff;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--ivory);
+    color: var(--slate);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 48px 32px 64px;
+  }
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 30px;
+    letter-spacing: -0.01em;
+    margin: 6px 0 4px;
+  }
+  .sub { color: var(--gray-500); max-width: 640px; }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+    align-items: center;
+  }
+  .search {
+    flex: 1 1 240px;
+    min-width: 200px;
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 9px 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 999px;
+    background: var(--white);
+  }
+  .search:focus {
+    outline: 2px solid var(--slate);
+    outline-offset: 2px;
+  }
+  .filter-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gray-800);
+    background: var(--white);
+    border: 1.5px solid var(--gray-200);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .filter-chip.active {
+    background: var(--slate);
+    color: var(--ivory);
+    border-color: var(--slate);
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { position: static !important; }
+  }
+  .banner {
+    grid-column: 1 / -1;
+    display: none;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1.5px solid #E8C2AE;
+    background: #F8E9E0;
+    color: var(--clay-d);
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .banner.show { display: flex; }
+  .form-col { display: flex; flex-direction: column; gap: 16px; }
+  .group {
+    background: var(--white);
+    border: 1.5px solid var(--gray-200);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .group.hidden { display: none; }
+  .group-head {
+    width: 100%;
+    margin: 0;
+    border: none;
+    background: transparent;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    padding: 12px 18px 11px;
+    border-bottom: 1.5px solid var(--gray-50);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .group-head:hover { background: var(--gray-50); }
+  .group-head:focus-visible {
+    outline: 2px solid var(--slate);
+    outline-offset: -2px;
+  }
+  .group.collapsed .group-head { border-bottom: none; }
+  .group-head-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .group-head .name { color: var(--gray-800); }
+  .group-chevron {
+    flex: none;
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid var(--gray-500);
+    transition: transform 160ms ease;
+  }
+  .group:not(.collapsed) .group-chevron { transform: rotate(90deg); }
+  .group-body { display: block; }
+  .group.collapsed .group-body { display: none; }
+  .flag {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--gray-50);
+    border-left: 3px solid transparent;
+    transition: border-left-color 140ms ease, background 140ms ease;
+  }
+  .flag:last-child { border-bottom: none; }
+  .flag.hidden { display: none; }
+  .flag.warn { border-left-color: var(--clay); background: #FBF3EE; }
+  .flag.changed { border-left-color: var(--olive); }
+  .flag-control { flex: none; width: 168px; margin-top: 1px; }
+  .flag-info { flex: 1; min-width: 0; }
+  .flag-key {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--gray-800);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .dot {
+    display: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--olive);
+    flex: none;
+  }
+  .flag.changed .dot { display: inline-block; }
+  .type-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    color: var(--gray-500);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 999px;
+    padding: 1px 7px 2px;
+  }
+  .flag-desc { color: var(--gray-500); font-size: 12.5px; margin-top: 2px; }
+  .flag-source {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--gray-500);
+    margin-top: 4px;
+    opacity: 0.9;
+  }
+  .flag-source code {
+    font-size: 10.5px;
+    color: var(--gray-800);
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .selector-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+    align-items: flex-end;
+  }
+  .selector-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 140px;
+    flex: 1 1 160px;
+  }
+  .selector-field label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+  }
+  .selector-field select {
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: var(--white);
+    color: var(--slate);
+  }
+  .compose-banner {
+    grid-column: 1 / -1;
+    display: none;
+    padding: 10px 14px;
+    border: 1.5px solid var(--gray-200);
+    background: var(--gray-50);
+    color: var(--gray-800);
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .compose-banner.show { display: block; }
+  .warn-chip {
+    display: none;
+    margin-top: 7px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--clay-d);
+    background: #F8E1D5;
+    border: 1px solid #E8C2AE;
+    border-radius: 999px;
+    padding: 2px 9px 3px;
+  }
+  .flag.warn .warn-chip { display: inline-flex; gap: 5px; align-items: baseline; }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: var(--white);
+    color: var(--slate);
+  }
+  textarea { min-height: 52px; resize: vertical; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--slate);
+    outline-offset: 1px;
+  }
+  .toggle {
+    display: inline-block;
+    position: relative;
+    width: 38px;
+    height: 22px;
+  }
+  .toggle input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .toggle .track {
+    position: absolute;
+    inset: 0;
+    background: var(--gray-200);
+    border-radius: 999px;
+    pointer-events: none;
+    transition: background 160ms ease;
+  }
+  .toggle .track::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--white);
+    box-shadow: 0 1px 2px rgba(20,20,19,0.18);
+    transition: transform 160ms ease;
+  }
+  .toggle input:checked + .track { background: var(--olive); }
+  .toggle input:checked + .track::after { transform: translateX(16px); }
+  .sidebar {
+    position: sticky;
+    top: 24px;
+    background: var(--white);
+    border: 1.5px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .side-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gray-500);
+  }
+  .side-count {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+  }
+  .side-count .warn-n { color: var(--clay-d); }
+  .side-count .sep { color: var(--gray-200); margin: 0 4px; }
+  .diff {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    max-height: 320px;
+    overflow-y: auto;
+    white-space: pre;
+  }
+  .diff .minus { color: var(--gray-500); }
+  .diff .plus { color: var(--olive); }
+  .diff .empty { color: var(--gray-500); }
+  .btn {
+    display: block;
+    width: 100%;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 9px 16px;
+    cursor: pointer;
+    text-align: center;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+  .btn.primary { background: var(--slate); color: var(--ivory); }
+  .btn.primary:hover:not(:disabled) { background: var(--gray-800); }
+  .btn.primary:disabled {
+    background: var(--gray-200);
+    color: var(--gray-500);
+    cursor: not-allowed;
+  }
+  .btn.primary.copied { background: var(--olive); }
+  .btn.ghost {
+    background: transparent;
+    color: var(--gray-800);
+    border: 1.5px solid var(--gray-200);
+  }
+  .btn.ghost:hover { border-color: var(--gray-500); }
+  .btn.ghost.copied { border-color: var(--olive); color: var(--olive); }
+  .btn-stack { display: flex; flex-direction: column; gap: 8px; }
+  .meta-note {
+    font-size: 12px;
+    color: var(--gray-500);
+    line-height: 1.45;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Orbit Wars / conf / frozen-defaults</div>
+    <h1>Resolved training config</h1>
+    <p class="sub">Form editor for resolved Hydra training config. Pick a
+      <strong>preset</strong> or change a <strong>config group</strong> (e.g.
+      <code>model=transformer_factorized_small</code>) to load values from that
+      YAML bundle. Each field shows which file last set it (approximate). Adjust
+      leaves, fix warnings, then copy Hydra overrides or YAML diff.</p>
+    <div class="toolbar">
+      <input class="search" id="search" type="search"
+        placeholder="Filter keys (e.g. training.lr, shield)" aria-label="Filter config keys" />
+      <button type="button" class="filter-chip active" data-filter="all">All</button>
+      <button type="button" class="filter-chip" data-filter="changed">Changed only</button>
+    </div>
+    <div class="selector-row" id="selectorRow">
+      <div class="selector-field">
+        <label for="presetSelect">Load preset</label>
+        <select id="presetSelect" aria-label="Load named preset composition"></select>
+      </div>
+    </div>
+    <p class="meta-note" style="margin-top:10px">Compositions are pre-built at
+      generate time (no live Hydra server). Multi-group combos work when that
+      exact bundle was embedded — otherwise use a preset or regenerate the HTML.
+      Verify before long runs:
+      <code>uv run ow train print_resolved_config=true …</code></p>
+  </header>
+
+  <div class="layout">
+    <div class="banner" id="banner">
+      <span>&#9888;</span>
+      <span id="bannerText"></span>
+    </div>
+    <div class="compose-banner" id="composeBanner"></div>
+
+    <div class="form-col" id="formCol"></div>
+
+    <aside class="sidebar">
+      <div>
+        <div class="side-label">Pending changes</div>
+        <div class="side-count" id="sideCount">0 changed</div>
+      </div>
+      <pre class="diff" id="diff"><span class="empty">// no changes yet</span></pre>
+      <p class="meta-note" id="baselineNote">Baseline: repo default at build time.
+        Regenerate after <code>conf/</code> or <code>schema.py</code> changes.</p>
+      <div class="btn-stack">
+        <button class="btn primary" id="copyHydra" disabled>Copy Hydra overrides</button>
+        <button class="btn ghost" id="copyYaml" disabled>Copy YAML diff</button>
+        <button class="btn ghost" id="copyJson">Copy full JSON</button>
+        <button class="btn ghost" id="reset">Reset</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const CONFIG = __CONFIG_DATA__;
+const GROUPS = CONFIG.groups;
+const WARN_RULES = CONFIG.warnRules || [];
+const CONFIG_GROUPS = CONFIG.configGroups || {};
+const COMPOSITION_INDEX = CONFIG.compositionIndex || {};
+const PRESETS = CONFIG.presets || [{ id: "", label: "Repo default" }];
+
+const FIELDS = {};
+const INITIAL = {};
+const SOURCES = {};
+let currentCompositionKey = "";
+let currentCompositionLabel = "Repo default";
+GROUPS.forEach(g => g.fields.forEach(f => { FIELDS[f.key] = f; }));
+
+const formCol = document.getElementById("formCol");
+const banner = document.getElementById("banner");
+const bannerTxt = document.getElementById("bannerText");
+const composeBanner = document.getElementById("composeBanner");
+const sideCount = document.getElementById("sideCount");
+const diffEl = document.getElementById("diff");
+const copyHydraBtn = document.getElementById("copyHydra");
+const copyYamlBtn = document.getElementById("copyYaml");
+const copyJsonBtn = document.getElementById("copyJson");
+const resetBtn = document.getElementById("reset");
+const searchEl = document.getElementById("search");
+const presetSelect = document.getElementById("presetSelect");
+const selectorRow = document.getElementById("selectorRow");
+const baselineNote = document.getElementById("baselineNote");
+let filterMode = "all";
+const groupExpanded = {};
+const groupSelections = {};
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function cloneValue(v) {
+  if (Array.isArray(v)) return v.slice();
+  if (v && typeof v === "object") return JSON.parse(JSON.stringify(v));
+  return v;
+}
+
+function valuesEqual(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function formatDisplay(v) {
+  if (v === null) return "null";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
+function parseFieldValue(field, raw) {
+  const t = field.type;
+  if (t === "bool") return !!raw;
+  if (t === "int") {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error("invalid integer");
+    return Math.trunc(n);
+  }
+  if (t === "float") {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error("invalid number");
+    return n;
+  }
+  if (t === "null") {
+    const trimmed = String(raw).trim();
+    if (trimmed === "" || trimmed === "null") return null;
+    throw new Error("use null or empty for null");
+  }
+  if (t === "list" || t === "dict") {
+    const parsed = JSON.parse(String(raw));
+    if (t === "list" && !Array.isArray(parsed)) throw new Error("expected JSON array");
+    if (t === "dict" && (parsed === null || Array.isArray(parsed) || typeof parsed !== "object")) {
+      throw new Error("expected JSON object");
+    }
+    return parsed;
+  }
+  return String(raw);
+}
+
+function hydraOverride(key, value) {
+  if (value === null) return "+" + key + "=null";
+  if (typeof value === "boolean") return key + "=" + (value ? "true" : "false");
+  if (typeof value === "number") return key + "=" + value;
+  if (typeof value === "string") {
+    if (/^[A-Za-z0-9_.-]+$/.test(value)) return key + "=" + value;
+    return key + "='" + value.replace(/'/g, "\\'") + "'";
+  }
+  if (Array.isArray(value)) return key + "=" + JSON.stringify(value);
+  return key + "=" + JSON.stringify(value);
+}
+
+function yamlScalar(value, indent) {
+  if (value === null) return "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") {
+    if (value === "" || /[:#\[\]{}&*!|>'"%@`]/.test(value) || /^\s|\s$/.test(value)) {
+      return JSON.stringify(value);
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return "[]";
+    return "\n" + value.map(item => indent + "  - " + yamlScalar(item, indent + "  ")).join("\n");
+  }
+  const lines = [];
+  for (const [k, v] of Object.entries(value)) {
+    const child = yamlScalar(v, indent + "  ");
+    if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+      lines.push(indent + k + ":\n" + child);
+    } else if (Array.isArray(v) && v.length && typeof v[0] === "object") {
+      lines.push(indent + k + ":\n" + child);
+    } else {
+      lines.push(indent + k + ": " + child);
+    }
+  }
+  return lines.join("\n");
+}
+
+function yamlPathLines(key, value) {
+  const parts = key.split(".");
+  const lines = [];
+  let indent = "";
+  for (let i = 0; i < parts.length - 1; i++) {
+    lines.push(indent + parts[i] + ":");
+    indent += "  ";
+  }
+  const leaf = parts[parts.length - 1];
+  lines.push(indent + leaf + ": " + yamlScalar(value, indent + "  ").replace(/^\s+/, ""));
+  return lines.join("\n");
+}
+
+function fieldValue(key) {
+  return cloneValue(INITIAL[key]);
+}
+
+function buildControl(field) {
+  const wrap = document.createElement("div");
+  wrap.className = "flag-control";
+  const value = fieldValue(field.key);
+  const t = field.type;
+  if (t === "bool") {
+    wrap.innerHTML =
+      '<label class="toggle">' +
+        '<input type="checkbox" data-key="' + esc(field.key) + '"' +
+          (value ? " checked" : "") +
+          ' aria-label="' + esc(field.key) + '">' +
+        '<span class="track"></span>' +
+      '</label>';
+    return wrap;
+  }
+  if (field.choices && field.choices.length) {
+    const sel = document.createElement("select");
+    sel.dataset.key = field.key;
+    for (const choice of field.choices) {
+      const opt = document.createElement("option");
+      opt.value = choice;
+      opt.textContent = choice;
+      if (valuesEqual(choice, value)) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    wrap.appendChild(sel);
+    return wrap;
+  }
+  if (t === "list" || t === "dict") {
+    const ta = document.createElement("textarea");
+    ta.dataset.key = field.key;
+    ta.value = JSON.stringify(value, null, 0);
+    wrap.appendChild(ta);
+    return wrap;
+  }
+  const input = document.createElement("input");
+  input.dataset.key = field.key;
+  if (t === "int" || t === "float") input.type = "number";
+  else input.type = "text";
+  input.value = value === null ? "" : String(value);
+  if (t === "float") input.step = "any";
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function isGroupExpanded(groupId) {
+  return groupExpanded[groupId] !== false;
+}
+
+function setGroupExpanded(panel, expanded) {
+  const groupId = panel.dataset.group;
+  groupExpanded[groupId] = expanded;
+  panel.classList.toggle("collapsed", !expanded);
+  const head = panel.querySelector(".group-head");
+  if (head) head.setAttribute("aria-expanded", expanded ? "true" : "false");
+}
+
+function toggleGroup(panel) {
+  setGroupExpanded(panel, !isGroupExpanded(panel.dataset.group));
+}
+
+function buildForm() {
+  formCol.innerHTML = "";
+  for (const g of GROUPS) {
+    const panel = document.createElement("section");
+    panel.className = "group";
+    panel.dataset.group = g.id;
+    if (groupExpanded[g.id] === undefined) groupExpanded[g.id] = true;
+
+    const bodyId = "group-body-" + g.id;
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "group-head";
+    head.setAttribute("aria-expanded", isGroupExpanded(g.id) ? "true" : "false");
+    head.setAttribute("aria-controls", bodyId);
+    head.innerHTML =
+      '<span class="group-head-left">' +
+        '<span class="group-chevron" aria-hidden="true"></span>' +
+        '<span class="name">' + esc(g.label) + '</span>' +
+      '</span>' +
+      '<span class="meta" data-meta></span>';
+    head.addEventListener("click", () => toggleGroup(panel));
+    panel.appendChild(head);
+    panel.classList.toggle("collapsed", !isGroupExpanded(g.id));
+
+    const body = document.createElement("div");
+    body.className = "group-body";
+    body.id = bodyId;
+
+    for (const f of g.fields) {
+      const row = document.createElement("div");
+      row.className = "flag";
+      row.dataset.key = f.key;
+
+      const info = document.createElement("div");
+      info.className = "flag-info";
+      info.innerHTML =
+        '<div class="flag-key"><span class="dot"></span><span>' + esc(f.key) + '</span>' +
+          '<span class="type-badge">' + esc(f.type) + '</span></div>' +
+        '<div class="flag-desc">' + esc(f.desc) + '</div>' +
+        '<div class="flag-source" data-source></div>' +
+        '<div class="warn-chip" data-warn></div>';
+
+      row.appendChild(buildControl(f));
+      row.appendChild(info);
+      body.appendChild(row);
+    }
+    panel.appendChild(body);
+    formCol.appendChild(panel);
+  }
+}
+
+function readControl(el, field) {
+  if (field.type === "bool") {
+    const cb = el.querySelector('input[type="checkbox"]');
+    return !!cb.checked;
+  }
+  const control = el.querySelector("select, input, textarea");
+  return parseFieldValue(field, control.type === "checkbox" ? control.checked : control.value);
+}
+
+function currentState() {
+  const state = {};
+  for (const key of Object.keys(FIELDS)) {
+    const field = FIELDS[key];
+    const row = formCol.querySelector('.flag[data-key="' + CSS.escape(key) + '"]');
+    try {
+      state[key] = readControl(row, field);
+      row.classList.remove("warn");
+      row.querySelector("[data-warn]").textContent = "";
+    } catch (err) {
+      state[key] = cloneValue(INITIAL[key]);
+      row.classList.add("warn");
+      row.querySelector("[data-warn]").textContent = String(err.message || err);
+    }
+  }
+  return state;
+}
+
+function ruleTriggered(rule, state) {
+  const req = !!state[rule.requires];
+  const active = rule.invert_requires ? !req : req;
+  if (!active) return false;
+  const v = state[rule.target];
+  switch (rule.predicate) {
+    case "gt_zero":
+      return !(Number(v) > 0);
+    case "zero_when_off":
+      return Number(v) !== 0;
+    case "non_empty_list":
+      return !Array.isArray(v) || v.length === 0;
+    default:
+      return false;
+  }
+}
+
+function collectWarnings(state) {
+  const warnings = [];
+  for (const rule of WARN_RULES) {
+    if (ruleTriggered(rule, state)) warnings.push(rule);
+  }
+  return warnings;
+}
+
+function computeDiff(state) {
+  const lines = [];
+  for (const g of GROUPS) {
+    for (const f of g.fields) {
+      if (!valuesEqual(state[f.key], INITIAL[f.key])) {
+        lines.push({
+          key: f.key,
+          from: INITIAL[f.key],
+          to: state[f.key],
+        });
+      }
+    }
+  }
+  return lines;
+}
+
+function diffText(lines) {
+  return lines.map(l =>
+    "- " + l.key + ": " + formatDisplay(l.from) + "\n" +
+    "+ " + l.key + ": " + formatDisplay(l.to)
+  ).join("\n");
+}
+
+function hydraText(lines) {
+  return lines.map(l => hydraOverride(l.key, l.to)).join("\n");
+}
+
+function yamlDiffText(lines) {
+  return lines.map(l => "# " + l.key + "\n" + yamlPathLines(l.key, l.to)).join("\n\n");
+}
+
+function fullJson(state) {
+  const tree = {};
+  for (const g of GROUPS) {
+    for (const f of g.fields) {
+      const parts = f.key.split(".");
+      let node = tree;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const p = parts[i];
+        if (!(p in node)) node[p] = {};
+        node = node[p];
+      }
+      node[parts[parts.length - 1]] = cloneValue(state[f.key]);
+    }
+  }
+  return JSON.stringify(tree, null, 2);
+}
+
+function matchesFilter(key, changed) {
+  const q = searchEl.value.trim().toLowerCase();
+  if (filterMode === "changed" && !changed) return false;
+  if (!q) return true;
+  return key.toLowerCase().includes(q);
+}
+
+function formatSource(source) {
+  if (!source) return "";
+  if (source.startsWith("override:")) {
+    return "Set by " + esc(source.slice("override:".length).trim());
+  }
+  if (source === "schema.py default") {
+    return "From <code>schema.py</code> default";
+  }
+  if (source === "composed") {
+    return "Composed / derived (not a single yaml leaf)";
+  }
+  return "From <code>" + esc(source) + "</code>";
+}
+
+function updateSources() {
+  for (const key of Object.keys(FIELDS)) {
+    const row = formCol.querySelector('.flag[data-key="' + CSS.escape(key) + '"]');
+    if (!row) continue;
+    const el = row.querySelector("[data-source]");
+    const source = SOURCES[key] || "";
+    el.innerHTML = source ? formatSource(source) : "";
+  }
+}
+
+function compositionKeyFromSelections(overrides) {
+  const groupOverrides = overrides.filter(o => o.includes("=") && !o.split("=")[0].includes("."));
+  const leafOverrides = overrides.filter(o => !groupOverrides.includes(o));
+  return groupOverrides.sort().concat(leafOverrides.sort()).join("|");
+}
+
+function overridesFromGroupSelections() {
+  const overrides = [];
+  for (const [group, meta] of Object.entries(CONFIG_GROUPS)) {
+    const selected = groupSelections[group];
+    const repoDefault = meta.defaultSelection || "default";
+    if (selected && selected !== repoDefault) {
+      overrides.push(group + "=" + selected);
+    }
+  }
+  return overrides;
+}
+
+function applyComposition(key, label, options) {
+  const opts = options || {};
+  const entry = COMPOSITION_INDEX[key] || COMPOSITION_INDEX[""];
+  if (!entry) {
+    composeBanner.textContent =
+      "Composition not embedded. Regenerate the picker or use a preset.";
+    composeBanner.classList.add("show");
+    return false;
+  }
+  currentCompositionKey = key;
+  currentCompositionLabel = label || entry.label || "Composition";
+  for (const k of Object.keys(FIELDS)) {
+    INITIAL[k] = cloneValue(entry.values[k]);
+    SOURCES[k] = entry.sources[k] || "";
+  }
+  if (!opts.skipControls) {
+    for (const g of GROUPS) {
+      for (const f of g.fields) {
+        const row = formCol.querySelector('.flag[data-key="' + CSS.escape(f.key) + '"]');
+        const controlWrap = row.querySelector(".flag-control");
+        const next = buildControl(f);
+        controlWrap.replaceWith(next);
+      }
+    }
+    updateSources();
+  }
+  composeBanner.classList.remove("show");
+  baselineNote.textContent =
+    "Baseline: " + currentCompositionLabel + ". Regenerate after conf/ changes.";
+  if (!opts.silent) update();
+  return true;
+}
+
+function tryLoadGroupComposition() {
+  const overrides = overridesFromGroupSelections();
+  const key = compositionKeyFromSelections(overrides);
+  if (COMPOSITION_INDEX[key]) {
+    presetSelect.value = "";
+    return applyComposition(key, COMPOSITION_INDEX[key].label);
+  }
+  if (overrides.length === 0) {
+    presetSelect.value = "repo_default";
+    return applyComposition("", "Repo default");
+  }
+  if (overrides.length === 1) {
+    const only = overrides[0];
+    const singleKey = compositionKeyFromSelections([only]);
+    if (COMPOSITION_INDEX[singleKey]) {
+      presetSelect.value = "";
+      return applyComposition(singleKey, COMPOSITION_INDEX[singleKey].label);
+    }
+  }
+  composeBanner.innerHTML =
+    "Combination <code>" + esc(overrides.join(" ")) + "</code> was not pre-composed. " +
+    "Try a preset, change one group at a time, or regenerate with that bundle embedded.";
+  composeBanner.classList.add("show");
+  return false;
+}
+
+function buildSelectors() {
+  PRESETS.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.label;
+    presetSelect.appendChild(opt);
+  });
+  for (const group of Object.keys(CONFIG_GROUPS).sort()) {
+    const meta = CONFIG_GROUPS[group];
+    const field = document.createElement("div");
+    field.className = "selector-field";
+    const label = document.createElement("label");
+    label.setAttribute("for", "group-" + group);
+    label.textContent = group;
+    const sel = document.createElement("select");
+    sel.id = "group-" + group;
+    sel.dataset.group = group;
+    const repoDefault = meta.defaultSelection || "default";
+    groupSelections[group] = repoDefault;
+    for (const option of meta.options) {
+      const opt = document.createElement("option");
+      opt.value = option.id;
+      const suffix = option.id === repoDefault ? " (repo default)" : "";
+      opt.textContent = option.id + suffix;
+      if (option.id === repoDefault) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener("change", () => {
+      groupSelections[group] = sel.value;
+      presetSelect.value = "";
+      tryLoadGroupComposition();
+    });
+    field.appendChild(label);
+    field.appendChild(sel);
+    selectorRow.appendChild(field);
+  }
+  presetSelect.addEventListener("change", () => {
+    const presetId = presetSelect.value;
+    if (!presetId) return;
+    const entry = COMPOSITION_INDEX[presetId] || COMPOSITION_INDEX[""];
+    for (const [group, meta] of Object.entries(CONFIG_GROUPS)) {
+      const repoDefault = meta.defaultSelection || "default";
+      let selected = repoDefault;
+      for (const override of (entry.overrides || [])) {
+        if (override.startsWith(group + "=")) {
+          selected = override.split("=", 2)[1];
+          break;
+        }
+      }
+      groupSelections[group] = selected;
+      const sel = document.getElementById("group-" + group);
+      if (sel) sel.value = selected;
+    }
+    applyComposition(presetId === "repo_default" ? "" : presetId, entry.label);
+  });
+}
+
+function update() {
+  const state = currentState();
+  const warnings = collectWarnings(state);
+  const lines = computeDiff(state);
+  updateSources();
+
+  for (const g of GROUPS) {
+    let visible = 0;
+    let changedCount = 0;
+    for (const f of g.fields) {
+      const row = formCol.querySelector('.flag[data-key="' + CSS.escape(f.key) + '"]');
+      const changed = !valuesEqual(state[f.key], INITIAL[f.key]);
+      row.classList.toggle("changed", changed);
+      if (changed) changedCount++;
+
+      const warn = warnings.find(w => w.target === f.key);
+      row.classList.toggle("warn", !!warn);
+      if (warn) row.querySelector("[data-warn]").textContent = warn.message;
+
+      const show = matchesFilter(f.key, changed);
+      row.classList.toggle("hidden", !show);
+      if (show) visible++;
+    }
+    const panel = formCol.querySelector('.group[data-group="' + g.id + '"]');
+    panel.classList.toggle("hidden", visible === 0);
+    const meta = panel.querySelector("[data-meta]");
+    meta.textContent = visible + " fields, " + changedCount + " changed";
+    if (visible > 0 && changedCount > 0) {
+      setGroupExpanded(panel, true);
+    }
+  }
+
+  if (lines.length === 0) {
+    diffEl.innerHTML = '<span class="empty">// no changes yet</span>';
+    copyHydraBtn.disabled = true;
+    copyYamlBtn.disabled = true;
+  } else {
+    diffEl.innerHTML = lines.map(l =>
+      '<span class="minus">- ' + esc(l.key) + ': ' + esc(formatDisplay(l.from)) + '</span>\n' +
+      '<span class="plus">+ ' + esc(l.key) + ': ' + esc(formatDisplay(l.to)) + '</span>'
+    ).join("\n");
+    copyHydraBtn.disabled = false;
+    copyYamlBtn.disabled = false;
+  }
+
+  sideCount.innerHTML =
+    lines.length + " changed" +
+    '<span class="sep">&middot;</span>' +
+    '<span class="' + (warnings.length ? "warn-n" : "") + '">' +
+      warnings.length + " warning" + (warnings.length === 1 ? "" : "s") +
+    "</span>";
+
+  if (warnings.length > 0) {
+    bannerTxt.textContent =
+      warnings.length === 1
+        ? "1 cross-field validation warning"
+        : warnings.length + " cross-field validation warnings";
+    banner.classList.add("show");
+  } else {
+    banner.classList.remove("show");
+  }
+}
+
+function flash(btn, label) {
+  const orig = btn.textContent;
+  btn.textContent = label;
+  btn.classList.add("copied");
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.classList.remove("copied");
+    update();
+  }, 1200);
+}
+
+function writeClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (e) { /* ignore */ }
+  document.body.removeChild(ta);
+  return Promise.resolve();
+}
+
+copyHydraBtn.addEventListener("click", () => {
+  const lines = computeDiff(currentState());
+  if (!lines.length) return;
+  writeClipboard(hydraText(lines)).then(() => flash(copyHydraBtn, "Copied ✓"));
+});
+
+copyYamlBtn.addEventListener("click", () => {
+  const lines = computeDiff(currentState());
+  if (!lines.length) return;
+  writeClipboard(yamlDiffText(lines)).then(() => flash(copyYamlBtn, "Copied ✓"));
+});
+
+copyJsonBtn.addEventListener("click", () => {
+  writeClipboard(fullJson(currentState())).then(() => flash(copyJsonBtn, "Copied ✓"));
+});
+
+resetBtn.addEventListener("click", () => {
+  applyComposition(currentCompositionKey || "", currentCompositionLabel, { silent: true });
+  update();
+});
+
+formCol.addEventListener("change", e => {
+  if (e.target.matches("input, select, textarea")) update();
+});
+formCol.addEventListener("input", e => {
+  if (e.target.matches("input, textarea")) update();
+});
+
+searchEl.addEventListener("input", () => update());
+document.querySelectorAll(".filter-chip").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-chip").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    filterMode = btn.dataset.filter;
+    update();
+  });
+});
+
+applyComposition("", "Repo default", { skipControls: true, silent: true });
+buildForm();
+buildSelectors();
+update();
+</script>
+</body>
+</html>

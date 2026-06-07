@@ -5,7 +5,7 @@ from src.benchmark.production import (
     production_benchmark_payload,
     rollout_group_summary,
 )
-from src.config import compose_hydra_train_config
+from src.jax.training_benchmark import resolve_benchmark_overrides
 
 
 def test_rollout_group_summary_uses_training_derived_env_counts() -> None:
@@ -38,3 +38,15 @@ def test_production_benchmark_payload_includes_group_metadata() -> None:
     assert payload["total_envs"] == 32
     assert payload["rollout_groups"] == [dict(group) for group in groups]
     assert payload["samples_per_sec"] == 200.0
+
+
+def test_planet_flow_p0_benchmark_preset_selects_proof_profile() -> None:
+    overrides = resolve_benchmark_overrides(
+        preset="planet_flow_p0",
+        overrides=["training.total_updates=5"],
+    )
+
+    assert "model=planet_flow_target_heatmap" in overrides
+    assert "training=2p4p_16_split" in overrides
+    assert "artifacts=planet_flow_proof" in overrides
+    assert overrides[-1] == "training.total_updates=5"

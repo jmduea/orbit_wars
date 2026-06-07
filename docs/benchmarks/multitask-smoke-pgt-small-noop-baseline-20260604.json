@@ -1,0 +1,41 @@
+{
+  "run_dir": "outputs/campaigns/multitask_smoke/runs/20260604T151112Z-s42-bed91b60",
+  "log_path": "logs/planet_graph_transformer_small-2p-selfplay-u20-env2-s42-20260604T151238Z_jax.jsonl",
+  "captured_at": "2026-06-04",
+  "note": "Pre noop encode_turn skip optimization in collect_rollout_jax",
+  "hydra_overrides": [
+    "model.architecture=planet_graph_transformer_small",
+    "task.candidate_count=3",
+    "task.edge_rank_mode=intercept_min",
+    "training.num_envs=2",
+    "training.rollout_microbatch_envs=2",
+    "training.rollout_steps=128",
+    "training.total_updates=20",
+    "training.update_chunk_rows=2048",
+    "opponents.mode.opponent=no_op",
+    "curriculum=off"
+  ],
+  "steady_state_updates": "11-19",
+  "update_20": {
+    "update": 20,
+    "env_steps_per_sec": 54.95225125797153,
+    "rollout_env_steps_per_sec": 55.2143905573233,
+    "rollout_seconds": 4.636472438000055,
+    "ppo_seconds": 0.022116271999948367,
+    "update_seconds": 4.658589851000215,
+    "elapsed_seconds": 386.6999984129998,
+    "total_env_steps": 5120
+  },
+  "compile_warmup": {
+    "update_1": {
+      "env_steps_per_sec": 1.5473105030173027,
+      "ppo_seconds": 93.74058717699972,
+      "rollout_seconds": 71.70778091900002
+    },
+    "update_2": {
+      "env_steps_per_sec": 9.234879769213256,
+      "rollout_seconds": 27.702892174000226
+    }
+  },
+  "steady_env_steps_per_sec_mean_u11_u19": 63.98
+}

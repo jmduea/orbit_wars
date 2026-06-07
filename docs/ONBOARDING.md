@@ -18,12 +18,13 @@
 
 ```bash
 uv sync --group dev
-uv run --group dev pytest
-uv run python -m src.train model=attention training.total_updates=1000
-uv run python -m src.train print_resolved_config=true   # resolve config without training
+make test-fast
+uv run ow train model=attention training.total_updates=1000
+uv run ow train print_resolved_config=true   # resolve config without training
+uv run ow runs list                          # inspect outputs/campaigns
 ```
 
-Canonical references: `README.md` (user-facing) and `AGENTS.md` (agent/editor guidance).
+Canonical references: `README.md` (user-facing), `AGENTS.md` and `docs/AGENT_CAPABILITIES.md` (agent/editor guidance).
 
 ---
 
@@ -68,7 +69,9 @@ Pytest guards Hydra wiring, JAX env/policy/PPO behavior, feature dimensions, cur
 
 ### 4. Documentation (`docs/`)
 
-Experiment guides, baseline sweep notes, Hydra/config migration history, and this onboarding doc.
+<!-- hand-maintained:documentation -->
+Doc-type map at [docs/README.md](README.md), stage design index at [docs/architecture/README.md](architecture/README.md), and operator workflows in [docs/operator-runbook.md](operator-runbook.md).
+<!-- /hand-maintained -->
 
 ### 5. Scripts (`scripts/`)
 
@@ -97,6 +100,8 @@ Operational CLIs: JAX benchmarks, artifact workers, Kaggle Docker validation, at
 7. **Checkpoint compatibility** — Checkpoints embed feature metadata; incompatible shapes or old flat config layouts are rejected in `checkpoint_compat.py`.
 
 8. **Campaign outputs** — New runs use `outputs/campaigns/<campaign>/runs/<run_id>/` with Hydra snapshots, manifests, and checkpoints grouped by experimental question (`output.campaign=`).
+
+**See also:** [nomenclature RFC](nomenclature-rfc.md) — maps opaque jargon (tier-1/2, launch hygiene, Planet Flow) to descriptive terms and separates Kaggle mechanics parity from production training throughput gates.
 
 ---
 
@@ -158,11 +163,22 @@ Recommended path from the knowledge graph (10 steps). Each step links file-level
 
 #### Seed scheduler — config and observability
 
-Periodic rollout reseeding is **off by default** (`training.reseed_every_updates: 0`, `training.reseed_on_plateau: false`). Enable periodic swaps with Hydra, for example:
+Periodic rollout reseeding defaults to **50 updates** (`training.reseed_every_updates: 50`, calibrated in `docs/benchmarks/seed-scheduler-calibration.json`). Use `-1` for auto-scale (`max(25, total_updates // 10)`). Set `0` to disable. Plateau-triggered reseeding stays off (`training.reseed_on_plateau: false`).
 
 ```bash
-uv run python -m src.train training.reseed_every_updates=50
+uv run ow train training.reseed_every_updates=50   # fixed interval
+uv run ow train training.reseed_every_updates=0    # disable
 ```
+
+On reseed, the training loop replaces the root PRNG key **and** resets all rollout env states so new board layouts take effect immediately. Reseed policies use `random_jump` unless `heldout_eval_seed_set` is non-empty (then `shuffled_pool`).
+
+Calibrate intervals with held-out tournament seeds:
+
+```bash
+uv run ow benchmark calibrate-seed-scheduler --dry-run
+```
+
+See `docs/benchmarks/seed-scheduler-calibration.md`. Benchmark sweeps subprocess `ow train` with W&B off — expect a startup banner and per-update lines after PR #165; if the terminal is silent, see `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`.
 
 Plateau-triggered reseeding uses `training.plateau_metric`, `plateau_window`, and `plateau_delta`. When `heldout_eval_seed_set` is non-empty, reseeds draw from a shuffled pool instead of random jumps.
 
@@ -223,11 +239,14 @@ These fields land in the run JSONL (`campaigns/*/runs/*/logs/*_jax.jsonl`) and i
 
 ### Documentation
 
+<!-- hand-maintained:documentation -->
 | Doc | Topic |
-|-----|--------|
-| `docs/experiments.md` | Experiment conventions |
-| `docs/baseline_sweep.md` | Baseline sweep methodology |
-| `docs/config_migration.md`, `docs/hydra_migration.md` | Config history |
+| --- | --- |
+| [docs/README.md](README.md) | Doc-type map, folder index, navigation chains |
+| [docs/architecture/README.md](architecture/README.md) | Stage-level architecture index |
+| [docs/operator-runbook.md](operator-runbook.md) | Operator workflows and run commands |
+| [docs/hydra_migration.md](hydra_migration.md) | Hydra/config migration history |
+<!-- /hand-maintained -->
 
 ---
 
@@ -266,7 +285,7 @@ Canonical **agent** test-selection rules live in `AGENTS.md` § *Test Selection 
 |-------------|---------------|---------------|
 | Config / schema | `make test-domain-config` | `test_config_consolidation.py`, `test_telemetry.py`, `test_metric_registry.py`, `test_run_paths.py` |
 | Env / features | `make test-domain-features` | Python feature tests; add `make test-domain-jax-env` when JAX env mirrors change |
-| JAX env / Kaggle parity | `make test-kaggle-parity` or `make test-domain-jax-env` | `-m "jax and not slow"`; `test_jax_env_parity.py` is no longer slow-tier |
+| JAX env / Kaggle parity | `make test-kaggle-parity` or `make test-domain-jax-env` | `-m "jax and not slow"`; `test_jax_env_parity.py` is no longer slow-tier; **CI:** `.github/workflows/kaggle-jax-parity.yml` on every PR |
 | Policy / PPO | `make test-domain-policy` | serial `-m "jax and not slow"` |
 | Curriculum | `make test-domain-curriculum` | CPU subset of `test_curriculum.py`, `test_jax_train_timing.py` |
 | Artifacts | `make test-domain-artifacts` | `test_artifact_pipeline.py`, `test_replay.py`, `test_kaggle_submission_packager.py` |
@@ -284,5 +303,7 @@ IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.
 1. Run `/understand` to refresh `.understand-anything/knowledge-graph.json`.
 2. Run `/understand-onboard` to regenerate this document.
 3. Commit `docs/ONBOARDING.md` so the team shares the same map.
+
+**Hand-maintained sections:** Full `/understand-onboard` refresh may overwrite graph-derived sections (architecture tour, guided tour, hotspots, verification matrix). After regen, re-apply the hand-maintained blocks marked `<!-- hand-maintained:documentation -->` in § Documentation and § 4. Documentation, verifying links against [docs/README.md](README.md). Skip full regen when only navigation changed.
 
 Graph stats at generation time: **691 nodes**, **1408 edges**, **115 files** analyzed, **239 paths** excluded by `.understandignore`.

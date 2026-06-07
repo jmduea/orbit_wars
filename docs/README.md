@@ -26,7 +26,7 @@ Canonical requirements (supersedes parallel preflight / hybrid / bracket doc pat
 - [competition/COMPETITION_OVERVIEW.md](competition/COMPETITION_OVERVIEW.md) — game rules and scoring
 - [competition/COMPETITION_SUBMISSION.md](competition/COMPETITION_SUBMISSION.md) — agent packaging and submission
 
-Tracker: GitHub [#205](https://github.com/jmduea/orbit_wars/issues/205).
+Tracker: GitHub [#205](https://github.com/jmduea/orbit_wars/issues/205). Interactive spine: [tools/ssot-training-pipeline-flowchart.html](tools/ssot-training-pipeline-flowchart.html).
 
 ## Doc-type lifecycle
 
@@ -47,12 +47,13 @@ Tracker: GitHub [#205](https://github.com/jmduea/orbit_wars/issues/205).
 | [architecture/](architecture/) | Stage-level design notes with curated index ([architecture/README.md](architecture/README.md)) |
 | [archive/](archive/) | Retired docs and historical mirrors (e.g. OMG/MCP) |
 | [audits/](audits/) | Point-in-time architecture and agent-native reviews |
-| [benchmarks/](benchmarks/) | Committed calibration JSON and benchmark runbooks; derive thresholds from these artifacts |
+| [benchmarks/](benchmarks/) | Committed calibration JSON and benchmark runbooks; see [benchmarks/README.md](benchmarks/README.md) |
 | [brainstorms/](brainstorms/) | Requirements-style docs before planning |
 | [competition/](competition/) | Kaggle competition rules and submission packaging (SSOT for lane A/C) |
 | [ideation/](ideation/) | Early exploration before scoped requirements |
 | [plans/](plans/) | Dated feat/fix implementation plans with units |
 | [solutions/](solutions/) | Documented learnings organized by category |
+| [tools/](tools/) | Local maintainer HTML tools (SSOT flowchart, config picker); see [tools/README.md](tools/README.md) |
 
 ## Root evergreen docs
 

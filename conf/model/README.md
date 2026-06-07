@@ -9,7 +9,7 @@ architecture: planet_graph_transformer
 pointer_decoder: factorized_topk
 hidden_size: 128
 attention_heads: 4
-max_moves_k: 3
+max_moves_k: 2
 value_head: distributional
 ```
 
@@ -18,4 +18,5 @@ Examples:
 ```bash
 uv run ow train model=transformer_factorized
 uv run ow train model=transformer_factorized_small
+uv run ow train model=planet_graph_transformer_small
 ```

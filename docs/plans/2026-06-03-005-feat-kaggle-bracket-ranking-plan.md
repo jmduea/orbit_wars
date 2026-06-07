@@ -287,7 +287,7 @@ flowchart LR
 
 **In scope (this LFG slice):** U1–U8, smoke workflow above
 
-**Deferred to Follow-Up Work:** Qualifier 1.0 seed-count calibration campaign, Gate 5 proof threshold changes for 1.0 qualifier
+**Deferred to Follow-Up Work:** Qualifier 1.0 seed-count calibration campaign, Gate 5 proof threshold changes for 1.0 qualifier. Post-merge operator checklist: [PR #186](https://github.com/jmduea/orbit_wars/pull/186) **Remaining work** section.
 
 **Outside this product's identity:** Replacing Kaggle Docker validation; changing preflight Gates 2–4 thresholds
 

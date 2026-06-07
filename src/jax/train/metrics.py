@@ -4,11 +4,75 @@ import jax.numpy as jnp
 
 import jax
 from src.config import TrainConfig
+from src.jax.rollout.planet_flow_metric_descriptors import PLANET_FLOW_RATE_DELTA_SUFFIXES
 from src.jax.rollout.metrics import trajectory_shield_legal_rate
+from src.jax.train.sweep_score import PLANET_FLOW_MIN_DEMAND_MASS
 from src.telemetry.metric_registry import (
     prune_scalar_metrics,
     rollout_merge_scalar_keys,
 )
+
+_PLANET_FLOW_PREFIX = "planet_flow"
+_PLANET_FLOW_CONTROL_PREFIX = "planet_flow_control"
+
+
+def _finalize_planet_flow_rates(
+    metrics: dict[str, jax.Array],
+    *,
+    prefix: str,
+) -> None:
+    demanded = metrics[f"{prefix}_demanded_mass_sum"]
+    requested_ship_mass = metrics[f"{prefix}_requested_ship_mass_sum"]
+    emitted_launches = metrics[f"{prefix}_emitted_launch_count"]
+    attempted_launches = (
+        metrics[f"{prefix}_emitted_launch_count"]
+        + metrics[f"{prefix}_capacity_dropped_launch_count"]
+    )
+    metrics[f"{prefix}_unreachable_demand_rate"] = jnp.where(
+        demanded >= PLANET_FLOW_MIN_DEMAND_MASS,
+        metrics[f"{prefix}_unreachable_demand_mass_sum"] / demanded,
+        0.0,
+    )
+    metrics[f"{prefix}_held_demand_rate"] = jnp.where(
+        demanded >= PLANET_FLOW_MIN_DEMAND_MASS,
+        metrics[f"{prefix}_held_demand_mass_sum"] / demanded,
+        0.0,
+    )
+    metrics[f"{prefix}_emitted_ship_mass_rate"] = jnp.where(
+        requested_ship_mass > 0.0,
+        metrics[f"{prefix}_emitted_ship_mass_sum"] / requested_ship_mass,
+        0.0,
+    )
+    metrics[f"{prefix}_capacity_drop_rate"] = jnp.where(
+        attempted_launches > 0.0,
+        metrics[f"{prefix}_capacity_dropped_launch_count"] / attempted_launches,
+        0.0,
+    )
+    metrics[f"{prefix}_small_launch_rate"] = jnp.where(
+        emitted_launches > 0.0,
+        metrics[f"{prefix}_small_launch_count"] / emitted_launches,
+        0.0,
+    )
+    metrics[f"{prefix}_duplicate_source_target_rate"] = jnp.where(
+        emitted_launches > 0.0,
+        metrics[f"{prefix}_duplicate_source_target_count"] / emitted_launches,
+        0.0,
+    )
+
+
+def _finalize_planet_flow_control_deltas(metrics: dict[str, jax.Array]) -> None:
+    metrics["planet_flow_emitted_launch_count_delta_vs_control"] = (
+        metrics["planet_flow_emitted_launch_count"]
+        - metrics["planet_flow_control_emitted_launch_count"]
+    )
+    metrics["planet_flow_emitted_ship_mass_delta_vs_control"] = (
+        metrics["planet_flow_emitted_ship_mass_sum"]
+        - metrics["planet_flow_control_emitted_ship_mass_sum"]
+    )
+    for name in PLANET_FLOW_RATE_DELTA_SUFFIXES:
+        metrics[f"planet_flow_{name}_delta_vs_control"] = (
+            metrics[f"planet_flow_{name}"] - metrics[f"planet_flow_control_{name}"]
+        )
 
 
 def finalize_rollout_phase_timing_metrics(
@@ -91,6 +155,17 @@ def finalize_cross_chunk_rate_metrics(
         (metrics["wins_2p"] + metrics["first_places_4p"]) / metrics["episode_done"],
         0.0,
     )
+    if "planet_flow_demanded_mass_sum" in metrics:
+        _finalize_planet_flow_rates(metrics, prefix=_PLANET_FLOW_PREFIX)
+        if "planet_flow_control_demanded_mass_sum" in metrics:
+            _finalize_planet_flow_rates(metrics, prefix=_PLANET_FLOW_CONTROL_PREFIX)
+            _finalize_planet_flow_control_deltas(metrics)
+    if "launch_ship_count_sum" in metrics:
+        metrics["mean_ships_per_launch"] = jnp.where(
+            metrics["active_launch_count"] > 0.0,
+            metrics["launch_ship_count_sum"] / metrics["active_launch_count"],
+            0.0,
+        )
     return metrics
 
 

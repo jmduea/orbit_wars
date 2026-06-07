@@ -5,11 +5,32 @@ from __future__ import annotations
 import json
 
 from src.jax.preflight_calibration import (
+    PREFLIGHT_TRAIN_BASE,
+    calibration_train_overrides,
     derive_thresholds,
     discover_calibration_snapshots,
     extract_training_signals,
     summarize_calibration,
 )
+
+
+def test_preflight_train_base_logs_every_update() -> None:
+    assert "training.log_every=1" in PREFLIGHT_TRAIN_BASE
+
+
+def test_planet_flow_calibration_overrides_use_p0_guards() -> None:
+    overrides = calibration_train_overrides(
+        "noop_only",
+        seed=42,
+        total_updates=20,
+        model="planet_flow_target_heatmap",
+    )
+
+    assert "artifacts=planet_flow_proof" in overrides
+    assert "training=planet_flow" in overrides
+    assert "training.rollout_steps=128" not in overrides
+    assert "curriculum=off" in overrides
+    assert "telemetry.metric_groups.action_decision=true" in overrides
 
 
 def test_extract_training_signals_computes_trend() -> None:
@@ -59,6 +80,35 @@ def test_derive_thresholds_prefers_trend_plus_tournament() -> None:
     win_proof = thresholds["win_proof_tournament"]
     assert isinstance(win_proof, dict)
     assert float(win_proof["noop_min_win_rate"]) < 0.85
+
+
+def test_planet_flow_calibration_writes_planet_flow_thresholds() -> None:
+    records = [
+        {
+            "update": index,
+            "overall_win_rate": 0.15 if index <= 10 else 0.35,
+            "mean_active_launches_per_turn": 1.0 if index <= 10 else 7.0,
+            "approx_kl": 0.01,
+            "entropy": 0.05,
+        }
+        for index in range(1, 21)
+    ]
+    snapshot = extract_training_signals(
+        records,
+        opponent="noop_only",
+        seed=42,
+        total_updates=20,
+        model="planet_flow_target_heatmap",
+    )
+    thresholds = derive_thresholds(summarize_calibration([snapshot]))
+
+    planet_flow = thresholds["planet_flow_learning_signal"]
+    learning = thresholds["learning_signal"]
+    assert isinstance(planet_flow, dict)
+    assert isinstance(learning, dict)
+    for key, value in learning.items():
+        assert planet_flow[key] == value
+    assert planet_flow["max_post_mask_unreachable_demand_rate"] == 0.05
 
 
 def test_discover_calibration_snapshots_reads_campaign_layout(tmp_path) -> None:
