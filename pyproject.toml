@@ -77,7 +77,27 @@ dev = [
     "ruff>=0.15.13",
     "pytest>=8.3.0",
     "pytest-xdist>=3.6.0",
+    "pytest-cov>=6.0.0",
+    "coverage[toml]>=7.6.0",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/scripts/*",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+show_missing = true
+skip_empty = true
 
 [build-system]
 requires = ["uv_build >= 0.11.7, <0.12.0"]

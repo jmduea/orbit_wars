@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from src.cli import runs as runs_cli
 
 
@@ -148,3 +150,45 @@ def test_runs_checkpoint_delete(tmp_path: Path) -> None:
         == 0
     )
     assert not ckpt.exists()
+
+
+def test_runs_show_missing_manifest_exits(tmp_path: Path) -> None:
+    run_dir = tmp_path / "missing-manifest"
+    run_dir.mkdir()
+    with pytest.raises(SystemExit, match="No manifest.json"):
+        runs_cli.main(["show", "--run", str(run_dir)])
+
+
+def test_runs_logs_missing_log_exits(tmp_path: Path) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "run-001", "campaign": "cap"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="No \\*_jax.jsonl log"):
+        runs_cli.main(["logs", "--run", str(run_dir)])
+
+
+def test_runs_list_json_format(tmp_path: Path, capsys) -> None:
+    run_dir = tmp_path / "outputs" / "campaigns" / "cap" / "runs" / "run-json"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-json",
+                "campaign": "cap",
+                "created_at": "2026-06-06T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    outputs_root = tmp_path / "outputs"
+    assert (
+        runs_cli.main(
+            ["list", "--format", "json", "--outputs-root", str(outputs_root)]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["runs"][0]["run_id"] == "run-json"

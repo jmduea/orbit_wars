@@ -293,6 +293,9 @@ Canonical **agent** test-selection rules live in `AGENTS.md` § *Test Selection 
 | JAX / env parity | `make test-jax` or `make test-kaggle-parity` | after `src/jax/` or env changes |
 | Pre-merge | `make test-premerge` | daily + slow (bounded sweep); add `make test-sweep` before release |
 | Parallel CPU | `make test-fast-parallel` | xdist on fast tier only |
+| Line coverage (diagnostic) | `make test-cov-fast` | fast tier + `htmlcov/`; baseline in `docs/benchmarks/test-coverage-baseline.json` |
+
+**Coverage note:** line coverage supplements tiered behavioral gates (Kaggle parity, trace hygiene, admission throughput) — it does not replace them. Use `make test-cov-report` when you need a `coverage.xml` artifact; there is no CI fail-under threshold yet.
 
 IDE tip: set `"python.testing.pytestArgs": ["-m", "not slow and not jax"]` in `.vscode/settings.json` so the test explorer defaults to the CPU-safe tier.
 

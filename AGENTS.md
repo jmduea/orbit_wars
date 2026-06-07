@@ -51,6 +51,7 @@ uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + to
 - **Pre-merge:** `make test-premerge` = `test-daily` + `test-slow` (`slow and not sweep`). Before release: `make test-sweep`.
 - **Parallel CPU tiers:** `make test-fast-parallel` / `make test-jax-parallel` only (sets `ORBIT_WARS_PYTEST_XDIST=1`; never on slow/sweep/GPU).
 - **Never:** bare `pytest -n` without the Makefile targets; never xdist on slow/sweep; `make test-full` only when user asks (~15 min WSL2).
+- **Line coverage (diagnostic):** `make test-cov-fast` (HTML in `htmlcov/`) or `make test-cov-report` (`coverage.xml`); baseline `docs/benchmarks/test-coverage-baseline.json`. Supplements parity/trace/admission gates — no CI fail-under yet.
 
 ## Key invariants
 
