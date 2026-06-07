@@ -19,4 +19,4 @@ throughput:
   baseline: docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
   within_pct: 10
   warmup: 2
-  max_measured_update: 20
+  measured_update_count: 20

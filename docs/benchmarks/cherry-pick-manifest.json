@@ -1,34 +1,266 @@
 {
   "manifest_id": "nuclear-cherry-pick-throughput-anchor-2026-06-05",
-  "assessed_date": "2026-06-05",
+  "assessed_date": "2026-06-07",
   "baseline_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
   "baseline_branch": "throughput-baseline",
+  "admission_profile": {
+    "name": "learning_first_unified",
+    "status": "operator_locked",
+    "locked_date": "2026-06-05",
+    "description": "One training recipe for both checks: the agent must show a real learning signal against the do-nothing opponent, and training must stay fast enough on the same model, opponents, shield, and rollout geometry. Speed is measured from the same 200-update learning run (updates 3\u201320 of the gate JSONL) \u2014 no separate 20-update GPU job.",
+    "locked_recipe_summary": "Operator locked admission from picker preset beat_noop_core with deltas: mixed 2-player and 4-player rollouts (50/50), 32 parallel envs, 256 rollout steps, 3 planet candidates per turn, Weights & Biases logging (group preflight), replay artifacts off. Uses small factorized transformer, cheap shield, noop-only opponents, curriculum off.",
+    "user_direction": "Proof of learning beats raw throughput. Reject the prior split where speed used self-play + full model while learning used noop + small model. Capture a new speed baseline from this unified recipe (replacing the old primary-preset framing).",
+    "prior_recommendation_superseded": {
+      "name": "tier2_admission",
+      "what_it_meant": "Two different training setups sharing only a thin common spine: speed check used self-play with the full transformer; learning proof used the noop opponent with a smaller model and fewer envs. A commit could pass one check while training on an incomparable path.",
+      "why_rejected": "User requires one comparable training config for both gates; learning requirements are the source of truth."
+    },
+    "source_of_truth": {
+      "learning_gate": "beat_noop",
+      "gate_recipe": "conf/benchmark/gates/beat_noop.yaml",
+      "thresholds": "docs/benchmarks/preflight-calibration.json learning_signal",
+      "preflight_base": "PREFLIGHT_TRAIN_BASE in src/jax/preflight_calibration.py"
+    },
+    "picker_workflow": {
+      "tool": "docs/tools/config-frozen-defaults-picker.html",
+      "regenerate": "uv run python scripts/build_config_frozen_defaults_picker.py",
+      "open": "xdg-open docs/tools/config-frozen-defaults-picker.html",
+      "purpose": "Browser form over the default Hydra composition. Adjust leaves, fix cross-field warnings, copy Hydra overrides or YAML diff for conf/ updates. Regenerate after conf/ or schema.py changes.",
+      "operator_note": "Start from beat_noop defaults below; only change model/opponents/training geometry with explicit recalibration intent. Default beat_noop model (transformer_factorized_small) is calibrated \u2014 upgrading model size requires new threshold calibration."
+    },
+    "operator_locked_overrides": {
+      "picker_preset": "beat_noop_core",
+      "picker_yaml_diff": {
+        "task.candidate_count": 3,
+        "training.format_weights.2": 0.5,
+        "training.format_weights.4": 0.5,
+        "training.num_envs": 32,
+        "training.rollout_microbatch_envs": 32,
+        "training.rollout_steps": 256,
+        "telemetry.wandb.enabled": true,
+        "telemetry.wandb.group": "preflight",
+        "artifacts.replay.enabled": false
+      },
+      "picker_note": "YAML diff is deltas vs beat_noop_core only. Picker showed rollout_microbatch_envs=32; with 50/50 mixed format and 32 envs each format group gets 16 envs, so microbatch resolves to 16 (32 is invalid). Canonical runnable form uses training=2p4p_32_split instead of training=2p_16 plus leaf format/env overrides.",
+      "shared": [
+        "model=transformer_factorized_small",
+        "model.max_moves_k=2",
+        "task=shield_cheap",
+        "training=2p4p_32_split",
+        "training.rollout_steps=256",
+        "task.candidate_count=3",
+        "opponents=noop_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=true",
+        "telemetry.wandb.group=preflight",
+        "artifacts.artifact_pipeline.enabled=false",
+        "artifacts.replay.enabled=false",
+        "telemetry.metric_groups.action_decision=true",
+        "seed=42",
+        "training.log_every=1"
+      ],
+      "gate_train_overrides": [
+        "model.max_moves_k=2",
+        "training=2p4p_32_split",
+        "training.rollout_steps=256",
+        "task.candidate_count=3",
+        "telemetry.wandb.enabled=true",
+        "telemetry.wandb.group=preflight",
+        "artifacts.replay.enabled=false"
+      ],
+      "resolved_geometry": {
+        "num_envs": 32,
+        "rollout_steps": 256,
+        "rollout_microbatch_envs": 16,
+        "format_weights": {
+          "2": 0.5,
+          "4": 0.5
+        },
+        "candidate_count": 3,
+        "max_moves_k": 2,
+        "wandb_enabled": true,
+        "wandb_group": "preflight"
+      },
+      "changes_vs_beat_noop_default": [
+        "2-player only \u2192 50/50 mixed 2-player and 4-player rollouts",
+        "16 envs \u00d7 128 steps \u2192 32 envs \u00d7 256 steps (~4\u00d7 env-steps per update)",
+        "6 planet candidates \u2192 3 (smaller action space)",
+        "wandb off \u2192 on (group preflight)",
+        "replay artifacts explicitly disabled (artifact pipeline still off)"
+      ],
+      "threshold_recalibration": {
+        "learning_signal": "use_with_caution",
+        "reason": "beat_noop thresholds in preflight-calibration.json were measured on 2-player-only, 16 envs, 128 steps, candidate_count=6. Mixed format and longer rollouts change win-rate dynamics and PPO batch geometry; recalibrate with ow benchmark calibrate before treating failures as regressions.",
+        "throughput_baseline": "required",
+        "throughput_reason": "Env-steps per update and per-format compile cost differ from the prior 2p_16\u00d7128 proposal; capture a new launch-hygiene-e2e-baseline-learning-first.json on this locked recipe before \u00b110% gating."
+      }
+    },
+    "proposed_core_overrides": {
+      "description": "Superseded by operator_locked_overrides (2026-06-05). Kept for diff reference.",
+      "shared": [
+        "model=transformer_factorized_small",
+        "task=shield_cheap",
+        "training=2p_16",
+        "training.rollout_steps=128",
+        "opponents=noop_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=false",
+        "artifacts.artifact_pipeline.enabled=false",
+        "telemetry.metric_groups.action_decision=true",
+        "seed=42",
+        "training.log_every=1"
+      ],
+      "ppo_profile_note": "beat_noop gate applies transformer_factorized_small PPO overrides automatically (lr, clip_coef, ent_coef, vf_coef, max_grad_norm, epochs, update_chunk_rows, reseed_every_updates=0). Throughput capture must include the same PPO bundle \u2014 use gate dry-run output or append profile overrides from docs/benchmarks/preflight-profiles.json.",
+      "throughput_extract": {
+        "mode": "single_run_hybrid",
+        "description": "After beat_noop (200 updates), extract env_steps_per_sec and seconds_per_update_mean from the gate JSONL using updates 3\u201322 (20 measured rows after warmup updates 1\u20132). Matches ow benchmark training --updates 20 --warmup 2 without a second training job.",
+        "cli": "uv run ow benchmark admission-throughput",
+        "gate_compose": "uv run ow benchmark gate run beat_noop --also-throughput --throughput-baseline <baseline.json>",
+        "window": {
+          "warmup": 2,
+          "measured_update_count": 20
+        },
+        "blocking_metrics": [
+          "env_steps_per_sec",
+          "seconds_per_update_mean"
+        ],
+        "recorded_with_detailed_timing": [
+          "rollout_seconds_per_update_mean",
+          "ppo_seconds_per_update_mean"
+        ]
+      },
+      "measurement_only": {
+        "throughput_baseline_capture": {
+          "training.total_updates": 20,
+          "warmup": 2,
+          "repeats_capture": 3,
+          "purpose": "One-time baseline JSON only (ow benchmark training or 3\u00d7 gate+log extract after picker locks recipe). Not required for every cherry-pick once baseline exists.",
+          "suggested_output": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json"
+        },
+        "learn_proof": {
+          "training.total_updates": 200,
+          "gate": "beat_noop",
+          "thresholds": "win_rate_delta >= 0.05 over last 10 updates, approx_kl <= 0.15, entropy >= 0.0001",
+          "throughput_follow_up": "ow benchmark admission-throughput <gate.json> --baseline docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json --assert-within-pct 10"
+        }
+      }
+    },
+    "verify_resolved_config": "uv run ow train print_resolved_config=true model=transformer_factorized_small task=shield_cheap training=2p4p_32_split training.rollout_steps=256 task.candidate_count=3 opponents=noop_only curriculum=off telemetry.wandb.enabled=true telemetry.wandb.group=preflight artifacts.artifact_pipeline.enabled=false artifacts.replay.enabled=false telemetry.metric_groups.action_decision=true seed=42 training.log_every=1 training.lr=0.0003 training.clip_coef=0.2 training.ent_coef=0.005 training.vf_coef=0.5 training.max_grad_norm=0.5 training.epochs=2 training.update_chunk_rows=1024 training.reseed_every_updates=0",
+    "capture_throughput_baseline": {
+      "description": "Capture a reference baseline JSON from the unified recipe (3\u00d720-update runs OR 3 gate runs with admission-throughput extract). Cherry-pick admission then compares each candidate's gate JSONL extract against this file.",
+      "suggested_output": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
+      "command_template_training": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --overrides <core+PPO overrides from picker/gate dry-run> --label learning_first_capture --updates 20 --warmup 2 --repeats 3 --detailed-timing --out docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
+      "command_template_hybrid": "uv run ow benchmark gate run beat_noop --out /tmp/gate.json && uv run ow benchmark admission-throughput /tmp/gate.json",
+      "follow_up": "Point Makefile test-launch-hygiene-e2e-throughput and manifest baseline_gates at the new JSON once capture is approved."
+    },
+    "learn_proof_on_anchor": {
+      "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+      "branch": "throughput-baseline",
+      "dry_run": "uv run ow benchmark gate run beat_noop --dry-run --verbose",
+      "capture": "uv run ow benchmark gate run beat_noop --out outputs/benchmarks/cherry-pick/anchor_learn_proof.json"
+    },
+    "rejected_alternatives": [
+      {
+        "label": "tier2_admission (split heads)",
+        "reason": "User rejected different configs for speed vs learning; dual gate was meaningless under incomparable paths."
+      },
+      {
+        "label": "primary preset (self_play + transformer_factorized)",
+        "reason": "Superseded as admission framing; old baseline captured pre-hygiene speed without learning signal on same recipe."
+      },
+      {
+        "label": "self_play_only for learning proof",
+        "reason": "~50% win rate is not a learning signal; beat_noop requires noop_only."
+      },
+      {
+        "label": "transformer_factorized without recalibration",
+        "reason": "beat_noop thresholds calibrated on transformer_factorized_small; full model needs new calibration campaign."
+      }
+    ]
+  },
   "baseline_gates": {
     "throughput_e2e": {
+      "profile": "learning_first_unified",
+      "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json",
+      "baseline_capture_date": "2026-06-05",
+      "baseline_commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "baseline_worktree": "/home/jmduea/projects/orbit_wars-pre-hygiene",
+      "baseline_aggregate": {
+        "env_steps_per_sec_mean": 5431.985098263416,
+        "seconds_per_update_mean": 1.5082574630321082,
+        "pass_band_within_pct": 10.0,
+        "env_steps_per_sec_floor": 4888.786588437074,
+        "seconds_per_update_mean_ceiling": 1.659083309335319
+      },
+      "baseline_superseded": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
+      "baseline_superseded_note": "Old baseline used primary preset (self-play, full transformer, 32 envs \u00d7 500 steps). Locked admission recipe is noop, small model, mixed 2p/4p, 32 envs \u00d7 256 steps. Numbers are not comparable \u2014 do not gate new captures against the old JSON or the earlier 2p_16\u00d7128 proposal.",
+      "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_unified.json",
+      "verdict": "admit",
+      "anchor_gate_extract": {
+        "source": "admission-throughput on anchor_learn_proof.json gate JSONL (updates 3\u201320)",
+        "run_date": "2026-06-06",
+        "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+        "log_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T021830Z_jax.jsonl",
+        "env_steps_per_sec": 4950.968734558304,
+        "seconds_per_update_mean": 1.654625678166566,
+        "rollout_seconds_per_update_mean": 1.151900956117768,
+        "ppo_seconds_per_update_mean": 0.5027232608893731,
+        "verdict": "PASS",
+        "note": "Within \u00b110% of learning-first baseline (env_steps floor 4888.79, seconds ceiling 1.659). --also-throughput skipped because learn_proof exit_code=1; extracted post-hoc from gate JSONL."
+      },
+      "prior_capture": {
+        "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_2p.json",
+        "verdict": "obsolete_profile",
+        "note": "Captured under tier2_admission / primary preset; invalid under learning-first unified direction."
+      },
       "preset": "tier2_primary",
       "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
-      "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput.json",
-      "verdict": "admit",
-      "measured_commit_sha": "ac4b5b8090b0c087492d0ee0df78aae74089f882",
-      "gate_passed": true,
-      "env_steps_per_sec": 9627.617296393499,
-      "samples_per_sec": 48138.0864819675,
-      "seconds_per_update_mean": 1.6618857509005465
+      "verdict_detail": "baseline_captured"
     },
     "learn_proof": {
-      "model": "transformer_factorized_small",
-      "through": "beat_noop",
+      "gate": "beat_noop",
+      "profile": "learning_first_unified",
       "artifact": "outputs/benchmarks/cherry-pick/anchor_learn_proof.json",
-      "verdict": "pending"
+      "run_date": "2026-06-06",
+      "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+      "harness_repo": "/home/jmduea/projects/orbit_wars",
+      "verdict": "pending",
+      "run_dir": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559",
+      "log_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T021830Z_jax.jsonl",
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/checkpoints/jax_ckpt_last.pkl",
+      "reasons": [
+        "win_rate_delta 0.049 < 0.050 (last 10 vs first 10 updates)",
+        "approx_kl 2.3448 > 0.1500"
+      ],
+      "metrics": {
+        "win_rate_delta": 0.04906489700078964,
+        "win_rate_first_window": 0.4246570259332657,
+        "window_overall_win_rate": 0.47372192293405535,
+        "approx_kl_last10": 2.3448,
+        "entropy_last10": 1.5747025847434997,
+        "best_rolling_win_rate": 0.6290180623531342,
+        "thresholds": {
+          "min_win_rate_delta": 0.05,
+          "max_approx_kl": 0.15,
+          "min_entropy": 0.0001
+        }
+      },
+      "interpretation": "Borderline win-rate delta and elevated KL likely reflect threshold geometry mismatch (calibrated 2p-only/16env/128 steps vs locked mixed 2p/4p/32env/256 steps), not necessarily a bad anchor cherry-pick. Recalibrate before blocking Phase 2.",
+      "admission_gate_note": "Use ow benchmark gate run admission (or make gate-admission REPO_ROOT=anchor) for blocking learn+speed; beat_noop-only JSON superseded for admission blocking.",
+      "verdict_detail": "NOT_VERIFIED"
     },
     "parity": {
       "command": "make test-kaggle-parity",
-      "verdict": "pending"
+      "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+      "run_date": "2026-06-06",
+      "verdict": "admit",
+      "result": "15 passed, 1 deselected in 18.77s",
+      "verdict_detail": "PASS"
     }
   },
-  "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), tier-2 production training throughput within the launch-hygiene-e2e baseline pass band, and learn-proof ladder VERIFIED at calibrated thresholds.",
+  "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), training throughput within \u00b110% of the learning-first unified baseline (once captured), and learn-proof beat_noop VERIFIED at calibrated thresholds \u2014 all on the same core training recipe.",
   "throughput_gate_contract": {
-    "blocking_preset": "tier2_primary",
+    "blocking_profile": "learning_first_unified",
     "blocking_metrics": [
       "env_steps_per_sec",
       "seconds_per_update_mean"
@@ -40,34 +272,1277 @@
     "recorded_not_gated": [
       "samples_per_sec"
     ],
-    "primary_profile": {
-      "preset": "primary",
-      "training_format": "2p_only",
-      "notes": "PRIMARY_E2E_OVERRIDES + training/base.yaml format_weights 2:1.0 / 4:0.0 → single two_player rollout group (32 envs). Does not exercise 4p-only or mixed 2p+4p."
-    },
     "supplementary_format_coverage": [
       {
         "label": "4p_only",
         "override": "training=4p_32",
         "blocking": false,
         "phase": "characterization",
-        "notes": "Advisory until a 4p baseline is captured; does not block Phase 2 env-parity."
+        "notes": "Advisory until a 4p baseline exists on the unified recipe."
       },
       {
         "label": "2p4p_split",
         "override": "training=2p4p_32_split",
-        "blocking": false,
-        "phase": "characterization",
-        "notes": "Mixed-format production path; advisory until recalibrated baseline."
+        "blocking": true,
+        "phase": "admission_locked",
+        "notes": "Operator locked 50/50 mixed format as the admission recipe (2026-06-05). Learning thresholds still calibrated on 2p-only \u2014 treat gate results as provisional until recalibration."
       }
     ]
   },
-  "candidates": [],
-  "integration_state": {
-    "branch": "throughput-baseline-integration",
-    "ordered_shas": [],
-    "last_integrated_sha": null,
-    "integration_status": "building"
+  "candidates": [
+    {
+      "subject": "Offline game reference libs \u2014 comet/planet generation",
+      "phase": "env_parity",
+      "cherry_pick_order": 1,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188)",
+      "granularity": "file-level pick from commit; src/game/comet_generation.py, planet_generation.py, constants.py only \u2014 excluded shield_config and all JAX/test hunks from same commit",
+      "files_touched": [
+        "src/game/comet_generation.py",
+        "src/game/planet_generation.py",
+        "src/game/constants.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "worktree_note": "User-specified path ../orbit_wars-integration (handoff doc ../orbit_wars-throughput-baseline-integration not present; created fresh at user path)",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "15 passed, 1 deselected in 21.25s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 25.32s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json"
+      },
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "subject": "encode_learner_turn / fused learner feature path",
+      "phase": "env_parity",
+      "cherry_pick_order": 2,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188)",
+      "granularity": "hunk-level pick from commit; src/jax/features.py encode_learner_turn + _encode_turn_with_snapshot + append_feature_history snapshot reuse; env.py learner encode call sites only (reset, assign_learner_players, _finish_step) \u2014 excluded comet state, golden test comet fields, and all other JAX env hunks",
+      "files_touched": [
+        "src/jax/features.py",
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "15 passed, 1 deselected in 24.80s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 26.62s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json"
+      },
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "subject": "Env mechanics hunks \u2014 rotation, fleet launch, combat ordering",
+      "phase": "env_parity",
+      "cherry_pick_order": 3,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188); follow-up planet_id validation from phase 1 simplification",
+      "secondary_sha": "0cfd7622d1b633e0d07b7345655a89dd2d44d337",
+      "granularity": "hunk-level pick; src/jax/env.py mechanics only \u2014 sequential _launch_fleets (lax.scan + fleet cap), rotation step indexing, first-hit combat ordering, cfg.ship_speed, step() \u2192 step_multi_player; excluded comet state/subsystem, pure_callback, Kaggle reference reset, env_parity_mode split (pick #4)",
+      "files_touched": [
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "15 passed, 1 deselected in 21.87s",
+        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 22.92s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax",
+        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json"
+      },
+      "throughput_admission": {
+        "profile": "learning_first_unified",
+        "gate": "admission",
+        "floor_env_steps_per_sec": 4888.786588437074,
+        "pre_pick3": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T050013Z_jax.jsonl",
+          "env_steps_per_sec": 5696.451367,
+          "rollout_seconds_per_update_mean": 2.2229300870563344,
+          "measured_updates": 18,
+          "verdict": "PASS",
+          "note": "Picks #1-2 at 79162a2+dirty; env_steps floor PASS only \u2014 full admission FAIL on seconds/update at default 500/6 geometry",
+          "full_admission_passed": false,
+          "seconds_per_update_mean": 2.809,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "post_pick3": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T052219Z-s42-e5bb99b1",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T052219Z-s42-e5bb99b1/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T052245Z_jax.jsonl",
+          "env_steps_per_sec": 373.2232,
+          "rollout_seconds_per_update_mean": 42.15310395239503,
+          "measured_updates": 5,
+          "verdict": "FAIL",
+          "note": "~18\u00d7 rollout slowdown; sequential _launch_fleets (lax.scan) + step\u2192step_multi_player indirection"
+        },
+        "regression_ratio": 15.26,
+        "picks12_regate_52dfdb0": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+          "verdict": "FAIL",
+          "misconfigured_gate": true,
+          "seconds_per_update_mean": 3.037,
+          "env_steps_per_sec": 5268,
+          "note": "Wrong recipe (500/6); superseded by locked-recipe pass 060248Z \u2014 see integration_state.admission_integration"
+        },
+        "picks12_locked_recipe_pass": {
+          "run_date": "2026-06-06",
+          "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+          "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
+          "integration_head_sha": "3f88f1b",
+          "verdict": "PASS",
+          "full_admission_passed": true,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.173,
+          "env_steps_per_sec": 5419,
+          "seconds_per_update_mean": 1.512
+        }
+      },
+      "verdict": "reject",
+      "reject_reasons": [
+        "throughput_regression"
+      ],
+      "remediation": {
+        "date": "2026-06-06",
+        "action": "Reverted pick #3 mechanics hunks in integration worktree src/jax/env.py; restored anchor @ 52dfdb0 parallel _launch_fleets, direct step() 2p path, rotation step+1 indexing, MAX_FLEET_SPEED, argmax hit_idx. Kept pick #2 encode_learner_turn call sites.",
+        "deferred_to": "REJECTED: kaggle-only env_parity_mode + callbacks (user_constraint jax_only_hot_path_no_callbacks). See planned_picks #4\u2013#6."
+      }
+    },
+    {
+      "id": "pick_3_partial",
+      "subject": "Cheap env mechanics hunks (rotation, ship_speed, first-hit, planet_id)",
+      "phase": "env_parity",
+      "cherry_pick_order": "3b",
+      "parent_pick": 3,
+      "sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
+      "secondary_sha": "0cfd7622d1b633e0d07b7345655a89dd2d44d337",
+      "commit_group": "feat(jax-env): JAX comet subsystem Kaggle parity (#188); planet_id validation from phase 1 simplification",
+      "granularity": "hunk-level pick; src/jax/env.py only \u2014 hunks C\u2013F: rotation step indexing, cfg.ship_speed fleet_speed, first-hit combat min planet index, planet_id launch guard. EXCLUDED: sequential _launch_fleets lax.scan (hunk A), step()\u2192step_multi_player (hunk B), comet/callbacks/env_parity_mode",
+      "files_touched": [
+        "src/jax/env.py"
+      ],
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "15 passed, 1 deselected in 18.02s",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "static gate PASS; 10 pytest passed in 22.34s",
+        "note": "Anchor-era integration tree lacks make test-jax-trace-hygiene target; equivalent run from main harness against integration src/jax"
+      },
+      "throughput_admission": {
+        "status": "not_run",
+        "note": "Cheap hunks only; full pick #3 regressed ~18\u00d7 rollout via sequential launch. Re-run admission only if operator requests."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "excluded_hunks": [
+        "sequential _launch_fleets via lax.scan + fleet cap (throughput regression)",
+        "step() \u2192 step_multi_player indirection for 2p",
+        "comet state/subsystem, pure_callback, env_parity_mode"
+      ]
+    },
+    {
+      "subject": "Pure JAX planet + comet generation ports",
+      "phase": "env_parity",
+      "cherry_pick_order": 4,
+      "status": "admit",
+      "implementation": "greenfield_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
+      "granularity": "Greenfield JAX ports of src/game/{planet,comet}_generation.py rejection-sampling plus unified comet env wiring (JaxCometState, episode_seed, spawn/expire/advance). User decision: implement on integration directly \u2014 not main-first transplant.",
+      "files_touched": [
+        "src/jax/planet_generation.py",
+        "src/jax/comet_generation.py",
+        "src/jax/env.py",
+        "src/jax/submission_runtime.py",
+        "tests/test_jax_env_parity.py"
+      ],
+      "excluded_from_main_commits": [
+        "pure_callback",
+        "_reference_planet_tables",
+        "_reference_comet_paths",
+        "_reset_kaggle_reference",
+        "env_parity_mode train/kaggle split",
+        "task=kaggle_parity",
+        "sequential lax.scan fleet launch (pick #3 throughput regression)"
+      ],
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "16 passed, 1 deselected in 84.10s",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg on integration src/jax + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
+        "verdict": "PASS",
+        "result": "0 forbidden-pattern matches in integration src/jax; 10 pytest passed in 21.18s",
+        "note": "make test-jax-trace-hygiene from main harness alone fails on main src/jax (_reference_* present); run rg against integration tree per prior picks"
+      },
+      "throughput_admission": {
+        "status": "not_run",
+        "note": "Comet stepping adds hot-path work; operator may re-run admission at milestone. Pick #3 sequential launch still excluded."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "user_decision": "greenfield_on_integration_not_main_first",
+      "superseded_by": "pick_4_map_pool",
+      "superseded_note": "Inline JAX generation compile cliff; map-pool gather reset is the active pick #4 strategy (2026-06-06)."
+    },
+    {
+      "id": "pick_4_map_pool",
+      "subject": "Pre-baked 500-map pool gather reset (offline bake, no inline generation)",
+      "phase": "env_parity",
+      "cherry_pick_order": 4,
+      "status": "landed_on_integration",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "run_date": "2026-06-06",
+      "integration_head_sha": "795cf1c",
+      "integration_note": "Map pool stack on integration: adf2ea4 (pool) + 795cf1c (import fix). Operator admitted with learning waiver 2026-06-07.",
+      "granularity": "Offline bake via src/game/* into data/jax_map_pool/default_v1.npz; training reset gathers pool entry + baked comet activation in step(); eval/tournament stay on Kaggle obs replay.",
+      "files_touched": [
+        "src/jax/map_pool/",
+        "src/jax/env.py",
+        "src/jax/rollout/collect.py",
+        "src/jax/train/rollout_groups.py",
+        "conf/task/map_pool.yaml",
+        "data/jax_map_pool/default_v1.npz",
+        "tests/test_map_pool_*.py",
+        "tests/test_jax_env_parity.py"
+      ],
+      "map_pool": {
+        "npz_path": "data/jax_map_pool/default_v1.npz",
+        "sha256": "b48a38e4ad63aab25ffb155af321ab470b4e658cff42eca0369d72048f8d3023",
+        "pool_size": 500,
+        "profile": {
+          "mean_secs_per_map": 0.13083340820157902,
+          "extrapolated_batch_secs": 65.4167041007895,
+          "bake_seconds": 81.66847151098773
+        }
+      },
+      "parity": {
+        "command": "make test-kaggle-parity",
+        "verdict": "admit",
+        "result": "25 passed, 1 deselected in 151.28s",
+        "verdict_detail": "PASS"
+      },
+      "trace_hygiene": {
+        "command": "tier-A static rg on integration src/jax hot-path modules",
+        "verdict": "PASS",
+        "result": "0 matches for pure_callback, _reference_, while_loop in tier-A files present on integration worktree",
+        "note": "make test-jax-trace-hygiene from main harness scans main src/jax (legacy kaggle callbacks); integration map-pool path is callback-free"
+      },
+      "compile_smoke": {
+        "command": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pick4_map_pool_compile --updates 3 --warmup 1 --out outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json --overrides task=map_pool",
+        "verdict": "PASS",
+        "compile_seconds_to_update_3": 266.60437883698614,
+        "ceiling_seconds": 300,
+        "default_backend": "gpu",
+        "commit_sha": "adf2ea4f3f36993f1715aec084c5b60cdad1805d",
+        "artifact": "outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json",
+        "note": "Re-smoke on adf2ea4 stack passes R14 \u22645 min gate; prior 85576f0 smoke (306.09s) superseded by rebased map-pool commit."
+      },
+      "throughput_admission": {
+        "profile": "learning_first_unified_map_pool",
+        "gate": "admission",
+        "task_override": "task=map_pool",
+        "rollout_steps": 256,
+        "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+        "baseline_capture_sha": "e2a1f57",
+        "baseline_note": "Map-pool throughput baseline captured on main @ e2a1f57 with admission-locked recipe (256 rollout steps, 2p4p_32_split).",
+        "artifacts": {
+          "v2": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+          "admission_locked": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-admission-locked.json",
+          "recalibrated": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-recalibrated.json"
+        },
+        "v2_gate": {
+          "run_date": "2026-06-07",
+          "integration_head_sha": "795cf1c",
+          "artifact": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+          "throughput_verdict": "VERIFIED",
+          "env_steps_per_sec": 3775.78,
+          "seconds_per_update_mean": 2.17,
+          "learning_verdict": "NOT_VERIFIED",
+          "win_rate_delta": -0.019,
+          "admission_passed": false
+        },
+        "verdict": "VERIFIED",
+        "note": "Throughput within \u00b110% of map-pool baseline @ 256 steps; learning miss accepted by operator."
+      },
+      "operator_verdict": {
+        "date": "2026-06-07",
+        "verdict": "admit_with_learning_waiver",
+        "compile": "PASS (266.6s \u2264 300s on adf2ea4)",
+        "throughput": "VERIFIED vs launch-hygiene-e2e-baseline-map-pool.json (e2a1f57 capture)",
+        "learning": "NOT_VERIFIED \u2014 deferred to hyperparameter tuning; operator waived",
+        "blocks_next_picks": false,
+        "pursuit_stopped": true,
+        "note": "Operator stopped map-pool admission pursuit; keep on integration; move to opponent-stack incremental picks."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "sha": "adf2ea4",
+      "source_sha": "adf2ea4",
+      "import_fix_sha": "795cf1c",
+      "direction": "integration_to_main",
+      "notes": "Landed on integration @ adf2ea4 + 795cf1c import fix. Admitted with learning waiver; not blocking next opponent-stack picks.",
+      "blocked_by": []
+    },
+    {
+      "id": "phase_1_anchor_substrate",
+      "subject": "Throughput-baseline anchor substrate (harness sync, win_rate, gate metrics, pipeline kill switch)",
+      "direction": "main_to_integration",
+      "commit_group": "throughput-baseline ac4b5b8..52dfdb0 (7 commits past baseline_sha 79162a2)",
+      "source_shas": [
+        "ac4b5b8",
+        "beedfd7",
+        "0ee3afb",
+        "887a0fc",
+        "00746ba",
+        "117e9fb",
+        "52dfdb0"
+      ],
+      "sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+      "notes": "Phase 1 anchor fixes merged/ff into integration branch base before env-parity picks.",
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_3f88f1b",
+      "subject": "feat(env-parity): admit Phase 2 picks #1-2 onto throughput baseline",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "3f88f1b",
+      "sha": "3f88f1b",
+      "cherry_pick_order": 1,
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "notes": "Landing commit bundling picks #1-2 on integration.",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_9db50f5",
+      "subject": "fix(env): partial pick #3 cheap mechanics hunks (C\u2013F)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "9db50f5",
+      "sha": "9db50f5",
+      "cherry_pick_order": "3b",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "notes": "Same scope as pick_3_partial.",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_21b82ea",
+      "subject": "fix(rollout): restore rollout_collection_enabled_groups import",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "21b82ea",
+      "sha": "21b82ea",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_2718ba3",
+      "subject": "feat(ce-optimize): opponent rollout ladder infra and measurement harness",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "2718ba3",
+      "sha": "2718ba3",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_fd5f48a",
+      "subject": "refactor(opponents): dedupe rollout encode paths into jax_actions",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "fd5f48a",
+      "sha": "fd5f48a",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_fe359fd_3c2b76e",
+      "subject": "refactor(benchmark): consolidate implementations under src/benchmark (+ sync fixes)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_shas": [
+        "fe359fd",
+        "3c2b76e"
+      ],
+      "sha": "3c2b76e",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "admit_stack",
+      "blocked_by": [],
+      "reject_reasons": [],
+      "integration_head_sha": "602b63f",
+      "notes": "Cherry-picked fe359fd then 3c2b76e onto d86c08a 2026-06-07; noop map-pool admission PASS (learning + throughput). No rollout hot-path edits.",
+      "gates": {
+        "admission_noop_map_pool": {
+          "artifact": "outputs/benchmarks/admission/gate-integration-benchmark-sync-noop.json",
+          "run_date": "2026-06-07",
+          "integration_head_sha": "602b63f",
+          "admission_passed": true,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.13045354485511784,
+          "window_overall_win_rate": 0.8676087260246277,
+          "throughput_verdict": "VERIFIED",
+          "env_steps_per_sec": 3817.6282698651885,
+          "seconds_per_update_mean": 2.145834906102391,
+          "throughput_failures": [],
+          "train_overrides": "task=map_pool opponents=base opponents.mode.opponent=noop"
+        }
+      },
+      "cherry_pick_shas": [
+        "fe359fd",
+        "3c2b76e"
+      ],
+      "integration_commits": [
+        "985fc44",
+        "602b63f"
+      ]
+    },
+    {
+      "id": "integration_a46c37e",
+      "subject": "feat(opponents): family-batched mixed sampling and encode/sample meters",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "a46c37e",
+      "sha": "a46c37e",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "admit_stack",
+      "blocked_by": [],
+      "reject_reasons": [],
+      "integration_head_sha": "a499c714b889e428c87cf4ef2d9d249ecdfef4a2",
+      "notes": "Landed as a499c71 on integration. Trace crash fixed by stacked 25efafb0 (95f3399); noop map-pool admission PASS with tracefix stack \u2014 see integration_25efafb0 gates.",
+      "gates": {
+        "noop_map_pool_with_tracefix_stack": {
+          "artifact": "outputs/benchmarks/admission/gate-integration-a46c37e-25efafb-noop.json",
+          "run_date": "2026-06-06",
+          "integration_head_sha": "95f3399",
+          "admission_passed": true,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.16272811293601996,
+          "window_overall_win_rate": 0.8998832941055298,
+          "throughput_verdict": "VERIFIED",
+          "env_steps_per_sec": 4092.366121498174,
+          "seconds_per_update_mean": 2.0017759303023923,
+          "throughput_failures": []
+        }
+      }
+    },
+    {
+      "id": "integration_894beb0",
+      "subject": "fix(opponents): correct pool gather indices after family-batched reorder",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "894beb0",
+      "sha": "894beb0",
+      "status": "deferred",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "operator_skip",
+      "blocked_by": [
+        "operator_skip_pool_gather"
+      ],
+      "reject_reasons": [
+        "throughput_regression"
+      ],
+      "integration_head_sha": "3fe1b31",
+      "operator_decision": {
+        "date": "2026-06-07",
+        "action": "deferred_skipped",
+        "reason": "Throughput regression on noop map-pool admission (~26% env-steps/s drop). Correctness fix applies to mixed/historical opponents only — revisit when training those opponents with a throughput plan."
+      },
+      "notes": "Pool gather fix; fast gates green (kaggle-parity 25, opponent_mixed_sampling 8). Learning VERIFIED; throughput NOT_VERIFIED on noop map-pool admission. Rolled back from integration 2026-06-07 (reset to 95f3399). Operator deferred 2026-06-07 — not blocking harness sync or Phase 3 deferral.",
+      "gates": {
+        "admission_noop_map_pool": {
+          "artifact": "outputs/benchmarks/admission/gate-integration-894beb0-noop.json",
+          "run_date": "2026-06-06",
+          "integration_head_sha": "3fe1b31",
+          "admission_passed": false,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.10653256177902226,
+          "window_overall_win_rate": 0.8436877429485321,
+          "throughput_verdict": "NOT_VERIFIED",
+          "env_steps_per_sec": 2775.8425752730177,
+          "seconds_per_update_mean": 2.951176004350418,
+          "throughput_failures": [
+            "env_steps_per_sec 2775.8426 < floor 3740.3501",
+            "seconds_per_update_mean 2.9512 > ceiling 2.1747"
+          ]
+        }
+      }
+    },
+    {
+      "id": "integration_f979c2d",
+      "subject": "feat(opponent-rollout): inference-only K-step shield path (H3+H4, exp-001)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "f979c2d",
+      "sha": "f979c2d",
+      "status": "deferred",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "operator_skip",
+      "blocked_by": [
+        "operator_skip_h3_h4"
+      ],
+      "reject_reasons": [
+        "optimization_cycle_insufficient_benefit"
+      ],
+      "operator_decision": {
+        "date": "2026-06-07",
+        "action": "deferred_skipped",
+        "reason": "CE-optimize inference-only shield cycle did not show enough benefit to risk throughput on the admission stack."
+      },
+      "notes": "Skipped 2026-06-07: operator chose cleanup + benchmark package sync before H3/H4; benchmark sync admitted @ 602b63f. H3/H4 explicitly deferred — not on integration queue until operator re-opens opponent-rollout optimization."
+    },
+    {
+      "id": "integration_25efafb0",
+      "subject": "fix(jax): use lax.cond for opponent batch cache skip",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "25efafb0",
+      "sha": "25efafb0",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "admit",
+      "blocked_by": [],
+      "notes": "Trace fix for a46c37e/a499c71 batch-cache skip; noop map-pool admission PASS (learning + throughput).",
+      "gates": {
+        "admission_noop_map_pool": {
+          "artifact": "outputs/benchmarks/admission/gate-integration-a46c37e-25efafb-noop.json",
+          "run_date": "2026-06-06",
+          "integration_head_sha": "95f3399",
+          "admission_passed": true,
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.16272811293601996,
+          "window_overall_win_rate": 0.8998832941055298,
+          "throughput_verdict": "VERIFIED",
+          "env_steps_per_sec": 4092.366121498174,
+          "seconds_per_update_mean": 2.0017759303023923,
+          "throughput_failures": []
+        }
+      },
+      "reject_reasons": [],
+      "integration_head_sha": "95f3399"
+    },
+    {
+      "id": "integration_87e3915",
+      "subject": "chore: remove legacy tracked .omg wiki and tmp scripts",
+      "direction": "integration_to_main",
+      "source_sha": "87e3915",
+      "sha": "87e3915",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "admit_stack",
+      "notes": "Cherry-picked onto 95f3399 2026-06-07; cleanup only.",
+      "reject_reasons": [],
+      "integration_head_sha": "20480d0"
+    },
+    {
+      "id": "integration_a568e7c",
+      "subject": "docs: add main\u2194integration reconciliation map for cherry-pick readiness",
+      "direction": "integration_to_main",
+      "source_sha": "a568e7c",
+      "sha": "a568e7c",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "admit_stack",
+      "notes": "Cherry-picked onto 20480d0 2026-06-07; docs-only.",
+      "reject_reasons": [],
+      "integration_head_sha": "d86c08a"
+    },
+    {
+      "id": "pick_4a_planets",
+      "subject": "Compile-bounded pick 4a \u2014 planets-only JAX generation",
+      "phase": "env_parity",
+      "direction": "integration_first",
+      "status": "not_attempted",
+      "verdict": "pending",
+      "blocked_by": [
+        "pick_4_map_pool_compile",
+        "operator_sign_off"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "pick_4b_comets",
+      "subject": "Compile-bounded pick 4b \u2014 comets activation after 4a planets admit",
+      "phase": "env_parity",
+      "direction": "integration_first",
+      "status": "not_attempted",
+      "verdict": "pending",
+      "blocked_by": [
+        "pick_4a_planets"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_launch_hygiene_bundle",
+      "subject": "Launch hygiene bundle for K-step factorized decoder",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "46c825e",
+        "6e75826"
+      ],
+      "sha": "6e75826",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "hygiene_ablation_r10"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_planet_flow_stack",
+      "subject": "Planet Flow decoder replay batch contracts and queue residuals",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "5a0db6e",
+        "d0d9448",
+        "b38dd15"
+      ],
+      "sha": "b38dd15",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "parity_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_b5cd0e9",
+      "subject": "feat(jax): noop rollout fast path and multitask smoke benchmarks",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_sha": "b5cd0e9",
+      "sha": "b5cd0e9",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_telemetry_metrics",
+      "subject": "Telemetry shard registry, rollout contract sync, launch diagnostics",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "2c660f0",
+        "cdb76b3"
+      ],
+      "sha": "cdb76b3",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_4ace5f9_redesign",
+      "subject": "feat(rollout): selected_validate factorized sampling path (semantic redesign)",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_sha": "4ace5f9",
+      "sha": "4ace5f9",
+      "status": "excluded",
+      "verdict": "reject",
+      "reject_reasons": [
+        "semantic_redesign_halted"
+      ],
+      "notes": "Explicitly excluded; redesign track halted."
+    },
+    {
+      "id": "learning_ssot_qualifier_stack",
+      "subject": "SSOT qualifier / train-spine stack on main",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "integration_scope"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_manifest_harness_sync",
+      "subject": "Manifest + admission gate harness sync (main\u2192integration docs/tooling)",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "e2011e6",
+        "e566abf",
+        "c70bf4e",
+        "620128e",
+        "6995a8f"
+      ],
+      "sha": "6995a8f",
+      "status": "landed_on_integration",
+      "verdict": "admit",
+      "blocked_by": [],
+      "integration_head_sha": "602b63f",
+      "sync_date": "2026-06-07",
+      "files_synced": [
+        "docs/benchmarks/cherry-pick-manifest.json",
+        "conf/benchmark/gates/admission.yaml",
+        "src/cli/benchmark_gates.py",
+        "src/cli/benchmark/gate.py",
+        "src/cli/benchmark/admission_throughput.py",
+        "src/jax/admission_throughput.py",
+        "src/jax/preflight_config_summary.py",
+        "tests/test_admission_gate.py",
+        "src/cli/benchmark.py (gate subcommand wiring)"
+      ],
+      "notes": "Full manifest SSOT copied from main; harness gate CLI + admission.yaml landed on integration @ 602b63f+sync. Prior 9d452f6 covered preset loader; fe359fd benchmark package retained. Main remains manifest SSOT.",
+      "reject_reasons": []
+    },
+    {
+      "id": "main_e5480d0_rollout_phase_profile",
+      "subject": "feat(benchmark): rollout phase profile CLI and pick #4 gate harness",
+      "direction": "main_to_integration",
+      "source_sha": "e5480d0",
+      "sha": "e5480d0",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "integration_admission_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_1f8766a_encode_turn_microbench",
+      "subject": "feat(benchmark): add encode-turn CLI microbench",
+      "direction": "main_to_integration",
+      "source_sha": "1f8766a",
+      "sha": "1f8766a",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "integration_admission_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_pr221_optional",
+      "subject": "PR #221 unique commits (dispatch refactor, noop JIT-safe collect)",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "65877e2",
+        "7bad4e6"
+      ],
+      "sha": "7bad4e6",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_re_gate",
+        "equivalence_check"
+      ],
+      "notes": "Optional; PR #221 closed superseded.",
+      "reject_reasons": []
+    },
+    {
+      "id": "bisect_co_landing",
+      "subject": "Bisect characterization \u2014 co_landing commits (validation preset window)",
+      "direction": "characterization",
+      "source_shas": [
+        "71c3e91",
+        "ce6714b"
+      ],
+      "sha": "ce6714b",
+      "status": "recorded",
+      "verdict": "pending",
+      "reject_reasons": []
+    }
+  ],
+  "reconciliation_2026_06_06": {
+    "date": "2026-06-06",
+    "doc": "docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
+    "doc_repo": "orbit_wars-integration",
+    "main_head_sha": "6995a8f",
+    "integration_head_sha": "795cf1c",
+    "integration_branch": "optimize/opponent-rollout-throughput",
+    "merge_base_main_integration": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+    "pr_221": {
+      "number": 221,
+      "branch": "feat/family-batched-mixed-sampling",
+      "action": "close_superseded",
+      "reason": "Family-batched sampling + gather fix landed on integration (a46c37e, 894beb0) with H3/H4, ladder infra, map pool, env-parity picks. PR based on main; no shared history after 79162a2."
+    },
+    "pr_222": {
+      "number": 222,
+      "status": "closed",
+      "note": "exp-001 merged into integration via f979c2d / fadf02b; remote branch deleted"
+    },
+    "roles": {
+      "main": "Manifest SSOT, admission harness, controlled cherry-picks to main",
+      "integration": "Phase 2 env-parity + opponent optimizations landing zone"
+    },
+    "targeted_tests_integration": {
+      "command": "pytest tests/test_opponent_mixed_sampling.py tests/test_opponent_inference_only.py -q",
+      "verdict": "PASS",
+      "result": "10 passed",
+      "run_date": "2026-06-06"
+    },
+    "admission_blocker": "Map pool admitted with learning waiver @ 795cf1c (2026-06-07). Full opponent stack @ 25efafb0 still throughput-blocked \u2014 incremental picks resume at 2718ba3.",
+    "admission_post_tracefix": {
+      "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
+      "integration_head_sha": "25efafb0",
+      "learning_pass": true,
+      "throughput_pass": false,
+      "win_rate_delta": 0.0511,
+      "env_steps_per_sec": 3558,
+      "seconds_per_update_mean": 2.3
+    },
+    "manifest_ssot": {
+      "main": "docs/benchmarks/cherry-pick-manifest.json (orbit_wars main)",
+      "integration": "synced from main 2026-06-07 (main_manifest_harness_sync landed)"
+    },
+    "operator_deferred_2026_06_07": {
+      "integration_f979c2d": "H3/H4 inference-only shield \u2014 optimization cycle insufficient benefit; throughput risk",
+      "integration_894beb0": "Pool gather index fix \u2014 throughput regression; mixed/historical opponents only; revisit when training those opponents"
+    },
+    "map_pool_verdict": "admit_with_learning_waiver @ adf2ea4+795cf1c; compile PASS 266.6s; throughput VERIFIED (v2 gate); learning deferred to HP tuning"
   },
-  "decision": "Phase 1 U1 anchor throughput gate PASS (admit) at measured commit ac4b5b8; learn-proof ceiling and Kaggle parity captures still pending before env-parity substrate."
+  "integration_state": {
+    "branch": "optimize/opponent-rollout-throughput",
+    "worktree": "/home/jmduea/projects/orbit_wars-integration",
+    "worktree_note": "Phase 2 landing zone; reconciliation doc at docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
+    "ordered_shas": [
+      "ac4b5b8:Phase-1 harness copy",
+      "beedfd7:win_rate/binary_win alignment",
+      "0ee3afb:gate harness sync",
+      "887a0fc:flat log_prob anchor batch",
+      "00746ba:gate metrics aggregate",
+      "117e9fb:pipeline.enabled kill switch",
+      "52dfdb0:win rate finalize",
+      "3f88f1b:Phase-2 picks #1-2 landing",
+      "9db50f5:pick 3b cheap mechanics",
+      "adf2ea4:pick_4_map_pool (admit w/ learning waiver)",
+      "795cf1c:rollout import fix (map-pool collect)",
+      "2718ba3:CE-optimize ladder infra (NEXT incremental pick)",
+      "fd5f48a:opponent encode dedupe",
+      "fe359fd+3c2b76e:benchmark package sync",
+      "a46c37e:family-batched mixed sampling",
+      "894beb0:pool gather index fix",
+      "f979c2d:H3/H4 inference-only shield",
+      "87e3915:cleanup",
+      "a568e7c:reconciliation doc (integration)",
+      "25efafb0:lax.cond opponent batch cache trace fix"
+    ],
+    "last_integrated_sha": "795cf1c",
+    "last_integrated_note": "Map-pool stack through import fix; admitted with learning waiver. Opponent-stack picks from 2718ba3 onward pending incremental cherry-pick.",
+    "integration_head_sha": "602b63f",
+    "integration_head_note": "2026-06-07: @ 602b63f after benchmark sync (admission PASS). H3/H4 (f979c2d) and pool gather (894beb0) operator-deferred. Manifest + gate harness synced from main.",
+    "pick_4_map_pool_attempt_2026_06_06": {
+      "verdict": "superseded",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "integration_head": "85576f0",
+      "note": "Superseded by rebased adf2ea4 stack; prior 306.09s compile smoke on 85576f0 branch line."
+    },
+    "pick_4_map_pool_admission_2026_06_07": {
+      "verdict": "admit_with_learning_waiver",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "integration_head": "795cf1c",
+      "map_pool_sha": "adf2ea4",
+      "import_fix_sha": "795cf1c",
+      "parity": "25 passed make test-kaggle-parity",
+      "compile_smoke_seconds_to_update_3": 266.604,
+      "compile_ceiling_seconds": 300,
+      "compile_artifact": "outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json",
+      "throughput_baseline_sha": "e2a1f57",
+      "throughput_baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+      "admission_v2_artifact": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+      "throughput_verdict": "VERIFIED",
+      "learning_verdict": "NOT_VERIFIED",
+      "learning_waiver": true,
+      "learning_deferred_to": "hyperparameter_tuning",
+      "blocks_next_picks": false,
+      "operator_date": "2026-06-07",
+      "next_incremental_pick": "2718ba3"
+    },
+    "pick_4_attempt_2026_06_06": {
+      "verdict": "admit",
+      "implementation": "greenfield_on_integration",
+      "integration_head": "75a7cf2",
+      "prior_blocked_reason": "no_source_commits_on_main",
+      "adversarial_re_review_2026_06_06": {
+        "fast_gates": "pass",
+        "functional_parity": "pass",
+        "mechanical_fidelity_scope_2026_06_06": "User pivot: validity/rules gate, not seed replay. Coordinate goldens and Kaggle string RNG deprioritized.",
+        "p0": [
+          "planet_generation static-phase early exit (12 vs 24-32 planets)",
+          "env.py post-move expire drops initial_planets updates (desync step 85)"
+        ],
+        "fix_before": "pick_5_or_admission",
+        "parity_criterion": "make test-kaggle-parity \u2014 mechanical validity invariants + env sync tests, not coordinate goldens vs reference",
+        "mechanical_fidelity_fix_head": "0eb349e",
+        "mechanical_fidelity_gates": "51 passed make test-kaggle-parity; tier-A rg 0 matches integration src/jax; 10 pytest trace hygiene",
+        "mechanical_fidelity_fix_verdict": "rejected",
+        "mechanical_fidelity_fix_reject_reason": "compile_time_regression",
+        "mechanical_fidelity_fix_reject_note": "10m+ JAX compile on smoke/benchmark after 0eb349e; operator rolled integration worktree back to 9db50f5"
+      },
+      "worktree_head_after_rollback": "9db50f5",
+      "rollback_date": "2026-06-06",
+      "rollback_from_shas": [
+        "0eb349e7be0f3f9479b39900c62df61c29b48879",
+        "75a7cf287f3a01903179f4459464af4c16a06acc"
+      ]
+    },
+    "admission_passed": false,
+    "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+    "admission_log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
+    "integration_status": "building",
+    "branch_base_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+    "branch_base_branch": "throughput-baseline",
+    "previous_branch_base_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+    "remediation": {
+      "date": "2026-06-06",
+      "action": "git merge --ff-only throughput-baseline after stash push -u -m phase2-picks-1-2",
+      "stash": "phase2-picks-1-2",
+      "stash_pop_conflicts": false,
+      "picks_reapplied": "Phase 2 picks #1-2 (game reference libs + encode_learner_turn) re-applied on anchor HEAD",
+      "post_remediation_gates": {
+        "test_kaggle_parity": "15 passed, 1 deselected (~19s)",
+        "trace_hygiene_tier_a": "PASS (integration worktree static rg gate)",
+        "test_jax_trace_hygiene_pytest": "10 passed (~22s, main harness test file, integration cwd)"
+      },
+      "pick3_revert_remediation": {
+        "date": "2026-06-06",
+        "action": "Reverted pick #3 env mechanics hunks only; kept picks #1\u20132",
+        "reverted_hunks": [
+          "sequential _launch_fleets via lax.scan + fleet cap",
+          "step() \u2192 step_multi_player indirection for 2p",
+          "rotation step indexing (step vs step+1)",
+          "cfg.ship_speed in fleet_speed",
+          "first-hit combat (min planet index vs argmax)"
+        ],
+        "kept_hunks": [
+          "encode_learner_turn import + reset/assign_learner_players/_finish_step call sites"
+        ],
+        "post_revert_gates": {
+          "test_kaggle_parity": "15 passed, 1 deselected in 18.14s",
+          "trace_hygiene_tier_a": "PASS (integration src/jax static rg)",
+          "test_jax_trace_hygiene_pytest": "10 passed in 22.57s (main harness, integration cwd)"
+        },
+        "throughput_evidence": {
+          "pre_pick3_env_steps_per_sec": 5696.451367,
+          "post_pick3_env_steps_per_sec": 373.2232,
+          "floor_env_steps_per_sec": 4888.786588437074
+        }
+      }
+    },
+    "admission_diagnosis_2026_06_06": {
+      "failed_run": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+        "git_commit": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+        "picks_applied": "1-2 only (pick 3 reverted)",
+        "admission_passed": false,
+        "root_cause_primary": "Gate recipe mismatch: run used beat_noop default geometry (rollout_steps=500, candidate_count=6) without operator_locked admission overrides (256 steps, 3 candidates, wandb). Anchor pass run included those overrides in .hydra/overrides.yaml.",
+        "root_cause_secondary": "At the heavier default geometry, picks 1-2 add ~8% rollout env-step regression vs pre-pick-3 integration run (rollout_env_steps_per_sec mean u3-20: 6640 vs 7200); insufficient alone for 3x seconds/update vs anchor.",
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 3.037,
+          "rollout_seconds_per_update_mean": 2.411,
+          "env_steps_per_sec": 5268,
+          "gate_passed": false,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "learning": {
+          "win_rate_delta_reported": -0.018,
+          "verdict": "NOT_VERIFIED",
+          "note": "Thresholds calibrated for 2p-only 16x128 geometry per manifest; mixed recipe + wrong rollout/candidate geometry invalidates strict learning comparison."
+        }
+      },
+      "anchor_reference_pass": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_admission/runs/20260606T041356Z-s42-bf947175",
+        "geometry": {
+          "rollout_steps": 256,
+          "candidate_count": 3,
+          "total_env_steps_per_update_mean_u3_20": 94208
+        },
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 0.928,
+          "rollout_seconds_per_update_mean": 0.796,
+          "env_steps_per_sec": 8832,
+          "admission_passed": true
+        },
+        "learning": {
+          "win_rate_delta": 0.052,
+          "verdict": "VERIFIED"
+        }
+      },
+      "pre_pick3_reference": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T045939Z-s42-ae761c4c",
+        "git_commit": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+        "full_admission_passed": false,
+        "throughput_u3_20": {
+          "seconds_per_update_mean": 2.809,
+          "env_steps_per_sec": 5696,
+          "gate_passed": false,
+          "gate_failures": [
+            "seconds_per_update_mean > ceiling 1.659"
+          ]
+        },
+        "note": "Manifest pre_pick3 env_steps PASS was floor-only; never passed seconds_per_update ceiling at default 500/6 geometry."
+      },
+      "recommendations": [
+        "Re-run admission on integration @ 52dfdb0+picks1-2 with operator_locked_overrides from manifest (training.rollout_steps=256, task.candidate_count=3, wandb) \u2014 same overrides as anchor pass run.",
+        "Do not revert pick #2 before apples-to-apples re-gate; pick #1 is offline-only; pick #2 parity/trace gates passed.",
+        "Wire operator_locked gate_train_overrides into conf/benchmark/gates/admission.yaml or gate CLI so dry-run geometry matches anchor pass.",
+        "Treat learning threshold caution per manifest until recalibrated on locked mixed recipe."
+      ],
+      "superseded_by": "integration_state.admission_integration (2026-06-06 locked-recipe pass)"
+    },
+    "admission_integration": {
+      "run_date": "2026-06-06",
+      "gate": "admission",
+      "profile": "learning_first_unified",
+      "harness_repo": "/home/jmduea/projects/orbit_wars",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "integration_head_sha": "3f88f1b",
+      "branch_base_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+      "picks_applied": "1-2 only (pick 3 reverted)",
+      "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
+      "log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
+      "checkpoint_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/checkpoints/jax_ckpt_last.pkl",
+      "admission_passed": true,
+      "learning": {
+        "verdict": "VERIFIED",
+        "win_rate_delta": 0.173,
+        "thresholds": {
+          "min_win_rate_delta": 0.05,
+          "max_approx_kl": 0.15,
+          "min_entropy": 0.0001
+        },
+        "note": "Strong learning signal on locked mixed 2p/4p recipe; thresholds still calibrated on 2p-only geometry per manifest caution."
+      },
+      "throughput": {
+        "verdict": "VERIFIED",
+        "env_steps_per_sec": 5419,
+        "seconds_per_update_mean": 1.512,
+        "baseline_floor_env_steps_per_sec": 4888.786588437074,
+        "baseline_ceiling_seconds_per_update_mean": 1.659083309335319,
+        "pass_band_within_pct": 10.0,
+        "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json"
+      },
+      "contrast_wrong_recipe_run": {
+        "run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T053609Z-s42-af5e08bf",
+        "admission_passed": false,
+        "misconfigured_gate": true,
+        "geometry": "beat_noop default rollout_steps=500, candidate_count=6 (no operator_locked overrides)",
+        "seconds_per_update_mean": 3.037,
+        "env_steps_per_sec": 5268,
+        "note": "Failed run is not evidence against picks #1\u20132 \u2014 recipe mismatch vs locked admission profile."
+      },
+      "superseded_by": "admission_post_tracefix_2026_06_06"
+    },
+    "branch_actual": "optimize/opponent-rollout-throughput",
+    "next_incremental_pick": {
+      "sha": "2718ba3",
+      "subject": "feat(ce-optimize): opponent rollout ladder infra and measurement harness",
+      "status": "landed_on_integration",
+      "note": "H3/H4 (f979c2d) and pool gather (894beb0) operator-deferred 2026-06-07. Next work: integration\u2192main cherry-picks for admitted stack; Phase 3 learning deferred."
+    },
+    "admission_post_tracefix_2026_06_06": {
+      "run_date": "2026-06-06",
+      "gate": "admission",
+      "profile": "learning_first_unified",
+      "harness_repo": "/home/jmduea/projects/orbit_wars",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "integration_head_sha": "25efafb0",
+      "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
+      "prior_crash_sha": "a568e7c",
+      "fix_sha": "25efafb0",
+      "admission_passed": false,
+      "learning": {
+        "verdict": "VERIFIED",
+        "win_rate_delta": 0.0511
+      },
+      "throughput": {
+        "verdict": "FAIL",
+        "env_steps_per_sec": 3558,
+        "seconds_per_update_mean": 2.3,
+        "baseline_floor_env_steps_per_sec": 4888.786588437074,
+        "baseline_ceiling_seconds_per_update_mean": 1.659083309335319
+      }
+    },
+    "head_sha": "3fe1b31",
+    "head_subject": "fix(opponents): correct pool gather indices after family-batched reorder",
+    "notes": "Stack through 95f3399 (a46c37e family-batched + 25efafb0 lax.cond). 894beb0 rolled back 2026-06-07 (throughput reject on noop map-pool). Next pick: f979c2d \u2014 re-gate admission after each pick.",
+    "rollback_894beb0_2026_06_07": {
+      "prior_head_sha": "3fe1b31",
+      "reverted_to_sha": "95f3399",
+      "source_sha": "894beb0",
+      "reason": "admission_throughput NOT_VERIFIED on noop map-pool",
+      "operator_action": "git reset --hard 95f3399 in orbit_wars-integration",
+      "stash_preserved": "wip before 25efafb0 pick"
+    }
+  },
+  "user_constraint": {
+    "id": "jax_only_hot_path_no_callbacks",
+    "locked_date": "2026-06-06",
+    "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
+    "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
+  },
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT; pick 3b ADMIT; pick #4 map pool ADMIT with learning waiver @ adf2ea4+795cf1c. Opponent stack @ 95f3399 (a46c37e+25efafb0) admitted; H3/H4 (f979c2d) and pool gather (894beb0) operator-deferred 2026-06-07. Manifest+harness sync landed on integration. Phase 3 learning deferred. Main manifest SSOT.",
+  "planned_picks": [
+    {
+      "cherry_pick_order": 4,
+      "subject": "Pure JAX planet + comet generation ports",
+      "status": "admit",
+      "admit_date": "2026-06-06",
+      "implementation": "greenfield_on_integration",
+      "integration_head_sha": "75a7cf287f3a01903179f4459464af4c16a06acc",
+      "includes": [
+        "src/jax/planet_generation.py",
+        "src/jax/comet_generation.py",
+        "wire into reset and comet spawn without callbacks"
+      ],
+      "excludes": [
+        "pure_callback",
+        "_reset_kaggle_reference",
+        "_reference_planet_tables",
+        "_reference_comet_paths",
+        "task=kaggle_parity / env_parity_mode=kaggle hot-path branch"
+      ]
+    },
+    {
+      "cherry_pick_order": 5,
+      "subject": "Mechanics hunks \u2014 rotation, combat, slot-order launch",
+      "status": "pending",
+      "granularity": "one hunk per pick with make test-kaggle-parity + throughput smoke; reject bundled pick #3 replay",
+      "includes": [
+        "vectorized or lightweight sequential slot-order launch matching Kaggle without per-slot concat/compact"
+      ],
+      "partially_shipped_in_pick_3b": [
+        "rotation step indexing parity",
+        "first-hit combat (min planet index)",
+        "cfg.ship_speed fleet_speed",
+        "planet_id launch validation"
+      ],
+      "excludes": [
+        "lax.scan launch with _concat_fleets/_compact_fleets per slot (pick #3 throughput regression)",
+        "step() \u2192 step_multi_player indirection unless proven neutral"
+      ]
+    },
+    {
+      "cherry_pick_order": 6,
+      "subject": "Main-branch callback teardown",
+      "status": "pending",
+      "note": "Remove dead callback paths from main env.py so tier-A static gate passes; single JAX env for train and parity tests"
+    }
+  ],
+  "throughput_anchor_head_sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+  "throughput_anchor_head_note": "Integration branch fast-forwarded to throughput-baseline @ 52dfdb0 (7 commits past baseline_sha 79162a2); Phase 1 anchor fixes now on integration before Phase 2 picks.",
+  "operator_notes": [
+    {
+      "date": "2026-06-07",
+      "action": "cherry_pick_benchmark_sync_skip_h3_h4",
+      "integration_head": "602b63f",
+      "skipped": [
+        "f979c2d"
+      ],
+      "picked": [
+        "87e3915",
+        "a568e7c",
+        "fe359fd",
+        "3c2b76e"
+      ],
+      "admission_artifact": "outputs/benchmarks/admission/gate-integration-benchmark-sync-noop.json",
+      "admission_passed": true
+    },
+    {
+      "date": "2026-06-07",
+      "action": "manifest_harness_sync_defer_h3_h4_pool_gather",
+      "integration_head": "602b63f",
+      "deferred": {
+        "integration_f979c2d": "H3/H4 — optimization cycle insufficient benefit; throughput risk",
+        "integration_894beb0": "Pool gather — throughput regression; mixed/historical opponents only"
+      },
+      "synced": [
+        "main_manifest_harness_sync"
+      ],
+      "admission_re_gate": "not_run — prior PASS @ 602b63f; harness sync docs/tooling only"
+    }
+  ]
 }

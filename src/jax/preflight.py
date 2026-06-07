@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -12,18 +11,10 @@ from typing import Literal
 from src.jax.preflight_calibration import (
     WINDOW_UPDATES,
     default_calibration_json_path,
-    load_thresholds,
+    run_ow_train,
 )
 
 Verdict = Literal["VERIFIED", "NOT_VERIFIED", "INCONCLUSIVE"]
-
-PREFLIGHT_TRAIN_BASE: tuple[str, ...] = (
-    "telemetry.wandb.enabled=false",
-    "artifacts.artifact_pipeline.enabled=false",
-    "telemetry.metric_groups.action_decision=true",
-    "task=shield_cheap",
-    "seed=42",
-)
 
 GATE_ORDER: tuple[str, ...] = ("beat_noop", "beat_random", "curriculum_staged")
 
@@ -45,6 +36,9 @@ class PreflightGateSpec:
     require_curriculum_promotion: bool = False
     max_approx_kl: float = 0.15
     min_entropy: float = 1.0e-4
+    max_post_mask_unreachable_demand_rate: float | None = None
+    needs_calibration_reason: str | None = None
+    require_planet_flow_control_metrics: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,80 +63,44 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _learning_signal_thresholds(
-    thresholds_path: Path | None = None,
-) -> dict[str, object]:
-    path = thresholds_path or default_calibration_json_path(_repo_root())
-    payload = load_thresholds(path)
-    learning = payload.get("learning_signal", {})
-    if not isinstance(learning, dict):
-        learning = {}
-    return learning
-
-
 def _gate_specs(
     model: str,
     *,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
 ) -> dict[str, PreflightGateSpec]:
-    learning = _learning_signal_thresholds(thresholds_path)
-    window = int(learning.get("window_updates", WINDOW_UPDATES))
-    min_delta = float(learning.get("min_win_rate_delta", 0.08))
-    max_kl = float(learning.get("max_approx_kl", 0.15))
-    min_ent = float(learning.get("min_entropy", 1.0e-4))
-    return {
-        "beat_noop": PreflightGateSpec(
-            gate_id="beat_noop",
-            train_overrides=(
-                f"model={model}",
-                "training=2p_16",
-                "training.rollout_steps=128",
-                "training.total_updates=200",
-                "opponents=noop_only",
-                "curriculum=off",
-                *PREFLIGHT_TRAIN_BASE,
-            ),
-            min_win_rate_delta=min_delta,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-        "beat_random": PreflightGateSpec(
-            gate_id="beat_random",
-            train_overrides=(
-                f"model={model}",
-                "training=2p_16",
-                "training.rollout_steps=128",
-                "training.total_updates=300",
-                "opponents=random_only",
-                "curriculum=off",
-                *PREFLIGHT_TRAIN_BASE,
-            ),
-            min_win_rate_delta=min_delta,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-        "curriculum_staged": PreflightGateSpec(
-            gate_id="curriculum_staged",
-            train_overrides=(
-                "model=transformer_factorized",
-                "training=2p4p_16_split",
-                "training.rollout_steps=128",
-                "training.total_updates=500",
-                "curriculum=self_play_staged",
-                *PREFLIGHT_TRAIN_BASE,
-            ),
-            require_curriculum_promotion=True,
-            window_updates=window,
-            max_approx_kl=max_kl,
-            min_entropy=min_ent,
-        ),
-    }
+    from src.jax.preflight_gate_loader import gate_specs as load_gate_specs
+
+    return load_gate_specs(
+        model,
+        thresholds_path=thresholds_path,
+        profiles_path=profiles_path,
+        repo_root=_repo_root(),
+    )
 
 
 def preflight_campaign(gate_id: str) -> str:
     return f"preflight_{gate_id}"
+
+
+def _resolve_output_root(output_root: Path, repo_root: Path) -> Path:
+    """Resolve filesystem output root for run discovery (may be absolute)."""
+    if output_root.is_absolute():
+        return output_root.expanduser().resolve()
+    return (repo_root / output_root).expanduser().resolve()
+
+
+def _hydra_output_root(output_root: Path, repo_root: Path) -> str:
+    """Hydra ``output.root`` must be repo-relative (see ``_orbit_safe_rel``)."""
+    resolved_out = _resolve_output_root(output_root, repo_root)
+    resolved_repo = repo_root.expanduser().resolve()
+    try:
+        return resolved_out.relative_to(resolved_repo).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            f"output_root must lie under repo_root for Hydra output.root "
+            f"(got output_root={output_root!r}, repo_root={repo_root!r})"
+        ) from exc
 
 
 def read_jsonl_records(path: Path) -> list[dict[str, object]]:
@@ -313,11 +271,44 @@ def evaluate_gate_records(
     elif entropy < spec.min_entropy:
         reasons.append(f"entropy {entropy:.6f} < {spec.min_entropy:.6f}")
 
+    if spec.require_planet_flow_control_metrics:
+        required_control_keys = (
+            "planet_flow_control_emitted_launch_count",
+            "planet_flow_control_emitted_ship_mass_rate",
+            "planet_flow_emitted_launch_count_delta_vs_control",
+        )
+        for key in required_control_keys:
+            if not any(key in record for record in metric_rows):
+                reasons.append(f"missing Planet Flow compiler-control metric: {key}")
+
+    if spec.max_post_mask_unreachable_demand_rate is not None:
+        unreachable_rate = _window_mean(
+            metric_rows,
+            "planet_flow_unreachable_demand_rate",
+            last_n=effective_window,
+        )
+        if unreachable_rate is None:
+            reasons.append("missing planet_flow_unreachable_demand_rate")
+        elif unreachable_rate > spec.max_post_mask_unreachable_demand_rate:
+            reasons.append(
+                "planet_flow_unreachable_demand_rate "
+                f"{unreachable_rate:.4f} > "
+                f"{spec.max_post_mask_unreachable_demand_rate:.4f} "
+                f"(post-mask ceiling)"
+            )
+
     promotions = _count_curriculum_promotions(records)
     if spec.require_curriculum_promotion and promotions == 0:
         reasons.append("no curriculum_stage_promoted events in training log")
 
+    if spec.needs_calibration_reason is not None:
+        reasons.append(spec.needs_calibration_reason)
+
     if any("missing training jsonl" in reason for reason in reasons):
+        verdict = PreflightVerdict.INCONCLUSIVE
+    elif any("compiler-control metric" in reason for reason in reasons):
+        verdict = PreflightVerdict.INCONCLUSIVE
+    elif spec.needs_calibration_reason is not None:
         verdict = PreflightVerdict.INCONCLUSIVE
     elif reasons:
         verdict = PreflightVerdict.NOT_VERIFIED
@@ -367,42 +358,92 @@ def gate_evaluation_to_dict(evaluation: GateEvaluation) -> dict[str, object]:
     }
 
 
-def run_ow_train(
-    overrides: list[str],
-    *,
-    repo_root: Path,
-    dry_run: bool = False,
-) -> None:
-    cmd = ["uv", "run", "ow", "train", *overrides]
-    if dry_run:
-        print(" ".join(cmd), flush=True)
-        return
-    proc = subprocess.run(cmd, cwd=repo_root, check=False)
-    if proc.returncode != 0:
-        raise RuntimeError(f"ow train failed with exit code {proc.returncode}")
-
-
 def run_preflight_gate(
     gate_id: str,
     *,
     model: str = "transformer_factorized_small",
     output_root: Path = Path("outputs"),
     repo_root: Path | None = None,
+    campaign_gate_id: str | None = None,
     dry_run: bool = False,
+    verbose: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> GateEvaluation:
-    specs = _gate_specs(model, thresholds_path=thresholds_path)
+    specs = _gate_specs(
+        model,
+        thresholds_path=thresholds_path,
+        profiles_path=profiles_path,
+    )
     if gate_id not in specs:
         raise ValueError(f"Unknown preflight gate: {gate_id!r}")
     spec = specs[gate_id]
     root = repo_root or _repo_root()
-    campaign = preflight_campaign(gate_id)
+    campaign = preflight_campaign(campaign_gate_id or gate_id)
+    resolved_output_root = _resolve_output_root(output_root, root)
+    if spec.needs_calibration_reason is not None:
+        return GateEvaluation(
+            gate_id=gate_id,
+            verdict=PreflightVerdict.INCONCLUSIVE,
+            reasons=(spec.needs_calibration_reason,),
+            campaign=campaign,
+            run_dir=None,
+            log_path=None,
+            checkpoint_path=None,
+            window_overall_win_rate=None,
+            window_launches=None,
+            win_rate_first_window=None,
+            win_rate_delta=None,
+            best_rolling_win_rate=None,
+            curriculum_promotions=0,
+            evaluation_mode="needs_calibration",
+        )
     overrides = [
         f"output.campaign={campaign}",
-        f"output.root={output_root.as_posix()}",
+        f"output.root={_hydra_output_root(output_root, root)}",
         *spec.train_overrides,
+        *extra_train_overrides,
     ]
-    run_ow_train(overrides, repo_root=root, dry_run=dry_run)
+    from src.jax.benchmark_progress import (
+        emit_benchmark_progress,
+        emit_benchmark_progress_ts,
+        total_updates_from_overrides,
+    )
+
+    updates_hint = total_updates_from_overrides(overrides)
+    updates_note = (
+        f", training.total_updates={updates_hint}" if updates_hint is not None else ""
+    )
+    emit_benchmark_progress_ts(
+        f"preflight gate {gate_id!r}: model={model!r}, campaign={campaign!r}"
+        f"{updates_note}, dry_run={dry_run}"
+    )
+    from src.jax.preflight_config_summary import format_gate_train_config_summary
+
+    for line in format_gate_train_config_summary(overrides):
+        emit_benchmark_progress(line)
+    command_echo = (
+        " ".join(["uv", "run", "ow", "train", *overrides])
+        if verbose
+        else (
+            f"uv run ow train … ({len(overrides)} Hydra overrides; "
+            "pass --verbose for full command)"
+        )
+    )
+    if verbose or dry_run:
+        emit_benchmark_progress(
+            "Progress streams on stderr (child ow train + log_every lines). "
+            "First update may stall during JAX compile. "
+            "Do not pipe this command to tail/head — use --out for JSON."
+        )
+    run_ow_train(
+        overrides,
+        repo_root=root,
+        dry_run=dry_run,
+        label=f"preflight gate {gate_id} campaign={campaign}",
+        command_echo=command_echo,
+    )
     if dry_run:
         return GateEvaluation(
             gate_id=gate_id,
@@ -421,7 +462,7 @@ def run_preflight_gate(
             evaluation_mode="learning_signal",
         )
 
-    run_dir = latest_run_dir(campaign=campaign, output_root=output_root)
+    run_dir = latest_run_dir(campaign=campaign, output_root=resolved_output_root)
     log_files = sorted((run_dir / "logs").glob("*_jax.jsonl"))
     if not log_files:
         return evaluate_gate_records(
@@ -432,13 +473,20 @@ def run_preflight_gate(
             checkpoint=find_latest_checkpoint(run_dir),
         )
     records = read_jsonl_records(log_files[0])
-    return evaluate_gate_records(
+    evaluation = evaluate_gate_records(
         spec,
         records,
         campaign=campaign,
         run_dir=run_dir,
         checkpoint=find_latest_checkpoint(run_dir),
     )
+    emit_benchmark_progress_ts(
+        f"preflight gate {gate_id!r} finished: verdict={evaluation.verdict.value} "
+        f"run_dir={evaluation.run_dir}"
+    )
+    if verbose and evaluation.reasons:
+        emit_benchmark_progress(f"reasons: {', '.join(evaluation.reasons)}")
+    return evaluation
 
 
 def run_preflight_ladder(
@@ -449,6 +497,8 @@ def run_preflight_ladder(
     repo_root: Path | None = None,
     dry_run: bool = False,
     thresholds_path: Path | None = None,
+    profiles_path: Path | None = None,
+    extra_train_overrides: tuple[str, ...] = (),
 ) -> tuple[PreflightVerdict, list[GateEvaluation]]:
     if through not in GATE_ORDER:
         raise ValueError(f"--through must be one of {GATE_ORDER}, got {through!r}")
@@ -457,13 +507,20 @@ def run_preflight_ladder(
     evaluations: list[GateEvaluation] = []
     overall = PreflightVerdict.VERIFIED
     for gate_id in selected:
+        gate_model = (
+            "transformer_factorized"
+            if gate_id == "curriculum_staged" and model != "planet_flow_target_heatmap"
+            else model
+        )
         evaluation = run_preflight_gate(
             gate_id,
-            model=model if gate_id != "curriculum_staged" else "transformer_factorized",
+            model=gate_model,
             output_root=output_root,
             repo_root=repo_root,
             dry_run=dry_run,
             thresholds_path=thresholds_path,
+            profiles_path=profiles_path,
+            extra_train_overrides=extra_train_overrides,
         )
         evaluations.append(evaluation)
         if evaluation.verdict != PreflightVerdict.VERIFIED:

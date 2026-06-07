@@ -269,7 +269,9 @@ def test_build_baseline_artifact_round_trip(tmp_path: Path) -> None:
 
 
 _ANCHOR_SHA = "79162a2088160b8ed05c3e3a050e064c7f6c9556"
-_MANIFEST_VERDICT = frozenset({"admit", "reject", "pending"})
+_MANIFEST_VERDICT = frozenset(
+    {"admit", "admit_stack", "reject", "pending", "deferred", "operator_skip"}
+)
 _MANIFEST_PHASE = frozenset({"env_parity", "learning"})
 _MANIFEST_INTEGRATION_STATUS = frozenset({"building", "ready_for_main"})
 _MANIFEST_BASELINE_GATE_KEYS = frozenset({"throughput_e2e", "learn_proof", "parity"})
@@ -346,7 +348,10 @@ def test_committed_cherry_pick_manifest_artifact() -> None:
 
     integration = payload["integration_state"]
     assert isinstance(integration, dict)
-    assert integration.get("branch") == "throughput-baseline-integration"
+    assert integration.get("branch") in {
+        "throughput-baseline-integration",
+        "optimize/opponent-rollout-throughput",
+    }
     status = integration.get("integration_status")
     assert status in _MANIFEST_INTEGRATION_STATUS, (
         f"integration_status invalid: {status!r}"

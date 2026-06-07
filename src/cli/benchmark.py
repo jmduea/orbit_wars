@@ -245,6 +245,89 @@ def build_parser() -> argparse.ArgumentParser:
     )
     calibrate.add_argument("--dry-run", action="store_true")
 
+    gate = subparsers.add_parser(
+        "gate",
+        help="Composable preflight gates (YAML in conf/benchmark/gates/).",
+    )
+    gate.add_argument(
+        "tokens",
+        nargs="*",
+        default=[],
+        help=(
+            "`list`, `run <id>`, or legacy `<id>` "
+            "(admission, beat_noop, beat_random, curriculum_staged)."
+        ),
+    )
+    gate.add_argument(
+        "--list",
+        action="store_true",
+        help="List gate YAML recipes (alias for `gate list`).",
+    )
+    gate.add_argument(
+        "--model",
+        default=None,
+        help="Model override (default from gate YAML).",
+    )
+    gate.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Optional JSON report path.",
+    )
+    gate.add_argument(
+        "--output-root",
+        type=Path,
+        default=Path("outputs"),
+    )
+    gate.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help=(
+            "Run ``ow train`` in another checkout (e.g. a git worktree) while gate "
+            "recipes and thresholds load from this repo."
+        ),
+    )
+    gate.add_argument("--dry-run", action="store_true")
+    gate.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "Extra stderr progress (train overrides, hints). Training subprocess "
+            "output always streams on stderr."
+        ),
+    )
+    gate.add_argument("--thresholds-path", type=Path, default=None)
+    gate.add_argument("--profile-path", type=Path, default=None)
+    gate.add_argument(
+        "--train-overrides",
+        nargs="*",
+        default=[],
+        help="Extra Hydra overrides appended after gate overrides.",
+    )
+    gate.add_argument(
+        "--also-throughput",
+        action="store_true",
+        help=(
+            "After the learning run, extract throughput from the gate JSONL "
+            "(updates 3–22; 20 measured rows after warmup) and merge into --out JSON. "
+            "Prefer `gate run admission`."
+        ),
+    )
+    gate.add_argument(
+        "--throughput-baseline",
+        type=Path,
+        default=None,
+        help="Baseline JSON for --also-throughput comparison (with --throughput-within-pct).",
+    )
+    gate.add_argument(
+        "--throughput-within-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help="Exit non-zero when extracted throughput is outside baseline band (default 10).",
+    )
+
     rollout_phase_profile = subparsers.add_parser(
         "rollout-phase-profile",
         help=(
@@ -876,6 +959,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_learn_proof_cli(args)
         case "calibrate":
             return run_calibrate_cli(args)
+        case "gate":
+            from src.cli.benchmark_gate_cli import run_gate_cli
+
+            return run_gate_cli(args)
         case "factorized-sampler":
             return run_factorized_sampler_cli(args)
         case "map-pool":
