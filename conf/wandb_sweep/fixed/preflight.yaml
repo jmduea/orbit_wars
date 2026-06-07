@@ -7,11 +7,11 @@ parameters:
   task:
     value: rollout_selected_validate
   training:
-    value: 2p4p_16_split
+    value: 2p_16
   training.total_updates:
-    value: 100
+    value: 50
   opponents:
-    value: random_only
+    value: noop_only
   curriculum:
     value: "off"
   seed:
@@ -30,8 +30,8 @@ parameters:
     value:
       - preflight
   telemetry.metric_groups.action_decision:
-    value: true
+    value: false
   telemetry.metric_groups.losses:
     value: true
   artifacts.checkpoint_every:
-    value: 100
+    value: 50

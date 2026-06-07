@@ -13,7 +13,7 @@ parameters:
     min: 0.001
     max: 0.01
   training.epochs:
-    values: [1, 2]
+    value: 1
   training.vf_coef:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
