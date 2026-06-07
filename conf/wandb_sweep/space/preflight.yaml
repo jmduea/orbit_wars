@@ -2,6 +2,16 @@
 # PPO hyperparameter search space for SSOT short preflight (no tag override).
 
 parameters:
+  model:
+    values: [transformer_factorized_small, transformer_factorized, transformer_factorized_large]
+  training.rollout_steps:
+    values: [64, 128, 256, 384]
+  training:
+    values: [2p_16, 4p_16, 2p4p_16_split]
+  task.trajectory_shield_mode:
+    values: ["off", cheap]
+  task.edge_rank_mode: 
+    values: [snapshot, intercept_min]
   training.lr:
     distribution: log_uniform_values
     min: 0.00005
@@ -13,12 +23,8 @@ parameters:
     min: 0.001
     max: 0.01
   training.epochs:
-    value: 1
+    values: [1, 3]
   training.vf_coef:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
     values: [0.3, 0.5, 1.0]
-  reward.reward_capture_planet:
-    values: [0.0, 0.05, 0.1]
-  reward.reward_ship_delta:
-    values: [0.0, 0.01, 0.02]

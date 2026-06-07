@@ -2,14 +2,10 @@
 # Fixed axes for SSOT preflight sweep (50 updates, noop_only, rollout_selected_validate).
 
 parameters:
-  model:
-    value: transformer_factorized_small
   task:
     value: rollout_selected_validate
-  training:
-    value: 2p_16
   training.total_updates:
-    value: 50
+    value: 500
   opponents:
     value: noop_only
   curriculum:
@@ -29,9 +25,21 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
-  telemetry.metric_groups.action_decision:
-    value: false
+  artifacts:
+    value: default
+  artifacts.artifact_pipeline.enabled: 
+    value: true
+  artifacts.replay.enabled: 
+    value: true
+  artifacts.replay.every_n_checkpoints: 
+    value: 5
+  artifacts.artifact_pipeline.replay_async: 
+    value: true
+  artifacts.artifact_pipeline.checkpoint_eval_async: 
+    value: true
+  artifacts.artifact_pipeline.docker_validation_async: 
+    value: true
   telemetry.metric_groups.losses:
     value: true
   artifacts.checkpoint_every:
-    value: 50
+    value: 100
