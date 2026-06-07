@@ -8,7 +8,7 @@ ship_feature_scale: 100.0
 feature_history_steps: 1 # temporal feature control
 
 trajectory_shield_mode: off # off | cheap | exact | tiered
-rollout_factorized_sampling: selected_validate # lattice | selected_validate
+rollout_factorized_sampling: lattice # lattice | selected_validate
 trajectory_shield_final_validate_selected: false
 trajectory_shield_hit_mode: selected_target # non_friendly
 trajectory_shield_horizon: 30

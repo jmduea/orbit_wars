@@ -1,5 +1,5 @@
 # @package _global_
-# Fixed axes for SSOT preflight sweep (short updates, mix2p4p self-play).
+# Fixed axes for SSOT preflight sweep (50 updates, noop_only, rollout_selected_validate).
 
 parameters:
   model:

@@ -1,0 +1,299 @@
+{
+  "gate": "launch_hygiene_e2e_throughput",
+  "label": "learning_first_admission_locked",
+  "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+  "capture_worktree": "/home/jmduea/projects/orbit_wars-pre-hygiene",
+  "capture_notes": "Learning-first unified admission baseline at pre-hygiene anchor SHA 79162a2. Operator-locked recipe: mixed 2p/4p (50/50), 32 envs \u00d7 256 steps, noop opponents, transformer_factorized_small, beat_noop PPO profile. Pre-hygiene worktree lacks --repeats/--detailed-timing; 3 single-run captures aggregated here.",
+  "run_date": "2026-06-05",
+  "device": {
+    "default_backend": "gpu",
+    "devices": [
+      "cuda:0"
+    ],
+    "jax_version": "0.10.0"
+  },
+  "admission_profile": {
+    "name": "learning_first_unified",
+    "status": "operator_locked",
+    "overrides": [
+      "model=transformer_factorized_small",
+      "task=shield_cheap",
+      "training=2p4p_32_split",
+      "training.rollout_steps=256",
+      "task.candidate_count=3",
+      "opponents=noop_only",
+      "curriculum=off",
+      "telemetry.wandb.enabled=true",
+      "telemetry.wandb.group=preflight",
+      "artifacts.artifact_pipeline.enabled=false",
+      "artifacts.replay.enabled=false",
+      "telemetry.metric_groups.action_decision=true",
+      "seed=42",
+      "training.log_every=1",
+      "training.lr=0.0003",
+      "training.clip_coef=0.2",
+      "training.ent_coef=0.005",
+      "training.vf_coef=0.5",
+      "training.max_grad_norm=0.5",
+      "training.epochs=2",
+      "training.update_chunk_rows=1024",
+      "training.reseed_every_updates=0"
+    ],
+    "updates": 20,
+    "warmup": 2,
+    "seed": 42
+  },
+  "overrides": [
+    "model=transformer_factorized_small",
+    "task=shield_cheap",
+    "training=2p4p_32_split",
+    "training.rollout_steps=256",
+    "task.candidate_count=3",
+    "opponents=noop_only",
+    "curriculum=off",
+    "telemetry.wandb.enabled=true",
+    "telemetry.wandb.group=preflight",
+    "artifacts.artifact_pipeline.enabled=false",
+    "artifacts.replay.enabled=false",
+    "telemetry.metric_groups.action_decision=true",
+    "seed=42",
+    "training.log_every=1",
+    "training.lr=0.0003",
+    "training.clip_coef=0.2",
+    "training.ent_coef=0.005",
+    "training.vf_coef=0.5",
+    "training.max_grad_norm=0.5",
+    "training.epochs=2",
+    "training.update_chunk_rows=1024",
+    "training.reseed_every_updates=0"
+  ],
+  "updates": 20,
+  "warmup": 2,
+  "repeats": 3,
+  "runs": [
+    {
+      "label": "learning_first_capture_r1",
+      "overrides": [
+        "model=transformer_factorized_small",
+        "task=shield_cheap",
+        "training=2p4p_32_split",
+        "training.rollout_steps=256",
+        "task.candidate_count=3",
+        "opponents=noop_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=true",
+        "telemetry.wandb.group=preflight",
+        "artifacts.artifact_pipeline.enabled=false",
+        "artifacts.replay.enabled=false",
+        "telemetry.metric_groups.action_decision=true",
+        "seed=42",
+        "training.log_every=1",
+        "training.lr=0.0003",
+        "training.clip_coef=0.2",
+        "training.ent_coef=0.005",
+        "training.vf_coef=0.5",
+        "training.max_grad_norm=0.5",
+        "training.epochs=2",
+        "training.update_chunk_rows=1024",
+        "training.reseed_every_updates=0"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 256,
+      "compile_seconds_to_update_3": 409.9423345730029,
+      "seconds_total": 29.91137449396774,
+      "seconds_per_update_mean": 1.495568724698387,
+      "env_steps_per_sec": 5477.514917712718,
+      "policy_loss": -0.005708125967066735,
+      "value_loss": 2.488618777692318,
+      "approx_kl": 0.017375965014798565,
+      "entropy": 2.425491231679916,
+      "total_loss": 1.2264737859368324,
+      "mean_active_launches_per_turn": 1.067822265625,
+      "overall_win_rate": 0.27790323197841643,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "2p4p_32_split",
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 16
+        },
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "stability"
+    },
+    {
+      "label": "learning_first_capture_r2",
+      "overrides": [
+        "model=transformer_factorized_small",
+        "task=shield_cheap",
+        "training=2p4p_32_split",
+        "training.rollout_steps=256",
+        "task.candidate_count=3",
+        "opponents=noop_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=true",
+        "telemetry.wandb.group=preflight",
+        "artifacts.artifact_pipeline.enabled=false",
+        "artifacts.replay.enabled=false",
+        "telemetry.metric_groups.action_decision=true",
+        "seed=42",
+        "training.log_every=1",
+        "training.lr=0.0003",
+        "training.clip_coef=0.2",
+        "training.ent_coef=0.005",
+        "training.vf_coef=0.5",
+        "training.max_grad_norm=0.5",
+        "training.epochs=2",
+        "training.update_chunk_rows=1024",
+        "training.reseed_every_updates=0"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 256,
+      "compile_seconds_to_update_3": 401.90606145099446,
+      "seconds_total": 30.594128928991267,
+      "seconds_per_update_mean": 1.5297064464495633,
+      "env_steps_per_sec": 5355.2758563668,
+      "policy_loss": 0.010816142742987723,
+      "value_loss": 2.0684907346963883,
+      "approx_kl": 0.02213376866420731,
+      "entropy": 2.014132970571518,
+      "total_loss": 1.0349908486008643,
+      "mean_active_launches_per_turn": 0.90252685546875,
+      "overall_win_rate": 0.3728858850896358,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "2p4p_32_split",
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 16
+        },
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "stability"
+    },
+    {
+      "label": "learning_first_capture_r3",
+      "overrides": [
+        "model=transformer_factorized_small",
+        "task=shield_cheap",
+        "training=2p4p_32_split",
+        "training.rollout_steps=256",
+        "task.candidate_count=3",
+        "opponents=noop_only",
+        "curriculum=off",
+        "telemetry.wandb.enabled=true",
+        "telemetry.wandb.group=preflight",
+        "artifacts.artifact_pipeline.enabled=false",
+        "artifacts.replay.enabled=false",
+        "telemetry.metric_groups.action_decision=true",
+        "seed=42",
+        "training.log_every=1",
+        "training.lr=0.0003",
+        "training.clip_coef=0.2",
+        "training.ent_coef=0.005",
+        "training.vf_coef=0.5",
+        "training.max_grad_norm=0.5",
+        "training.epochs=2",
+        "training.update_chunk_rows=1024",
+        "training.reseed_every_updates=0"
+      ],
+      "updates": 20,
+      "warmup": 2,
+      "measured_updates": 20,
+      "devices": [
+        "cuda:0"
+      ],
+      "default_backend": "gpu",
+      "num_envs": 32,
+      "rollout_steps": 256,
+      "compile_seconds_to_update_3": 383.41150074200414,
+      "seconds_total": 29.989944358967477,
+      "seconds_per_update_mean": 1.4994972179483739,
+      "env_steps_per_sec": 5463.164520710729,
+      "policy_loss": -0.0026590150548145173,
+      "value_loss": 2.024731507897377,
+      "approx_kl": 0.0901663811178878,
+      "entropy": 2.842672312259674,
+      "total_loss": 0.9954933926463128,
+      "mean_active_launches_per_turn": 1.90015869140625,
+      "overall_win_rate": 0.40617816895246506,
+      "commit_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
+      "tier": "micro",
+      "jax_version": "0.10.0",
+      "format": "2p4p_32_split",
+      "rollout_groups": [
+        {
+          "name": "two_player",
+          "player_count": 2,
+          "num_envs": 16
+        },
+        {
+          "name": "four_player",
+          "player_count": 4,
+          "num_envs": 16
+        }
+      ],
+      "rollout_microbatch_envs": 16,
+      "gate": "stability"
+    }
+  ],
+  "aggregate": {
+    "env_steps_per_sec": {
+      "mean": 5431.985098263416,
+      "stddev": 54.557091306836696
+    },
+    "seconds_per_update_mean": {
+      "mean": 1.5082574630321082,
+      "stddev": 0.015251282613505005
+    }
+  },
+  "pass_band": {
+    "within_pct": 10.0,
+    "floors": {
+      "env_steps_per_sec": 4888.786588437075
+    },
+    "ceilings": {
+      "seconds_per_update_mean": 1.6590832093353192
+    },
+    "gate_authority_metrics": [
+      "env_steps_per_sec",
+      "seconds_per_update_mean"
+    ],
+    "recorded_not_gated": [
+      "samples_per_sec",
+      "rollout_collect_seconds_per_update_mean",
+      "ppo_seconds_per_update_mean"
+    ]
+  },
+  "capture_status": "complete"
+}
