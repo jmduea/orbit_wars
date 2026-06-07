@@ -26,6 +26,17 @@ from src.artifacts.worker_runner import resolve_run_worker_dirs, run_optional_jo
 from src.config.schema import TournamentConfig
 
 
+def _eval_export(name: str):
+    """Resolve a lazily exported CLI dependency (patchable on ``src.cli.eval``)."""
+
+    exported = globals().get(name)
+    if exported is not None:
+        return exported
+    value = __getattr__(name)
+    globals()[name] = value
+    return value
+
+
 def print_eval_help() -> None:
     print(
         "ow eval — tournament, artifact worker, Kaggle package/submit\n\n"
@@ -352,7 +363,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
-    tournament.add_argument("--campaign", default="scratch", help="Campaign slug for outputs.")
+    tournament.add_argument(
+        "--campaign", default="scratch", help="Campaign slug for outputs."
+    )
     tournament.add_argument(
         "--output-root",
         default="outputs",
@@ -378,7 +391,9 @@ def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
         default=None,
         help="W&B shortlist JSON with optional checkpoint_path fields.",
     )
-    tournament.add_argument("--limit", type=int, default=5, help="Max shortlist candidates.")
+    tournament.add_argument(
+        "--limit", type=int, default=5, help="Max shortlist candidates."
+    )
     tournament.add_argument(
         "--vs-promoted",
         action="store_true",
@@ -394,7 +409,9 @@ def _add_tournament_arguments(tournament: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Print resolved agents and exit without running matches.",
     )
-    tournament.add_argument("--seeds", default="0,1,2,3,4", help="Comma-separated env seeds.")
+    tournament.add_argument(
+        "--seeds", default="0,1,2,3,4", help="Comma-separated env seeds."
+    )
     tournament.add_argument("--games-per-pair", type=int, default=1)
     tournament.add_argument("--max-steps", type=int, default=500)
     tournament.add_argument(
@@ -452,7 +469,9 @@ def _default_output_dir(campaign: str, output_root: str) -> Path:
     )
 
 
-def _collect_candidates(args: argparse.Namespace) -> tuple[list, ShortlistResolveResult | None]:
+def _collect_candidates(
+    args: argparse.Namespace,
+) -> tuple[list, ShortlistResolveResult | None]:
     candidates: list = []
     shortlist_result: ShortlistResolveResult | None = None
     for checkpoint in args.checkpoints:
@@ -479,7 +498,9 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
                 "No shortlist candidates resolved. Provide --checkpoint paths, "
                 "checkpoint_path in shortlist JSON, or W&B artifact access."
             )
-        raise SystemExit("Provide --checkpoint and/or --shortlist with resolvable paths.")
+        raise SystemExit(
+            "Provide --checkpoint and/or --shortlist with resolvable paths."
+        )
 
     validate_agents_feature_compatible(candidates)
 
@@ -515,7 +536,9 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
-    output_dir = args.output_dir or _default_output_dir(str(args.campaign), str(args.output_root))
+    output_dir = args.output_dir or _default_output_dir(
+        str(args.campaign), str(args.output_root)
+    )
     result = run_tournament(
         tuple(candidates),
         cfg=cfg.artifacts.tournament,
@@ -532,7 +555,10 @@ def run_tournament_cli(args: argparse.Namespace) -> int:
     if args.promote:
         passing = top_passing_row(result)
         if passing is None:
-            print("No candidate passed tournament gates; promotion skipped.", file=sys.stderr)
+            print(
+                "No candidate passed tournament gates; promotion skipped.",
+                file=sys.stderr,
+            )
             return 1
         promoted_agent = next(
             agent for agent in candidates if agent.agent_id == passing.agent_id
@@ -592,15 +618,24 @@ def run_worker_cli(args: argparse.Namespace) -> int:
 
 
 def run_bracket_cli(args: argparse.Namespace) -> int:
-    from src.artifacts.tournament.bracket.status import bracket_show_payload, summarize_bracket
+    from src.artifacts.tournament.bracket.status import (
+        bracket_show_payload,
+        summarize_bracket,
+    )
 
     output_root = args.output_root.resolve()
     if args.bracket_command == "status":
-        payload = summarize_bracket(campaign=str(args.campaign), output_root=output_root)
+        payload = summarize_bracket(
+            campaign=str(args.campaign), output_root=output_root
+        )
     elif args.bracket_command == "show":
-        payload = bracket_show_payload(campaign=str(args.campaign), output_root=output_root)
+        payload = bracket_show_payload(
+            campaign=str(args.campaign), output_root=output_root
+        )
     else:
-        raise SystemExit("Unknown bracket command. Use: ow eval bracket status|show --help")
+        raise SystemExit(
+            "Unknown bracket command. Use: ow eval bracket status|show --help"
+        )
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
 
@@ -770,7 +805,9 @@ def main(argv: list[str] | None = None) -> int:
             return run_results_list_cli(args)
         if args.results_command == "show":
             return run_results_show_cli(args)
-        raise SystemExit("Unknown results command. Use: ow eval results list|show --help")
+        raise SystemExit(
+            "Unknown results command. Use: ow eval results list|show --help"
+        )
     if args.command == "jobs":
         if args.jobs_command == "cancel":
             return run_jobs_cancel_cli(args)
@@ -780,3 +817,49 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "submit":
         return run_submit_cli(args)
     raise SystemExit(f"Unknown eval command: {args.command!r}")
+
+
+def __getattr__(name: str):
+    """Lazy exports for unittest.mock.patch targets (avoid eager JAX imports)."""
+
+    if name == "package_checkpoint_submission":
+        from src.artifacts.kaggle_submission import package_checkpoint_submission
+
+        return package_checkpoint_submission
+    if name == "submit_competition_package":
+        from src.artifacts.kaggle_submission import submit_competition_package
+
+        return submit_competition_package
+    if name == "agent_from_checkpoint":
+        from src.artifacts.tournament.resolve import agent_from_checkpoint
+
+        return agent_from_checkpoint
+    if name == "run_optional_job_worker":
+        from src.artifacts.worker_runner import run_optional_job_worker
+
+        return run_optional_job_worker
+    if name == "run_tournament":
+        from src.artifacts.tournament.eval import run_tournament
+
+        return run_tournament
+    if name == "promote_from_tournament":
+        from src.artifacts.tournament.promotion import promote_from_tournament
+
+        return promote_from_tournament
+    if name == "top_passing_row":
+        from src.artifacts.tournament.promotion import top_passing_row
+
+        return top_passing_row
+    if name == "resolve_promoted_agent":
+        from src.artifacts.tournament.resolve import resolve_promoted_agent
+
+        return resolve_promoted_agent
+    if name == "run_context_for_agent":
+        from src.artifacts.tournament.resolve import run_context_for_agent
+
+        return run_context_for_agent
+    if name == "validate_agents_feature_compatible":
+        from src.artifacts.tournament.resolve import validate_agents_feature_compatible
+
+        return validate_agents_feature_compatible
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
