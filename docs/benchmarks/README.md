@@ -14,6 +14,7 @@ Committed JSON and runbooks under this folder define verification thresholds and
 | [launch-hygiene-e2e-baseline.json](launch-hygiene-e2e-baseline.json) | Tier-2 launch-hygiene throughput baseline (primary preset) |
 | [launch-hygiene-e2e-4p-baseline.json](launch-hygiene-e2e-4p-baseline.json) | 4p launch-hygiene baseline companion |
 | [launch-hygiene-ablation.json](launch-hygiene-ablation.json) | Launch-hygiene ablation reference |
+| [test-coverage-baseline.json](test-coverage-baseline.json) | Fast-tier line coverage baseline (observation only; no fail-under) |
 
 ## Env parity A/B (comet / Kaggle generators)
 

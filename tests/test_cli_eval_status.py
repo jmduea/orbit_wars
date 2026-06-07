@@ -160,3 +160,29 @@ def test_eval_status_watch_exits_when_idle(tmp_path: Path, capsys, monkeypatch) 
     )
     assert capsys.readouterr().out.count('"run_id": "r1"') >= 1
     assert sleeps == []
+
+
+def test_eval_status_without_manifest_reports_absent(tmp_path: Path, capsys) -> None:
+    run_dir = tmp_path / "runs" / "no-manifest"
+    run_dir.mkdir(parents=True)
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+
+    assert eval_cli.main(["status", "--run", str(run_dir)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["manifest_present"] is False
+    assert payload["jobs"] == []
+    assert not queue_is_active(payload)
+
+
+def test_summarize_run_status_empty_queue(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "idle"
+    run_dir.mkdir(parents=True)
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "idle", "campaign": "c"}),
+        encoding="utf-8",
+    )
+    (run_dir / "queue" / "optional_jobs").mkdir(parents=True)
+
+    summary = summarize_run_status(run_dir)
+    assert summary["jobs"] == []
+    assert not queue_is_active(summary)

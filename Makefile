@@ -25,6 +25,8 @@ help:
 	@echo "  test-fast-parallel       CPU xdist (ORBIT_WARS_PYTEST_XDIST=1)"
 	@echo "  test-jax-trace-hygiene   tier-A static rg gate + jit import/smoke tests"
 	@echo "  test-domain-{config,features,jax-env,policy,artifacts,curriculum}"
+	@echo "  test-cov-fast            fast tier + HTML coverage (htmlcov/)"
+	@echo "  test-cov-report          fast tier + coverage.xml artifact"
 	@echo ""
 	@echo "Preflight (GPU for learn-proof; see docs/operator-runbook.md):"
 	@echo "  preflight-sanity, preflight-learn-proof, preflight-calibrate"
@@ -129,6 +131,15 @@ test-domain-artifacts:
 
 test-domain-curriculum:
 	$(PYTEST_CPU) tests/test_curriculum.py tests/test_jax_train_timing.py -m "not slow and not jax"
+
+# Line coverage on fast tier (serial CPU; supplements behavioral gates, not a substitute).
+COV_FAST := $(PYTEST_CPU) -m "not slow and not jax and not sweep" --cov=src --cov-report=term-missing:skip-covered
+
+test-cov-fast:
+	$(COV_FAST) --cov-report=html:htmlcov
+
+test-cov-report:
+	$(COV_FAST) --cov-report=xml:coverage.xml
 
 preflight-sanity:
 	uv run ow benchmark sanity --out outputs/preflight/sanity_repro.json

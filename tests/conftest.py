@@ -39,6 +39,8 @@ FULL_JAX_FILES = frozenset(
         "test_jax_ppo.py",
         "test_jax_rollout.py",
         "test_jax_scripted_opponents.py",
+        "test_opponent_jax_sampling.py",
+        "test_opponents_pool.py",
         "test_decoder_carry.py",
         "test_factorized_launch_metrics.py",
     }
@@ -64,6 +66,8 @@ DOMAIN_BY_FILE: dict[str, str] = {
     "test_ppo_update.py": "policy",
     "test_jax_rollout.py": "policy",
     "test_jax_scripted_opponents.py": "policy",
+    "test_opponent_jax_sampling.py": "policy",
+    "test_opponents_pool.py": "policy",
     "test_jax_curriculum.py": "curriculum",
     "test_trajectory_shield.py": "policy",
     "test_decoder_carry.py": "policy",
