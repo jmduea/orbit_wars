@@ -479,6 +479,11 @@ def resolve_benchmark_overrides(
     preset: str | None,
     overrides: list[str] | None,
 ) -> list[str]:
+    if preset == "admission":
+        from src.jax.preflight_gate_loader import admission_gate_train_overrides
+
+        resolved = list(admission_gate_train_overrides(extra=tuple(overrides or ())))
+        return resolved
     preset_overrides = {
         "validation": WORKSTATION_VALIDATION_OVERRIDES,
         "primary": PRIMARY_E2E_OVERRIDES,

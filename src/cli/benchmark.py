@@ -45,11 +45,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     training.add_argument(
         "--preset",
-        choices=("validation", "primary"),
+        choices=("validation", "primary", "admission", "planet_flow_p0"),
         default=None,
         help=(
-            "Benchmark bundle: validation (workstation stability) or primary "
-            "(task=shield_cheap e2e throughput gate profile)."
+            "Benchmark bundle: validation (workstation stability), primary "
+            "(task=shield_cheap e2e throughput gate profile), admission "
+            "(operator-locked beat_noop + admission.yaml recipe; append "
+            "task=map_pool etc. via --overrides), or planet_flow_p0 (Planet Flow "
+            "compiler-control proof)."
         ),
     )
     training.add_argument(

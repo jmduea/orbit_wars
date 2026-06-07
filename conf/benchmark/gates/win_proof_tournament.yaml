@@ -1,0 +1,6 @@
+# Win-proof tournament gate (checkpoint-only; no train spec).
+# Primary entry: ow benchmark tournament-proof
+gate: win_proof
+description: Unified held-out tournament ladder (2p+4p combined, noop/random prerequisites, incumbent Stage 2)
+evaluation_mode: unified_tournament
+artifacts_profile: hybrid_promotion

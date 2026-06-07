@@ -1,0 +1,22 @@
+gate_id: admission
+title: Cherry-pick admission (learning + throughput)
+default_model: transformer_factorized_small
+learning_gate: beat_noop
+workflow: ow benchmark gate run admission
+primitive: ow benchmark gate run admission
+
+# Operator-locked recipe (docs/benchmarks/cherry-pick-manifest.json admission_profile).
+train_overrides:
+  - model.max_moves_k=2
+  - training=2p4p_32_split
+  - training.rollout_steps=256
+  - task.candidate_count=3
+  - telemetry.wandb.enabled=true
+  - telemetry.wandb.group=preflight
+  - artifacts.replay.enabled=false
+
+throughput:
+  baseline: docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
+  within_pct: 10
+  warmup: 2
+  max_measured_update: 20
