@@ -52,7 +52,10 @@ def _window_from_throughput(
     window: ThroughputWindow | PhaseTimingWindow | None,
 ) -> PhaseTimingWindow:
     if window is None:
-        return PhaseTimingWindow(warmup=2, max_measured_update=20)
+        return PhaseTimingWindow(
+            warmup=2,
+            max_measured_update=22,
+        )
     if isinstance(window, PhaseTimingWindow):
         return window
     return PhaseTimingWindow(
@@ -150,7 +153,9 @@ def extract_rollout_phase_breakdown_from_log(
     return payload
 
 
-def _profile_records_from_payload(payload: Mapping[str, object]) -> list[dict[str, object]] | None:
+def _profile_records_from_payload(
+    payload: Mapping[str, object],
+) -> list[dict[str, object]] | None:
     raw = payload.get("per_update_records")
     if not isinstance(raw, list) or not raw:
         return None

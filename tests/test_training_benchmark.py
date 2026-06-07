@@ -80,6 +80,7 @@ def test_primary_preset_resolves_shield_cheap_overrides() -> None:
 
 def test_primary_preset_default_updates_is_twenty() -> None:
     assert default_benchmark_updates(preset="primary") == 20
+    assert default_benchmark_updates(preset="admission") == 20
     assert default_benchmark_updates(preset=None) == 30
 
 

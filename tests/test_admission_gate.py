@@ -14,12 +14,15 @@ from src.cli.benchmark_gates import (
     resolve_throughput_options,
     run_gate_cli,
 )
-from src.jax.preflight_config_summary import format_gate_train_config_summary
-from src.jax.preflight_gate_loader import admission_gate_train_overrides, build_gate_spec
 from src.jax.admission_throughput import (
     apply_baseline_comparison,
     run_throughput_gate,
     validate_throughput_baseline_geometry,
+)
+from src.jax.preflight_config_summary import format_gate_train_config_summary
+from src.jax.preflight_gate_loader import (
+    admission_gate_train_overrides,
+    build_gate_spec,
 )
 from src.jax.training_benchmark import load_e2e_baseline
 
@@ -73,7 +76,7 @@ def test_resolve_throughput_options_uses_learning_first_baseline() -> None:
     assert baseline == DEFAULT_ADMISSION_THROUGHPUT_BASELINE
     assert within_pct == pytest.approx(10.0)
     assert window.warmup == 2
-    assert window.max_measured_update == 20
+    assert window.max_measured_update == 22
 
 
 def test_admission_gate_recipe_includes_operator_locked_overrides() -> None:
@@ -138,11 +141,18 @@ def test_admission_gate_dry_run_writes_combined_json(tmp_path: Path, capsys) -> 
 
 
 def _write_minimal_e2e_baseline(path: Path) -> None:
+    run = {
+        "rollout_steps": 256,
+        "num_envs": 32,
+        "env_steps_per_sec": 5000.0,
+        "samples_per_sec": 25000.0,
+        "seconds_per_update_mean": 1.65,
+    }
     path.write_text(
         json.dumps(
             {
                 "gate": "launch_hygiene_e2e_throughput",
-                "runs": [{}, {}, {}],
+                "runs": [run, run, run],
                 "aggregate": {
                     "env_steps_per_sec": {"mean": 5000.0},
                     "samples_per_sec": {"mean": 25000.0},
@@ -162,7 +172,7 @@ def test_run_throughput_gate_against_baseline(tmp_path: Path) -> None:
     log_path = tmp_path / "run_jax.jsonl"
     records = [
         _timing_record(update, update_seconds=1.65, env_steps_per_sec=4950.0)
-        for update in range(3, 21)
+        for update in range(3, 23)
     ]
     log_path.write_text(
         "\n".join(json.dumps(record) for record in records) + "\n",
@@ -177,6 +187,20 @@ def test_run_throughput_gate_against_baseline(tmp_path: Path) -> None:
     assert exit_code == 0
     assert payload["verdict"] == "VERIFIED"
     assert payload["gate_passed"] is True
+
+
+def test_throughput_geometry_missing_baseline_metadata_fails() -> None:
+    baseline_body = {
+        "gate": "launch_hygiene_e2e_throughput",
+        "runs": [{"env_steps_per_sec": 5000.0}],
+    }
+    payload = {
+        "measured_updates": 20,
+        "env_steps": 20 * 8192,
+    }
+    failures = validate_throughput_baseline_geometry(payload, baseline_body)
+    assert failures
+    assert "missing rollout_steps/num_envs" in failures[0]
 
 
 def test_throughput_geometry_mismatch_rejects_bad_baseline(tmp_path: Path) -> None:
@@ -220,8 +244,8 @@ def test_throughput_geometry_mismatch_rejects_bad_baseline(tmp_path: Path) -> No
     baseline_path.write_text(json.dumps(baseline_body) + "\n", encoding="utf-8")
     payload = {
         "gate": "admission_throughput",
-        "measured_updates": 18,
-        "env_steps": 18 * 8192,
+        "measured_updates": 20,
+        "env_steps": 20 * 8192,
         "seconds_total": 36.0,
         "seconds_per_update_mean": 2.0,
         "env_steps_per_sec": 4096.0,

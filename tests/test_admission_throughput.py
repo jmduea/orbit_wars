@@ -36,7 +36,9 @@ def _timing_record(
     return record
 
 
-def test_extract_throughput_skips_warmup_and_caps_at_update_20() -> None:
+def test_extract_throughput_skips_warmup_and_matches_training_benchmark_window() -> (
+    None
+):
     records = [
         _timing_record(1, update_seconds=10.0, env_steps_per_sec=100.0),
         _timing_record(2, update_seconds=9.0, env_steps_per_sec=200.0),
@@ -48,17 +50,17 @@ def test_extract_throughput_skips_warmup_and_caps_at_update_20() -> None:
                 rollout_seconds=1.2,
                 ppo_seconds=0.6,
             )
-            for update in range(3, 21)
+            for update in range(3, 23)
         ],
-        _timing_record(21, update_seconds=1.0, env_steps_per_sec=5000.0),
+        _timing_record(23, update_seconds=1.0, env_steps_per_sec=5000.0),
     ]
 
     payload = extract_throughput_from_records(records)
 
-    assert payload["measured_updates"] == 18
-    assert payload["updates_in_window"] == list(range(3, 21))
-    assert payload["seconds_total"] == pytest.approx(36.0)
-    assert payload["env_steps"] == 36000
+    assert payload["measured_updates"] == 20
+    assert payload["updates_in_window"] == list(range(3, 23))
+    assert payload["seconds_total"] == pytest.approx(40.0)
+    assert payload["env_steps"] == 40000
     assert payload["env_steps_per_sec"] == pytest.approx(1000.0)
     assert payload["seconds_per_update_mean"] == pytest.approx(2.0)
     assert payload["rollout_seconds_per_update_mean"] == pytest.approx(1.2)
@@ -95,7 +97,7 @@ def test_admission_throughput_cli_from_jsonl(tmp_path: Path, capsys) -> None:
     log_path = tmp_path / "preflight_beat_noop_jax.jsonl"
     records = [
         _timing_record(update, update_seconds=2.0, env_steps_per_sec=4000.0)
-        for update in range(3, 21)
+        for update in range(3, 23)
     ]
     log_path.write_text(
         "\n".join(json.dumps(record) for record in records) + "\n",
@@ -113,7 +115,7 @@ def test_admission_throughput_cli_from_gate_result(tmp_path: Path, capsys) -> No
     log_path = tmp_path / "run_jax.jsonl"
     records = [
         _timing_record(update, update_seconds=1.0, env_steps_per_sec=5000.0)
-        for update in range(3, 21)
+        for update in range(3, 23)
     ]
     log_path.write_text(
         "\n".join(json.dumps(record) for record in records) + "\n",

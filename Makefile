@@ -143,6 +143,8 @@ preflight-calibrate:
 	uv run ow benchmark calibrate --analyze-only --analyze-campaigns
 
 # Cherry-pick admission: beat_noop learning + throughput extract in one gate JSON.
+# Map-pool picks: ADMISSION_BASELINE=docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json \
+#   make gate-admission REPO_ROOT=../orbit_wars-integration
 ADMISSION_BASELINE ?= docs/benchmarks/launch-hygiene-e2e-baseline-learning-first.json
 ADMISSION_OUT ?= outputs/benchmarks/admission/gate.json
 ADMISSION_SEEDS ?= 42 43 44

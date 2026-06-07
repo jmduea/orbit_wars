@@ -20,7 +20,8 @@ from src.jax.training_benchmark import (
 
 ADMISSION_THROUGHPUT_GATE = "admission_throughput"
 DEFAULT_WARMUP = 2
-DEFAULT_MAX_MEASURED_UPDATE = 20
+# Matches ``ow benchmark training --updates`` (measured rows after warmup).
+DEFAULT_MEASURED_UPDATE_COUNT = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +34,17 @@ class ThroughputWindow:
     @property
     def first_update(self) -> int:
         return self.warmup + 1
+
+    @classmethod
+    def from_training_benchmark(
+        cls,
+        *,
+        warmup: int = DEFAULT_WARMUP,
+        measured_update_count: int = DEFAULT_MEASURED_UPDATE_COUNT,
+    ) -> ThroughputWindow:
+        """Build window aligned with ``run_training_benchmark`` (--updates = measured count)."""
+
+        return cls(warmup=warmup, max_measured_update=warmup + measured_update_count)
 
     def includes(self, update: int) -> bool:
         return self.first_update <= update <= self.max_measured_update
@@ -95,10 +107,7 @@ def extract_throughput_from_records(
 ) -> dict[str, object]:
     """Aggregate throughput metrics from per-update JSONL rows."""
 
-    resolved_window = window or ThroughputWindow(
-        warmup=DEFAULT_WARMUP,
-        max_measured_update=DEFAULT_MAX_MEASURED_UPDATE,
-    )
+    resolved_window = window or ThroughputWindow.from_training_benchmark()
     selected: list[Mapping[str, object]] = []
     for record in records:
         update = _record_update(record)
@@ -216,8 +225,13 @@ def validate_throughput_baseline_geometry(
 ) -> list[str]:
     """Reject apples-to-oranges baseline compares (e.g. 500-step baseline vs 256-step gate)."""
 
+    runs = baseline.get("runs")
     baseline_geometry = _baseline_rollout_geometry(baseline)
     measured_per_update = _measured_env_steps_per_update(payload)
+    if isinstance(runs, list) and runs and baseline_geometry is None:
+        return [
+            "throughput baseline runs missing rollout_steps/num_envs geometry metadata"
+        ]
     if baseline_geometry is None or measured_per_update is None:
         return []
     rollout_steps, num_envs = baseline_geometry

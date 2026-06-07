@@ -560,7 +560,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "After the learning run, extract throughput from the gate JSONL "
-            "(updates 3–20) and merge into --out JSON. Prefer `gate run admission`."
+            "(updates 3–22; 20 measured rows after warmup) and merge into --out JSON. "
+            "Prefer `gate run admission`."
         ),
     )
     gate.add_argument(
@@ -581,7 +582,7 @@ def build_parser() -> argparse.ArgumentParser:
         "admission-throughput",
         help=(
             "Extract env-steps/s and seconds/update from a gate result JSON or "
-            "*_jax.jsonl (updates 3–20 after warmup)."
+            "*_jax.jsonl (updates 3–22 after warmup; 20 measured rows)."
         ),
     )
     admission_throughput.add_argument(
@@ -614,8 +615,11 @@ def build_parser() -> argparse.ArgumentParser:
     admission_throughput.add_argument(
         "--max-measured-update",
         type=int,
-        default=20,
-        help="Last update index included in the throughput window (default 20).",
+        default=22,
+        help=(
+            "Last update index included in the throughput window "
+            "(default 22 = warmup 2 + 20 measured updates)."
+        ),
     )
 
     rollout_phase_profile = subparsers.add_parser(
@@ -640,7 +644,7 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_phase_profile.add_argument("--model", default=None)
     rollout_phase_profile.add_argument("--updates", type=int, default=5)
     rollout_phase_profile.add_argument("--warmup", type=int, default=2)
-    rollout_phase_profile.add_argument("--max-measured-update", type=int, default=20)
+    rollout_phase_profile.add_argument("--max-measured-update", type=int, default=22)
     rollout_phase_profile.add_argument("--json", action="store_true")
     rollout_phase_profile.add_argument(
         "--full-geometry",
@@ -680,8 +684,11 @@ def build_parser() -> argparse.ArgumentParser:
     rollout_phase_breakdown.add_argument(
         "--max-measured-update",
         type=int,
-        default=20,
-        help="Last update index included in the window (default 20).",
+        default=22,
+        help=(
+            "Last update index included in the window "
+            "(default 22 = warmup 2 + 20 measured updates)."
+        ),
     )
 
     tournament_proof = subparsers.add_parser(

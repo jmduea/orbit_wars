@@ -67,10 +67,18 @@ def resolve_throughput_options(
     within_pct = throughput_within_pct
     if within_pct is None and section.get("within_pct") is not None:
         within_pct = float(section["within_pct"])
-    window = ThroughputWindow(
-        warmup=int(section.get("warmup", 2)),
-        max_measured_update=int(section.get("max_measured_update", 20)),
-    )
+    warmup = int(section.get("warmup", 2))
+    if section.get("measured_update_count") is not None:
+        measured_count = int(section["measured_update_count"])
+        window = ThroughputWindow.from_training_benchmark(
+            warmup=warmup,
+            measured_update_count=measured_count,
+        )
+    else:
+        window = ThroughputWindow(
+            warmup=warmup,
+            max_measured_update=int(section.get("max_measured_update", warmup + 20)),
+        )
     return enabled, baseline, within_pct, window
 
 
@@ -234,7 +242,7 @@ def run_gate_cli(
         }
         report["throughput_verdict"] = "INCONCLUSIVE"
 
-    if throughput_enabled:
+    if gate_id == "admission" and throughput_enabled:
         exit_code = _finalize_admission_report(report)
     else:
         exit_code = learning_exit

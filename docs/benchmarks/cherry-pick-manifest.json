@@ -113,12 +113,12 @@
       "ppo_profile_note": "beat_noop gate applies transformer_factorized_small PPO overrides automatically (lr, clip_coef, ent_coef, vf_coef, max_grad_norm, epochs, update_chunk_rows, reseed_every_updates=0). Throughput capture must include the same PPO bundle \u2014 use gate dry-run output or append profile overrides from docs/benchmarks/preflight-profiles.json.",
       "throughput_extract": {
         "mode": "single_run_hybrid",
-        "description": "After beat_noop (200 updates), extract env_steps_per_sec and seconds_per_update_mean from the gate JSONL using updates 3\u201320 (skip JIT warmup updates 1\u20132). Matches launch-hygiene measurement window without a second training job.",
+        "description": "After beat_noop (200 updates), extract env_steps_per_sec and seconds_per_update_mean from the gate JSONL using updates 3\u201322 (20 measured rows after warmup updates 1\u20132). Matches ow benchmark training --updates 20 --warmup 2 without a second training job.",
         "cli": "uv run ow benchmark admission-throughput",
         "gate_compose": "uv run ow benchmark gate run beat_noop --also-throughput --throughput-baseline <baseline.json>",
         "window": {
           "warmup": 2,
-          "max_measured_update": 20
+          "measured_update_count": 20
         },
         "blocking_metrics": [
           "env_steps_per_sec",
@@ -756,11 +756,32 @@
       "sha": "a46c37e",
       "status": "landed_on_integration",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
-      "verdict": "pending",
+      "verdict": "reject",
       "blocked_by": [
-        "admission_throughput"
+        "fix_jax_trace_skip_opp_batch_cache"
       ],
-      "reject_reasons": []
+      "reject_reasons": [
+        "jax_trace_crash_on_noop_map_pool_admission"
+      ],
+      "integration_head_sha": "a499c714b889e428c87cf4ef2d9d249ecdfef4a2",
+      "notes": "Cherry-picked onto ec6f617 \u2192 a499c71. Fast gates green (kaggle-parity 25 passed; opponent tests 21 passed). Noop map-pool admission aborted at compile/collect: TracerBoolConversionError in _initial_opponent_batch_cache_2p (skip_opp_batch_refresh Python if). Mixed sampling unit tests did not surface gather bug \u2014 894beb0 not required for test failures. Likely needs 25efafb0 (lax.cond for opponent batch cache skip) before re-gate.",
+      "gates": {
+        "fast": {
+          "run_date": "2026-06-07",
+          "kaggle_parity": "25 passed, 1 deselected (~142s)",
+          "opponent_tests": "21 passed (~220s)"
+        },
+        "admission_noop_map_pool": {
+          "run_date": "2026-06-07",
+          "command": "uv run ow benchmark gate run admission --repo-root ../orbit_wars-integration --throughput-baseline docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json --train-overrides task=map_pool opponents=base opponents.mode.opponent=noop --out outputs/benchmarks/admission/gate-integration-a46c37e-noop.json --verbose",
+          "artifact": "outputs/benchmarks/admission/gate-integration-a46c37e-noop.json",
+          "admission_passed": false,
+          "learning_verdict": "NOT_RUN",
+          "win_rate_delta": null,
+          "throughput_verdict": "NOT_RUN",
+          "failure": "ow train exit 1: TracerBoolConversionError sampling.py:55 skip_opp_batch_refresh"
+        }
+      }
     },
     {
       "id": "integration_894beb0",

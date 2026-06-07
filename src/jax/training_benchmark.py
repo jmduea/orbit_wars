@@ -108,6 +108,7 @@ PLANET_FLOW_P0_BENCHMARK_OVERRIDES: tuple[str, ...] = (
     "seed=42",
 )
 
+
 @dataclass(frozen=True, slots=True)
 class TrainingBenchmarkSnapshot:
     """Per-update metric capture for learning-curve analysis."""
@@ -500,7 +501,7 @@ def resolve_benchmark_overrides(
 
 
 def default_benchmark_updates(*, preset: str | None) -> int:
-    if preset == "primary":
+    if preset in {"primary", "admission"}:
         return 20
     return 30
 
