@@ -1,5 +1,8 @@
-# @package _global_
 # Rollout throughput experiment: unshielded sampling masks + post-sample cheap validation.
 
-task:
-  rollout_factorized_sampling: selected_validate
+defaults:
+  - shield_cheap
+  - _self_
+
+map_pool_path: data/jax_map_pool/default_v1.npz
+rollout_factorized_sampling: selected_validate
