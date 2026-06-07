@@ -15,47 +15,35 @@ from src.jax.decoder_carry import (
     empty_decoder_hidden,
     reset_decoder_hidden_on_done,
 )
-from src.jax.env import (
-    JaxEnvState,
-    assign_learner_players,
-    batched_reset,
-    batched_reset_with_pool,
-    batched_step,
-    batched_step_multi_player,
-)
+from src.jax.env import JaxEnvState
 from src.jax.features import TurnBatch
 from src.jax.map_pool.load import MapPoolConstants
 from src.jax.normalization import ObservationNormState
 from src.jax.ppo_update import gae_returns_and_advantages
-from src.jax.rollout.collect import _policy_turn_batch
+from src.jax.rollout.collect_kernel import (
+    _build_transition,
+    _policy_turn_batch,
+    _reset_on_done,
+    _sample_opponent_phase_context,
+)
 from src.jax.rollout.phase_timing import ROLLOUT_PHASE_TIMING_KEYS
 from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
 from src.jax.ship_action import is_continuous_ship_mode
-from src.opponents.constants import (
-    OPPONENT_HISTORICAL,
-    OPPONENT_LATEST,
-    is_noop_jax_training_opponent_mode,
-    validate_jax_training_opponent_mode,
-)
+from src.opponents.constants import validate_jax_training_opponent_mode
 from src.opponents.jax_actions.builders import (
     build_action_from_factored_batch,
-    owned_planet_ships,
 )
 from src.opponents.jax_actions.sampling import (
-    _encode_four_player_turn_batches,
     _encode_opponent_turn_batch_2p,
+    _encode_four_player_turn_batches,
     _four_player_step_action,
     _initial_opponent_batch_cache_2p,
-    _maybe_effective_single_family_id,
-    _opponent_count_metrics,
-    _sample_opponent_2p_action,
-    _single_stage_family_id,
+    should_skip_opponent_batch_refresh_2p,
 )
-from src.opponents.pool import sample_opponent_type_ids_jax
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
 from src.training.curriculum import StageView, default_stage_view
 
-from .metrics import OPPONENT_SLOT_METRIC_KEYS, rollout_metrics
+from .metrics import rollout_metrics
 
 
 @dataclass
@@ -140,82 +128,6 @@ def _timed_call(accumulator: _PhaseAccumulator, field_name: str, fn, *args):
     return out
 
 
-def _build_transition(
-    *,
-    state,
-    batch,
-    sample,
-    result,
-    cfg: TrainConfig,
-    decoder_hidden,
-    include_opponent_metrics: bool,
-    include_shield_metrics: bool,
-    family_counts: dict[str, jax.Array] | None,
-    historical_fallback_slots: jax.Array,
-) -> dict:
-    transition = {
-        "planet_features": batch.planet_features,
-        "planet_mask": batch.planet_mask,
-        "edge_features": batch.edge_features,
-        "edge_mask": batch.edge_mask,
-        "edge_src_ids": batch.edge_src_ids,
-        "edge_tgt_ids": batch.edge_tgt_ids,
-        "global_features": batch.global_features,
-        "theta_ref": batch.theta_ref,
-        "player_count": jnp.full(
-            (batch.planet_features.shape[0],),
-            cfg.task.player_count,
-            dtype=jnp.int32,
-        ),
-        "ship_bucket_mask": sample.ship_bucket_mask,
-        "target_index": sample.target_index,
-        "ship_bucket": sample.ship_bucket,
-        "source_index": sample.source_index,
-        "target_slot": sample.target_slot,
-        "stop_flag": sample.stop_flag,
-        "step_mask": sample.step_mask,
-        "log_prob": sample.log_prob,
-        "initial_planet_ships": owned_planet_ships(state.game),
-        "value": sample.value,
-        "reward": result.reward,
-        "done": result.done,
-        "terminal_is_first": result.terminal_is_first,
-        "terminal_placement": result.terminal_placement,
-        "terminal_survival_time": result.terminal_survival_time,
-        "terminal_score_share": result.terminal_score_share,
-        "terminal_ship_differential": result.terminal_ship_differential,
-    }
-    if include_opponent_metrics and family_counts is not None:
-        transition.update(
-            {
-                key: (
-                    historical_fallback_slots
-                    if key == "opponent_historical_fallback_latest_slots"
-                    else family_counts[key]
-                )
-                for key in OPPONENT_SLOT_METRIC_KEYS
-            }
-        )
-    if include_shield_metrics:
-        transition.update(
-            {
-                "trajectory_shield_blocked_count": sample.diagnostics.blocked_count,
-                "trajectory_shield_blocked_sun_count": sample.diagnostics.blocked_sun_count,
-                "trajectory_shield_blocked_bounds_count": sample.diagnostics.blocked_bounds_count,
-                "trajectory_shield_blocked_unintended_hit_count": sample.diagnostics.blocked_unintended_hit_count,
-                "trajectory_shield_blocked_horizon_count": sample.diagnostics.blocked_horizon_count,
-                "trajectory_shield_fallback_noop_count": sample.diagnostics.fallback_noop_count,
-                "trajectory_shield_legal_non_noop_count": sample.diagnostics.legal_non_noop_count,
-                "trajectory_shield_original_non_noop_count": sample.diagnostics.original_non_noop_count,
-            }
-        )
-    if decoder_hidden is not None:
-        transition["decoder_hidden"] = decoder_hidden
-    if is_continuous_ship_mode(cfg):
-        transition["ship_fraction"] = sample.ship_fraction
-    return transition
-
-
 def collect_rollout_jax_timed(
     key: jax.Array,
     env_state: JaxEnvState,
@@ -233,16 +145,15 @@ def collect_rollout_jax_timed(
 ):
     del update
     validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
-    skip_opp_batch_refresh = (
-        cfg.task.player_count == 2
-        and is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
+    skip_opp_batch_refresh = should_skip_opponent_batch_refresh_2p(
+        cfg, active_stage_view
     )
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
         env_index_offset, dtype=jnp.int32
     )
-    active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
     carry_enabled = decoder_carry_enabled(cfg)
     fresh_decoder_hidden = (
         empty_decoder_hidden(env_count, cfg.model.hidden_size)
@@ -302,6 +213,8 @@ def collect_rollout_jax_timed(
         single_family,
         effective_single_family_id,
     ):
+        from src.opponents.jax_actions.sampling import _sample_opponent_2p_action
+
         opponent_action = _sample_opponent_2p_action(
             key_in,
             state_in.game._replace(
@@ -321,6 +234,8 @@ def collect_rollout_jax_timed(
 
     @jax.jit
     def env_step_2p(state_in, learner_action, opponent_action):
+        from src.jax.env import batched_step
+
         return batched_step(
             state_in, learner_action, opponent_action, cfg.task, cfg.reward
         )
@@ -333,6 +248,8 @@ def collect_rollout_jax_timed(
 
     @jax.jit
     def env_step_4p(state_in, multi_player_action):
+        from src.jax.env import batched_step_multi_player
+
         return batched_step_multi_player(
             state_in, multi_player_action, cfg.task, cfg.reward
         )
@@ -361,54 +278,14 @@ def collect_rollout_jax_timed(
         )
 
         key, _learner_key, opp_key, reset_key = jax.random.split(key, 4)
-        single_family_id = _single_stage_family_id(active_stage_view)
-        effective_single_family_id = _maybe_effective_single_family_id(
-            single_family_id, active_stage_view
+        opponent_ctx = _sample_opponent_phase_context(
+            opp_key=opp_key,
+            env_count=env_count,
+            learner_player=state.learner_player,
+            cfg=cfg,
+            active_stage_view=active_stage_view,
+            include_opponent_metrics=include_opponent_metrics,
         )
-        single_family = single_family_id >= 0
-        opponent_type_ids = sample_opponent_type_ids_jax(
-            jax.random.fold_in(opp_key, 9973),
-            env_count,
-            cfg.task.player_count,
-            ids=active_stage_view.family_ids,
-            probs=active_stage_view.family_probs,
-        )
-        opponent_type_ids = jnp.where(
-            single_family,
-            jnp.full(
-                (env_count, cfg.task.player_count),
-                single_family_id,
-                dtype=jnp.int32,
-            ),
-            opponent_type_ids,
-        )
-        has_historical = jnp.any(active_stage_view.snapshot_valid_mask)
-        effective_type_ids = jnp.where(
-            (opponent_type_ids == OPPONENT_HISTORICAL)
-            & jnp.logical_not(has_historical),
-            active_stage_view.fallback_family_id,
-            opponent_type_ids,
-        )
-        family_counts: dict[str, jax.Array] | None = None
-        historical_fallback_slots = jnp.array(0.0, dtype=jnp.float32)
-        if include_opponent_metrics:
-            family_counts = _opponent_count_metrics(
-                effective_type_ids, state.learner_player
-            )
-            historical_fallback_slots = (
-                (
-                    (
-                        (opponent_type_ids == OPPONENT_HISTORICAL)
-                        & (effective_type_ids == OPPONENT_LATEST)
-                    )
-                    & (
-                        jnp.arange(cfg.task.player_count, dtype=jnp.int32)[None, :]
-                        != state.learner_player[:, None]
-                    )
-                )
-                .astype(jnp.float32)
-                .sum()
-            )
 
         if cfg.task.player_count == 2:
             opponent_action = _timed_call(
@@ -419,9 +296,9 @@ def collect_rollout_jax_timed(
                 state,
                 opp_batch_cache,
                 learner_action,
-                effective_type_ids,
-                single_family,
-                effective_single_family_id,
+                opponent_ctx.effective_type_ids,
+                opponent_ctx.single_family,
+                opponent_ctx.effective_single_family_id,
             )
             next_state, result = _timed_call(
                 phases,
@@ -447,9 +324,9 @@ def collect_rollout_jax_timed(
                     opp_key=opp_key,
                     player_games=player_games,
                     player_batches=player_batches,
-                    effective_type_ids=effective_type_ids,
-                    single_family=single_family,
-                    effective_single_family_id=effective_single_family_id,
+                    effective_type_ids=opponent_ctx.effective_type_ids,
+                    single_family=opponent_ctx.single_family,
+                    effective_single_family_id=opponent_ctx.effective_single_family_id,
                     learner_action=learner_action,
                     learner_player=state.learner_player,
                     train_state=train_state,
@@ -486,51 +363,26 @@ def collect_rollout_jax_timed(
         done_any = bool(jax.device_get(jnp.any(result.done)))
         if done_any:
             reset_start = time.perf_counter()
-
-            def maybe_reset(new, old):
-                cond = result.done.reshape(result.done.shape + (1,) * (old.ndim - 1))
-                return jnp.where(cond, new, old)
-
-            reset_keys = jax.random.split(reset_key, env_count)
-            reset_episode_counts = state.episode_count + result.done.astype(jnp.int32)
-            if map_pool is not None:
-                map_ids = (reset_episode_counts + env_indices) % jnp.asarray(
-                    map_pool.pool_size, dtype=jnp.int32
-                )
-                reset_states, reset_batches = batched_reset_with_pool(
-                    reset_keys, cfg.task, map_pool, map_ids
-                )
-            else:
-                reset_states, reset_batches = batched_reset(reset_keys, cfg.task)
-            reset_states, reset_batches = assign_learner_players(
-                reset_states,
-                env_indices,
-                reset_episode_counts,
-                cfg.task,
-                cfg.opponents.mode.alternate_player_sides,
+            next_state, next_batch = _reset_on_done(
+                state=state,
+                next_state=next_state,
+                result=result,
+                reset_key=reset_key,
+                env_count=env_count,
+                env_indices=env_indices,
+                map_pool=map_pool,
+                cfg=cfg,
+                carry_enabled=carry_enabled,
+                fresh_decoder_hidden=fresh_decoder_hidden,
             )
-            if carry_enabled:
-                reset_states = reset_states._replace(
-                    decoder_hidden=fresh_decoder_hidden
-                )
-            merged_state = jax.tree.map(maybe_reset, reset_states, next_state)
-            merged_batch = jax.tree.map(maybe_reset, reset_batches, result.batch)
-            if carry_enabled:
-                merged_state = merged_state._replace(
-                    decoder_hidden=reset_decoder_hidden_on_done(
-                        merged_state.decoder_hidden,
-                        result.done,
-                        fresh_decoder_hidden,
-                    )
-                )
-            next_state, next_batch = merged_state, merged_batch
             _sync(next_state)
             phases.reset += time.perf_counter() - reset_start
         else:
-            next_state = next_state
             next_batch = result.batch
 
-        if cfg.task.player_count == 2 and not skip_opp_batch_refresh:
+        if cfg.task.player_count == 2 and not bool(
+            jax.device_get(skip_opp_batch_refresh)
+        ):
             encode_start = time.perf_counter()
             opp_batch_cache = opp_encode_2p(next_state)
             _sync(opp_batch_cache)
@@ -547,11 +399,14 @@ def collect_rollout_jax_timed(
                 sample=sample,
                 result=result,
                 cfg=cfg,
+                env_count=env_count,
+                value=sample.value,
+                log_prob=sample.log_prob,
                 decoder_hidden=decoder_hidden if carry_enabled else None,
                 include_opponent_metrics=include_opponent_metrics,
                 include_shield_metrics=include_shield_metrics,
-                family_counts=family_counts,
-                historical_fallback_slots=historical_fallback_slots,
+                family_counts=opponent_ctx.family_counts,
+                historical_fallback_slots=opponent_ctx.historical_fallback_slots,
             )
         )
         state = next_state
