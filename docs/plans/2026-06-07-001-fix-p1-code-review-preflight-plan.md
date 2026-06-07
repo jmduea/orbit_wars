@@ -1,7 +1,7 @@
 ---
 date: 2026-06-07
 topic: p1-code-review-preflight-fixes
-status: active
+status: completed
 branch: prep/launch-hygiene-cherry-pick
 origin: ce-code-review on commit 4ec161e
 ---
