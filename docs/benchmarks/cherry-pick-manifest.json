@@ -821,9 +821,9 @@
       "operator_decision": {
         "date": "2026-06-07",
         "action": "deferred_skipped",
-        "reason": "Throughput regression on noop map-pool admission (~26% env-steps/s drop). Correctness fix applies to mixed/historical opponents only — revisit when training those opponents with a throughput plan."
+        "reason": "Throughput regression on noop map-pool admission (~26% env-steps/s drop). Correctness fix applies to mixed/historical opponents only \u2014 revisit when training those opponents with a throughput plan."
       },
-      "notes": "Pool gather fix; fast gates green (kaggle-parity 25, opponent_mixed_sampling 8). Learning VERIFIED; throughput NOT_VERIFIED on noop map-pool admission. Rolled back from integration 2026-06-07 (reset to 95f3399). Operator deferred 2026-06-07 — not blocking harness sync or Phase 3 deferral.",
+      "notes": "Pool gather fix; fast gates green (kaggle-parity 25, opponent_mixed_sampling 8). Learning VERIFIED; throughput NOT_VERIFIED on noop map-pool admission. Rolled back from integration 2026-06-07 (reset to 95f3399). Operator deferred 2026-06-07 \u2014 not blocking harness sync or Phase 3 deferral.",
       "gates": {
         "admission_noop_map_pool": {
           "artifact": "outputs/benchmarks/admission/gate-integration-894beb0-noop.json",
@@ -864,7 +864,7 @@
         "action": "deferred_skipped",
         "reason": "CE-optimize inference-only shield cycle did not show enough benefit to risk throughput on the admission stack."
       },
-      "notes": "Skipped 2026-06-07: operator chose cleanup + benchmark package sync before H3/H4; benchmark sync admitted @ 602b63f. H3/H4 explicitly deferred — not on integration queue until operator re-opens opponent-rollout optimization."
+      "notes": "Skipped 2026-06-07: operator chose cleanup + benchmark package sync before H3/H4; benchmark sync admitted @ 602b63f. H3/H4 explicitly deferred \u2014 not on integration queue until operator re-opens opponent-rollout optimization."
     },
     {
       "id": "integration_25efafb0",
@@ -949,21 +949,132 @@
     },
     {
       "id": "learning_launch_hygiene_bundle",
-      "subject": "Launch hygiene bundle for K-step factorized decoder",
+      "subject": "Launch hygiene bundle for K-step factorized decoder (PR #163)",
       "phase": "learning",
       "direction": "main_to_integration",
       "source_shas": [
         "46c825e",
+        "0b7254f",
+        "b3d2b79",
+        "6a93d94",
         "6e75826"
       ],
       "sha": "6e75826",
-      "status": "deferred",
+      "commit_group": [
+        {
+          "sha": "46c825e",
+          "subject": "feat(policy): launch hygiene bundle for K-step factorized decoder",
+          "cherry_pick": "clean",
+          "hot_paths": [
+            "src/jax/launch_hygiene.py (new)",
+            "src/jax/action_sampling.py",
+            "src/opponents/jax_actions/builders.py"
+          ]
+        },
+        {
+          "sha": "0b7254f",
+          "subject": "fix(policy): align hygiene launch_valid with sampling bucket > 0",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "b3d2b79",
+          "subject": "test(policy): address PR #163 review findings for launch hygiene",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "6a93d94",
+          "subject": "fix(test): stabilize merge test and package launch_hygiene for Kaggle",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "6e75826",
+          "subject": "perf(policy): incremental launch hygiene carry restores sampler throughput",
+          "cherry_pick": "conflicts",
+          "conflicts": [
+            "Makefile",
+            "src/benchmark/factorized_sampler.py"
+          ],
+          "resolution": "Keep integration paths: ow benchmark factorized-sampler + src/benchmark/factorized_sampler.py (main@6e75826 still used scripts/benchmark_factorized_sampler.py)."
+        }
+      ],
+      "optional_follow_on": [
+        {
+          "sha": "aa70fde",
+          "subject": "perf(hygiene): compact PPO carry and rollout replay shortcuts (U7)",
+          "cherry_pick": "clean",
+          "depends_on": "6e75826",
+          "notes": "Further compacts launch_hygiene.py + action_sampling.py; picked cleanly on prep branch."
+        }
+      ],
+      "deferred_follow_on": [
+        {
+          "sha": "cdb76b3",
+          "subject": "feat(telemetry): mean_ships_per_launch and gate debug diagnostics",
+          "cherry_pick": "blocked",
+          "conflicts": [
+            "src/telemetry/metric_registry.py",
+            "src/jax/rollout/metrics.py",
+            "src/jax/train/metrics.py",
+            "docs/ROADMAP.md"
+          ],
+          "notes": "Land after telemetry shard sync (learning_telemetry_metrics) or manual merge."
+        },
+        {
+          "sha": "ee2f346",
+          "subject": "feat(benchmark): launch hygiene e2e throughput gate (Phase A)",
+          "cherry_pick": "partial",
+          "notes": "Integration already has tier-2 harness via ac4b5b8; diff vs ee2f346 is mostly docs/agent-native churn."
+        },
+        {
+          "sha": "4ace5f9",
+          "subject": "feat(rollout): selected_validate factorized sampling path",
+          "status": "excluded_preflight_opt_in",
+          "id": "learning_4ace5f9_redesign",
+          "notes": "Excluded from integration spine (semantic_redesign_halted); selected_validate path admitted only as opt-in preflight via task=rollout_selected_validate \u2014 not default train."
+        }
+      ],
+      "cherry_pick_prep": {
+        "branch": "prep/launch-hygiene-cherry-pick",
+        "worktree": "/home/jmduea/projects/orbit_wars-integration",
+        "base_branch": "optimize/opponent-rollout-throughput",
+        "base_sha": "38718f1",
+        "head_sha": "e78663a",
+        "prep_date": "2026-06-07",
+        "commits_picked": 6,
+        "diff_stat": "13 files, +2193 / -44",
+        "core_files": [
+          "src/jax/launch_hygiene.py",
+          "src/jax/factored_sequence_scan.py",
+          "src/jax/action_sampling.py",
+          "src/opponents/jax_actions/builders.py",
+          "tests/test_launch_hygiene.py"
+        ],
+        "unit_verification": "uv run pytest tests/test_launch_hygiene.py \u2014 11 passed (prep branch)",
+        "admission_gates_after_merge": [
+          "make test-fast",
+          "make test-launch-hygiene-throughput",
+          "make test-launch-hygiene-e2e-throughput",
+          "make test-kaggle-parity",
+          "make gate-admission REPO_ROOT=/home/jmduea/projects/orbit_wars-integration"
+        ],
+        "throughput_note": "Tier-2 gate uses learning-first baseline (launch-hygiene-e2e-baseline-learning-first.json) or map-pool baseline per admission profile \u2014 not primary preset alone.",
+        "ablation_gate": "docs/solutions/tooling-decisions/launch-hygiene-learner-ablation-gate.md (R10) before manifest admit",
+        "pr": 224,
+        "operator_waiver_2026_06_07": "Operator one-time waiver (2026-06-07, PR #224): G3 compile ceiling (381s vs 300s) and G4 tier-2 completion waived for prep branch merge; parity+trace+tier-1 PASS; full hygiene+lattice rejected for default train; hygiene+selected_validate opt-in via task=rollout_selected_validate for preflight only.",
+        "per_pick_gate_notes": {
+          "compile_smoke": "One-time G3 compile waiver for PR #224 merge (381s measured; 300s ceiling; map_pool+hygiene expected).",
+          "tier2_e2e": "G4 tier-2 waived one-time for merge cycle; learning-first recipe aligned; throughput FAIL expected on hygiene."
+        }
+      },
+      "status": "prep_ready",
       "verdict": "pending",
       "blocked_by": [
         "phase_2_admission",
-        "hygiene_ablation_r10"
+        "hygiene_ablation_r10",
+        "tier2_throughput_gate"
       ],
-      "reject_reasons": []
+      "reject_reasons": [],
+      "notes": "Default train: defer full launch_hygiene+lattice (~45s/rollout). Preflight: hygiene+selected_validate via task=rollout_selected_validate (~4s). PR #224 prep/launch-hygiene-cherry-pick."
     },
     {
       "id": "learning_planet_flow_stack",
@@ -1536,13 +1647,13 @@
       "action": "manifest_harness_sync_defer_h3_h4_pool_gather",
       "integration_head": "602b63f",
       "deferred": {
-        "integration_f979c2d": "H3/H4 — optimization cycle insufficient benefit; throughput risk",
-        "integration_894beb0": "Pool gather — throughput regression; mixed/historical opponents only"
+        "integration_f979c2d": "H3/H4 \u2014 optimization cycle insufficient benefit; throughput risk",
+        "integration_894beb0": "Pool gather \u2014 throughput regression; mixed/historical opponents only"
       },
       "synced": [
         "main_manifest_harness_sync"
       ],
-      "admission_re_gate": "not_run — prior PASS @ 602b63f; harness sync docs/tooling only"
+      "admission_re_gate": "not_run \u2014 prior PASS @ 602b63f; harness sync docs/tooling only"
     }
   ]
 }
