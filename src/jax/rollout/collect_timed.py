@@ -36,7 +36,7 @@ from src.opponents.jax_actions.builders import (
 from src.opponents.jax_actions.sampling import (
     _encode_four_player_turn_batches,
     _encode_opponent_turn_batch_2p,
-    _four_player_step_action,
+    _sample_opponent_player_action,
     _select_opp_batch_cache_2p,
     should_skip_opponent_batch_refresh_2p,
 )
@@ -213,14 +213,8 @@ def collect_rollout_jax_timed(
         single_family,
         effective_single_family_id,
     ):
-        from src.opponents.jax_actions.sampling import _sample_opponent_2p_action
-
-        opponent_action = _sample_opponent_2p_action(
+        opponent_action = _sample_opponent_player_action(
             key_in,
-            state_in.game._replace(
-                player=(1 - state_in.learner_player).astype(jnp.int32)
-            ),
-            opp_batch_cache,
             effective_type_ids=effective_type_ids,
             single_family=single_family,
             effective_single_family_id=effective_single_family_id,
@@ -229,6 +223,11 @@ def collect_rollout_jax_timed(
             cfg=cfg,
             stage_view=active_stage_view,
             historical_params_pool=historical_params_pool,
+            opp_game=state_in.game._replace(
+                player=(1 - state_in.learner_player).astype(jnp.int32)
+            ),
+            opp_batch=opp_batch_cache,
+            opponent_params_by_player=opponent_params_by_player,
         )
         return opponent_action
 
@@ -319,22 +318,22 @@ def collect_rollout_jax_timed(
 
             sample_start = time.perf_counter()
             per_player_action = jax.vmap(
-                lambda player_id: _four_player_step_action(
-                    player_id,
-                    opp_key=opp_key,
-                    player_games=player_games,
-                    player_batches=player_batches,
+                lambda player_id: _sample_opponent_player_action(
+                    opp_key,
                     effective_type_ids=opponent_ctx.effective_type_ids,
                     single_family=opponent_ctx.single_family,
                     effective_single_family_id=opponent_ctx.effective_single_family_id,
-                    learner_action=learner_action,
-                    learner_player=state.learner_player,
                     train_state=train_state,
                     policy=policy,
                     cfg=cfg,
-                    opponent_params_by_player=opponent_params_by_player,
-                    active_stage_view=active_stage_view,
+                    stage_view=active_stage_view,
                     historical_params_pool=historical_params_pool,
+                    player_id=player_id,
+                    player_games=player_games,
+                    player_batches=player_batches,
+                    opponent_params_by_player=opponent_params_by_player,
+                    learner_action=learner_action,
+                    learner_player=state.learner_player,
                 )
             )(player_ids)
             multi_player_action = jax.tree.map(

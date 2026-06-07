@@ -180,6 +180,10 @@ _OPPONENT_SLOT_COUNT_SPECS: tuple[tuple[str, int], ...] = (
     ("opponent_slots_turtle", OPPONENT_TURTLE),
     ("opponent_slots_opportunistic", OPPONENT_OPPORTUNISTIC),
 )
+OPPONENT_SLOT_COUNT_KEYS: tuple[str, ...] = (
+    "opponent_slots_total",
+    *tuple(key for key, _ in _OPPONENT_SLOT_COUNT_SPECS),
+)
 
 
 def _opponent_count_metrics(
@@ -478,9 +482,7 @@ def _sample_single_family_action(
             )
         return action
 
-    random_key = (
-        jax.random.fold_in(key, player_count) if player_count == 4 else key
-    )
+    random_key = jax.random.fold_in(key, player_count) if player_count == 4 else key
     return _switch_sample_opponent_family(
         key,
         family_id,

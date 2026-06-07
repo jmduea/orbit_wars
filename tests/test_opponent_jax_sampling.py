@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
+from src.jax.env import JaxAction
 from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
     OPPONENT_NOOP,
     OPPONENT_RANDOM,
 )
-from src.jax.env import JaxAction
 from src.opponents.jax_actions.sampling import (
     OPPONENT_SLOT_COUNT_KEYS,
     _gather_action_by_env,
@@ -53,8 +52,9 @@ def test_gather_action_by_env_indexes_pool_rows() -> None:
         ships=pool.ships,
         valid=pool.valid,
     )
-    indices = jnp.array([2, 0], dtype=jnp.int32)
-    gathered = _gather_action_by_env(pool, indices)
+    snapshot_indices = jnp.array([2, 0], dtype=jnp.int32)
+    pool_row_indices = jnp.array([0, 1], dtype=jnp.int32)
+    gathered = _gather_action_by_env(pool, snapshot_indices, pool_row_indices)
     assert gathered.source_id.shape == (2,)
     assert int(gathered.source_id[0]) == 4
     assert int(gathered.source_id[1]) == 1
