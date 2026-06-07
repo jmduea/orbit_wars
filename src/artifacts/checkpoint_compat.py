@@ -71,7 +71,9 @@ METADATA_KEYS = (
 )
 
 POINTER_DECODER_FACTORIZED_TOPK = "factorized_topk"
+POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP = "planet_flow_target_heatmap"
 ACTION_LAYOUT_FACTORIZED_TOPK = 2
+ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP = 3
 
 
 def encoder_backbone_for_architecture(architecture: str) -> str:
@@ -96,9 +98,12 @@ def pointer_decoder_for_model(model_cfg: ModelConfig) -> str:
         "factorized_topk",
     }:
         return POINTER_DECODER_FACTORIZED_TOPK
+    if normalized == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        return POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP
     raise ValueError(
         f"Unsupported pointer_decoder {raw!r}. Expected "
-        f"{POINTER_DECODER_FACTORIZED_TOPK!r}."
+        f"{POINTER_DECODER_FACTORIZED_TOPK!r} or "
+        f"{POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP!r}."
     )
 
 
@@ -108,11 +113,22 @@ def is_factorized_pointer_decoder(model_cfg: ModelConfig) -> bool:
     return pointer_decoder_for_model(model_cfg) == POINTER_DECODER_FACTORIZED_TOPK
 
 
+def is_planet_flow_pointer_decoder(model_cfg: ModelConfig) -> bool:
+    """Return True when the configured model uses the Planet Flow target heatmap."""
+
+    return (
+        pointer_decoder_for_model(model_cfg)
+        == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP
+    )
+
+
 def action_layout_version_for_pointer_decoder(pointer_decoder: str) -> int:
     """Return the integer action-layout version for a pointer decoder slug."""
 
     if pointer_decoder == POINTER_DECODER_FACTORIZED_TOPK:
         return ACTION_LAYOUT_FACTORIZED_TOPK
+    if pointer_decoder == POINTER_DECODER_PLANET_FLOW_TARGET_HEATMAP:
+        return ACTION_LAYOUT_PLANET_FLOW_TARGET_HEATMAP
     raise ValueError(f"Unsupported pointer_decoder slug: {pointer_decoder!r}")
 
 
@@ -136,8 +152,8 @@ def validate_checkpoint_pointer_decoder_compatibility(
         location = f" at {checkpoint_path}" if checkpoint_path is not None else ""
         raise ValueError(
             f"Checkpoint{location} pointer_decoder={stored_decoder!r} is incompatible "
-        f"with current model (expected pointer_decoder={expected!r}). Retrain or "
-        "load a matching checkpoint."
+            f"with current model (expected pointer_decoder={expected!r}). Retrain or "
+            "load a matching checkpoint."
         )
 
     stored_layout = stored.get("action_layout_version")
@@ -392,9 +408,7 @@ def _intercept_anchors_match(
         return False
     if len(stored_tuple) != len(expected_tuple):
         return False
-    return all(
-        abs(a - b) <= tolerance for a, b in zip(stored_tuple, expected_tuple)
-    )
+    return all(abs(a - b) <= tolerance for a, b in zip(stored_tuple, expected_tuple))
 
 
 def _is_legacy_v1_metadata(metadata: Mapping[str, object]) -> bool:
@@ -447,7 +461,9 @@ def validate_checkpoint_feature_compatibility(
     stored = checkpoint_feature_metadata(checkpoint)
     source = "checkpoint metadata"
     if stored is None:
-        stored = infer_feature_metadata_from_state_dict(checkpoint_state_dict(checkpoint))
+        stored = infer_feature_metadata_from_state_dict(
+            checkpoint_state_dict(checkpoint)
+        )
         source = "policy weight shapes (checkpoint has no feature metadata)"
     if stored is None:
         return
@@ -493,9 +509,7 @@ def validate_checkpoint_feature_compatibility(
         stored_anchors = stored.get("intercept_anchors")
         expected_anchors = expected.get("intercept_anchors")
         if not _intercept_anchors_match(stored_anchors, expected_anchors):
-            mismatches.append(
-                ("intercept_anchors", stored_anchors, expected_anchors)
-            )
+            mismatches.append(("intercept_anchors", stored_anchors, expected_anchors))
 
     if not mismatches:
         return

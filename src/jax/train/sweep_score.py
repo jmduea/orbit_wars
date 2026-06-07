@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import deque
-
 from pathlib import Path
 
 from src.jax.preflight_calibration import (
@@ -288,7 +287,7 @@ def preflight_sweep_score(
     return float(win_rate_delta)
 
 
-def collect_preflight_sweep_metrics(
+def collect_ssot_preflight_sweep_metrics(
     *,
     win_rate_trend: WinRateTrendTracker,
     approx_kl_window: MetricWindowTracker | None,
@@ -338,4 +337,5 @@ def is_ssot_preflight_sweep(cfg: object) -> bool:
     tags = getattr(wandb_cfg, "tags", None) if wandb_cfg is not None else None
     if not tags:
         return False
-    return "ssot_preflight" in {str(tag).strip() for tag in tags}
+    normalized = {str(tag).strip() for tag in tags}
+    return "ssot_preflight" in normalized or "preflight" in normalized

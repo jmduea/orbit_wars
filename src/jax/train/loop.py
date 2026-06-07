@@ -7,6 +7,7 @@ from pathlib import Path
 import jax.numpy as jnp
 
 import jax
+from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.artifacts.pipeline import (
     ArtifactPipelineError,
     AsyncArtifactPipeline,
@@ -30,6 +31,7 @@ from src.jax.normalization import (
 )
 from src.jax.policy import build_jax_policy
 from src.jax.ppo_update import concatenate_transition_batches, ppo_update_jax
+from src.jax.preflight_calibration import default_calibration_json_path, load_thresholds
 from src.jax.rollout.metrics import FINALIZED_ROLLOUT_RATE_KEYS
 from src.jax.rollout.types import JaxTransitionBatch
 from src.jax.tournament_qualifiers.promotion import ssot_rollout_stage_view
@@ -67,6 +69,7 @@ from src.jax.train.sweep_score import (
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_planet_flow_sweep_metrics,
+    collect_ssot_preflight_sweep_metrics,
     is_ssot_preflight_sweep,
     planet_flow_max_post_mask_unreachable_rate,
 )

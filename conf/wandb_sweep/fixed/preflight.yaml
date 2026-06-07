@@ -4,8 +4,6 @@
 parameters:
   model:
     value: transformer_factorized_small
-  task:
-    value: shield_cheap
   training:
     value: 2p4p_16_split
   training.total_updates:

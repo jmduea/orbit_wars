@@ -44,6 +44,11 @@ def test_is_ssot_preflight_sweep_detects_tag() -> None:
     )
     assert is_ssot_preflight_sweep(cfg) is True
 
+    cfg_preflight_tag = TrainConfig(
+        telemetry=TelemetryConfig(wandb=WandBConfig(tags=["preflight"]))
+    )
+    assert is_ssot_preflight_sweep(cfg_preflight_tag) is True
+
     assert is_ssot_preflight_sweep(TrainConfig()) is False
 
 
