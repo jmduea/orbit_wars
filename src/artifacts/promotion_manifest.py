@@ -43,3 +43,22 @@ def append_promotion_index(
     indexes_dir: Path, record: Mapping[str, object]
 ) -> None:
     append_jsonl_atomic(indexes_dir / "promoted.jsonl", dict(record))
+
+
+def commit_promotion(
+    *,
+    campaign_dir: Path,
+    campaign_manifest_path: Path,
+    indexes_dir: Path,
+    promoted_payload: Mapping[str, object],
+    campaign_updates: Mapping[str, object],
+    index_record: Mapping[str, object],
+) -> Path:
+    """Write promoted manifest, merge campaign fields, and append the index row."""
+
+    manifest_out = write_promoted_manifest(campaign_dir, promoted_payload)
+    merge_campaign_manifest(campaign_manifest_path, campaign_updates)
+    index_payload = dict(index_record)
+    index_payload.setdefault("promoted_manifest_path", str(manifest_out))
+    append_promotion_index(indexes_dir, index_payload)
+    return manifest_out

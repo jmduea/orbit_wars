@@ -86,6 +86,92 @@ def test_checkpoint_handler_skips_artifact_jobs_when_pipeline_disabled(
     queue_tournament.assert_not_called()
 
 
+def test_checkpoint_handler_parses_shared_metric_once(tmp_path: Path) -> None:
+    import json
+
+    log_path = tmp_path / "metrics.jsonl"
+    log_path.write_text(
+        json.dumps({"update": 5, "episode_reward_mean": 0.8}) + "\n",
+        encoding="utf-8",
+    )
+    checkpoint_path = tmp_path / "jax_ckpt_000005.pkl"
+    checkpoint_path.write_bytes(b"ckpt")
+    cfg = SimpleNamespace(
+        artifacts=SimpleNamespace(
+            artifact_pipeline=SimpleNamespace(
+                enabled=False,
+                replay_async=False,
+                docker_validation_async=False,
+            ),
+            checkpoint_retention=SimpleNamespace(
+                keep_last_n=1,
+                keep_every_n_updates=0,
+                keep_best_k_by_metric=2,
+                best_metric_name="episode_reward_mean",
+                best_metric_mode="max",
+                min_update_for_pruning=0,
+                dry_run_pruning=True,
+            ),
+            promotion=SimpleNamespace(
+                enabled=True,
+                strategy="hybrid",
+                metric_name="episode_reward_mean",
+                metric_mode="max",
+            ),
+            tournament=SimpleNamespace(enabled=False),
+            replay=SimpleNamespace(enabled=False),
+        ),
+        telemetry=SimpleNamespace(wandb=SimpleNamespace(log_artifacts=False)),
+    )
+    handler = CheckpointHandler(
+        cfg=cfg,
+        run_dir=tmp_path,
+        log_path=log_path,
+        run_context=SimpleNamespace(
+            campaign_slug="shared_metric",
+            campaign_dir=tmp_path / "campaign",
+            campaign_manifest_path=tmp_path / "campaign" / "campaign_manifest.json",
+            indexes_dir=tmp_path / "indexes",
+            run_dir=tmp_path,
+            run_id="run-1",
+            evaluations_dir=tmp_path / "eval",
+            manifest_path=tmp_path / "manifest.json",
+        ),
+        telemetry=MagicMock(),
+        artifact_queue_dir=tmp_path / "queue",
+        checkpoint_pipeline=None,
+    )
+    (tmp_path / "campaign").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "indexes").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "manifest.json").write_text(
+        json.dumps({"produced_artifacts": []}),
+        encoding="utf-8",
+    )
+
+    with patch(
+        "src.jax.train.checkpoint.collect_metric_by_update",
+        wraps=__import__(
+            "src.artifacts.checkpoint_retention",
+            fromlist=["collect_metric_by_update"],
+        ).collect_metric_by_update,
+    ) as collect_metrics:
+        handler.handle_results(
+            [
+                CheckpointResult(
+                    job_id="sync-5",
+                    update=5,
+                    status="committed",
+                    numbered_path=checkpoint_path,
+                    latest_path=tmp_path / "jax_ckpt_last.pkl",
+                    final=False,
+                )
+            ]
+        )
+
+    assert collect_metrics.call_count == 1
+    assert collect_metrics.call_args.args == (log_path, "episode_reward_mean")
+
+
 def test_checkpoint_handler_records_failed_results(tmp_path: Path) -> None:
     log_path = tmp_path / "metrics.jsonl"
     cfg = SimpleNamespace(

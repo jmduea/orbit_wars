@@ -57,12 +57,16 @@ def test_checkpoint_eval_worker_runs_docker_then_tournament(
     docker_calls: list[dict[str, object]] = []
     tournament_calls: list[Path] = []
 
-    def fake_docker(**kwargs: object) -> dict[str, object]:
-        docker_calls.append(dict(kwargs))
-        output_dir = Path(str(kwargs["output_dir"]))
+    def fake_docker_gate(
+        job: dict[str, object], *, result_dir: Path, repo_root: Path
+    ) -> tuple[dict[str, object], bool]:
+        docker_calls.append(
+            {"job": job, "result_dir": result_dir, "repo_root": repo_root}
+        )
+        output_dir = result_dir / "docker_validation"
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "submission.tar.gz").write_bytes(b"tar")
-        return {
+        manifest = {
             "validation_ok": True,
             "output_dir": str(output_dir),
             "package_path": str(output_dir / "submission.tar.gz"),
@@ -70,6 +74,8 @@ def test_checkpoint_eval_worker_runs_docker_then_tournament(
             "stdout_path": str(output_dir / "stdout.log"),
             "stderr_path": str(output_dir / "stderr.log"),
         }
+        (result_dir / "docker_manifest.json").write_text("{}", encoding="utf-8")
+        return manifest, True
 
     fake_tournament = TournamentResult(
         tournament_id="t-1",
@@ -91,8 +97,8 @@ def test_checkpoint_eval_worker_runs_docker_then_tournament(
         return fake_tournament, None
 
     monkeypatch.setattr(
-        "src.artifacts.checkpoint_eval.run_submit_valid_docker_gate",
-        fake_docker,
+        "src.artifacts.checkpoint_eval.run_docker_gate_for_job",
+        fake_docker_gate,
     )
     monkeypatch.setattr(
         "src.artifacts.checkpoint_eval.run_tournament_promotion_job",
@@ -133,7 +139,9 @@ def test_checkpoint_eval_worker_marks_failed_when_docker_fails(
     )
     job = load_pending_optional_jobs(tmp_path / "jobs")[0]
 
-    def fake_docker(**_kwargs: object) -> dict[str, object]:
+    def fake_docker_gate(
+        _job: dict[str, object], *, result_dir: Path, repo_root: Path
+    ) -> tuple[dict[str, object], bool]:
         raise RuntimeError("docker down")
 
     tournament_called = {"value": False}
@@ -143,8 +151,8 @@ def test_checkpoint_eval_worker_marks_failed_when_docker_fails(
         raise AssertionError("tournament should not run")
 
     monkeypatch.setattr(
-        "src.artifacts.checkpoint_eval.run_submit_valid_docker_gate",
-        fake_docker,
+        "src.artifacts.checkpoint_eval.run_docker_gate_for_job",
+        fake_docker_gate,
     )
     monkeypatch.setattr(
         "src.artifacts.checkpoint_eval.run_tournament_promotion_job",
@@ -155,3 +163,52 @@ def test_checkpoint_eval_worker_marks_failed_when_docker_fails(
         run_artifact_worker._run_checkpoint_eval_job(job)
 
     assert tournament_called["value"] is False
+
+
+def test_checkpoint_eval_worker_completes_when_docker_soft_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from scripts import run_artifact_worker
+
+    checkpoint_path = tmp_path / "jax_ckpt_000010.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+    job_path = write_optional_job(
+        tmp_path / "jobs",
+        kind="checkpoint_eval",
+        update=10,
+        checkpoint_path=checkpoint_path,
+        payload={"campaign": "c", "run_id": "r"},
+        result_root=tmp_path / "evaluations",
+    )
+    job = load_pending_optional_jobs(tmp_path / "jobs")[0]
+    tournament_called = {"value": False}
+
+    def fake_docker_gate(
+        _job: dict[str, object], *, result_dir: Path, repo_root: Path
+    ) -> tuple[dict[str, object], bool]:
+        return {"validation_ok": False}, False
+
+    def fake_tournament_job(_job: dict[str, object], *, result_dir: Path):
+        tournament_called["value"] = True
+        raise AssertionError("tournament should not run")
+
+    monkeypatch.setattr(
+        "src.artifacts.checkpoint_eval.run_docker_gate_for_job",
+        fake_docker_gate,
+    )
+    monkeypatch.setattr(
+        "src.artifacts.checkpoint_eval.run_tournament_promotion_job",
+        fake_tournament_job,
+    )
+
+    run_artifact_worker._run_checkpoint_eval_job(job)
+
+    assert tournament_called["value"] is False
+    status = json.loads(job_path.read_text(encoding="utf-8"))
+    assert status["status"] == "completed"
+    assert status["validation_ok"] is False
+    manifest = json.loads(
+        Path(status["result_manifest_path"]).read_text(encoding="utf-8")
+    )
+    assert manifest["tournament_skipped"] is True
+    assert manifest["promotion_reason"] == "docker_validation_failed"

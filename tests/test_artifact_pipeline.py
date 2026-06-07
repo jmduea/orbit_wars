@@ -8,7 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.artifacts.checkpoint_retention import (
+    collect_metric_by_update,
+    prune_checkpoints,
+)
 from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointJob,
@@ -41,11 +44,74 @@ def test_atomic_checkpoint_commit_writes_numbered_then_latest(tmp_path: Path):
     assert latest["update"] == 7
 
 
+def test_submit_checkpoint_returns_none(tmp_path: Path) -> None:
+    pipeline = AsyncArtifactPipeline(checkpoint_queue_size=2, autostart=False)
+    job = CheckpointJob(update=1, run_dir=tmp_path, build_payload=lambda: _payload(1))
+    assert pipeline.submit_checkpoint(job) is None
+
+
+def test_checkpoint_queue_skips_incoming_job_under_queue_pressure(
+    tmp_path: Path,
+) -> None:
+    pipeline = AsyncArtifactPipeline(
+        checkpoint_queue_size=1,
+        autostart=False,
+        coalesce_intermediate_checkpoints=False,
+    )
+    first = CheckpointJob(update=1, run_dir=tmp_path, build_payload=lambda: _payload(1))
+    second = CheckpointJob(
+        update=2, run_dir=tmp_path, build_payload=lambda: _payload(2)
+    )
+
+    assert pipeline.submit_checkpoint(first) is None
+    assert pipeline.submit_checkpoint(second) is None
+
+    results = pipeline.drain_results()
+    skipped = [result for result in results if result.status == "skipped"]
+    assert len(skipped) == 1
+    assert skipped[0].update == 2
+    assert skipped[0].reason == "queue_pressure"
+    assert {result.status for result in results}.issubset(
+        {"committed", "failed", "skipped"}
+    )
+
+
+def test_collect_metric_by_update_skips_malformed_and_missing_metric_rows(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "metrics.jsonl"
+    log_path.write_text(
+        "\n".join(
+            [
+                '{"update": 1, "episode_reward_mean": 0.5}',
+                "not-json",
+                '{"update": 2}',
+                '{"update": 3, "episode_reward_mean": "bad"}',
+                '{"update": 4, "episode_reward_mean": 1.0}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert collect_metric_by_update(log_path, "episode_reward_mean") == {1: 0.5, 4: 1.0}
+
+
+def test_collect_metric_by_update_missing_file_returns_empty(tmp_path: Path) -> None:
+    assert (
+        collect_metric_by_update(tmp_path / "missing.jsonl", "episode_reward_mean")
+        == {}
+    )
+    assert collect_metric_by_update(tmp_path / "metrics.jsonl", "") == {}
+
+
 def test_checkpoint_queue_coalesces_intermediate_but_keeps_final(tmp_path: Path):
     pipeline = AsyncArtifactPipeline(checkpoint_queue_size=1, autostart=False)
 
     first = CheckpointJob(update=1, run_dir=tmp_path, build_payload=lambda: _payload(1))
-    second = CheckpointJob(update=2, run_dir=tmp_path, build_payload=lambda: _payload(2))
+    second = CheckpointJob(
+        update=2, run_dir=tmp_path, build_payload=lambda: _payload(2)
+    )
     final = CheckpointJob(
         update=3,
         run_dir=tmp_path,
@@ -53,14 +119,18 @@ def test_checkpoint_queue_coalesces_intermediate_but_keeps_final(tmp_path: Path)
         final=True,
     )
 
-    assert pipeline.submit_checkpoint(first) == []
+    pipeline.submit_checkpoint(first)
     pipeline.submit_checkpoint(second)
     pipeline.submit_checkpoint(final)
     pipeline.start()
     results = pipeline.close(timeout_seconds=5.0)
 
-    skipped_updates = {result.update for result in results if result.status == "skipped"}
-    committed_updates = {result.update for result in results if result.status == "committed"}
+    skipped_updates = {
+        result.update for result in results if result.status == "skipped"
+    }
+    committed_updates = {
+        result.update for result in results if result.status == "committed"
+    }
     assert skipped_updates == {1, 2}
     assert committed_updates == {3}
     assert (tmp_path / "jax_ckpt_000003.pkl").exists()
@@ -330,7 +400,9 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
         assert "--timeout-seconds" not in command
         replay_dir = output_dir / "replays"
         replay_dir.mkdir(parents=True, exist_ok=True)
-        (replay_dir / "replay_u000001_2p.html").write_text("<html></html>", encoding="utf-8")
+        (replay_dir / "replay_u000001_2p.html").write_text(
+            "<html></html>", encoding="utf-8"
+        )
         return SimpleNamespace(returncode=0, stdout="ok", stderr="")
 
     monkeypatch.setattr("src.artifacts.docker_validation.subprocess.run", fake_run)
@@ -347,9 +419,7 @@ def test_docker_worker_records_replay_html_paths(tmp_path: Path, monkeypatch):
     assert status["replay_html_paths"][0].endswith("replay_u000001_2p.html")
 
 
-def test_artifact_worker_retry_failed_processes_failed_job(
-    tmp_path: Path, monkeypatch
-):
+def test_artifact_worker_retry_failed_processes_failed_job(tmp_path: Path, monkeypatch):
     from scripts import run_artifact_worker
 
     checkpoint_path = tmp_path / "jax_ckpt_000001.pkl"
@@ -403,7 +473,9 @@ def test_local_replay_worker_writes_to_result_dir(tmp_path: Path, monkeypatch):
     )
     job = load_pending_optional_jobs(tmp_path / "jobs")[0]
 
-    monkeypatch.setattr(run_artifact_worker, "_load_checkpoint_config", lambda _path: TrainConfig())
+    monkeypatch.setattr(
+        run_artifact_worker, "_load_checkpoint_config", lambda _path: TrainConfig()
+    )
 
     captured: dict[str, Path | None] = {}
 
@@ -414,14 +486,18 @@ def test_local_replay_worker_writes_to_result_dir(tmp_path: Path, monkeypatch):
         metadata_path.write_text("{}", encoding="utf-8")
         return metadata_path
 
-    monkeypatch.setattr(run_artifact_worker, "maybe_write_jax_checkpoint_replay", fake_replay)
+    monkeypatch.setattr(
+        run_artifact_worker, "maybe_write_jax_checkpoint_replay", fake_replay
+    )
 
     run_artifact_worker._run_replay_job(job)
 
     status = json.loads(job_path.read_text(encoding="utf-8"))
     assert captured["output_dir"] == Path(status["result_dir"]) / "replay"
     assert Path(status["result_manifest_path"]).exists()
-    assert status["metadata_path"] == str(Path(status["result_dir"]) / "replay" / "replay.json")
+    assert status["metadata_path"] == str(
+        Path(status["result_dir"]) / "replay" / "replay.json"
+    )
 
 
 def test_worker_rejects_result_dir_escape(tmp_path: Path):
@@ -429,7 +505,12 @@ def test_worker_rejects_result_dir_escape(tmp_path: Path):
 
     job_file = tmp_path / "jobs" / "job.json"
     job_file.parent.mkdir()
-    job = {"job_id": "bad", "kind": "replay", "update": 1, "result_dir": str(tmp_path / "elsewhere")}
+    job = {
+        "job_id": "bad",
+        "kind": "replay",
+        "update": 1,
+        "result_dir": str(tmp_path / "elsewhere"),
+    }
 
     with pytest.raises(ValueError, match="escapes"):
         run_artifact_worker._job_result_dir(job, job_file)
@@ -472,7 +553,9 @@ def test_worker_accepts_custom_result_root_from_trusted_worker_option(
     assert run_artifact_worker._job_result_dir(job, job_file) == Path(job["result_dir"])
 
 
-def test_artifact_worker_autostart_launches_background_process(tmp_path: Path, monkeypatch):
+def test_artifact_worker_autostart_launches_background_process(
+    tmp_path: Path, monkeypatch
+):
     from src.config import TrainConfig
     from src.jax.train import queue as train_queue
 

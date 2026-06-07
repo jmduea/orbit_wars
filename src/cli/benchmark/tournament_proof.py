@@ -7,10 +7,11 @@ import json
 import sys
 from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import REPO_ROOT, _git_head_sha
+
 
 def run_tournament_proof_cli(args: argparse.Namespace) -> int:
-    from src.artifacts.submit_valid_funnel import (
+    from src.artifacts.docker_validation import (
         docker_gate_passed,
         run_submit_valid_docker_gate,
     )
@@ -43,18 +44,18 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
     docker_output_dir = output_dir / "docker_validation"
 
     if args.dry_run:
-        stage1_count = (
-            len(spec.stage1.opponents)
-            * len(spec.stage1.seeds)
-            * spec.stage1.games_per_pair
-            * (1 + ("4p_challenger_vs_baselines" in spec.stage1.formats))
-        )
         if "4p_challenger_vs_baselines" in spec.stage1.formats:
             stage1_count = (
                 len(spec.stage1.opponents)
                 * len(spec.stage1.seeds)
                 * spec.stage1.games_per_pair
                 + len(spec.stage1.seeds) * spec.stage1.games_per_pair
+            )
+        else:
+            stage1_count = (
+                len(spec.stage1.opponents)
+                * len(spec.stage1.seeds)
+                * spec.stage1.games_per_pair
             )
         plan = {
             "gate": "win_proof",
@@ -172,4 +173,3 @@ def run_tournament_proof_cli(args: argparse.Namespace) -> int:
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
     return 0 if preflight_verdict == PreflightVerdict.VERIFIED else 1
-

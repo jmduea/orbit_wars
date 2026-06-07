@@ -13,7 +13,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-CheckpointStatus = Literal["committed", "failed", "skipped", "coalesced"]
+from src.artifacts.run_paths import append_jsonl_atomic
+
+CheckpointStatus = Literal["committed", "failed", "skipped"]
 OptionalJobKind = Literal[
     "replay",
     "docker_validation",
@@ -128,8 +130,11 @@ class AsyncArtifactPipeline:
                 last_error=self._stats.last_error,
             )
 
-    def submit_checkpoint(self, job: CheckpointJob) -> list[CheckpointResult]:
-        """Submit a checkpoint job, coalescing intermediate pending work if needed."""
+    def submit_checkpoint(self, job: CheckpointJob) -> None:
+        """Submit a checkpoint job, coalescing intermediate pending work if needed.
+
+        Results are delivered via ``drain_results()`` after the worker commits.
+        """
 
         with self._condition:
             if self._closed:
@@ -142,13 +147,15 @@ class AsyncArtifactPipeline:
 
             if job.final:
                 self._skip_all_pending_locked("final_checkpoint_priority")
-            elif len(self._pending) >= self._max_pending and self._coalesce_intermediate:
+            elif (
+                len(self._pending) >= self._max_pending and self._coalesce_intermediate
+            ):
                 self._skip_one_intermediate_locked("queue_pressure")
 
             if len(self._pending) >= self._max_pending and not job.final:
                 result = _skipped_result(job, "queue_pressure")
                 self._record_result_locked(result)
-                return []
+                return
 
             self._pending.append(job)
             self._stats.queue_depth = len(self._pending)
@@ -162,7 +169,6 @@ class AsyncArtifactPipeline:
                 }
             )
             self._condition.notify_all()
-        return []
 
     def drain_results(self) -> list[CheckpointResult]:
         results: list[CheckpointResult] = []
@@ -177,7 +183,7 @@ class AsyncArtifactPipeline:
                     self._stats.latest_committed_update = max(
                         self._stats.latest_committed_update, result.update
                     )
-                elif result.status in {"skipped", "coalesced"}:
+                elif result.status == "skipped":
                     self._stats.skipped_checkpoints += 1
                 elif result.status == "failed":
                     self._stats.failed_checkpoints += 1
@@ -186,7 +192,9 @@ class AsyncArtifactPipeline:
         return results
 
     def flush(self, *, timeout_seconds: float | None = None) -> list[CheckpointResult]:
-        deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
+        deadline = (
+            None if timeout_seconds is None else time.monotonic() + timeout_seconds
+        )
         with self._condition:
             while self._pending or self._active:
                 remaining = None if deadline is None else deadline - time.monotonic()
@@ -284,7 +292,9 @@ class AsyncArtifactPipeline:
     def _append_ledger(self, record: Mapping[str, object]) -> None:
         if self._ledger_path is None:
             return
-        append_jsonl_atomic(self._ledger_path, {**dict(record), "time_unix": time.time()})
+        append_jsonl_atomic(
+            self._ledger_path, {**dict(record), "time_unix": time.time()}
+        )
 
 
 def _skipped_result(job: CheckpointJob, reason: str) -> CheckpointResult:
@@ -348,14 +358,6 @@ def _fsync_dir(path: Path) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
-
-
-def append_jsonl_atomic(path: Path, record: Mapping[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(dict(record), sort_keys=True) + "\n")
-        file.flush()
-        os.fsync(file.fileno())
 
 
 def write_optional_job(
@@ -466,7 +468,9 @@ def cancel_optional_jobs(
     """Cancel queued optional jobs by marking their JSON status as ``cancelled``."""
 
     if not all_queued and not job_ids:
-        raise ValueError("Provide --all-queued and/or --job-id to select jobs to cancel.")
+        raise ValueError(
+            "Provide --all-queued and/or --job-id to select jobs to cancel."
+        )
 
     cancellable_statuses = {"queued"}
     if include_running:

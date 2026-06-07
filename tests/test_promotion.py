@@ -7,9 +7,9 @@ import pytest
 
 from src.artifacts.promotion import (
     promote_if_better,
-    promoted_manifest_path,
     resolve_from_promoted,
 )
+from src.artifacts.promotion_manifest import commit_promotion, promoted_manifest_path
 from src.artifacts.run_paths import RunContext, resolve_run_paths, write_run_manifests
 from src.config.schema import TrainConfig
 
@@ -32,6 +32,79 @@ def _write_metric_log(log_path: Path, records: list[dict[str, object]]) -> None:
         "\n".join(json.dumps(record) for record in records) + "\n",
         encoding="utf-8",
     )
+
+
+def test_commit_promotion_writes_manifest_campaign_and_index(tmp_path: Path) -> None:
+    context = _run_context(tmp_path, campaign="commit_helper")
+    cfg = TrainConfig()
+    cfg.output.root = str(tmp_path / "outputs")
+    write_run_manifests(cfg, context, {"job_type": "train", "backend": "jax"})
+    checkpoint_path = context.checkpoints_dir / "jax_ckpt_000001.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    manifest_out = commit_promotion(
+        campaign_dir=context.campaign_dir,
+        campaign_manifest_path=context.campaign_manifest_path,
+        indexes_dir=context.indexes_dir,
+        promoted_payload={
+            "campaign": context.campaign_slug,
+            "checkpoint_path": str(checkpoint_path),
+            "metric_name": "episode_reward_mean",
+            "metric_value": 0.5,
+        },
+        campaign_updates={
+            "current_best_value": 0.5,
+            "current_best_run_id": context.run_id,
+        },
+        index_record={
+            "campaign": context.campaign_slug,
+            "run_id": context.run_id,
+            "update": 1,
+            "metric_name": "episode_reward_mean",
+            "metric_value": 0.5,
+            "checkpoint_path": str(checkpoint_path),
+        },
+    )
+
+    assert manifest_out == promoted_manifest_path(context.campaign_dir)
+    campaign_manifest = json.loads(context.campaign_manifest_path.read_text())
+    assert campaign_manifest["current_best_value"] == pytest.approx(0.5)
+    index_lines = (context.indexes_dir / "promoted.jsonl").read_text().strip().splitlines()
+    assert len(index_lines) == 1
+    assert "promoted_manifest_path" in json.loads(index_lines[0])
+
+
+def test_promote_if_better_uses_injected_metrics_without_log_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _run_context(tmp_path)
+    cfg = TrainConfig()
+    cfg.output.root = str(tmp_path / "outputs")
+    cfg.artifacts.promotion.metric_name = "episode_reward_mean"
+    write_run_manifests(cfg, context, {"job_type": "train", "backend": "jax"})
+    checkpoint_path = context.checkpoints_dir / "jax_ckpt_000002.pkl"
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    def fail_scan(*_args: object, **_kwargs: object) -> dict[int, float]:
+        raise AssertionError("collect_metric_by_update should not run when metrics are injected")
+
+    monkeypatch.setattr(
+        "src.artifacts.promotion.collect_metric_by_update",
+        fail_scan,
+    )
+
+    attempt, run_best = promote_if_better(
+        cfg,
+        context,
+        checkpoint_path=checkpoint_path,
+        update=2,
+        log_path=context.log_path,
+        run_best_value=None,
+        metrics_by_update={2: 0.7},
+    )
+
+    assert attempt.promoted is True
+    assert run_best == pytest.approx(0.7)
 
 
 def test_promote_if_better_cas_max_updates_manifest_and_index(tmp_path: Path) -> None:

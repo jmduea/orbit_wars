@@ -75,7 +75,7 @@ def compose_run_name(cfg: TrainConfig) -> str:
         _format_run_name_component(cfg),
         _opponent_run_name_component(cfg),
         f"u{int(cfg.training.total_updates)}",
-        f"env{_run_name_env_count(cfg)}",
+        f"env{run_name_env_count(cfg)}",
         f"s{int(cfg.seed)}",
     ]
     job_num = _hydra_job_num()
@@ -86,7 +86,7 @@ def compose_run_name(cfg: TrainConfig) -> str:
 
 
 def _format_run_name_component(cfg: TrainConfig) -> str:
-    player_counts = _rollout_player_counts(cfg)
+    player_counts = rollout_player_counts(cfg)
     if len(player_counts) > 1:
         return "mix" + "p".join(str(count) for count in player_counts) + "p"
     return f"{player_counts[0]}p"
@@ -106,14 +106,6 @@ def _opponent_run_name_component(cfg: TrainConfig) -> str:
     else:
         opponent = str(cfg.opponents.mode.opponent)
     return _run_name_component(opponent)
-
-
-def _run_name_env_count(cfg: TrainConfig) -> int:
-    return run_name_env_count(cfg)
-
-
-def _rollout_player_counts(cfg: TrainConfig) -> list[int]:
-    return rollout_player_counts(cfg)
 
 
 def _run_name_component(value: str) -> str:
@@ -217,7 +209,8 @@ def _merge_campaign_manifest_on_run_start(
         "updated_at": created_at,
         "default_retention_class": context.retention_class,
         "promotion_metric_name": metric_name or existing.get("promotion_metric_name"),
-        "promotion_metric_mode": metric_mode or existing.get("promotion_metric_mode", "max"),
+        "promotion_metric_mode": metric_mode
+        or existing.get("promotion_metric_mode", "max"),
         "current_best_value": existing.get("current_best_value"),
         "current_best_run_id": existing.get("current_best_run_id"),
     }

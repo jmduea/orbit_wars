@@ -17,7 +17,7 @@ from src.artifacts.checkpoint_compat import (
     validate_checkpoint_feature_compatibility,
     validate_checkpoint_pointer_decoder_compatibility,
 )
-from src.artifacts.checkpoint_retention import prune_checkpoints
+from src.artifacts.checkpoint_retention import collect_metric_by_update, prune_checkpoints
 from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointJob,
@@ -274,6 +274,26 @@ class CheckpointHandler:
     def artifact_cfg(self):
         return self.cfg.artifacts.artifact_pipeline
 
+    def _metric_maps_for_result(
+        self,
+        retention: object,
+        promotion: object,
+    ) -> dict[str, dict[int, float]]:
+        """Parse each required training metric at most once per committed result."""
+
+        names: set[str] = set()
+        keep_best_k = int(getattr(retention, "keep_best_k_by_metric", 0) or 0)
+        retention_metric = str(getattr(retention, "best_metric_name", "") or "").strip()
+        if keep_best_k > 0 and retention_metric:
+            names.add(retention_metric)
+        if bool(getattr(promotion, "enabled", False)):
+            promotion_metric = str(getattr(promotion, "metric_name", "") or "").strip()
+            if promotion_metric:
+                names.add(promotion_metric)
+        return {
+            name: collect_metric_by_update(self.log_path, name) for name in names
+        }
+
     def protected_artifact_paths(self) -> set[Path]:
         paths = {self.run_dir / "jax_ckpt_last.pkl"}
         if self.checkpoint_pipeline is not None:
@@ -348,6 +368,12 @@ class CheckpointHandler:
                 )
 
             retention = self.cfg.artifacts.checkpoint_retention
+            promotion = self.cfg.artifacts.promotion
+            metric_cache = self._metric_maps_for_result(retention, promotion)
+            retention_metric_name = str(retention.best_metric_name or "").strip()
+            promotion_metric_name = (
+                str(promotion.metric_name or "").strip() if promotion.enabled else ""
+            )
             pruning = prune_checkpoints(
                 self.run_dir,
                 log_path=self.log_path,
@@ -359,6 +385,7 @@ class CheckpointHandler:
                 min_update_for_pruning=retention.min_update_for_pruning,
                 dry_run_pruning=retention.dry_run_pruning,
                 protected_paths=protected_paths,
+                metrics_by_update=metric_cache.get(retention_metric_name),
             )
             action_label = "would prune" if pruning.dry_run else "pruned"
             print(
@@ -372,6 +399,7 @@ class CheckpointHandler:
                 update=result.update,
                 log_path=self.log_path,
                 run_best_value=self.run_promotion_best,
+                metrics_by_update=metric_cache.get(promotion_metric_name),
             )
             if promotion_attempt.promoted:
                 print(

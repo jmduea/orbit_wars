@@ -8,6 +8,68 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from src.artifacts.run_paths import atomic_write_json
+
+DEFAULT_DOCKER_IMAGE = "gcr.io/kaggle-images/python-simulations"
+
+
+def run_submit_valid_docker_gate(
+    *,
+    checkpoint_path: Path,
+    output_dir: Path,
+    repo_root: Path,
+    docker_image: str = DEFAULT_DOCKER_IMAGE,
+    seed: int = 42,
+    player_count: str = "both",
+    per_step_seconds: float = 1.0,
+    overage_budget_seconds: float = 60.0,
+    episode_steps: int = 500,
+) -> dict[str, Any]:
+    """Validate checkpoint packaging in Kaggle Docker before tournament work."""
+
+    return run_docker_validation_subprocess(
+        checkpoint_path=checkpoint_path,
+        output_dir=output_dir,
+        repo_root=repo_root,
+        docker_image=docker_image,
+        seed=seed,
+        player_count=player_count,
+        per_step_seconds=per_step_seconds,
+        overage_budget_seconds=overage_budget_seconds,
+        episode_steps=episode_steps,
+    )
+
+
+def docker_gate_passed(manifest: dict[str, Any]) -> bool:
+    """Return whether a Docker gate manifest indicates submit-valid packaging."""
+
+    return bool(manifest.get("validation_ok"))
+
+
+def run_docker_gate_for_job(
+    job: dict[str, object],
+    *,
+    result_dir: Path,
+    repo_root: Path,
+) -> tuple[dict[str, Any], bool]:
+    """Run docker validation for a queued job and write ``docker_manifest.json``."""
+
+    checkpoint_path = Path(str(job["checkpoint_path"]))
+    docker_output_dir = result_dir / "docker_validation"
+    docker_manifest = run_submit_valid_docker_gate(
+        checkpoint_path=checkpoint_path,
+        output_dir=docker_output_dir,
+        repo_root=repo_root,
+        docker_image=str(job.get("docker_image", DEFAULT_DOCKER_IMAGE)),
+        seed=int(job.get("seed", 42)),
+        player_count=str(job.get("player_count", "both")),
+        per_step_seconds=float(job.get("per_step_seconds", 1.0)),
+        overage_budget_seconds=float(job.get("overage_budget_seconds", 60.0)),
+        episode_steps=int(job.get("episode_steps", 500)),
+    )
+    atomic_write_json(result_dir / "docker_manifest.json", docker_manifest)
+    return docker_manifest, docker_gate_passed(docker_manifest)
+
 
 def run_docker_validation_subprocess(
     *,
@@ -46,7 +108,9 @@ def run_docker_validation_subprocess(
     ]
     timeout_seconds = max(
         120.0,
-        float(episode_steps) * float(per_step_seconds) + float(overage_budget_seconds) + 120.0,
+        float(episode_steps) * float(per_step_seconds)
+        + float(overage_budget_seconds)
+        + 120.0,
     )
     try:
         completed = subprocess.run(

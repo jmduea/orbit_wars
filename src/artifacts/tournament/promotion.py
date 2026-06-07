@@ -9,10 +9,8 @@ from typing import TYPE_CHECKING
 
 from src.artifacts.promotion import PromotionAttempt
 from src.artifacts.promotion_manifest import (
-    append_promotion_index,
-    merge_campaign_manifest,
+    commit_promotion,
     promoted_manifest_path,
-    write_promoted_manifest,
 )
 from src.artifacts.run_paths import RunContext, _git_identity
 from src.artifacts.tournament.resolve import load_train_config_from_checkpoint
@@ -138,12 +136,12 @@ def promote_from_tournament(
         "tournament_gates_passed": True,
     }
 
-    campaign_manifest_path = context.campaign_manifest_path
-    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
-
-    merge_campaign_manifest(
-        campaign_manifest_path,
-        {
+    manifest_out = commit_promotion(
+        campaign_dir=context.campaign_dir,
+        campaign_manifest_path=context.campaign_manifest_path,
+        indexes_dir=context.indexes_dir,
+        promoted_payload=promoted_payload,
+        campaign_updates={
             "campaign": context.campaign_slug,
             "campaign_dir": str(context.campaign_dir),
             "promotion_metric_name": metric_name,
@@ -153,18 +151,13 @@ def promote_from_tournament(
             "current_best_run_id": context.run_id,
             "updated_at": now,
         },
-    )
-
-    append_promotion_index(
-        context.indexes_dir,
-        {
+        index_record={
             "campaign": context.campaign_slug,
             "run_id": context.run_id,
             "update": update,
             "metric_name": metric_name,
             "metric_value": metric_value,
             "checkpoint_path": str(checkpoint_path.resolve()),
-            "promoted_manifest_path": str(manifest_out),
             "promotion_strategy": promotion.strategy,
             "tournament_id": tournament.tournament_id,
             "updated_at": now,
@@ -251,12 +244,12 @@ def promote_from_unified_ladder(
         "unified_verdict_reason": verdict.reason,
     }
 
-    campaign_manifest_path = context.campaign_manifest_path
-    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
-
-    merge_campaign_manifest(
-        campaign_manifest_path,
-        {
+    manifest_out = commit_promotion(
+        campaign_dir=context.campaign_dir,
+        campaign_manifest_path=context.campaign_manifest_path,
+        indexes_dir=context.indexes_dir,
+        promoted_payload=promoted_payload,
+        campaign_updates={
             "campaign": context.campaign_slug,
             "campaign_dir": str(context.campaign_dir),
             "promotion_metric_name": metric_name,
@@ -266,18 +259,13 @@ def promote_from_unified_ladder(
             "current_best_run_id": context.run_id,
             "updated_at": now,
         },
-    )
-
-    append_promotion_index(
-        context.indexes_dir,
-        {
+        index_record={
             "campaign": context.campaign_slug,
             "run_id": context.run_id,
             "update": update,
             "metric_name": metric_name,
             "metric_value": metric_value,
             "checkpoint_path": str(checkpoint_path),
-            "promoted_manifest_path": str(manifest_out),
             "promotion_strategy": promotion.strategy,
             "updated_at": now,
         },

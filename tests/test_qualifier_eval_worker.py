@@ -7,9 +7,16 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.artifacts.pipeline import load_pending_optional_jobs, write_optional_job
-from src.artifacts.tournament.bracket.qualifier import QualifierVerdict
-from src.artifacts.tournament.bracket.state import load_bracket_state, save_bracket_state, BracketState, BracketEntry
-from src.artifacts.tournament.unified.reporting import UnifiedLadderVerdict, UnifiedStageResult
+from src.artifacts.tournament.bracket.state import (
+    BracketEntry,
+    BracketState,
+    load_bracket_state,
+    save_bracket_state,
+)
+from src.artifacts.tournament.unified.reporting import (
+    UnifiedLadderVerdict,
+    UnifiedStageResult,
+)
 from src.artifacts.tournament.unified.scoring import UnifiedOpponentScore
 
 
@@ -36,8 +43,8 @@ def test_qualifier_eval_worker_skips_ladder_when_docker_fails(
         raise AssertionError("ladder should not run")
 
     monkeypatch.setattr(
-        "src.artifacts.qualifier_eval.run_submit_valid_docker_gate",
-        lambda **kwargs: {"validation_ok": False},
+        "src.artifacts.qualifier_eval.run_docker_gate_for_job",
+        lambda _job, **kwargs: ({"validation_ok": False}, False),
     )
     monkeypatch.setattr("src.artifacts.qualifier_eval.run_unified_ladder", fake_ladder)
 
@@ -46,7 +53,9 @@ def test_qualifier_eval_worker_skips_ladder_when_docker_fails(
     status = json.loads(job_path.read_text(encoding="utf-8"))
     assert status["status"] == "completed"
     assert status["validation_ok"] is False
-    manifest = json.loads(Path(status["result_manifest_path"]).read_text(encoding="utf-8"))
+    manifest = json.loads(
+        Path(status["result_manifest_path"]).read_text(encoding="utf-8")
+    )
     assert manifest["ladder_skipped"] is True
 
 
@@ -73,7 +82,13 @@ def test_qualifier_eval_worker_updates_bracket_state(
     state_path = tmp_path / "campaigns" / "c" / "bracket" / "state.json"
     save_bracket_state(
         state_path,
-        BracketState(entries={"u10": BracketEntry(agent_id="u10", checkpoint_path=str(checkpoint_path))}),
+        BracketState(
+            entries={
+                "u10": BracketEntry(
+                    agent_id="u10", checkpoint_path=str(checkpoint_path)
+                )
+            }
+        ),
     )
 
     job_path = write_optional_job(
@@ -91,8 +106,8 @@ def test_qualifier_eval_worker_updates_bracket_state(
     job = load_pending_optional_jobs(tmp_path / "jobs")[0]
 
     monkeypatch.setattr(
-        "src.artifacts.qualifier_eval.run_submit_valid_docker_gate",
-        lambda **kwargs: {"validation_ok": True},
+        "src.artifacts.qualifier_eval.run_docker_gate_for_job",
+        lambda _job, **kwargs: ({"validation_ok": True}, True),
     )
     monkeypatch.setattr(
         "src.artifacts.qualifier_eval.load_train_config_from_checkpoint",

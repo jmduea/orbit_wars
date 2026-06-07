@@ -7,12 +7,10 @@ from pathlib import Path
 from typing import Literal
 
 from src.artifacts.checkpoint_compat import feature_metadata
-from src.artifacts.checkpoint_retention import _collect_metric_by_update
+from src.artifacts.checkpoint_retention import collect_metric_by_update
 from src.artifacts.promotion_manifest import (
-    append_promotion_index,
-    merge_campaign_manifest,
+    commit_promotion,
     promoted_manifest_path,
-    write_promoted_manifest,
 )
 from src.artifacts.run_paths import RunContext, _git_identity
 from src.config import TrainConfig
@@ -71,8 +69,18 @@ def _metric_improves(
     return candidate < incumbent
 
 
-def _run_metric_at_update(log_path: Path, metric_name: str, update: int) -> float | None:
-    metrics = _collect_metric_by_update(log_path, metric_name)
+def _metric_at_update(
+    log_path: Path,
+    metric_name: str,
+    update: int,
+    *,
+    metrics_by_update: dict[int, float] | None = None,
+) -> float | None:
+    metrics = (
+        metrics_by_update
+        if metrics_by_update is not None
+        else collect_metric_by_update(log_path, metric_name)
+    )
     value = metrics.get(update)
     return None if value is None else float(value)
 
@@ -85,6 +93,7 @@ def promote_if_better(
     update: int,
     log_path: Path,
     run_best_value: float | None,
+    metrics_by_update: dict[int, float] | None = None,
 ) -> tuple[PromotionAttempt, float | None]:
     """Compare-and-swap promote when the run-local best improves campaign best."""
 
@@ -96,32 +105,34 @@ def promote_if_better(
         )
 
     metric_name = str(promotion.metric_name or "").strip()
-    metric_mode = str(promotion.metric_mode or "max").strip().lower()
-    if metric_mode not in {"max", "min"}:
-        metric_mode = "max"
+    raw_mode = str(promotion.metric_mode or "max").strip().lower()
+    mode: MetricMode = raw_mode if raw_mode in {"max", "min"} else "max"
 
-    metric_value = _run_metric_at_update(log_path, metric_name, update)
+    metric_value = _metric_at_update(
+        log_path,
+        metric_name,
+        update,
+        metrics_by_update=metrics_by_update,
+    )
     if metric_value is None:
         return (
             PromotionAttempt(
                 promoted=False,
                 reason="metric_missing",
                 metric_name=metric_name,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             run_best_value,
         )
 
-    if not _metric_improves(
-        metric_value, run_best_value, mode=metric_mode  # type: ignore[arg-type]
-    ):
+    if not _metric_improves(metric_value, run_best_value, mode=mode):
         return (
             PromotionAttempt(
                 promoted=False,
                 reason="run_best_unchanged",
                 metric_name=metric_name,
                 metric_value=metric_value,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             run_best_value,
         )
@@ -142,7 +153,7 @@ def promote_if_better(
                 reason="metric_mismatch",
                 metric_name=metric_name,
                 metric_value=metric_value,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             new_run_best,
         )
@@ -154,16 +165,14 @@ def promote_if_better(
     else:
         incumbent_float = None
 
-    if not _metric_improves(
-        metric_value, incumbent_float, mode=metric_mode  # type: ignore[arg-type]
-    ):
+    if not _metric_improves(metric_value, incumbent_float, mode=mode):
         return (
             PromotionAttempt(
                 promoted=False,
                 reason="campaign_best_unchanged",
                 metric_name=metric_name,
                 metric_value=metric_value,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             new_run_best,
         )
@@ -176,7 +185,7 @@ def promote_if_better(
                 reason="tournament_only",
                 metric_name=metric_name,
                 metric_value=metric_value,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             new_run_best,
         )
@@ -187,7 +196,7 @@ def promote_if_better(
                 reason="metric_eligible_queue_tournament",
                 metric_name=metric_name,
                 metric_value=metric_value,
-                metric_mode=metric_mode,
+                metric_mode=mode,
             ),
             new_run_best,
         )
@@ -199,7 +208,7 @@ def promote_if_better(
         "checkpoint_path": str(checkpoint_path.resolve()),
         "metric_name": metric_name,
         "metric_value": metric_value,
-        "metric_mode": metric_mode,
+        "metric_mode": mode,
         "source_run_id": context.run_id,
         "source_update": int(update),
         "hydra_overrides_path": str(overrides_path),
@@ -208,31 +217,27 @@ def promote_if_better(
         "updated_at": now,
     }
 
-    manifest_out = write_promoted_manifest(context.campaign_dir, promoted_payload)
-
-    merge_campaign_manifest(
-        campaign_manifest_path,
-        {
+    manifest_out = commit_promotion(
+        campaign_dir=context.campaign_dir,
+        campaign_manifest_path=campaign_manifest_path,
+        indexes_dir=context.indexes_dir,
+        promoted_payload=promoted_payload,
+        campaign_updates={
             "campaign": context.campaign_slug,
             "campaign_dir": str(context.campaign_dir),
             "promotion_metric_name": metric_name,
-            "promotion_metric_mode": metric_mode,
+            "promotion_metric_mode": mode,
             "current_best_value": metric_value,
             "current_best_run_id": context.run_id,
             "updated_at": now,
         },
-    )
-
-    append_promotion_index(
-        context.indexes_dir,
-        {
+        index_record={
             "campaign": context.campaign_slug,
             "run_id": context.run_id,
             "update": int(update),
             "metric_name": metric_name,
             "metric_value": metric_value,
             "checkpoint_path": str(checkpoint_path.resolve()),
-            "promoted_manifest_path": str(manifest_out),
             "updated_at": now,
         },
     )
@@ -243,7 +248,7 @@ def promote_if_better(
             reason="promoted",
             metric_name=metric_name,
             metric_value=metric_value,
-            metric_mode=metric_mode,
+            metric_mode=mode,
             promoted_manifest_path=manifest_out,
         ),
         new_run_best,

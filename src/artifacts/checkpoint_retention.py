@@ -21,7 +21,7 @@ def _parse_update(path: Path) -> int | None:
     stem = path.stem
     for prefix in ("ckpt_", "jax_ckpt_"):
         if stem.startswith(prefix):
-            suffix = stem[len(prefix):]
+            suffix = stem[len(prefix) :]
             if suffix == "last":
                 return None
             if suffix.isdigit():
@@ -29,7 +29,7 @@ def _parse_update(path: Path) -> int | None:
     return None
 
 
-def _collect_metric_by_update(log_path: Path, metric_name: str) -> dict[int, float]:
+def collect_metric_by_update(log_path: Path, metric_name: str) -> dict[int, float]:
     if not log_path.exists() or not metric_name:
         return {}
     metrics: dict[int, float] = {}
@@ -63,6 +63,7 @@ def prune_checkpoints(
     min_update_for_pruning: int,
     dry_run_pruning: bool,
     protected_paths: set[Path] | None = None,
+    metrics_by_update: dict[int, float] | None = None,
 ) -> RetentionDecision:
     """Prune unprotected checkpoints within ``run_dir`` based on retention policy."""
 
@@ -83,11 +84,17 @@ def prune_checkpoints(
 
     if keep_every_n_updates > 0:
         protected.update(
-            p for p, u in updates.items() if u is not None and u % keep_every_n_updates == 0
+            p
+            for p, u in updates.items()
+            if u is not None and u % keep_every_n_updates == 0
         )
 
     if keep_best_k_by_metric > 0 and best_metric_name:
-        by_update = _collect_metric_by_update(log_path, best_metric_name)
+        by_update = (
+            metrics_by_update
+            if metrics_by_update is not None
+            else collect_metric_by_update(log_path, best_metric_name)
+        )
         scored = [
             (u, by_update[u])
             for u in sorted_updates
@@ -125,4 +132,6 @@ def prune_checkpoints(
         if not dry_run_pruning:
             resolved.unlink(missing_ok=True)
 
-    return RetentionDecision(deleted=deleted, kept=kept, reclaimed_bytes=reclaimed, dry_run=dry_run_pruning)
+    return RetentionDecision(
+        deleted=deleted, kept=kept, reclaimed_bytes=reclaimed, dry_run=dry_run_pruning
+    )

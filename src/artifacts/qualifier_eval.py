@@ -5,11 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from src.artifacts.docker_validation import run_docker_gate_for_job
 from src.artifacts.run_paths import atomic_write_json
-from src.artifacts.submit_valid_funnel import (
-    docker_gate_passed,
-    run_submit_valid_docker_gate,
-)
 from src.artifacts.tournament.bracket.qualifier import evaluate_qualifier_scores
 from src.artifacts.tournament.bracket.scheduler import queue_round_robin_matches
 from src.artifacts.tournament.bracket.state import (
@@ -49,22 +46,9 @@ def run_qualifier_eval_job(
     campaign = str(job.get("campaign", "default"))
     output_root = Path(str(job.get("output_root", REPO_ROOT / "outputs")))
 
-    docker_output_dir = result_dir / "docker_validation"
-    docker_manifest = run_submit_valid_docker_gate(
-        checkpoint_path=checkpoint_path,
-        output_dir=docker_output_dir,
-        repo_root=REPO_ROOT,
-        docker_image=str(
-            job.get("docker_image", "gcr.io/kaggle-images/python-simulations")
-        ),
-        seed=int(job.get("seed", 42)),
-        player_count=str(job.get("player_count", "both")),
-        per_step_seconds=float(job.get("per_step_seconds", 1.0)),
-        overage_budget_seconds=float(job.get("overage_budget_seconds", 60.0)),
-        episode_steps=int(job.get("episode_steps", 500)),
+    _, validation_ok = run_docker_gate_for_job(
+        job, result_dir=result_dir, repo_root=REPO_ROOT
     )
-    atomic_write_json(result_dir / "docker_manifest.json", docker_manifest)
-    validation_ok = docker_gate_passed(docker_manifest)
     if not validation_ok:
         return {
             "validation_ok": False,
@@ -106,7 +90,6 @@ def run_qualifier_eval_job(
         agent_id=agent_id,
         verdict=qualifier_verdict,
     )
-    save_bracket_state(state_path, state)
 
     round_robin_jobs = 0
     if queue_dir is not None and qualifier_verdict.cleared and state.phase == "main":
@@ -114,7 +97,9 @@ def run_qualifier_eval_job(
             queue_dir,
             state=state,
             update=update,
-            result_root=Path(str(job["result_root"])) if job.get("result_root") else None,
+            result_root=Path(str(job["result_root"]))
+            if job.get("result_root")
+            else None,
             campaign=campaign,
             output_root=output_root,
         )

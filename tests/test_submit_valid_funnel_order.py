@@ -52,7 +52,7 @@ def test_tournament_proof_dry_run_documents_docker_first_order(tmp_path: Path) -
 
 
 @patch("src.artifacts.tournament.unified.ladder.run_unified_ladder")
-@patch("src.artifacts.submit_valid_funnel.run_submit_valid_docker_gate")
+@patch("src.artifacts.docker_validation.run_submit_valid_docker_gate")
 def test_tournament_proof_runs_docker_before_ladder(
     mock_docker,
     mock_ladder,
@@ -125,7 +125,7 @@ def test_tournament_proof_runs_docker_before_ladder(
 
 
 @patch("src.artifacts.tournament.unified.ladder.run_unified_ladder")
-@patch("src.artifacts.submit_valid_funnel.run_submit_valid_docker_gate")
+@patch("src.artifacts.docker_validation.run_submit_valid_docker_gate")
 def test_tournament_proof_skips_ladder_when_docker_fails(
     mock_docker,
     mock_ladder,
@@ -174,7 +174,7 @@ def test_tournament_proof_skips_ladder_when_docker_fails(
 
 
 @patch("src.artifacts.checkpoint_eval.run_tournament_promotion_job")
-@patch("src.artifacts.checkpoint_eval.run_submit_valid_docker_gate")
+@patch("src.artifacts.checkpoint_eval.run_docker_gate_for_job")
 def test_checkpoint_eval_runs_docker_before_tournament(
     mock_docker,
     mock_tournament,
@@ -184,9 +184,11 @@ def test_checkpoint_eval_runs_docker_before_tournament(
 
     call_order: list[str] = []
 
-    def _docker(**_kwargs: object) -> dict[str, object]:
+    def _docker_gate(
+        _job: dict[str, object], *, result_dir: Path, repo_root: Path
+    ) -> tuple[dict[str, object], bool]:
         call_order.append("docker")
-        return {"validation_ok": True}
+        return {"validation_ok": True}, True
 
     def _tournament(_job: dict[str, object], *, result_dir: Path):
         call_order.append("tournament")
@@ -200,7 +202,7 @@ def test_checkpoint_eval_runs_docker_before_tournament(
             None,
         )
 
-    mock_docker.side_effect = _docker
+    mock_docker.side_effect = _docker_gate
     mock_tournament.side_effect = _tournament
 
     run_checkpoint_eval_job(
@@ -211,13 +213,13 @@ def test_checkpoint_eval_runs_docker_before_tournament(
 
 
 @patch("src.artifacts.checkpoint_eval.run_tournament_promotion_job")
-@patch("src.artifacts.checkpoint_eval.run_submit_valid_docker_gate")
+@patch("src.artifacts.checkpoint_eval.run_docker_gate_for_job")
 def test_checkpoint_eval_skips_tournament_when_docker_manifest_not_ok(
     mock_docker,
     mock_tournament,
     tmp_path: Path,
 ) -> None:
-    mock_docker.return_value = {"validation_ok": False}
+    mock_docker.return_value = ({"validation_ok": False}, False)
 
     result = run_checkpoint_eval_job(
         {"checkpoint_path": str(tmp_path / "ckpt.pkl")},

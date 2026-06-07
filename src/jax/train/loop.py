@@ -80,7 +80,7 @@ from src.jax.train.telemetry import (
     historical_pool_snapshot_telemetry,
     write_filtered_update_records,
 )
-from src.telemetry import build_telemetry
+from src.telemetry import TelemetryLogger
 from src.telemetry.gpu_memory import GpuMemoryTracker
 from src.telemetry.metric_registry import (
     enabled_metric_groups,
@@ -162,7 +162,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
         f"orbit_train_start run_dir={run_context.run_dir} log_path={log_path} "
         f"queue_dir={run_context.queue_dir} wandb={'on' if wandb_enabled else 'off'}"
     )
-    telemetry = build_telemetry(
+    telemetry = TelemetryLogger(
         cfg,
         {
             "seed": cfg.seed,
@@ -552,17 +552,11 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         historical_pool=historical_pool,
                         final=is_final,
                     )
-                    checkpoint_results = checkpoint_pipeline.submit_checkpoint(job)
-                    checkpoint_handler.handle_results(checkpoint_results)
+                    checkpoint_pipeline.submit_checkpoint(job)
                     saved_checkpoint_path = None
-                    for result in checkpoint_results:
-                        if result.committed and result.numbered_path is not None:
-                            saved_checkpoint_path = result.numbered_path
-                            break
-                    if saved_checkpoint_path is None:
-                        candidate = run_dir / f"jax_ckpt_{update:06d}.pkl"
-                        if candidate.is_file():
-                            saved_checkpoint_path = candidate
+                    candidate = run_dir / f"jax_ckpt_{update:06d}.pkl"
+                    if candidate.is_file():
+                        saved_checkpoint_path = candidate
             bracket_metrics: dict[str, object] = {}
             if bracket_training_enabled(cfg):
                 tick = bracket_training_tick(
