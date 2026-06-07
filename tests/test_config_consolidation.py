@@ -57,7 +57,12 @@ ACCEPTABLE_SHIP_ACTION_MODES = frozenset({"buckets", "continuous_fraction"})
 ACCEPTABLE_TRAJECTORY_SHIELD_MODES = frozenset({"off", "cheap", "tiered", "exact"})
 ACCEPTABLE_REPLAY_BACKENDS = frozenset({"docker", "local"})
 ACCEPTABLE_TOURNAMENT_FORMATS = frozenset(
-    {"2p_vs_baseline", "2p_head_to_head", "4p_free_for_all"}
+    {
+        "2p_vs_baseline",
+        "2p_head_to_head",
+        "4p_free_for_all",
+        "4p_challenger_vs_baselines",
+    }
 )
 ACCEPTABLE_PROMOTION_STRATEGIES = frozenset({"metric", "tournament", "hybrid"})
 
@@ -98,6 +103,20 @@ def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
     assert resolve_rollout_group_specs(cfg)
+
+
+def test_hybrid_promotion_artifacts_profile_composes() -> None:
+    cfg = compose_hydra_train_config(["artifacts=hybrid_promotion"])
+
+    assert cfg.artifacts.promotion.strategy in ACCEPTABLE_PROMOTION_STRATEGIES
+    assert cfg.artifacts.promotion.strategy == "hybrid"
+    assert cfg.artifacts.tournament.enabled
+    assert cfg.artifacts.unified_tournament.enabled
+    assert "4p_challenger_vs_baselines" in cfg.artifacts.tournament.formats
+    assert cfg.artifacts.artifact_pipeline.checkpoint_eval_async
+    assert not cfg.artifacts.artifact_pipeline.docker_validation_async
+    assert not cfg.artifacts.artifact_pipeline.replay_async
+    assert not cfg.artifacts.replay.enabled
 
 
 def test_benchmark_sanity_defaults_compose_with_even_2p4p_split() -> None:

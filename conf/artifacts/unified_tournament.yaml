@@ -2,9 +2,6 @@ defaults:
   - base
   - _self_
 
-promotion:
-  strategy: hybrid
-
 unified_tournament:
   enabled: true
   enforcement: false
@@ -12,11 +9,3 @@ unified_tournament:
 tournament:
   enabled: true
   formats: [2p_vs_baseline, 2p_head_to_head, 4p_challenger_vs_baselines]
-
-artifact_pipeline:
-  checkpoint_eval_async: true
-  docker_validation_async: false
-  replay_async: false
-
-replay:
-  enabled: false

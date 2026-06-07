@@ -245,6 +245,27 @@ class PromotionConfig:
 
 
 @dataclass(slots=True)
+class UnifiedTournamentConfig:
+    """Held-out unified ladder settings for Gate 5 and hybrid checkpoint_eval."""
+
+    enabled: bool = False
+    enforcement: bool = False
+    games_per_pair: int = 4
+    prerequisite_seeds: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
+    incumbent_seeds: list[int] = field(default_factory=lambda: list(range(30)))
+    four_p_baseline_fillers: list[str] = field(
+        default_factory=lambda: ["noop", "random", "random"]
+    )
+    noop_min_combined: float = 0.7
+    random_min_combined: float = 0.58
+    incumbent_checkpoint_path: str | None = None
+    max_steps: int = 500
+    per_step_seconds: float = 1.0
+    overage_budget_seconds: float = 60.0
+    write_replays: bool = False
+
+
+@dataclass(slots=True)
 class TournamentConfig:
     enabled: bool = False
     seeds: list[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
@@ -298,6 +319,9 @@ class ArtifactsConfig:
     )
     promotion: PromotionConfig = field(default_factory=PromotionConfig)
     tournament: TournamentConfig = field(default_factory=TournamentConfig)
+    unified_tournament: UnifiedTournamentConfig = field(
+        default_factory=UnifiedTournamentConfig
+    )
 
 
 @dataclass(slots=True)

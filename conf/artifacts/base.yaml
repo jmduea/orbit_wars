@@ -50,6 +50,7 @@ promotion:
     min_win_rate_vs_incumbent: 0.51
     min_first_place_rate_4p: null
     require_head_to_head: true
+    # Superseded when artifacts.unified_tournament.enabled=true (hybrid promotion profile).
 
 tournament:
   enabled: false
@@ -62,3 +63,20 @@ tournament:
   write_replays: false
   per_step_seconds: 1.0
   overage_budget_seconds: 60.0
+
+# Unified held-out ladder (Gate 5 + hybrid promotion). Legacy promotion.tournament
+# soft sniper floors are ignored when unified_tournament.enabled is true.
+unified_tournament:
+  enabled: false
+  enforcement: false
+  games_per_pair: 4
+  prerequisite_seeds: [0, 1, 2, 3, 4]
+  incumbent_seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+  four_p_baseline_fillers: [noop, random, random]
+  noop_min_combined: 0.7
+  random_min_combined: 0.58
+  incumbent_checkpoint_path: null
+  max_steps: 500
+  per_step_seconds: 1.0
+  overage_budget_seconds: 60.0
+  write_replays: false
