@@ -7,6 +7,7 @@ import pytest
 import jax
 from src.benchmark.rollout_phase_profile import (
     _maybe_seed_historical_snapshots,
+    compose_profile_config,
     resolve_profile_overrides,
 )
 from src.config import compose_hydra_train_config
@@ -45,6 +46,20 @@ def test_admission_profile_full_geometry_opt_in() -> None:
     assert "task=map_pool" in overrides
     assert "training.total_updates=5" in overrides
     assert "telemetry=rollout_phase_timing" not in overrides
+
+
+def test_profile_config_composes_production_mix_overrides() -> None:
+    cfg = compose_profile_config(
+        preset="admission",
+        extra_overrides=("opponents=default", "curriculum=production_mix"),
+        updates=20,
+        quick=False,
+    )
+
+    assert cfg.opponents.mode.opponent == "self"
+    assert cfg.curriculum.enabled is True
+    assert cfg.training.rollout_steps == 256
+    assert cfg.training.total_updates == 20
 
 
 def test_profile_breakdown_uses_measured_window() -> None:

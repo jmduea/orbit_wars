@@ -22,10 +22,12 @@ from src.opponents.constants import (
     OPPONENT_RANDOM,
 )
 from src.opponents.jax_actions.sampling import (
+    _flatten_four_player_turn_batches,
     _gather_action_by_env,
     _masked_env_sort_order,
     _merge_reordered_family_action,
     _reorder_env_axis,
+    _sample_flat_four_player_actions,
     _sample_mixed_by_family_batched,
     _sample_single_family_action,
     _single_stage_family_id,
@@ -269,6 +271,82 @@ def test_collect_rollout_mixed_curriculum_4p_finite() -> None:
         == cfg.training.rollout_steps * cfg.training.num_envs
     )
     assert jnp.all(jnp.isfinite(transitions.returns))
+
+
+@pytest.mark.jax
+def test_flat_four_player_sampler_restores_env_player_layout_and_learner_slots() -> None:
+    from src.jax.env import assign_learner_players
+
+    cfg = TrainConfig()
+    cfg.task.player_count = 4
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 3
+    cfg.model.hidden_size = 16
+    cfg.model.max_moves_k = 2
+    cfg.training.num_envs = 4
+    cfg.opponents.mode.opponent = "noop"
+
+    env_count = cfg.training.num_envs
+    reset_keys = jax.random.split(jax.random.PRNGKey(20), env_count)
+    env_state, _turn_batch = batched_reset(reset_keys, cfg.task)
+    env_indices = jnp.arange(env_count, dtype=jnp.int32)
+    episode_counts = jnp.zeros((env_count,), dtype=jnp.int32)
+    env_state, _turn_batch = assign_learner_players(
+        env_state,
+        env_indices,
+        episode_counts,
+        cfg.task,
+        alternate_player_sides=True,
+    )
+    flat_game, flat_batch = _flatten_four_player_turn_batches(
+        env_state, cfg.task, env_count
+    )
+    fleet_ids = jnp.arange(
+        env_count * cfg.task.max_fleets,
+        dtype=jnp.int32,
+    ).reshape(env_count, cfg.task.max_fleets)
+    learner_action = JaxAction(
+        source_id=fleet_ids + 1000,
+        angle=jnp.full((env_count, cfg.task.max_fleets), 1.25, dtype=jnp.float32),
+        ships=jnp.full((env_count, cfg.task.max_fleets), 3.0, dtype=jnp.float32),
+        valid=jnp.ones((env_count, cfg.task.max_fleets), dtype=bool),
+    )
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.PRNGKey(21), policy, cfg)
+    stage_view = _mixed_stage_view(cfg)
+
+    multi_action = _sample_flat_four_player_actions(
+        jax.random.PRNGKey(22),
+        flat_game=flat_game,
+        flat_batch=flat_batch,
+        learner_action=learner_action,
+        learner_player=env_state.learner_player,
+        effective_type_ids=jnp.full(
+            (env_count, cfg.task.player_count),
+            OPPONENT_NOOP,
+            dtype=jnp.int32,
+        ),
+        single_family=jnp.asarray(True),
+        effective_single_family_id=jnp.asarray(OPPONENT_NOOP, dtype=jnp.int32),
+        train_state=train_state,
+        policy=policy,
+        cfg=cfg,
+        stage_view=stage_view,
+        historical_params_pool=None,
+    )
+
+    assert multi_action.source_id.shape == (
+        env_count,
+        cfg.task.player_count,
+        cfg.task.max_fleets,
+    )
+    learner_axis = env_state.learner_player[:, None, None]
+    restored_learner_source = jnp.take_along_axis(
+        multi_action.source_id,
+        jnp.broadcast_to(learner_axis, (env_count, 1, cfg.task.max_fleets)),
+        axis=1,
+    ).squeeze(axis=1)
+    assert jnp.array_equal(restored_learner_source, learner_action.source_id)
 
 
 @pytest.mark.jax

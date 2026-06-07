@@ -8,8 +8,8 @@ stages:
     min_updates: 100000
     cooldown_updates: 0
     opponent_families:
-      latest: 0.5
-      historical: 0.5
+      latest: 1.0
+      historical: 0.0
       random: 0.0
       noop: 0.0
       nearest_sniper: 0.0

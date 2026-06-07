@@ -217,6 +217,21 @@ def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
     return family_id == OPPONENT_NOOP
 
 
+def is_single_family_latest_stage_view(stage_view: StageView) -> bool:
+    """Host-side mirror of single-family latest detection used in rollout scan."""
+
+    probs = [float(value) for value in list(stage_view.family_probs)]
+    family_ids = [int(value) for value in list(stage_view.family_ids)]
+    active_indices = [index for index, prob in enumerate(probs) if prob > 0.0]
+    if len(active_indices) != 1:
+        return False
+    family_id = family_ids[active_indices[0]]
+    has_historical = any(bool(value) for value in list(stage_view.snapshot_valid_mask))
+    if family_id == OPPONENT_HISTORICAL and not has_historical:
+        family_id = int(stage_view.fallback_family_id)
+    return family_id == OPPONENT_LATEST
+
+
 def should_skip_opponent_batch_refresh_2p(
     cfg: TrainConfig,
     stage_view: StageView,
@@ -230,21 +245,6 @@ def should_skip_opponent_batch_refresh_2p(
     single_family_id = _single_stage_family_id(stage_view)
     effective_id = _maybe_effective_single_family_id(single_family_id, stage_view)
     return (single_family_id >= 0) & (effective_id == OPPONENT_NOOP)
-
-
-def is_single_family_noop_stage_view(stage_view: StageView) -> bool:
-    """Host-side mirror of single-family noop detection used in rollout scan."""
-
-    probs = [float(value) for value in list(stage_view.family_probs)]
-    family_ids = [int(value) for value in list(stage_view.family_ids)]
-    active_indices = [index for index, prob in enumerate(probs) if prob > 0.0]
-    if len(active_indices) != 1:
-        return False
-    family_id = family_ids[active_indices[0]]
-    has_historical = any(bool(value) for value in list(stage_view.snapshot_valid_mask))
-    if family_id == OPPONENT_HISTORICAL and not has_historical:
-        family_id = int(stage_view.fallback_family_id)
-    return family_id == OPPONENT_NOOP
 
 
 def _single_stage_family_id(stage_view: StageView) -> jax.Array:
@@ -592,6 +592,205 @@ def _opponent_step_context(
         resolved_player_id=resolved_player_id,
         slot_type=slot_type,
     )
+
+
+def _flatten_player_major(tree: object, player_count: int, env_count: int) -> object:
+    """Flatten a ``(player, env, ...)`` pytree into ``(player * env, ...)``."""
+
+    return jax.tree.map(
+        lambda value: value.reshape((player_count * env_count,) + value.shape[2:]),
+        tree,
+    )
+
+
+def _unflatten_player_major_action(
+    action: JaxAction,
+    player_count: int,
+    env_count: int,
+) -> JaxAction:
+    """Restore flat player-major actions to ``batched_step_multi_player`` layout."""
+
+    return jax.tree.map(
+        lambda value: jnp.moveaxis(
+            value.reshape((player_count, env_count) + value.shape[1:]),
+            0,
+            1,
+        ),
+        action,
+    )
+
+
+def _flatten_four_player_turn_batches(
+    state,
+    task: TaskConfig,
+    env_count: int,
+) -> tuple[object, TurnBatch]:
+    """Build 4p player views as one flat player-major batch."""
+
+    player_games, player_batches = _encode_four_player_turn_batches(
+        state, task, env_count
+    )
+    player_count = int(task.player_count)
+    return (
+        _flatten_player_major(player_games, player_count, env_count),
+        _flatten_player_major(player_batches, player_count, env_count),
+    )
+
+
+def _broadcast_learner_action_player_major(
+    learner_action: JaxAction,
+    player_count: int,
+) -> JaxAction:
+    """Broadcast ``(env, ...)`` learner actions into flat player-major slots."""
+
+    return jax.tree.map(
+        lambda value: jnp.broadcast_to(
+            value[None, ...],
+            (player_count,) + value.shape,
+        ).reshape((player_count * value.shape[0],) + value.shape[1:]),
+        learner_action,
+    )
+
+
+def _flat_slot_metadata(
+    *,
+    effective_type_ids: jax.Array,
+    learner_player: jax.Array,
+    player_count: int,
+    env_count: int,
+) -> tuple[jax.Array, jax.Array]:
+    """Return flat family ids and learner-slot mask for player-major views."""
+
+    player_ids = jnp.arange(player_count, dtype=jnp.int32)
+    family_pe = jnp.swapaxes(effective_type_ids, 0, 1)
+    learner_pe = player_ids[:, None] == learner_player[None, :]
+    return (
+        family_pe.reshape((player_count * env_count,)),
+        learner_pe.reshape((player_count * env_count,)),
+    )
+
+
+def _sample_flat_self_play_action(
+    key: jax.Array,
+    *,
+    flat_family: jax.Array,
+    single_family: jax.Array,
+    effective_single_family_id: jax.Array,
+    flat_game,
+    flat_batch: TurnBatch,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    """Sample self-play over one flat player-space batch."""
+
+    flat_count = flat_batch.planet_features.shape[0]
+
+    def sample_single_family(
+        key_in,
+        family_id,
+        game_in,
+        batch_in,
+        pool_row_indices,
+    ):
+        return _sample_single_family_action(
+            key_in,
+            family_id,
+            game_in,
+            batch_in,
+            train_state,
+            policy,
+            cfg,
+            stage_view,
+            historical_params_pool,
+            pool_row_indices,
+            player_id=jnp.asarray(0, dtype=jnp.int32),
+            opponent_params_by_player=None,
+        )
+
+    def single_family_branch(_: None) -> JaxAction:
+        return sample_single_family(
+            key,
+            effective_single_family_id,
+            flat_game,
+            flat_batch,
+            jnp.arange(flat_count, dtype=jnp.int32),
+        )
+
+    def mixed_family_branch(_: None) -> JaxAction:
+        return _sample_mixed_by_family_batched(
+            slot_type=flat_family,
+            game=flat_game,
+            batch=flat_batch,
+            cfg=cfg,
+            base_key=key,
+            sample_single_family=sample_single_family,
+        )
+
+    return jax.lax.cond(
+        single_family,
+        single_family_branch,
+        mixed_family_branch,
+        None,
+    )
+
+
+def _sample_flat_four_player_actions(
+    key: jax.Array,
+    *,
+    flat_game,
+    flat_batch: TurnBatch,
+    learner_action: JaxAction,
+    learner_player: jax.Array,
+    effective_type_ids: jax.Array,
+    single_family: jax.Array,
+    effective_single_family_id: jax.Array,
+    train_state: JaxTrainState,
+    policy: object,
+    cfg: TrainConfig,
+    stage_view: StageView,
+    historical_params_pool: dict | None,
+) -> JaxAction:
+    """Sample all 4p player slots as a single flat opponent batch."""
+
+    player_count = int(cfg.task.player_count)
+    env_count = int(learner_player.shape[0])
+    flat_family, flat_is_learner = _flat_slot_metadata(
+        effective_type_ids=effective_type_ids,
+        learner_player=learner_player,
+        player_count=player_count,
+        env_count=env_count,
+    )
+    learner_flat = _broadcast_learner_action_player_major(
+        learner_action, player_count
+    )
+
+    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+        flat_action = build_noop_action_from_edge_batch(flat_game, flat_batch, cfg)
+    elif cfg.opponents.mode.opponent == "random":
+        flat_action = _shielded_random_edge_action(key, flat_game, flat_batch, cfg)
+    elif cfg.opponents.mode.opponent == "self":
+        flat_action = _sample_flat_self_play_action(
+            key,
+            flat_family=flat_family,
+            single_family=single_family,
+            effective_single_family_id=effective_single_family_id,
+            flat_game=flat_game,
+            flat_batch=flat_batch,
+            train_state=train_state,
+            policy=policy,
+            cfg=cfg,
+            stage_view=stage_view,
+            historical_params_pool=historical_params_pool,
+        )
+    else:
+        validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+        raise AssertionError("unreachable")
+
+    flat_action = _select_env_action(flat_is_learner, learner_flat, flat_action)
+    return _unflatten_player_major_action(flat_action, player_count, env_count)
 
 
 def _sample_self_play_opponent_action(

@@ -14,7 +14,6 @@ import jax
 from src.config import (
     TrainConfig,
     compose_hydra_train_config,
-    train_config_from_omegaconf,
 )
 from src.jax.device import ensure_jax_accelerator_backend
 from src.jax.policy import build_jax_policy
@@ -122,7 +121,7 @@ def compose_profile_config(
         model=model,
         quick=quick,
     )
-    return train_config_from_omegaconf(compose_hydra_train_config(list(overrides)))
+    return compose_hydra_train_config(list(overrides))
 
 
 def _emit_profile_progress(message: str) -> None:

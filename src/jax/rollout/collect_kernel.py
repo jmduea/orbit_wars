@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import jax
 from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.config import TrainConfig
+from src.jax.action_sampling import _sample_shielded_sequence_with_params
 from src.jax.decoder_carry import reset_decoder_hidden_on_done
 from src.jax.env import (
     assign_learner_players,
@@ -21,13 +22,23 @@ from src.jax.features import TurnBatch
 from src.jax.map_pool.load import MapPoolConstants
 from src.jax.normalization import ObservationNormState, normalize_turn_batch
 from src.jax.ship_action import is_continuous_ship_mode
-from src.opponents.constants import OPPONENT_HISTORICAL, OPPONENT_LATEST
-from src.opponents.jax_actions.builders import owned_planet_ships
+from src.opponents.constants import (
+    OPPONENT_FAMILY_NAMES,
+    OPPONENT_HISTORICAL,
+    OPPONENT_LATEST,
+)
+from src.opponents.jax_actions.builders import (
+    build_action_from_factored_batch,
+    owned_planet_ships,
+)
 from src.opponents.jax_actions.sampling import (
     _encode_four_player_turn_batches,
+    _flatten_four_player_turn_batches,
     _opponent_count_metrics,
+    _sample_flat_four_player_actions,
     _sample_opponent_player_action,
     _single_stage_family_id,
+    _unflatten_player_major_action,
     _maybe_effective_single_family_id,
 )
 from src.opponents.pool import sample_opponent_type_ids_jax
@@ -44,6 +55,37 @@ def _policy_turn_batch(
     if norm_state is None or not cfg.model.normalize_observations:
         return batch
     return normalize_turn_batch(batch, norm_state, cfg.model)
+
+
+def _is_latest_only_family_weights(weights: dict[str, float]) -> bool:
+    latest = float(weights.get("latest", 0.0))
+    if latest <= 0.0:
+        return False
+    return all(
+        family == "latest" or float(weights.get(family, 0.0)) <= 0.0
+        for family in OPPONENT_FAMILY_NAMES
+    )
+
+
+def _static_latest_only_self_play_sample_enabled(
+    cfg: TrainConfig,
+    opponent_params_by_player: tuple[dict, ...] | None,
+) -> bool:
+    """Return whether learner/latest can share one policy sample from cfg alone."""
+
+    if is_planet_flow_pointer_decoder(cfg.model):
+        return False
+    if cfg.opponents.mode.opponent != "self":
+        return False
+    if opponent_params_by_player is not None:
+        return False
+    if bool(cfg.curriculum.enabled):
+        stages = list(cfg.curriculum.stages or [])
+        if len(stages) != 1:
+            return False
+        weights = dict(stages[0].get("opponent_families", {}) or {})
+        return _is_latest_only_family_weights(weights)
+    return _is_latest_only_family_weights(dict(cfg.opponents.mix.weights or {}))
 
 
 def _shield_transition_fields(diagnostics) -> dict[str, jax.Array]:
@@ -97,6 +139,108 @@ def _planet_flow_transition_fields(
             pf_control_diag.duplicate_source_target_count
         ),
     }
+
+
+def _take_leading_axis_rows(tree: object, indices: jax.Array, row_count: int) -> object:
+    """Gather rows from pytrees whose leading axis is the flat player-seat axis."""
+
+    def take_leaf(value):
+        if (
+            isinstance(value, jax.Array)
+            and value.ndim > 0
+            and value.shape[0] == row_count
+        ):
+            return jnp.take(value, indices, axis=0)
+        return value
+
+    return jax.tree.map(take_leaf, tree)
+
+
+def _take_player_action_by_env(action, player_ids: jax.Array):
+    """Gather one player action per env from ``(env, player, ...)`` actions."""
+
+    return jax.tree.map(
+        lambda value: jnp.take_along_axis(
+            value,
+            player_ids.reshape((player_ids.shape[0], 1) + (1,) * (value.ndim - 2)),
+            axis=1,
+        ).squeeze(axis=1),
+        action,
+    )
+
+
+def _sample_all_player_latest_policy_actions(
+    *,
+    key: jax.Array,
+    state,
+    raw_batch: TurnBatch,
+    train_state,
+    policy: object,
+    cfg: TrainConfig,
+    env_count: int,
+    norm_state: ObservationNormState | None,
+    decoder_hidden: jax.Array | None,
+):
+    """Sample learner and latest-opponent seats in one flat policy decode."""
+
+    player_count = int(cfg.task.player_count)
+    flat_game, flat_raw_batch = _flatten_four_player_turn_batches(
+        state, cfg.task, env_count
+    )
+    flat_policy_batch = _policy_turn_batch(flat_raw_batch, norm_state, cfg)
+    flat_count = player_count * env_count
+    flat_decoder_hidden = None
+    if decoder_hidden is not None:
+        player_ids = jnp.arange(player_count, dtype=jnp.int32)
+        learner_mask = player_ids[:, None] == state.learner_player[None, :]
+        flat_decoder_hidden = jnp.where(
+            learner_mask[..., None],
+            decoder_hidden[None, :, :],
+            jnp.zeros(
+                (player_count, env_count, decoder_hidden.shape[-1]),
+                dtype=decoder_hidden.dtype,
+            ),
+        ).reshape((flat_count, decoder_hidden.shape[-1]))
+    flat_sample = _sample_shielded_sequence_with_params(
+        key,
+        flat_game,
+        flat_policy_batch,
+        train_state.params,
+        policy,
+        cfg,
+        deterministic=False,
+        decoder_hidden_in=flat_decoder_hidden,
+    )
+    flat_action = build_action_from_factored_batch(
+        flat_game,
+        flat_raw_batch,
+        flat_sample.source_index,
+        flat_sample.target_slot,
+        flat_sample.ship_bucket,
+        flat_sample.stop_flag,
+        flat_sample.step_mask,
+        cfg,
+        ship_fraction=flat_sample.ship_fraction,
+    )
+    multi_player_action = _unflatten_player_major_action(
+        flat_action, player_count, env_count
+    )
+    learner_rows = state.learner_player * env_count + jnp.arange(
+        env_count, dtype=jnp.int32
+    )
+    learner_sample = _take_leading_axis_rows(flat_sample, learner_rows, flat_count)
+    learner_action = build_action_from_factored_batch(
+        state.game,
+        raw_batch,
+        learner_sample.source_index,
+        learner_sample.target_slot,
+        learner_sample.ship_bucket,
+        learner_sample.stop_flag,
+        learner_sample.step_mask,
+        cfg,
+        ship_fraction=learner_sample.ship_fraction,
+    )
+    return learner_sample, learner_action, multi_player_action
 
 
 def _build_transition(
@@ -342,6 +486,95 @@ def _sample_opponent_phase_context(
     )
 
 
+def _sample_legacy_four_player_actions(
+    *,
+    cfg: TrainConfig,
+    state,
+    learner_action,
+    opp_key: jax.Array,
+    opponent_ctx: OpponentPhaseContext,
+    train_state,
+    policy: object,
+    active_stage_view: StageView,
+    historical_params_pool: dict | None,
+    opponent_params_by_player: tuple[dict, ...] | None,
+    env_count: int,
+):
+    player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
+    player_games, player_batches = _encode_four_player_turn_batches(
+        state, cfg.task, env_count
+    )
+    per_player_action = jax.vmap(
+        lambda player_id: _sample_opponent_player_action(
+            opp_key,
+            effective_type_ids=opponent_ctx.effective_type_ids,
+            single_family=opponent_ctx.single_family,
+            effective_single_family_id=opponent_ctx.effective_single_family_id,
+            train_state=train_state,
+            policy=policy,
+            cfg=cfg,
+            stage_view=active_stage_view,
+            historical_params_pool=historical_params_pool,
+            player_id=player_id,
+            player_games=player_games,
+            player_batches=player_batches,
+            opponent_params_by_player=opponent_params_by_player,
+            learner_action=learner_action,
+            learner_player=state.learner_player,
+        )
+    )(player_ids)
+    return jax.tree.map(lambda x: jnp.moveaxis(x, 0, 1), per_player_action)
+
+
+def _sample_four_player_actions(
+    *,
+    cfg: TrainConfig,
+    state,
+    learner_action,
+    opp_key: jax.Array,
+    opponent_ctx: OpponentPhaseContext,
+    train_state,
+    policy: object,
+    active_stage_view: StageView,
+    historical_params_pool: dict | None,
+    opponent_params_by_player: tuple[dict, ...] | None,
+    env_count: int,
+):
+    if opponent_params_by_player is not None:
+        return _sample_legacy_four_player_actions(
+            cfg=cfg,
+            state=state,
+            learner_action=learner_action,
+            opp_key=opp_key,
+            opponent_ctx=opponent_ctx,
+            train_state=train_state,
+            policy=policy,
+            active_stage_view=active_stage_view,
+            historical_params_pool=historical_params_pool,
+            opponent_params_by_player=opponent_params_by_player,
+            env_count=env_count,
+        )
+
+    flat_game, flat_batch = _flatten_four_player_turn_batches(
+        state, cfg.task, env_count
+    )
+    return _sample_flat_four_player_actions(
+        opp_key,
+        flat_game=flat_game,
+        flat_batch=flat_batch,
+        learner_action=learner_action,
+        learner_player=state.learner_player,
+        effective_type_ids=opponent_ctx.effective_type_ids,
+        single_family=opponent_ctx.single_family,
+        effective_single_family_id=opponent_ctx.effective_single_family_id,
+        train_state=train_state,
+        policy=policy,
+        cfg=cfg,
+        stage_view=active_stage_view,
+        historical_params_pool=historical_params_pool,
+    )
+
+
 def _env_step_with_opponents(
     *,
     cfg: TrainConfig,
@@ -379,30 +612,17 @@ def _env_step_with_opponents(
             state, learner_action, opponent_action, cfg.task, cfg.reward
         )
 
-    player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
-    player_games, player_batches = _encode_four_player_turn_batches(
-        state, cfg.task, env_count
-    )
-    per_player_action = jax.vmap(
-        lambda player_id: _sample_opponent_player_action(
-            opp_key,
-            effective_type_ids=opponent_ctx.effective_type_ids,
-            single_family=opponent_ctx.single_family,
-            effective_single_family_id=opponent_ctx.effective_single_family_id,
-            train_state=train_state,
-            policy=policy,
-            cfg=cfg,
-            stage_view=active_stage_view,
-            historical_params_pool=historical_params_pool,
-            player_id=player_id,
-            player_games=player_games,
-            player_batches=player_batches,
-            opponent_params_by_player=opponent_params_by_player,
-            learner_action=learner_action,
-            learner_player=state.learner_player,
-        )
-    )(player_ids)
-    multi_player_action = jax.tree.map(
-        lambda x: jnp.moveaxis(x, 0, 1), per_player_action
+    multi_player_action = _sample_four_player_actions(
+        cfg=cfg,
+        state=state,
+        learner_action=learner_action,
+        opp_key=opp_key,
+        opponent_ctx=opponent_ctx,
+        train_state=train_state,
+        policy=policy,
+        active_stage_view=active_stage_view,
+        historical_params_pool=historical_params_pool,
+        opponent_params_by_player=opponent_params_by_player,
+        env_count=env_count,
     )
     return batched_step_multi_player(state, multi_player_action, cfg.task, cfg.reward)

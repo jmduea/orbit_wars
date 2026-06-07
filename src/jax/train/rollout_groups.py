@@ -271,7 +271,10 @@ def _init_rollout_group(
     group_cfg = _copy_config_for_rollout_group(
         cfg, player_count=player_count, num_envs=num_envs
     )
-    microbatch_envs = _resolve_rollout_microbatch_envs(group_cfg)
+    if timed_collect:
+        microbatch_envs = int(group_cfg.training.num_envs)
+    else:
+        microbatch_envs = _resolve_rollout_microbatch_envs(group_cfg)
     reset_keys = jax.random.split(key, group_cfg.training.num_envs)
     env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
     episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)

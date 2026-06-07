@@ -24,10 +24,17 @@ from src.jax.rollout.collect_kernel import (
     _build_transition,
     _policy_turn_batch,
     _reset_on_done,
+    _sample_all_player_latest_policy_actions,
     _sample_opponent_phase_context,
+    _static_latest_only_self_play_sample_enabled,
+    _take_player_action_by_env,
 )
 from src.jax.rollout.phase_timing import ROLLOUT_PHASE_TIMING_KEYS
-from src.jax.rollout.types import JaxTrainState, JaxTransitionBatch
+from src.jax.rollout.types import (
+    FactorizedActionReplay,
+    JaxTrainState,
+    JaxTransitionBatch,
+)
 from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import validate_jax_training_opponent_mode
 from src.opponents.jax_actions.builders import (
@@ -36,6 +43,8 @@ from src.opponents.jax_actions.builders import (
 from src.opponents.jax_actions.sampling import (
     _encode_four_player_turn_batches,
     _encode_opponent_turn_batch_2p,
+    _flatten_four_player_turn_batches,
+    _sample_flat_four_player_actions,
     _sample_opponent_player_action,
     _select_opp_batch_cache_2p,
     should_skip_opponent_batch_refresh_2p,
@@ -173,6 +182,9 @@ def collect_rollout_jax_timed(
     collection_groups = rollout_collection_enabled_groups(cfg)
     include_opponent_metrics = "opponent_composition" in collection_groups
     include_shield_metrics = "trajectory_shield_debug" in collection_groups
+    stack_latest_policy_sample = (
+        _static_latest_only_self_play_sample_enabled(cfg, opponent_params_by_player)
+    )
 
     params = train_state.params
 
@@ -202,6 +214,21 @@ def collect_rollout_jax_timed(
             ship_fraction=sample.ship_fraction,
         )
         return sample, learner_action
+
+    @jax.jit
+    def stacked_policy_phase(key_in, state_in, batch_in, decoder_hidden_in):
+        key_p, _learner_key, _opp_key, _reset_key = jax.random.split(key_in, 4)
+        return _sample_all_player_latest_policy_actions(
+            key=key_p,
+            state=state_in,
+            raw_batch=batch_in,
+            train_state=train_state,
+            policy=policy,
+            cfg=cfg,
+            env_count=env_count,
+            norm_state=norm_state,
+            decoder_hidden=decoder_hidden_in,
+        )
 
     @jax.jit
     def opponent_phase_2p(
@@ -240,6 +267,18 @@ def collect_rollout_jax_timed(
         )
 
     @jax.jit
+    def env_step_2p_from_multi(state_in, learner_action, multi_player_action):
+        from src.jax.env import batched_step
+
+        opponent_action = _take_player_action_by_env(
+            multi_player_action,
+            (1 - state_in.learner_player).astype(jnp.int32),
+        )
+        return batched_step(
+            state_in, learner_action, opponent_action, cfg.task, cfg.reward
+        )
+
+    @jax.jit
     def opp_encode_2p(next_state):
         return _encode_opponent_turn_batch_2p(
             next_state.game, next_state.learner_player, cfg.task
@@ -251,6 +290,37 @@ def collect_rollout_jax_timed(
 
         return batched_step_multi_player(
             state_in, multi_player_action, cfg.task, cfg.reward
+        )
+
+    @jax.jit
+    def opp_encode_4p_flat(state_in):
+        return _flatten_four_player_turn_batches(state_in, cfg.task, env_count)
+
+    @jax.jit
+    def opponent_phase_4p_flat(
+        key_in,
+        state_in,
+        flat_game,
+        flat_batch,
+        learner_action,
+        effective_type_ids,
+        single_family,
+        effective_single_family_id,
+    ):
+        return _sample_flat_four_player_actions(
+            key_in,
+            flat_game=flat_game,
+            flat_batch=flat_batch,
+            learner_action=learner_action,
+            learner_player=state_in.learner_player,
+            effective_type_ids=effective_type_ids,
+            single_family=single_family,
+            effective_single_family_id=effective_single_family_id,
+            train_state=train_state,
+            policy=policy,
+            cfg=cfg,
+            stage_view=active_stage_view,
+            historical_params_pool=historical_params_pool,
         )
 
     phases = _PhaseAccumulator()
@@ -272,9 +342,21 @@ def collect_rollout_jax_timed(
     rollout_steps = int(cfg.training.rollout_steps)
     for _step in range(rollout_steps):
         key, subkey = jax.random.split(key)
-        sample, learner_action = _timed_call(
-            phases, "policy", policy_phase, subkey, state, batch, decoder_hidden
-        )
+        multi_player_action = None
+        if stack_latest_policy_sample:
+            sample, learner_action, multi_player_action = _timed_call(
+                phases,
+                "policy",
+                stacked_policy_phase,
+                subkey,
+                state,
+                batch,
+                decoder_hidden,
+            )
+        else:
+            sample, learner_action = _timed_call(
+                phases, "policy", policy_phase, subkey, state, batch, decoder_hidden
+            )
 
         key, _learner_key, opp_key, reset_key = jax.random.split(key, 4)
         opponent_ctx = _sample_opponent_phase_context(
@@ -286,7 +368,25 @@ def collect_rollout_jax_timed(
             include_opponent_metrics=include_opponent_metrics,
         )
 
-        if cfg.task.player_count == 2:
+        if stack_latest_policy_sample:
+            if cfg.task.player_count == 2:
+                next_state, result = _timed_call(
+                    phases,
+                    "env_step",
+                    env_step_2p_from_multi,
+                    state,
+                    learner_action,
+                    multi_player_action,
+                )
+            else:
+                next_state, result = _timed_call(
+                    phases,
+                    "env_step",
+                    env_step_4p,
+                    state,
+                    multi_player_action,
+                )
+        elif cfg.task.player_count == 2:
             opponent_action = _timed_call(
                 phases,
                 "opponent_sample",
@@ -308,39 +408,62 @@ def collect_rollout_jax_timed(
                 opponent_action,
             )
         else:
-            encode_start = time.perf_counter()
-            player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
-            player_games, player_batches = _encode_four_player_turn_batches(
-                state, cfg.task, env_count
-            )
-            _sync(player_batches)
-            phases.opponent_encode += time.perf_counter() - encode_start
-
-            sample_start = time.perf_counter()
-            per_player_action = jax.vmap(
-                lambda player_id: _sample_opponent_player_action(
-                    opp_key,
-                    effective_type_ids=opponent_ctx.effective_type_ids,
-                    single_family=opponent_ctx.single_family,
-                    effective_single_family_id=opponent_ctx.effective_single_family_id,
-                    train_state=train_state,
-                    policy=policy,
-                    cfg=cfg,
-                    stage_view=active_stage_view,
-                    historical_params_pool=historical_params_pool,
-                    player_id=player_id,
-                    player_games=player_games,
-                    player_batches=player_batches,
-                    opponent_params_by_player=opponent_params_by_player,
-                    learner_action=learner_action,
-                    learner_player=state.learner_player,
+            if opponent_params_by_player is None:
+                flat_game, flat_batch = _timed_call(
+                    phases,
+                    "opponent_encode",
+                    opp_encode_4p_flat,
+                    state,
                 )
-            )(player_ids)
-            multi_player_action = jax.tree.map(
-                lambda x: jnp.moveaxis(x, 0, 1), per_player_action
-            )
-            _sync(multi_player_action)
-            phases.opponent_sample += time.perf_counter() - sample_start
+                multi_player_action = _timed_call(
+                    phases,
+                    "opponent_sample",
+                    opponent_phase_4p_flat,
+                    opp_key,
+                    state,
+                    flat_game,
+                    flat_batch,
+                    learner_action,
+                    opponent_ctx.effective_type_ids,
+                    opponent_ctx.single_family,
+                    opponent_ctx.effective_single_family_id,
+                )
+            else:
+                encode_start = time.perf_counter()
+                player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
+                player_games, player_batches = _encode_four_player_turn_batches(
+                    state, cfg.task, env_count
+                )
+                _sync(player_batches)
+                phases.opponent_encode += time.perf_counter() - encode_start
+
+                sample_start = time.perf_counter()
+                per_player_action = jax.vmap(
+                    lambda player_id: _sample_opponent_player_action(
+                        opp_key,
+                        effective_type_ids=opponent_ctx.effective_type_ids,
+                        single_family=opponent_ctx.single_family,
+                        effective_single_family_id=(
+                            opponent_ctx.effective_single_family_id
+                        ),
+                        train_state=train_state,
+                        policy=policy,
+                        cfg=cfg,
+                        stage_view=active_stage_view,
+                        historical_params_pool=historical_params_pool,
+                        player_id=player_id,
+                        player_games=player_games,
+                        player_batches=player_batches,
+                        opponent_params_by_player=opponent_params_by_player,
+                        learner_action=learner_action,
+                        learner_player=state.learner_player,
+                    )
+                )(player_ids)
+                multi_player_action = jax.tree.map(
+                    lambda x: jnp.moveaxis(x, 0, 1), per_player_action
+                )
+                _sync(multi_player_action)
+                phases.opponent_sample += time.perf_counter() - sample_start
 
             next_state, result = _timed_call(
                 phases,
@@ -422,33 +545,35 @@ def collect_rollout_jax_timed(
         gamma=cfg.training.gamma,
         gae_lambda=cfg.training.gae_lambda,
     )
-    transition_kwargs = {
-        "planet_features": data["planet_features"],
-        "planet_mask": data["planet_mask"],
-        "edge_features": data["edge_features"],
-        "edge_mask": data["edge_mask"],
-        "edge_src_ids": data["edge_src_ids"],
-        "edge_tgt_ids": data["edge_tgt_ids"],
-        "global_features": data["global_features"],
-        "theta_ref": data["theta_ref"],
-        "player_count": data["player_count"],
+    replay_kwargs = {
         "ship_bucket_mask": data["ship_bucket_mask"],
         "target_index": data["target_index"],
         "ship_bucket": data["ship_bucket"],
         "log_prob": data["log_prob"],
-        "returns": returns_step,
-        "advantages": advantages_step,
         "source_index": data["source_index"],
         "target_slot": data["target_slot"],
         "stop_flag": data["stop_flag"],
         "step_mask": data["step_mask"],
-        "initial_planet_ships": data["initial_planet_ships"],
     }
     if carry_enabled:
-        transition_kwargs["decoder_hidden"] = data["decoder_hidden"]
+        replay_kwargs["decoder_hidden"] = data["decoder_hidden"]
     if is_continuous_ship_mode(cfg):
-        transition_kwargs["ship_fraction"] = data["ship_fraction"]
-    transitions = JaxTransitionBatch(**transition_kwargs)
+        replay_kwargs["ship_fraction"] = data["ship_fraction"]
+    transitions = JaxTransitionBatch(
+        planet_features=data["planet_features"],
+        planet_mask=data["planet_mask"],
+        edge_features=data["edge_features"],
+        edge_mask=data["edge_mask"],
+        edge_src_ids=data["edge_src_ids"],
+        edge_tgt_ids=data["edge_tgt_ids"],
+        global_features=data["global_features"],
+        theta_ref=data["theta_ref"],
+        player_count=data["player_count"],
+        returns=returns_step,
+        advantages=advantages_step,
+        action_replay=FactorizedActionReplay(**replay_kwargs),
+        initial_planet_ships=data["initial_planet_ships"],
+    )
     metrics = rollout_metrics(data=data, cfg=cfg, env_count=env_count)
     metrics.update(phases.as_metric_dict())
     return key, state, batch, transitions, metrics

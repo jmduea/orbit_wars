@@ -31,7 +31,10 @@ from src.jax.rollout.collect_kernel import (
     _env_step_with_opponents,
     _policy_turn_batch,
     _reset_on_done,
+    _sample_all_player_latest_policy_actions,
     _sample_opponent_phase_context,
+    _static_latest_only_self_play_sample_enabled,
+    _take_player_action_by_env,
 )
 from src.jax.rollout.types import (
     FactorizedActionReplay,
@@ -103,11 +106,22 @@ def collect_rollout_jax(
     collection_groups = rollout_collection_enabled_groups(cfg)
     include_opponent_metrics = "opponent_composition" in collection_groups
     include_shield_metrics = "trajectory_shield_debug" in collection_groups
+    stack_latest_policy_sample = (
+        _static_latest_only_self_play_sample_enabled(cfg, opponent_params_by_player)
+    )
 
     def scan_step(carry, _):
         key, state, batch, opp_batch_cache, decoder_hidden = carry
         policy_batch = _policy_turn_batch(batch, norm_state, cfg)
         key, learner_key, opp_key, reset_key = jax.random.split(key, 4)
+        opponent_ctx = _sample_opponent_phase_context(
+            opp_key=opp_key,
+            env_count=env_count,
+            learner_player=state.learner_player,
+            cfg=cfg,
+            active_stage_view=active_stage_view,
+            include_opponent_metrics=include_opponent_metrics,
+        )
         planet_flow_target_bucket = None
         planet_flow_target_pressure = None
         planet_flow_target_mask = None
@@ -171,27 +185,42 @@ def collect_rollout_jax(
             planet_flow_target_mask = pressure_action.target_mask
             shield_diagnostics = None
         else:
-            sample = _sample_shielded_sequence_with_params(
-                learner_key,
-                state.game,
-                policy_batch,
-                train_state.params,
-                policy,
-                cfg,
-                deterministic=False,
-                decoder_hidden_in=decoder_hidden,
-            )
-            learner_action = build_action_from_factored_batch(
-                state.game,
-                batch,
-                sample.source_index,
-                sample.target_slot,
-                sample.ship_bucket,
-                sample.stop_flag,
-                sample.step_mask,
-                cfg,
-                ship_fraction=sample.ship_fraction,
-            )
+            if stack_latest_policy_sample:
+                sample, learner_action, multi_player_action = (
+                    _sample_all_player_latest_policy_actions(
+                        key=learner_key,
+                        state=state,
+                        raw_batch=batch,
+                        train_state=train_state,
+                        policy=policy,
+                        cfg=cfg,
+                        env_count=env_count,
+                        norm_state=norm_state,
+                        decoder_hidden=decoder_hidden,
+                    )
+                )
+            else:
+                sample = _sample_shielded_sequence_with_params(
+                    learner_key,
+                    state.game,
+                    policy_batch,
+                    train_state.params,
+                    policy,
+                    cfg,
+                    deterministic=False,
+                    decoder_hidden_in=decoder_hidden,
+                )
+                learner_action = build_action_from_factored_batch(
+                    state.game,
+                    batch,
+                    sample.source_index,
+                    sample.target_slot,
+                    sample.ship_bucket,
+                    sample.stop_flag,
+                    sample.step_mask,
+                    cfg,
+                    ship_fraction=sample.ship_fraction,
+                )
             decoder_hidden_out = sample.decoder_hidden_out
             ship_bucket_mask = sample.ship_bucket_mask
             target_index = sample.target_index
@@ -206,28 +235,38 @@ def collect_rollout_jax(
             shield_diagnostics = sample.diagnostics
             planet_flow_control_diagnostics = None
 
-        opponent_ctx = _sample_opponent_phase_context(
-            opp_key=opp_key,
-            env_count=env_count,
-            learner_player=state.learner_player,
-            cfg=cfg,
-            active_stage_view=active_stage_view,
-            include_opponent_metrics=include_opponent_metrics,
-        )
-        next_state, result = _env_step_with_opponents(
-            cfg=cfg,
-            state=state,
-            learner_action=learner_action,
-            opp_key=opp_key,
-            opp_batch_cache=opp_batch_cache,
-            opponent_ctx=opponent_ctx,
-            train_state=train_state,
-            policy=policy,
-            active_stage_view=active_stage_view,
-            historical_params_pool=historical_params_pool,
-            opponent_params_by_player=opponent_params_by_player,
-            env_count=env_count,
-        )
+        if stack_latest_policy_sample:
+            if cfg.task.player_count == 2:
+                opponent_action = _take_player_action_by_env(
+                    multi_player_action,
+                    (1 - state.learner_player).astype(jnp.int32),
+                )
+                from src.jax.env import batched_step
+
+                next_state, result = batched_step(
+                    state, learner_action, opponent_action, cfg.task, cfg.reward
+                )
+            else:
+                from src.jax.env import batched_step_multi_player
+
+                next_state, result = batched_step_multi_player(
+                    state, multi_player_action, cfg.task, cfg.reward
+                )
+        else:
+            next_state, result = _env_step_with_opponents(
+                cfg=cfg,
+                state=state,
+                learner_action=learner_action,
+                opp_key=opp_key,
+                opp_batch_cache=opp_batch_cache,
+                opponent_ctx=opponent_ctx,
+                train_state=train_state,
+                policy=policy,
+                active_stage_view=active_stage_view,
+                historical_params_pool=historical_params_pool,
+                opponent_params_by_player=opponent_params_by_player,
+                env_count=env_count,
+            )
 
         if carry_enabled:
             next_decoder_hidden = reset_decoder_hidden_on_done(
