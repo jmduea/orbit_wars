@@ -949,19 +949,121 @@
     },
     {
       "id": "learning_launch_hygiene_bundle",
-      "subject": "Launch hygiene bundle for K-step factorized decoder",
+      "subject": "Launch hygiene bundle for K-step factorized decoder (PR #163)",
       "phase": "learning",
       "direction": "main_to_integration",
       "source_shas": [
         "46c825e",
+        "0b7254f",
+        "b3d2b79",
+        "6a93d94",
         "6e75826"
       ],
       "sha": "6e75826",
-      "status": "deferred",
+      "commit_group": [
+        {
+          "sha": "46c825e",
+          "subject": "feat(policy): launch hygiene bundle for K-step factorized decoder",
+          "cherry_pick": "clean",
+          "hot_paths": [
+            "src/jax/launch_hygiene.py (new)",
+            "src/jax/action_sampling.py",
+            "src/opponents/jax_actions/builders.py"
+          ]
+        },
+        {
+          "sha": "0b7254f",
+          "subject": "fix(policy): align hygiene launch_valid with sampling bucket > 0",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "b3d2b79",
+          "subject": "test(policy): address PR #163 review findings for launch hygiene",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "6a93d94",
+          "subject": "fix(test): stabilize merge test and package launch_hygiene for Kaggle",
+          "cherry_pick": "clean"
+        },
+        {
+          "sha": "6e75826",
+          "subject": "perf(policy): incremental launch hygiene carry restores sampler throughput",
+          "cherry_pick": "conflicts",
+          "conflicts": [
+            "Makefile",
+            "src/benchmark/factorized_sampler.py"
+          ],
+          "resolution": "Keep integration paths: ow benchmark factorized-sampler + src/benchmark/factorized_sampler.py (main@6e75826 still used scripts/benchmark_factorized_sampler.py)."
+        }
+      ],
+      "optional_follow_on": [
+        {
+          "sha": "aa70fde",
+          "subject": "perf(hygiene): compact PPO carry and rollout replay shortcuts (U7)",
+          "cherry_pick": "clean",
+          "depends_on": "6e75826",
+          "notes": "Further compacts launch_hygiene.py + action_sampling.py; picked cleanly on prep branch."
+        }
+      ],
+      "deferred_follow_on": [
+        {
+          "sha": "cdb76b3",
+          "subject": "feat(telemetry): mean_ships_per_launch and gate debug diagnostics",
+          "cherry_pick": "blocked",
+          "conflicts": [
+            "src/telemetry/metric_registry.py",
+            "src/jax/rollout/metrics.py",
+            "src/jax/train/metrics.py",
+            "docs/ROADMAP.md"
+          ],
+          "notes": "Land after telemetry shard sync (learning_telemetry_metrics) or manual merge."
+        },
+        {
+          "sha": "ee2f346",
+          "subject": "feat(benchmark): launch hygiene e2e throughput gate (Phase A)",
+          "cherry_pick": "partial",
+          "notes": "Integration already has tier-2 harness via ac4b5b8; diff vs ee2f346 is mostly docs/agent-native churn."
+        },
+        {
+          "sha": "4ace5f9",
+          "subject": "feat(rollout): selected_validate factorized sampling path",
+          "status": "excluded",
+          "id": "learning_4ace5f9_redesign"
+        }
+      ],
+      "cherry_pick_prep": {
+        "branch": "prep/launch-hygiene-cherry-pick",
+        "base_branch": "optimize/opponent-rollout-throughput",
+        "base_sha": "38718f1",
+        "head_sha": "18a548c",
+        "prep_date": "2026-06-07",
+        "commits_picked": 6,
+        "diff_stat": "13 files, +2193 / -44",
+        "core_files": [
+          "src/jax/launch_hygiene.py",
+          "src/jax/factored_sequence_scan.py",
+          "src/jax/action_sampling.py",
+          "src/opponents/jax_actions/builders.py",
+          "tests/test_launch_hygiene.py"
+        ],
+        "unit_verification": "uv run pytest tests/test_launch_hygiene.py — 11 passed (prep branch)",
+        "admission_gates_after_merge": [
+          "make test-fast",
+          "make test-launch-hygiene-throughput",
+          "make test-launch-hygiene-e2e-throughput",
+          "make test-kaggle-parity",
+          "make gate-admission REPO_ROOT=/home/jmduea/projects/orbit_wars-integration"
+        ],
+        "throughput_note": "Tier-2 gate uses learning-first baseline (launch-hygiene-e2e-baseline-learning-first.json) or map-pool baseline per admission profile — not primary preset alone.",
+        "ablation_gate": "docs/solutions/tooling-decisions/launch-hygiene-learner-ablation-gate.md (R10) before manifest admit"
+      },
+      "status": "prep_ready",
       "verdict": "pending",
       "blocked_by": [
         "phase_2_admission",
-        "hygiene_ablation_r10"
+        "hygiene_ablation_r10",
+        "tier2_throughput_gate"
       ],
       "reject_reasons": []
     },
