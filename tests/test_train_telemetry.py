@@ -9,6 +9,8 @@ from src.config import compose_hydra_train_config
 from src.jax.train.checkpoint import HistoricalSnapshotPool
 from src.jax.train.telemetry import (
     build_update_record,
+    format_update_progress_line,
+    record_scalar_float,
     split_debug_update_record,
     write_filtered_update_records,
 )
@@ -162,6 +164,31 @@ def test_write_filtered_update_records_respects_disabled_groups(
     assert "debug_rollout_scan" not in logged
     assert debug_log_path.exists()
     telemetry.log.assert_called_once()
+
+
+def test_format_update_progress_line_omits_loss_metrics_when_absent() -> None:
+    line = format_update_progress_line(
+        update=1,
+        total_env_steps=256,
+        completed_episodes=0,
+        record={
+            "samples_per_sec": 42.2,
+            "update_seconds": 1.0,
+        },
+        rollout_seconds=0.5,
+        ppo_seconds=0.3,
+    )
+
+    assert "loss=" not in line
+    assert "entropy=" not in line
+    assert "sps=42.2" in line
+    assert "rollout_s=0.500" in line
+
+
+def test_record_scalar_float_rejects_non_numeric() -> None:
+    assert record_scalar_float({"entropy": 0.25}, "entropy") == 0.25
+    assert record_scalar_float({}, "entropy") is None
+    assert record_scalar_float({"entropy": "n/a"}, "entropy") is None
 
 
 def test_opponent_recovery_telemetry_keeps_composition_without_losses(

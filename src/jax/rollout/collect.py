@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import flax.linen as nn
 import jax.numpy as jnp
 
 import jax
@@ -56,7 +57,7 @@ def collect_rollout_jax(
     env_state: JaxEnvState,
     turn_batch: TurnBatch,
     train_state: JaxTrainState,
-    policy: object,
+    policy: nn.Module,
     cfg: TrainConfig,
     opponent_params_by_player: tuple[dict, ...] | None = None,
     stage_view: StageView | None = None,
@@ -152,6 +153,7 @@ def collect_rollout_jax(
                 cfg,
             )
             control_result = compile_seeded_random_planet_flow_control(
+                # pyrefly: ignore [implicit-import]
                 jax.random.fold_in(learner_key, 104_729),
                 state.game,
                 batch,

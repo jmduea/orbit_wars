@@ -311,8 +311,7 @@ def _sample_opponent_phase_context(
     )
     has_historical = jnp.any(active_stage_view.snapshot_valid_mask)
     effective_type_ids = jnp.where(
-        (opponent_type_ids == OPPONENT_HISTORICAL)
-        & jnp.logical_not(has_historical),
+        (opponent_type_ids == OPPONENT_HISTORICAL) & jnp.logical_not(has_historical),
         active_stage_view.fallback_family_id,
         opponent_type_ids,
     )
@@ -376,7 +375,9 @@ def _env_step_with_opponents(
             opp_batch=opp_batch_cache,
             opponent_params_by_player=opponent_params_by_player,
         )
-        return batched_step(state, learner_action, opponent_action, cfg.task, cfg.reward)
+        return batched_step(
+            state, learner_action, opponent_action, cfg.task, cfg.reward
+        )
 
     player_ids = jnp.arange(cfg.task.player_count, dtype=jnp.int32)
     player_games, player_batches = _encode_four_player_turn_batches(
@@ -404,6 +405,4 @@ def _env_step_with_opponents(
     multi_player_action = jax.tree.map(
         lambda x: jnp.moveaxis(x, 0, 1), per_player_action
     )
-    return batched_step_multi_player(
-        state, multi_player_action, cfg.task, cfg.reward
-    )
+    return batched_step_multi_player(state, multi_player_action, cfg.task, cfg.reward)

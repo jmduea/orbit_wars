@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from numbers import Real
 from pathlib import Path
 from typing import Protocol
 
@@ -24,6 +25,58 @@ _UPDATE_RECORD_CORE_ROLLOUT_KEYS = ROLLOUT_INTERNAL_REQUIRED_METRIC_NAMES | froz
 
 class _TelemetryLogger(Protocol):
     def log(self, record: dict[str, object], *, step: int) -> None: ...
+
+
+def record_scalar_float(record: dict[str, object], key: str) -> float | None:
+    """Return a host float for a scalar update-record field, if present."""
+
+    if key not in record:
+        return None
+    value = record[key]
+    if isinstance(value, Real) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def format_update_progress_line(
+    *,
+    update: int,
+    total_env_steps: int,
+    completed_episodes: int,
+    record: dict[str, object],
+    rollout_seconds: float,
+    ppo_seconds: float,
+) -> str:
+    """Format stderr progress for an update; omit loss metrics when disabled."""
+
+    parts = [
+        f"update={update} steps={total_env_steps} episodes={completed_episodes}",
+    ]
+    total_loss = record_scalar_float(record, "total_loss")
+    if total_loss is not None:
+        parts.append(f"loss={total_loss:.4f}")
+    samples_per_sec = record_scalar_float(record, "samples_per_sec")
+    if samples_per_sec is not None:
+        parts.append(f"sps={samples_per_sec:.1f}")
+    parts.append(f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f}")
+
+    entropy_stop = record_scalar_float(record, "entropy_stop")
+    entropy_move = record_scalar_float(record, "entropy_move")
+    entropy = record_scalar_float(record, "entropy")
+    if entropy_stop is not None and entropy_move is not None and entropy is not None:
+        parts.append(
+            f"entropy_stop={entropy_stop:.4f} entropy_move={entropy_move:.4f} "
+            f"entropy={entropy:.4f}"
+        )
+    elif entropy is not None:
+        parts.append(f"entropy={entropy:.4f}")
+
+    return " ".join(parts)
 
 
 def build_per_format_timing_metrics(

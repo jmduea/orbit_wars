@@ -77,6 +77,7 @@ from src.jax.train.sweep_score import (
 from src.jax.train.telemetry import (
     build_per_format_timing_metrics,
     build_update_record,
+    format_update_progress_line,
     historical_pool_snapshot_telemetry,
     write_filtered_update_records,
 )
@@ -632,18 +633,15 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                 update=update,
             )
             if update % cfg.training.log_every == 0:
-                entropy_line = f"entropy={float(record['entropy']):.4f}"
-                if "entropy_stop" in record and "entropy_move" in record:
-                    entropy_line = (
-                        f"entropy_stop={float(record['entropy_stop']):.4f} "
-                        f"entropy_move={float(record['entropy_move']):.4f} "
-                        f"entropy={float(record['entropy']):.4f}"
-                    )
                 print(
-                    f"update={update} steps={total_env_steps} episodes={completed_episodes} "
-                    f"loss={record['total_loss']:.4f} sps={record['samples_per_sec']:.1f} "
-                    f"rollout_s={rollout_seconds:.3f} ppo_s={ppo_seconds:.3f} "
-                    f"{entropy_line}"
+                    format_update_progress_line(
+                        update=update,
+                        total_env_steps=total_env_steps,
+                        completed_episodes=completed_episodes,
+                        record=record,
+                        rollout_seconds=rollout_seconds,
+                        ppo_seconds=ppo_seconds,
+                    )
                 )
 
         completed_training = True

@@ -63,7 +63,9 @@ def register_runtime_resolvers() -> None:
     if not OmegaConf.has_resolver("orbit_slug"):
         OmegaConf.register_new_resolver("orbit_slug", _orbit_slug, use_cache=False)
     if not OmegaConf.has_resolver("orbit_safe_rel"):
-        OmegaConf.register_new_resolver("orbit_safe_rel", _orbit_safe_rel, use_cache=False)
+        OmegaConf.register_new_resolver(
+            "orbit_safe_rel", _orbit_safe_rel, use_cache=False
+        )
     if not OmegaConf.has_resolver("orbit_sweep_subdir"):
         OmegaConf.register_new_resolver(
             "orbit_sweep_subdir", _orbit_sweep_subdir, use_cache=False
@@ -222,12 +224,28 @@ def config_from_plain(data: dict[str, Any]) -> TrainConfig:
     return train_config_from_omegaconf(OmegaConf.create(data))
 
 
+def _normalize_wandb_tags(cfg_raw: Any) -> None:
+    """Coerce scalar W&B sweep tags into ``list[str]`` before structured merge.
+
+    W&B categorical ``values: [tag_a, tag_b, ...]`` on ``telemetry.wandb.tags``
+    samples one string per run; Hydra then receives ``tags=REPLAY_ON`` instead
+    of a list.
+    """
+
+    tags = OmegaConf.select(cfg_raw, "telemetry.wandb.tags", default=None)
+    if tags is None:
+        return
+    if isinstance(tags, str):
+        OmegaConf.update(cfg_raw, "telemetry.wandb.tags", [tags], merge=False)
+
+
 def train_config_from_omegaconf(
     cfg_raw: Any, overrides: list[str] | None = None
 ) -> TrainConfig:
     """Convert a Hydra/OmegaConf object into a validated ``TrainConfig``."""
 
     register_runtime_resolvers()
+    _normalize_wandb_tags(cfg_raw)
     merged = OmegaConf.merge(OmegaConf.structured(TrainConfig), cfg_raw)
     cfg: TrainConfig = OmegaConf.to_object(merged)
     cfg.heldout_eval_seed_set = _parse_seed_set(cfg.heldout_eval_seed_set)
