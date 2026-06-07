@@ -34,6 +34,11 @@ KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES: frozenset[str] = frozenset(
     {
         "overall_win_rate",
         "env_steps_per_sec",
+        "preflight_sweep_score",
+        "planet_flow_sweep_score",
+        "win_rate_delta_10",
+        "approx_kl_window_mean",
+        "entropy_window_mean",
     }
 )
 

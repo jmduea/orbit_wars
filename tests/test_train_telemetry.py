@@ -80,6 +80,58 @@ def test_build_update_record_applies_rollout_metric_filtering() -> None:
     assert "debug_rollout_scan" not in record
 
 
+def test_build_update_record_merges_preflight_sweep_metrics() -> None:
+    cfg = SimpleNamespace(model=SimpleNamespace(max_moves_k=4))
+    cfg.telemetry = SimpleNamespace(metric_groups={})
+    historical_pool = HistoricalSnapshotPool(
+        params={"w": jnp.zeros((2, 2))},
+        snapshot_ids=jnp.zeros((2,), dtype=jnp.int32),
+        snapshot_updates=jnp.zeros((2,), dtype=jnp.int32),
+        valid_mask=jnp.array([True, False]),
+    )
+    rollout_scalars = {
+        "env_steps": 10.0,
+        "episode_done": 2.0,
+        "win_rate_2p": 0.5,
+        "first_place_rate_4p": 0.0,
+        "average_placement_4p": 0.0,
+        "overall_win_rate": 0.5,
+        "survival_time": 1.0,
+        "score_share": 0.25,
+        "episode_reward_mean": 0.2,
+        "mean_active_launches_per_turn": 2.0,
+    }
+
+    record = build_update_record(
+        update=10,
+        total_env_steps=100,
+        completed_episodes=20,
+        rollout_samples=100,
+        rollout_scalars=rollout_scalars,
+        metrics_host={"total_loss": 1.0},
+        update_seconds=1.0,
+        rollout_seconds=0.5,
+        ppo_seconds=0.4,
+        train_start_time=0.0,
+        per_format_timing_metrics={},
+        curriculum_telemetry={},
+        reseed_events=[],
+        update_events=[],
+        historical_pool=historical_pool,
+        gpu_update_metrics={},
+        seed_scheduler_policy="fixed",
+        plateau_metric="overall_win_rate",
+        cfg=cfg,
+        planet_flow_sweep_metrics={
+            "preflight_sweep_score": 0.08,
+            "win_rate_delta_10": 0.08,
+        },
+    )
+
+    assert record["preflight_sweep_score"] == 0.08
+    assert record["win_rate_delta_10"] == 0.08
+
+
 def test_write_filtered_update_records_respects_disabled_groups(
     tmp_path: Path,
 ) -> None:

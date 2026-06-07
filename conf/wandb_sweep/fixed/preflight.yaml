@@ -27,5 +27,9 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
+  telemetry.metric_groups.action_decision:
+    value: true
+  telemetry.metric_groups.losses:
+    value: true
   artifacts.checkpoint_every:
     value: 100
