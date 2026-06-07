@@ -1,0 +1,5 @@
+# @package _global_
+early_terminate:
+  type: hyperband
+  min_iter: 50
+  eta: 3

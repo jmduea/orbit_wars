@@ -1,0 +1,22 @@
+# @package _global_
+# W&B sweep for preflight (Gates 2–3 learning-signal trend).
+#
+# Generate:  uv run ow make wandb_sweep=preflight_top_33
+# Register:  uv run wandb sweep outputs/_meta/sweeps/preflight_top_33.yaml
+# Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
+#
+# Objective: maximize win_rate_delta_10 (hyperband top 33% based on mean win_rate_delta_10 at step 50).
+
+defaults:
+  - base
+  - command: ow_train
+  - method: bayes
+  - metric: win_rate_delta_10
+  - early_terminate: top_33_at_50
+  - fixed: preflight
+  - space: preflight
+  - _self_
+
+name: preflight_top_33
+description: >
+  Preflight W&B sweep: hyperband top 33%.
