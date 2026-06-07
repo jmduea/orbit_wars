@@ -42,7 +42,6 @@ from src.jax.ship_action import is_continuous_ship_mode
 from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
-    is_noop_jax_training_opponent_mode,
     validate_jax_training_opponent_mode,
 )
 from src.opponents.jax_actions.builders import (
@@ -99,10 +98,6 @@ def collect_rollout_jax(
             f"got {cfg.task.player_count}."
         )
     validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
-    # Opponent noop actions ignore edge features; skip per-step opponent re-encode.
-    skip_opp_batch_refresh = cfg.task.player_count == 2 and is_noop_jax_training_opponent_mode(
-        cfg.opponents.mode.opponent
-    )
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
@@ -376,15 +371,12 @@ def collect_rollout_jax(
             operand=None,
         )
         if cfg.task.player_count == 2:
-            if skip_opp_batch_refresh:
-                next_opp_batch_cache = opp_batch_cache
-            else:
-                next_opp_game = next_state.game._replace(
-                    player=(1 - next_state.learner_player).astype(jnp.int32)
-                )
-                next_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-                    next_opp_game
-                )
+            next_opp_batch_cache = _select_opp_batch_cache_2p(
+                skip_refresh=skip_opp_batch_refresh,
+                cached=opp_batch_cache,
+                env_state=next_state,
+                task=cfg.task,
+            )
         else:
             next_opp_batch_cache = opp_batch_cache
 
@@ -521,16 +513,12 @@ def collect_rollout_jax(
         ), transition
 
     if cfg.task.player_count == 2:
-        if skip_opp_batch_refresh:
-            # Noop opponents ignore edge features; learner batch has the right shape.
-            initial_opp_batch_cache = turn_batch
-        else:
-            initial_opp_game = env_state.game._replace(
-                player=(1 - env_state.learner_player).astype(jnp.int32)
-            )
-            initial_opp_batch_cache = jax.vmap(lambda game: encode_turn(game, cfg.task))(
-                initial_opp_game
-            )
+        initial_opp_batch_cache = _initial_opponent_batch_cache_2p(
+            env_state=env_state,
+            turn_batch=turn_batch,
+            task=cfg.task,
+            skip_opp_batch_refresh=skip_opp_batch_refresh,
+        )
     else:
         initial_opp_batch_cache = turn_batch
 

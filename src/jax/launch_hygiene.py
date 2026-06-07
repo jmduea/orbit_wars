@@ -175,16 +175,6 @@ def launch_valid_at_step(
     )
 
 
-def _planet_id_to_row(batch: TurnBatch, planet_id: jax.Array) -> jax.Array:
-    """Map planet id to source row index; ``num_planets`` when not found."""
-
-    num_planets = batch.planet_mask.shape[-1]
-    matches = batch.edge_src_ids == planet_id[:, None]
-    sentinel = jnp.full((1, num_planets), num_planets, dtype=jnp.int32)
-    rows = jnp.arange(num_planets, dtype=jnp.int32)[None, :]
-    return jnp.where(matches, rows, sentinel).min(axis=-1)
-
-
 def _row_for_planet_id(lookups: HygieneLookups, planet_id: jax.Array) -> jax.Array:
     env_count = planet_id.shape[0]
     batch_idx = jnp.arange(env_count, dtype=jnp.int32)
@@ -203,20 +193,6 @@ def _slots_matching_target_on_row(
     batch_idx = jnp.arange(env_count, dtype=jnp.int32)
     tgt_ids_at_row = batch.edge_tgt_ids[batch_idx, src_row, :]
     return tgt_ids_at_row == tgt_planet_id[:, None]
-
-
-def _owner_is_learner_pov(batch: TurnBatch, planet_id: jax.Array) -> jax.Array:
-    """True when ``planet_id`` is learner-owned in turn-start ``TurnBatch`` features."""
-
-    env_count = planet_id.shape[0]
-    num_planets = batch.planet_mask.shape[-1]
-    batch_idx = jnp.arange(env_count, dtype=jnp.int32)
-    row = _planet_id_to_row(batch, planet_id)
-    valid_row = row < num_planets
-    owner_slice = PLANET_FEATURE_SCHEMA.base_slice("owner_slot")
-    owner_slot = batch.planet_features[batch_idx, row, owner_slice]
-    is_self = owner_slot[..., 0] > 0.5
-    return valid_row & is_self & batch.planet_mask[batch_idx, row]
 
 
 def _mark_launch_forbidden_cells(

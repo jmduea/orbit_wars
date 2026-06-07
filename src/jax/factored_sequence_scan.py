@@ -82,8 +82,6 @@ def _replay_logprobs_with_prefix_forwards(
 ) -> FactoredSequenceLogProbResult:
     """Replay log-probs with one shield-prefix decoder forward per sub-step."""
 
-    from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
-
     env_count = source_index.shape[0]
     sequence_k = source_index.shape[1]
     continuous = is_continuous_ship_mode(cfg)
@@ -156,18 +154,8 @@ def _replay_logprobs_with_prefix_forwards(
         fraction_arg = None
         if continuous and ship_fraction is not None:
             fraction_arg = ship_fraction[:, step_idx]
-        step_lp = factored_step_logprob_at_index(
-            step_output,
-            cfg,
-            step_idx,
-            source_index=source_index,
-            target_slot=target_slot,
-            ship_bucket=ship_bucket,
-            stop_flag=stop_flag,
-            ship_bucket_mask=ship_bucket_mask,
-            remaining_ships=remaining_ships,
-            ship_fraction=ship_fraction,
-            hygiene_bucket_mask=step_bucket_mask,
+        source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
+            step_bucket_mask, remaining_ships
         )
         step_lp, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
             step_output.source_logits[:, step_idx, :],
