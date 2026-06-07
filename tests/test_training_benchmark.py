@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.jax.training_benchmark import (
     PRIMARY_E2E_OVERRIDES,
     TrainingBenchmarkResult,
+    compose_benchmark_config,
     default_benchmark_updates,
     resolve_benchmark_overrides,
     training_benchmark_payload,
@@ -80,3 +81,16 @@ def test_primary_preset_resolves_shield_cheap_overrides() -> None:
 def test_primary_preset_default_updates_is_twenty() -> None:
     assert default_benchmark_updates(preset="primary") == 20
     assert default_benchmark_updates(preset=None) == 30
+
+
+def test_admission_preset_resolves_operator_locked_rollout_steps() -> None:
+    overrides = resolve_benchmark_overrides(
+        preset="admission",
+        overrides=["task=map_pool"],
+    )
+    assert "training.rollout_steps=256" in overrides
+    assert "task=map_pool" in overrides
+    cfg = compose_benchmark_config(overrides)
+    assert cfg.training.rollout_steps == 256
+    assert cfg.task.candidate_count == 3
+    assert cfg.task.map_pool_path is not None

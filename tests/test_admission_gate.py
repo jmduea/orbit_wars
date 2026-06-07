@@ -15,8 +15,12 @@ from src.cli.benchmark_gates import (
     run_gate_cli,
 )
 from src.jax.preflight_config_summary import format_gate_train_config_summary
-from src.jax.preflight_gate_loader import build_gate_spec
-from src.jax.admission_throughput import run_throughput_gate
+from src.jax.preflight_gate_loader import admission_gate_train_overrides, build_gate_spec
+from src.jax.admission_throughput import (
+    apply_baseline_comparison,
+    run_throughput_gate,
+    validate_throughput_baseline_geometry,
+)
 from src.jax.training_benchmark import load_e2e_baseline
 
 
@@ -82,6 +86,13 @@ def test_admission_gate_recipe_includes_operator_locked_overrides() -> None:
     assert "telemetry.wandb.enabled=true" in overrides
     assert "telemetry.wandb.group=preflight" in overrides
     assert "artifacts.replay.enabled=false" in overrides
+
+
+def test_admission_gate_train_overrides_match_beat_noop_plus_recipe() -> None:
+    overrides = admission_gate_train_overrides()
+    assert "training.rollout_steps=256" in overrides
+    assert "opponents=noop_only" in overrides
+    assert "training=2p4p_32_split" in overrides
 
 
 def test_admission_gate_dry_run_resolves_max_moves_k_two() -> None:
@@ -166,3 +177,64 @@ def test_run_throughput_gate_against_baseline(tmp_path: Path) -> None:
     assert exit_code == 0
     assert payload["verdict"] == "VERIFIED"
     assert payload["gate_passed"] is True
+
+
+def test_throughput_geometry_mismatch_rejects_bad_baseline(tmp_path: Path) -> None:
+    baseline_body = {
+        "gate": "launch_hygiene_e2e_throughput",
+        "runs": [
+            {
+                "rollout_steps": 500,
+                "num_envs": 32,
+                "env_steps_per_sec": 5000.0,
+                "samples_per_sec": 25000.0,
+                "seconds_per_update_mean": 3.2,
+            },
+            {
+                "rollout_steps": 500,
+                "num_envs": 32,
+                "env_steps_per_sec": 5000.0,
+                "samples_per_sec": 25000.0,
+                "seconds_per_update_mean": 3.2,
+            },
+            {
+                "rollout_steps": 500,
+                "num_envs": 32,
+                "env_steps_per_sec": 5000.0,
+                "samples_per_sec": 25000.0,
+                "seconds_per_update_mean": 3.2,
+            },
+        ],
+        "aggregate": {
+            "env_steps_per_sec": {"mean": 5000.0},
+            "samples_per_sec": {"mean": 25000.0},
+            "seconds_per_update_mean": {"mean": 3.2},
+        },
+        "pass_band": {
+            "within_pct": 10.0,
+            "floors": {"env_steps_per_sec": 4500.0},
+            "ceilings": {"seconds_per_update_mean": 3.52},
+        },
+    }
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline_body) + "\n", encoding="utf-8")
+    payload = {
+        "gate": "admission_throughput",
+        "measured_updates": 18,
+        "env_steps": 18 * 8192,
+        "seconds_total": 36.0,
+        "seconds_per_update_mean": 2.0,
+        "env_steps_per_sec": 4096.0,
+        "samples_per_sec": 20480.0,
+    }
+    failures = validate_throughput_baseline_geometry(payload, baseline_body)
+    assert failures
+    assert "geometry mismatch" in failures[0]
+
+    enriched, passed = apply_baseline_comparison(
+        dict(payload),
+        baseline_path=baseline_path,
+        within_pct=10.0,
+    )
+    assert passed is False
+    assert enriched["gate_failures"][0].startswith("throughput geometry mismatch")

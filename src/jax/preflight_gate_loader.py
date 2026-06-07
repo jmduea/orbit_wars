@@ -215,6 +215,22 @@ def build_gate_spec(
     )
 
 
+def admission_gate_train_overrides(
+    *,
+    model: str = "transformer_factorized_small",
+    extra: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    """Operator-locked Hydra overrides for ``ow benchmark gate run admission``."""
+
+    beat_noop = build_gate_spec("beat_noop", model=model)
+    recipe = load_gate_yaml("admission")
+    raw_extras = recipe.get("train_overrides")
+    admission_extras: tuple[str, ...] = ()
+    if isinstance(raw_extras, list):
+        admission_extras = tuple(str(item) for item in raw_extras)
+    return (*beat_noop.train_overrides, *admission_extras, *extra)
+
+
 def gate_specs(
     model: str,
     *,

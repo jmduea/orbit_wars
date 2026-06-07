@@ -182,6 +182,62 @@ def measured_for_baseline_gate(payload: Mapping[str, object]) -> dict[str, float
     )
 
 
+def _baseline_rollout_geometry(
+    baseline: Mapping[str, object],
+) -> tuple[int, int] | None:
+    runs = baseline.get("runs")
+    if not isinstance(runs, list) or not runs:
+        return None
+    first = runs[0]
+    if not isinstance(first, dict):
+        return None
+    rollout_steps = first.get("rollout_steps")
+    num_envs = first.get("num_envs")
+    if isinstance(rollout_steps, int) and isinstance(num_envs, int):
+        return rollout_steps, num_envs
+    return None
+
+
+def _measured_env_steps_per_update(payload: Mapping[str, object]) -> float | None:
+    env_steps = payload.get("env_steps")
+    measured_updates = payload.get("measured_updates")
+    if not isinstance(env_steps, int | float):
+        return None
+    if not isinstance(measured_updates, int) or measured_updates <= 0:
+        return None
+    return float(env_steps) / measured_updates
+
+
+def validate_throughput_baseline_geometry(
+    payload: Mapping[str, object],
+    baseline: Mapping[str, object],
+    *,
+    tolerance: float = 0.10,
+) -> list[str]:
+    """Reject apples-to-oranges baseline compares (e.g. 500-step baseline vs 256-step gate)."""
+
+    baseline_geometry = _baseline_rollout_geometry(baseline)
+    measured_per_update = _measured_env_steps_per_update(payload)
+    if baseline_geometry is None or measured_per_update is None:
+        return []
+    rollout_steps, num_envs = baseline_geometry
+    expected_per_update = rollout_steps * num_envs
+    if expected_per_update <= 0:
+        return []
+    ratio = measured_per_update / expected_per_update
+    if abs(ratio - 1.0) <= tolerance:
+        return []
+    return [
+        "throughput geometry mismatch: measured "
+        f"~{measured_per_update:.0f} env-steps/update vs baseline recipe "
+        f"{rollout_steps} rollout_steps × {num_envs} envs "
+        f"(={expected_per_update}); ratio {ratio:.2f} outside "
+        f"±{tolerance * 100:.0f}% — recapture baseline with "
+        "`ow benchmark training --preset admission` (and matching --overrides) "
+        "or align gate --train-overrides"
+    ]
+
+
 def apply_baseline_comparison(
     payload: dict[str, object],
     *,
@@ -189,6 +245,7 @@ def apply_baseline_comparison(
     within_pct: float | None,
 ) -> tuple[dict[str, object], bool]:
     baseline = load_e2e_baseline(baseline_path)
+    geometry_failures = validate_throughput_baseline_geometry(payload, baseline)
     measured = measured_for_baseline_gate(payload)
     if not measured:
         missing = [key for key in E2E_THROUGHPUT_METRICS if key not in payload]
@@ -200,6 +257,9 @@ def apply_baseline_comparison(
         measured,
         pass_band=pass_band,
     )
+    if geometry_failures:
+        passed = False
+        failures = [*geometry_failures, *failures]
     payload["baseline_path"] = str(baseline_path)
     payload["pass_band_applied"] = pass_band
     payload["measured_for_gate"] = measured
