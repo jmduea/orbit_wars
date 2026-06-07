@@ -1,6 +1,6 @@
 {
   "manifest_id": "nuclear-cherry-pick-throughput-anchor-2026-06-05",
-  "assessed_date": "2026-06-05",
+  "assessed_date": "2026-06-06",
   "baseline_sha": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
   "baseline_branch": "throughput-baseline",
   "admission_profile": {
@@ -195,7 +195,7 @@
       "baseline_superseded": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
       "baseline_superseded_note": "Old baseline used primary preset (self-play, full transformer, 32 envs \u00d7 500 steps). Locked admission recipe is noop, small model, mixed 2p/4p, 32 envs \u00d7 256 steps. Numbers are not comparable \u2014 do not gate new captures against the old JSON or the earlier 2p_16\u00d7128 proposal.",
       "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_unified.json",
-      "verdict": "baseline_captured",
+      "verdict": "admit",
       "anchor_gate_extract": {
         "source": "admission-throughput on anchor_learn_proof.json gate JSONL (updates 3\u201320)",
         "run_date": "2026-06-06",
@@ -212,7 +212,10 @@
         "artifact": "outputs/benchmarks/cherry-pick/anchor_throughput_2p.json",
         "verdict": "obsolete_profile",
         "note": "Captured under tier2_admission / primary preset; invalid under learning-first unified direction."
-      }
+      },
+      "preset": "tier2_primary",
+      "source": "docs/benchmarks/launch-hygiene-e2e-baseline.json",
+      "verdict_detail": "baseline_captured"
     },
     "learn_proof": {
       "gate": "beat_noop",
@@ -221,7 +224,7 @@
       "run_date": "2026-06-06",
       "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
       "harness_repo": "/home/jmduea/projects/orbit_wars",
-      "verdict": "NOT_VERIFIED",
+      "verdict": "pending",
       "run_dir": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559",
       "log_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T021830Z_jax.jsonl",
       "checkpoint_path": "/home/jmduea/projects/orbit_wars-throughput-anchor/outputs/campaigns/preflight_beat_noop/runs/20260606T021758Z-s42-b5549559/checkpoints/jax_ckpt_last.pkl",
@@ -243,14 +246,16 @@
         }
       },
       "interpretation": "Borderline win-rate delta and elevated KL likely reflect threshold geometry mismatch (calibrated 2p-only/16env/128 steps vs locked mixed 2p/4p/32env/256 steps), not necessarily a bad anchor cherry-pick. Recalibrate before blocking Phase 2.",
-      "admission_gate_note": "Use ow benchmark gate run admission (or make gate-admission REPO_ROOT=anchor) for blocking learn+speed; beat_noop-only JSON superseded for admission blocking."
+      "admission_gate_note": "Use ow benchmark gate run admission (or make gate-admission REPO_ROOT=anchor) for blocking learn+speed; beat_noop-only JSON superseded for admission blocking.",
+      "verdict_detail": "NOT_VERIFIED"
     },
     "parity": {
       "command": "make test-kaggle-parity",
       "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
       "run_date": "2026-06-06",
-      "verdict": "PASS",
-      "result": "15 passed, 1 deselected in 18.77s"
+      "verdict": "admit",
+      "result": "15 passed, 1 deselected in 18.77s",
+      "verdict_detail": "PASS"
     }
   },
   "criterion": "Learning candidates require Kaggle mechanics parity (make test-kaggle-parity), training throughput within \u00b110% of the learning-first unified baseline (once captured), and learn-proof beat_noop VERIFIED at calibrated thresholds \u2014 all on the same core training recipe.",
@@ -302,9 +307,10 @@
       "run_date": "2026-06-06",
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
+        "verdict": "admit",
         "result": "15 passed, 1 deselected in 21.25s",
-        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json"
+        "artifact": "outputs/benchmarks/cherry-pick/pick1_offline_game_reference_libs_gates.json",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
@@ -331,9 +337,10 @@
       "run_date": "2026-06-06",
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
+        "verdict": "admit",
         "result": "15 passed, 1 deselected in 24.80s",
-        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json"
+        "artifact": "outputs/benchmarks/cherry-pick/pick2_encode_learner_turn_gates.json",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness)",
@@ -360,9 +367,10 @@
       "run_date": "2026-06-06",
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
+        "verdict": "admit",
         "result": "15 passed, 1 deselected in 21.87s",
-        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json"
+        "artifact": "outputs/benchmarks/cherry-pick/pick3_env_mechanics_gates.json",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
@@ -450,8 +458,9 @@
       "run_date": "2026-06-06",
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
-        "result": "15 passed, 1 deselected in 18.02s"
+        "verdict": "admit",
+        "result": "15 passed, 1 deselected in 18.02s",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
@@ -499,8 +508,9 @@
       ],
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
-        "result": "16 passed, 1 deselected in 84.10s"
+        "verdict": "admit",
+        "result": "16 passed, 1 deselected in 84.10s",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg on integration src/jax + tests/test_jax_trace_hygiene.py (main harness, integration cwd)",
@@ -523,13 +533,13 @@
       "subject": "Pre-baked 500-map pool gather reset (offline bake, no inline generation)",
       "phase": "env_parity",
       "cherry_pick_order": 4,
-      "status": "reject",
+      "status": "landed_on_integration",
       "implementation": "map_pool_gather_reset",
       "env_parity_mode": "map_pool",
       "worktree": "/home/jmduea/projects/orbit_wars-integration",
       "run_date": "2026-06-06",
-      "integration_head_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
-      "integration_note": "Uncommitted working tree on 9db50f5 substrate; units U1\u2013U7 complete, U8 compile gate failed.",
+      "integration_head_sha": "795cf1c",
+      "integration_note": "Map pool stack on integration: adf2ea4 (pool) + 795cf1c (import fix). Operator admitted with learning waiver 2026-06-07.",
       "granularity": "Offline bake via src/game/* into data/jax_map_pool/default_v1.npz; training reset gathers pool entry + baked comet activation in step(); eval/tournament stay on Kaggle obs replay.",
       "files_touched": [
         "src/jax/map_pool/",
@@ -553,8 +563,9 @@
       },
       "parity": {
         "command": "make test-kaggle-parity",
-        "verdict": "PASS",
-        "result": "25 passed, 1 deselected in 151.28s"
+        "verdict": "admit",
+        "result": "25 passed, 1 deselected in 151.28s",
+        "verdict_detail": "PASS"
       },
       "trace_hygiene": {
         "command": "tier-A static rg on integration src/jax hot-path modules",
@@ -563,26 +574,481 @@
         "note": "make test-jax-trace-hygiene from main harness scans main src/jax (legacy kaggle callbacks); integration map-pool path is callback-free"
       },
       "compile_smoke": {
-        "command": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pick4_map_pool_compile --updates 3 --warmup 1 --out /tmp/pick4_compile.json --overrides task=map_pool",
-        "verdict": "FAIL",
-        "compile_seconds_to_update_3": 306.0894605079957,
+        "command": "env -u JAX_COMPILATION_CACHE_DIR ORBIT_WARS_PYTEST_JAX_CACHE=0 uv run ow benchmark training --preset primary --label pick4_map_pool_compile --updates 3 --warmup 1 --out outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json --overrides task=map_pool",
+        "verdict": "PASS",
+        "compile_seconds_to_update_3": 266.60437883698614,
         "ceiling_seconds": 300,
         "default_backend": "gpu",
-        "commit_sha": "9db50f59f6f0d42d74b37cb1dbee373fc3ed6827",
-        "note": "Cold-cache compile completes but exceeds R14 \u22645 min gate by ~6 s; do not admit per phase2 pick #4 rollback criteria"
+        "commit_sha": "adf2ea4f3f36993f1715aec084c5b60cdad1805d",
+        "artifact": "outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json",
+        "note": "Re-smoke on adf2ea4 stack passes R14 \u22645 min gate; prior 85576f0 smoke (306.09s) superseded by rebased map-pool commit."
       },
+      "throughput_admission": {
+        "profile": "learning_first_unified_map_pool",
+        "gate": "admission",
+        "task_override": "task=map_pool",
+        "rollout_steps": 256,
+        "baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+        "baseline_capture_sha": "e2a1f57",
+        "baseline_note": "Map-pool throughput baseline captured on main @ e2a1f57 with admission-locked recipe (256 rollout steps, 2p4p_32_split).",
+        "artifacts": {
+          "v2": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+          "admission_locked": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-admission-locked.json",
+          "recalibrated": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-recalibrated.json"
+        },
+        "v2_gate": {
+          "run_date": "2026-06-07",
+          "integration_head_sha": "795cf1c",
+          "artifact": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+          "throughput_verdict": "VERIFIED",
+          "env_steps_per_sec": 3775.78,
+          "seconds_per_update_mean": 2.17,
+          "learning_verdict": "NOT_VERIFIED",
+          "win_rate_delta": -0.019,
+          "admission_passed": false
+        },
+        "verdict": "VERIFIED",
+        "note": "Throughput within \u00b110% of map-pool baseline @ 256 steps; learning miss accepted by operator."
+      },
+      "operator_verdict": {
+        "date": "2026-06-07",
+        "verdict": "admit_with_learning_waiver",
+        "compile": "PASS (266.6s \u2264 300s on adf2ea4)",
+        "throughput": "VERIFIED vs launch-hygiene-e2e-baseline-map-pool.json (e2a1f57 capture)",
+        "learning": "NOT_VERIFIED \u2014 deferred to hyperparameter tuning; operator waived",
+        "blocks_next_picks": false,
+        "pursuit_stopped": true,
+        "note": "Operator stopped map-pool admission pursuit; keep on integration; move to opponent-stack incremental picks."
+      },
+      "verdict": "admit",
+      "reject_reasons": [],
+      "sha": "adf2ea4",
+      "source_sha": "adf2ea4",
+      "import_fix_sha": "795cf1c",
+      "direction": "integration_to_main",
+      "notes": "Landed on integration @ adf2ea4 + 795cf1c import fix. Admitted with learning waiver; not blocking next opponent-stack picks.",
+      "blocked_by": []
+    },
+    {
+      "id": "phase_1_anchor_substrate",
+      "subject": "Throughput-baseline anchor substrate (harness sync, win_rate, gate metrics, pipeline kill switch)",
+      "direction": "main_to_integration",
+      "commit_group": "throughput-baseline ac4b5b8..52dfdb0 (7 commits past baseline_sha 79162a2)",
+      "source_shas": [
+        "ac4b5b8",
+        "beedfd7",
+        "0ee3afb",
+        "887a0fc",
+        "00746ba",
+        "117e9fb",
+        "52dfdb0"
+      ],
+      "sha": "52dfdb02ffa9a45e7fcfef41aa065509111c4076",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-throughput-anchor",
+      "notes": "Phase 1 anchor fixes merged/ff into integration branch base before env-parity picks.",
+      "verdict": "admit",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_3f88f1b",
+      "subject": "feat(env-parity): admit Phase 2 picks #1-2 onto throughput baseline",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "3f88f1b",
+      "sha": "3f88f1b",
+      "cherry_pick_order": 1,
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "notes": "Landing commit bundling picks #1-2 on integration.",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_9db50f5",
+      "subject": "fix(env): partial pick #3 cheap mechanics hunks (C\u2013F)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "9db50f5",
+      "sha": "9db50f5",
+      "cherry_pick_order": "3b",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "notes": "Same scope as pick_3_partial.",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_21b82ea",
+      "subject": "fix(rollout): restore rollout_collection_enabled_groups import",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "21b82ea",
+      "sha": "21b82ea",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_2718ba3",
+      "subject": "feat(ce-optimize): opponent rollout ladder infra and measurement harness",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "2718ba3",
+      "sha": "2718ba3",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_fd5f48a",
+      "subject": "refactor(opponents): dedupe rollout encode paths into jax_actions",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "fd5f48a",
+      "sha": "fd5f48a",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_fe359fd_3c2b76e",
+      "subject": "refactor(benchmark): consolidate implementations under src/benchmark (+ sync fixes)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_shas": [
+        "fe359fd",
+        "3c2b76e"
+      ],
+      "sha": "3c2b76e",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_a46c37e",
+      "subject": "feat(opponents): family-batched mixed sampling and encode/sample meters",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "a46c37e",
+      "sha": "a46c37e",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_894beb0",
+      "subject": "fix(opponents): correct pool gather indices after family-batched reorder",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "894beb0",
+      "sha": "894beb0",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_f979c2d",
+      "subject": "feat(opponent-rollout): inference-only K-step shield path (H3+H4, exp-001)",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "f979c2d",
+      "sha": "f979c2d",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_25efafb0",
+      "subject": "fix(jax): use lax.cond for opponent batch cache skip",
+      "phase": "env_parity",
+      "direction": "integration_to_main",
+      "source_sha": "25efafb0",
+      "sha": "25efafb0",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_throughput"
+      ],
+      "notes": "Fixes a568e7c crash; post-tracefix: learning PASS, throughput FAIL.",
+      "gates": {
+        "admission_post_tracefix": {
+          "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
+          "run_date": "2026-06-06",
+          "integration_head_sha": "25efafb0",
+          "learning_verdict": "VERIFIED",
+          "win_rate_delta": 0.0511,
+          "throughput_verdict": "FAIL",
+          "env_steps_per_sec": 3558,
+          "seconds_per_update_mean": 2.3,
+          "admission_passed": false
+        }
+      },
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_87e3915",
+      "subject": "chore: remove legacy tracked .omg wiki and tmp scripts",
+      "direction": "integration_to_main",
+      "source_sha": "87e3915",
+      "sha": "87e3915",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "notes": "Cleanup only; low risk.",
+      "reject_reasons": []
+    },
+    {
+      "id": "integration_a568e7c",
+      "subject": "docs: add main\u2194integration reconciliation map for cherry-pick readiness",
+      "direction": "integration_to_main",
+      "source_sha": "a568e7c",
+      "sha": "a568e7c",
+      "status": "landed_on_integration",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "verdict": "pending",
+      "notes": "Docs-only; superseded on main by 6995a8f.",
+      "reject_reasons": []
+    },
+    {
+      "id": "pick_4a_planets",
+      "subject": "Compile-bounded pick 4a \u2014 planets-only JAX generation",
+      "phase": "env_parity",
+      "direction": "integration_first",
+      "status": "not_attempted",
+      "verdict": "pending",
+      "blocked_by": [
+        "pick_4_map_pool_compile",
+        "operator_sign_off"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "pick_4b_comets",
+      "subject": "Compile-bounded pick 4b \u2014 comets activation after 4a planets admit",
+      "phase": "env_parity",
+      "direction": "integration_first",
+      "status": "not_attempted",
+      "verdict": "pending",
+      "blocked_by": [
+        "pick_4a_planets"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_launch_hygiene_bundle",
+      "subject": "Launch hygiene bundle for K-step factorized decoder",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "46c825e",
+        "6e75826"
+      ],
+      "sha": "6e75826",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "hygiene_ablation_r10"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_planet_flow_stack",
+      "subject": "Planet Flow decoder replay batch contracts and queue residuals",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "5a0db6e",
+        "d0d9448",
+        "b38dd15"
+      ],
+      "sha": "b38dd15",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "parity_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_b5cd0e9",
+      "subject": "feat(jax): noop rollout fast path and multitask smoke benchmarks",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_sha": "b5cd0e9",
+      "sha": "b5cd0e9",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_telemetry_metrics",
+      "subject": "Telemetry shard registry, rollout contract sync, launch diagnostics",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "2c660f0",
+        "cdb76b3"
+      ],
+      "sha": "cdb76b3",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "learning_4ace5f9_redesign",
+      "subject": "feat(rollout): selected_validate factorized sampling path (semantic redesign)",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "source_sha": "4ace5f9",
+      "sha": "4ace5f9",
+      "status": "excluded",
       "verdict": "reject",
       "reject_reasons": [
-        "compile_time_regression"
-      ]
+        "semantic_redesign_halted"
+      ],
+      "notes": "Explicitly excluded; redesign track halted."
+    },
+    {
+      "id": "learning_ssot_qualifier_stack",
+      "subject": "SSOT qualifier / train-spine stack on main",
+      "phase": "learning",
+      "direction": "main_to_integration",
+      "status": "deferred",
+      "verdict": "pending",
+      "blocked_by": [
+        "phase_2_admission",
+        "integration_scope"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_manifest_harness_sync",
+      "subject": "Manifest + admission gate harness sync (main\u2192integration docs/tooling)",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "e2011e6",
+        "e566abf",
+        "c70bf4e",
+        "620128e",
+        "6995a8f"
+      ],
+      "sha": "6995a8f",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "integration_admission_green"
+      ],
+      "notes": "Integration carries 73-line stub; main remains SSOT.",
+      "reject_reasons": []
+    },
+    {
+      "id": "main_e5480d0_rollout_phase_profile",
+      "subject": "feat(benchmark): rollout phase profile CLI and pick #4 gate harness",
+      "direction": "main_to_integration",
+      "source_sha": "e5480d0",
+      "sha": "e5480d0",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "integration_admission_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_1f8766a_encode_turn_microbench",
+      "subject": "feat(benchmark): add encode-turn CLI microbench",
+      "direction": "main_to_integration",
+      "source_sha": "1f8766a",
+      "sha": "1f8766a",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "integration_admission_green"
+      ],
+      "reject_reasons": []
+    },
+    {
+      "id": "main_pr221_optional",
+      "subject": "PR #221 unique commits (dispatch refactor, noop JIT-safe collect)",
+      "direction": "main_to_integration",
+      "source_shas": [
+        "65877e2",
+        "7bad4e6"
+      ],
+      "sha": "7bad4e6",
+      "status": "pending",
+      "verdict": "pending",
+      "blocked_by": [
+        "admission_re_gate",
+        "equivalence_check"
+      ],
+      "notes": "Optional; PR #221 closed superseded.",
+      "reject_reasons": []
+    },
+    {
+      "id": "bisect_co_landing",
+      "subject": "Bisect characterization \u2014 co_landing commits (validation preset window)",
+      "direction": "characterization",
+      "source_shas": [
+        "71c3e91",
+        "ce6714b"
+      ],
+      "sha": "ce6714b",
+      "status": "recorded",
+      "verdict": "pending",
+      "reject_reasons": []
     }
   ],
   "reconciliation_2026_06_06": {
     "date": "2026-06-06",
     "doc": "docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
     "doc_repo": "orbit_wars-integration",
-    "main_head_sha": "1f8766ae81be39079fafcea2250ce262c8a825ac",
-    "integration_head_sha": "87e3915",
+    "main_head_sha": "6995a8f",
+    "integration_head_sha": "795cf1c",
     "integration_branch": "optimize/opponent-rollout-throughput",
     "merge_base_main_integration": "79162a2088160b8ed05c3e3a050e064c7f6c9556",
     "pr_221": {
@@ -606,34 +1072,80 @@
       "result": "10 passed",
       "run_date": "2026-06-06"
     },
-    "admission_blocker": "Post-optimization stack (3b, map pool 85576f0, family-batched, H3/H4) not re-gated; prior exp-001 throughput FAIL ~20% below floor. Re-run make gate-admission REPO_ROOT=integration before cherry-pick to main."
+    "admission_blocker": "Map pool admitted with learning waiver @ 795cf1c (2026-06-07). Full opponent stack @ 25efafb0 still throughput-blocked \u2014 incremental picks resume at 2718ba3.",
+    "admission_post_tracefix": {
+      "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
+      "integration_head_sha": "25efafb0",
+      "learning_pass": true,
+      "throughput_pass": false,
+      "win_rate_delta": 0.0511,
+      "env_steps_per_sec": 3558,
+      "seconds_per_update_mean": 2.3
+    },
+    "manifest_ssot": {
+      "main": "docs/benchmarks/cherry-pick-manifest.json (orbit_wars main)",
+      "integration": "73-line stub \u2014 copy from main when ready"
+    },
+    "map_pool_verdict": "admit_with_learning_waiver @ adf2ea4+795cf1c; compile PASS 266.6s; throughput VERIFIED (v2 gate); learning deferred to HP tuning"
   },
   "integration_state": {
-    "branch": "optimize/opponent-rollout-throughput",
+    "branch": "throughput-baseline-integration",
     "worktree": "/home/jmduea/projects/orbit_wars-integration",
     "worktree_note": "Phase 2 landing zone; reconciliation doc at docs/reconciliation/2026-06-06-main-integration-reconciliation.md",
     "ordered_shas": [
-      "33b56e2:src/game/{comet_generation,planet_generation,constants}.py",
-      "33b56e2:src/jax/features.py + env.py learner encode call sites",
-      "33b56e2+0cfd762:src/jax/env.py mechanics (REJECTED \u2014 reverted 2026-06-06)",
-      "33b56e2+0cfd762:src/jax/env.py cheap hunks C\u2013F only (pick 3b, 2026-06-06)"
+      "ac4b5b8:Phase-1 harness copy",
+      "beedfd7:win_rate/binary_win alignment",
+      "0ee3afb:gate harness sync",
+      "887a0fc:flat log_prob anchor batch",
+      "00746ba:gate metrics aggregate",
+      "117e9fb:pipeline.enabled kill switch",
+      "52dfdb0:win rate finalize",
+      "3f88f1b:Phase-2 picks #1-2 landing",
+      "9db50f5:pick 3b cheap mechanics",
+      "adf2ea4:pick_4_map_pool (admit w/ learning waiver)",
+      "795cf1c:rollout import fix (map-pool collect)",
+      "2718ba3:CE-optimize ladder infra (NEXT incremental pick)",
+      "fd5f48a:opponent encode dedupe",
+      "fe359fd+3c2b76e:benchmark package sync",
+      "a46c37e:family-batched mixed sampling",
+      "894beb0:pool gather index fix",
+      "f979c2d:H3/H4 inference-only shield",
+      "87e3915:cleanup",
+      "a568e7c:reconciliation doc (integration)",
+      "25efafb0:lax.cond opponent batch cache trace fix"
     ],
-    "last_integrated_sha": "33b56e219e9851bfe8e4f53d6d9b263b4f45efd5",
-    "last_integrated_note": "Picks #1\u20132 + pick 3b only; pick #4 greenfield (75a7cf2) and mechanical fix (0eb349e) rolled back 2026-06-06 to 9db50f5 (compile_time_regression on mechanical fix smoke/benchmark)",
-    "integration_head_sha": "87e3915",
-    "integration_head_note": "2026-06-06 reconciliation: branch optimize/opponent-rollout-throughput @ 87e3915. Includes map pool 85576f0, opponent stack (2718ba3\u219287e3915), env-parity picks. PR #221 closed as superseded.",
+    "last_integrated_sha": "795cf1c",
+    "last_integrated_note": "Map-pool stack through import fix; admitted with learning waiver. Opponent-stack picks from 2718ba3 onward pending incremental cherry-pick.",
+    "integration_head_sha": "795cf1c",
+    "integration_head_note": "Operator stopped map-pool pursuit 2026-06-07; compile+throughput pass, learning waived. Next pick: 2718ba3.",
     "pick_4_map_pool_attempt_2026_06_06": {
-      "verdict": "reject",
+      "verdict": "superseded",
       "implementation": "map_pool_gather_reset",
       "env_parity_mode": "map_pool",
-      "integration_head": "9db50f5",
-      "working_tree": "uncommitted",
+      "integration_head": "85576f0",
+      "note": "Superseded by rebased adf2ea4 stack; prior 306.09s compile smoke on 85576f0 branch line."
+    },
+    "pick_4_map_pool_admission_2026_06_07": {
+      "verdict": "admit_with_learning_waiver",
+      "implementation": "map_pool_gather_reset",
+      "env_parity_mode": "map_pool",
+      "integration_head": "795cf1c",
+      "map_pool_sha": "adf2ea4",
+      "import_fix_sha": "795cf1c",
       "parity": "25 passed make test-kaggle-parity",
-      "compile_smoke_seconds_to_update_3": 306.09,
+      "compile_smoke_seconds_to_update_3": 266.604,
       "compile_ceiling_seconds": 300,
-      "reject_reason": "compile_time_regression",
-      "pool_sha256": "b48a38e4ad63aab25ffb155af321ab470b4e658cff42eca0369d72048f8d3023",
-      "next_steps": "Investigate compile budget (pool tensor shapes in trace, or relax gate with operator sign-off); commit integration work only after admit"
+      "compile_artifact": "outputs/benchmarks/admission/pick4_compile_integration-adf2ea4.json",
+      "throughput_baseline_sha": "e2a1f57",
+      "throughput_baseline": "docs/benchmarks/launch-hygiene-e2e-baseline-map-pool.json",
+      "admission_v2_artifact": "outputs/benchmarks/admission/gate-integration-pick4-map-pool-v2.json",
+      "throughput_verdict": "VERIFIED",
+      "learning_verdict": "NOT_VERIFIED",
+      "learning_waiver": true,
+      "learning_deferred_to": "hyperparameter_tuning",
+      "blocks_next_picks": false,
+      "operator_date": "2026-06-07",
+      "next_incremental_pick": "2718ba3"
     },
     "pick_4_attempt_2026_06_06": {
       "verdict": "admit",
@@ -663,7 +1175,7 @@
         "75a7cf287f3a01903179f4459464af4c16a06acc"
       ]
     },
-    "admission_passed": true,
+    "admission_passed": false,
     "admission_run_dir": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4",
     "admission_log_path": "/home/jmduea/projects/orbit_wars-integration/outputs/campaigns/preflight_admission/runs/20260606T060248Z-s42-36cbf9d4/logs/planet_graph_transformer-mix2p4p-noop-u200-env32-s42-20260606T060313Z_jax.jsonl",
     "integration_status": "building",
@@ -809,6 +1321,43 @@
         "seconds_per_update_mean": 3.037,
         "env_steps_per_sec": 5268,
         "note": "Failed run is not evidence against picks #1\u20132 \u2014 recipe mismatch vs locked admission profile."
+      },
+      "superseded_by": "admission_post_tracefix_2026_06_06"
+    },
+    "branch_actual": "optimize/opponent-rollout-throughput",
+    "next_incremental_pick": {
+      "sha": "2718ba3",
+      "subject": "feat(ce-optimize): opponent rollout ladder infra and measurement harness",
+      "risk": "medium",
+      "rationale": "First opponent-stack commit after map-pool landing; mostly measurement harness + noop JAX path; touches collect.py/sampling.py but excludes family-batched sampling (a46c37e) and H3/H4 shield (f979c2d) that drove throughput FAIL @ 25efafb0.",
+      "fast_gates": [
+        "make test-kaggle-parity",
+        "make test-jax-trace-hygiene",
+        "pytest tests/test_opponent_ladder_compose.py tests/test_rollout_noop_opponent.py -q"
+      ],
+      "gpu_gate_deferred": "make gate-admission REPO_ROOT=integration after operator go/no-go"
+    },
+    "admission_post_tracefix_2026_06_06": {
+      "run_date": "2026-06-06",
+      "gate": "admission",
+      "profile": "learning_first_unified",
+      "harness_repo": "/home/jmduea/projects/orbit_wars",
+      "worktree": "/home/jmduea/projects/orbit_wars-integration",
+      "integration_head_sha": "25efafb0",
+      "artifact": "outputs/benchmarks/admission/gate-integration-20260606-post-tracefix.json",
+      "prior_crash_sha": "a568e7c",
+      "fix_sha": "25efafb0",
+      "admission_passed": false,
+      "learning": {
+        "verdict": "VERIFIED",
+        "win_rate_delta": 0.0511
+      },
+      "throughput": {
+        "verdict": "FAIL",
+        "env_steps_per_sec": 3558,
+        "seconds_per_update_mean": 2.3,
+        "baseline_floor_env_steps_per_sec": 4888.786588437074,
+        "baseline_ceiling_seconds_per_update_mean": 1.659083309335319
       }
     }
   },
@@ -818,7 +1367,7 @@
     "rule": "No pure_callback, io_callback, _reference_* helpers, env_parity_mode train/kaggle split, or src/game planet/comet generation imports on the JAX training hot path (reset/step/vmap/jit rollout). Kaggle parity via pure JAX ports only; reference libs are test-only.",
     "source": "docs/solutions/conventions/jax-no-kaggle-callbacks.md"
   },
-  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT; pick 3b ADMIT; pick #4 map pool COMMITTED on integration (85576f0) but manifest admit pending compile re-check. Opponent optimizations (family-batched, H3/H4, ladder) landed greenfield on integration \u2014 PR #221 closed superseded. Admission VERIFIED at 3f88f1b (picks #1\u20132 only); full stack @ 87e3915 needs re-gate before main cherry-pick. Next: gate-admission on integration, pick #5 hunks, pick #6 callback teardown from main. See reconciliation_2026_06_06.",
+  "decision": "Phase 2 picks #1\u2013#2 ADMIT; pick #3 REJECT; pick 3b ADMIT; pick #4 map pool ADMIT with learning waiver @ adf2ea4+795cf1c (compile PASS, throughput VERIFIED @ 256 steps, learning deferred to HP tuning). Opponent-stack incremental picks resume at 2718ba3. Full stack @ 25efafb0 still throughput-blocked. Phase 3 learning deferred. Main manifest SSOT.",
   "planned_picks": [
     {
       "cherry_pick_order": 4,
