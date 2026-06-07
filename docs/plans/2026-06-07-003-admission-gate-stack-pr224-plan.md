@@ -98,3 +98,13 @@ make test-launch-hygiene-e2e-throughput
 ```
 
 **Verdict:** Step 2 **partial** — G1 PASS, G3 FAIL (expected compile regression), G4 **operator-run required**. No code fixes applied (no crash/preset/cache bugs found).
+
+## Operator one-time waiver (2026-06-07)
+
+The operator waived **G3 compile ceiling** (381.02s vs 300s) and **G4 tier-2 completion** for this PR #224 merge cycle only.
+
+- Parity + trace hygiene + **tier-1** throughput: **PASS**
+- Learning-first tier-2 recipe aligned (`--preset admission` + `launch-hygiene-e2e-baseline-learning-first.json`)
+- Full `launch_hygiene` + `lattice` remains **rejected** for default train; `task=rollout_selected_validate` is **opt-in preflight only**
+- Documented map_pool+hygiene compile regression; no threshold relaxation in code
+
