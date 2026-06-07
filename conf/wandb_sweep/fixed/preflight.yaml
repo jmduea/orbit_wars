@@ -3,43 +3,31 @@
 
 parameters:
   model:
-    value: transformer_factorized
+    value: transformer_factorized_small
   task:
     value: shield_cheap
   training:
-    value: smoke
+    value: 2p4p_16_split
   training.total_updates:
-    value: 50
+    value: 100
   opponents:
-    value: self_play_only
+    value: random_only
   curriculum:
     value: "off"
   seed:
     value: 42
   output.campaign:
-    value: ssot_preflight_sweep
+    value: preflight
   telemetry:
     value: default
   telemetry.wandb.enabled:
     value: true
   telemetry.wandb.group:
-    value: ssot_preflight
+    value: preflight
   telemetry.wandb.log_artifacts:
     value: true
   telemetry.wandb.tags:
     value:
-      - ssot_preflight
-      - gates_2_3
-      - mix2p4p_selfplay
-  telemetry.metric_groups.action_decision:
-    value: true
-  telemetry.metric_groups.losses:
-    value: true
-  artifacts:
-    value: local_fast
-  artifacts.artifact_pipeline.enabled:
-    value: false
-  artifacts.replay.enabled:
-    value: false
+      - preflight
   artifacts.checkpoint_every:
-    value: 50
+    value: 100

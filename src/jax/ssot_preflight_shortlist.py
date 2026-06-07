@@ -15,9 +15,9 @@ from src.jax.planet_flow_shortlist import (
     write_shortlist_report,
 )
 from src.jax.train.sweep_score import (
-    SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
+    PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
     ssot_preflight_learning_signal_thresholds,
-    ssot_preflight_sweep_score,
+    preflight_sweep_score,
 )
 
 
@@ -74,7 +74,7 @@ def evaluate_ssot_shortlist_run(
         max_kl = float(max_approx_kl)
     if min_entropy is not None:
         min_ent = float(min_entropy)
-    score = ssot_preflight_sweep_score(
+    score = preflight_sweep_score(
         win_rate_delta=win_rate_delta,
         approx_kl=approx_kl,
         entropy=entropy,
@@ -90,7 +90,7 @@ def evaluate_ssot_shortlist_run(
         max_approx_kl=max_kl,
         min_entropy=min_ent,
     )
-    eligible = score != SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    eligible = score != PREFLIGHT_SWEEP_SCORE_INELIGIBLE
     checkpoint_artifact = f"checkpoint-u{int(summary.get('update', 50) or 50)}"
     return {
         "run_id": run.run_id,
@@ -99,7 +99,7 @@ def evaluate_ssot_shortlist_run(
         "win_rate_delta_10": win_rate_delta,
         "approx_kl_window_mean": approx_kl,
         "entropy_window_mean": entropy,
-        "ssot_preflight_sweep_score": score,
+        "preflight_sweep_score": score,
         "guardrail_reasons": guardrail_reasons,
         "eligible": eligible,
         "checkpoint_artifact": checkpoint_artifact,
@@ -112,7 +112,7 @@ def rank_ssot_eligible_entries(
     eligible = [entry for entry in entries if entry.get("eligible")]
 
     def sort_key(entry: dict[str, object]) -> tuple[float, float, float]:
-        score = float(entry.get("ssot_preflight_sweep_score") or float("-inf"))
+        score = float(entry.get("preflight_sweep_score") or float("-inf"))
         delta = float(entry.get("win_rate_delta_10") or float("-inf"))
         kl = float(entry.get("approx_kl_window_mean") or float("inf"))
         return (-score, -delta, kl)

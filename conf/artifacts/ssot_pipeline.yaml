@@ -26,11 +26,11 @@ ssot_pipeline:
 
 artifact_pipeline:
   enabled: true
-  checkpoint_eval_async: false
+  checkpoint_eval_async: true
   docker_validation_async: false
-  replay_async: false
+  replay_async: true
 
 replay:
-  enabled: false
+  enabled: true
 
 checkpoint_every: 100

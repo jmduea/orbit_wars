@@ -4,17 +4,17 @@ import pytest
 
 from src.config.schema import TelemetryConfig, TrainConfig, WandBConfig
 from src.jax.train.sweep_score import (
-    SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
+    PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_ssot_preflight_sweep_metrics,
     is_ssot_preflight_sweep,
-    ssot_preflight_sweep_score,
+    preflight_sweep_score,
 )
 
 
-def test_ssot_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
-    assert ssot_preflight_sweep_score(
+def test_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
+    assert preflight_sweep_score(
         win_rate_delta=0.08,
         approx_kl=0.1,
         entropy=0.01,
@@ -32,8 +32,8 @@ def test_ssot_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
         {"win_rate_delta": 0.08, "approx_kl": 0.1, "entropy": 1.0e-5},
     ],
 )
-def test_ssot_preflight_sweep_score_ineligible(kwargs: dict[str, float | None]) -> None:
-    assert ssot_preflight_sweep_score(**kwargs) == SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+def test_preflight_sweep_score_ineligible(kwargs: dict[str, float | None]) -> None:
+    assert preflight_sweep_score(**kwargs) == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
 
 
 def test_is_ssot_preflight_sweep_detects_tag() -> None:
@@ -69,4 +69,4 @@ def test_collect_ssot_preflight_sweep_metrics_populates_score() -> None:
     assert "win_rate_delta_10" in metrics
     assert "approx_kl_window_mean" in metrics
     assert "entropy_window_mean" in metrics
-    assert metrics["ssot_preflight_sweep_score"] > 0.0
+    assert metrics["preflight_sweep_score"] > 0.0

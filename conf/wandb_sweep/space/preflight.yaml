@@ -18,3 +18,7 @@ parameters:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
     values: [0.3, 0.5, 1.0]
+  reward.reward_capture_planet:
+    values: [0.0, 0.05, 0.1]
+  reward.reward_ship_delta:
+    values: [0.0, 0.01, 0.02]

@@ -11,7 +11,7 @@ from src.jax.preflight_calibration import (
 )
 
 PLANET_FLOW_MIN_DEMAND_MASS = 100.0
-SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE = -1.0
+PREFLIGHT_SWEEP_SCORE_INELIGIBLE = -1.0
 PLANET_FLOW_MIN_EMITTED_LAUNCHES = 50.0
 PLANET_FLOW_MIN_MEAN_LAUNCHES = 0.05
 PLANET_FLOW_MIN_ENTROPY = 1.0e-3
@@ -266,7 +266,7 @@ def ssot_preflight_learning_signal_thresholds(
     )
 
 
-def ssot_preflight_sweep_score(
+def preflight_sweep_score(
     *,
     win_rate_delta: float | None,
     approx_kl: float | None,
@@ -278,17 +278,17 @@ def ssot_preflight_sweep_score(
     """W&B sweep objective for SSOT short preflight (Gates 2–3 trend, not raw win rate)."""
 
     if win_rate_delta is None or approx_kl is None or entropy is None:
-        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+        return PREFLIGHT_SWEEP_SCORE_INELIGIBLE
     if (
         float(win_rate_delta) < float(min_win_rate_delta)
         or float(approx_kl) > float(max_approx_kl)
         or float(entropy) < float(min_entropy)
     ):
-        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+        return PREFLIGHT_SWEEP_SCORE_INELIGIBLE
     return float(win_rate_delta)
 
 
-def collect_ssot_preflight_sweep_metrics(
+def collect_preflight_sweep_metrics(
     *,
     win_rate_trend: WinRateTrendTracker,
     approx_kl_window: MetricWindowTracker | None,
@@ -319,7 +319,7 @@ def collect_ssot_preflight_sweep_metrics(
             metrics["entropy_window_mean"] = float(entropy_wm)
 
     min_delta, max_kl, min_ent = ssot_preflight_learning_signal_thresholds(thresholds)
-    metrics["ssot_preflight_sweep_score"] = ssot_preflight_sweep_score(
+    metrics["preflight_sweep_score"] = preflight_sweep_score(
         win_rate_delta=win_rate_delta_10,
         approx_kl=approx_kl_wm,
         entropy=entropy_wm,

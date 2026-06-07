@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from src.telemetry.metric_definition import MetricDefinition, metric
 
-
 _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
     "stop_rate": metric(
         "stop_rate",
@@ -38,10 +37,10 @@ _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
         "action_decision",
         "W&B sweep objective: win_rate_delta_10 when window-mean KL/entropy floors pass, else -1.",
     ),
-    "ssot_preflight_sweep_score": metric(
-        "ssot_preflight_sweep_score",
+    "preflight_sweep_score": metric(
+        "preflight_sweep_score",
         "action_decision",
-        "SSOT W&B preflight objective: win_rate_delta_10 when Gates 2–3 floors pass, else -1.",
+        "W&B preflight sweep objective: win_rate_delta_10 when Gates 2–3 floors pass, else -1.",
     ),
     "stop_utilization_ratio": metric(
         "stop_utilization_ratio",

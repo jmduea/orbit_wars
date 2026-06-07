@@ -67,7 +67,6 @@ from src.jax.train.sweep_score import (
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_planet_flow_sweep_metrics,
-    collect_ssot_preflight_sweep_metrics,
     is_ssot_preflight_sweep,
     planet_flow_max_post_mask_unreachable_rate,
 )

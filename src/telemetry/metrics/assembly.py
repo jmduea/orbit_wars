@@ -116,7 +116,7 @@ _REGISTRY_ASSEMBLY_ORDER: tuple[str, ...] = (
     "approx_kl_window_mean",
     "entropy_window_mean",
     "planet_flow_sweep_score",
-    "ssot_preflight_sweep_score",
+    "preflight_sweep_score",
     "stop_utilization_ratio",
     "mean_ships_per_launch",
     "survival_time",

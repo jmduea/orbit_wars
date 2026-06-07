@@ -4,7 +4,7 @@ decoder_carry: true
 
 hidden_size: 128
 attention_heads: 4
-max_moves_k: 5
+max_moves_k: 2
 gnn_k_neighbors: 5
 gnn_message_passing_layers: 2
 planet_transformer_layers: 2
