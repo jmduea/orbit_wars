@@ -18,7 +18,10 @@ from omegaconf import OmegaConf
 
 from scripts.make_wandb_sweep import compose_sweep_gen, write_wandb_sweep
 from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
-from src.config.rollout_allocation import resolve_rollout_group_specs
+from src.config.rollout_allocation import (
+    resolve_rollout_group_specs,
+    validate_rollout_allocation,
+)
 from src.jax.training_benchmark import (
     PRIMARY_E2E_OVERRIDES,
     WORKSTATION_VALIDATION_OVERRIDES,
@@ -81,8 +84,21 @@ def test_responsibility_base_yaml_declares_required_schema_keys() -> None:
     assert missing == []
 
 
+TRAINING_PROFILES = tuple(
+    path.stem
+    for path in sorted(
+        (Path(__file__).resolve().parents[1] / "conf" / "training").glob("*.yaml")
+    )
+    if path.stem != "base"
+)
+
+
 def test_default_train_profile_composes_and_respects_command_critical_sets() -> None:
     cfg = compose_hydra_train_config()
+
+    specs = resolve_rollout_group_specs(cfg)
+    assert {spec.player_count: spec.num_envs for spec in specs} == {2: 16, 4: 16}
+    assert cfg.training.rollout_microbatch_envs == 16
 
     assert cfg.model.architecture in SACRED_ARCHITECTURES
     assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
@@ -102,6 +118,13 @@ def test_default_train_profile_composes_and_respects_command_critical_sets() -> 
     if cfg.opponents.self_play.enabled:
         assert cfg.opponents.snapshot.pool_size > 0
         assert cfg.opponents.snapshot.interval_updates > 0
+
+
+@pytest.mark.parametrize("profile", TRAINING_PROFILES)
+def test_training_profile_composes(profile: str) -> None:
+    cfg = compose_hydra_train_config([f"training={profile}"])
+    validate_rollout_allocation(cfg)
+    assert resolve_rollout_group_specs(cfg)
 
 
 @pytest.mark.parametrize("name,overrides", PRIMARY_TRAIN_PROFILES.items())

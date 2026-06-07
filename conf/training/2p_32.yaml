@@ -6,3 +6,4 @@ num_envs: 32
 format_weights:
   2: 1.0
   4: 0.0
+rollout_microbatch_envs: 32
