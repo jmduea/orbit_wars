@@ -19,6 +19,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 | Train (local Hydra) | `ow train` |
 | Print resolved config | `ow train print_resolved_config=true` |
 | Kaggle train lifecycle | `ow train kaggle` |
+| Colab train lifecycle | `ow train colab` |
 | Tournament eval | `ow eval tournament` |
 | Artifact worker | `ow eval worker` |
 | Eval queue status | `ow eval status` |

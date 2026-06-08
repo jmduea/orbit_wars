@@ -19,7 +19,7 @@ _TOP_LEVEL_OW_COMMANDS: frozenset[str] = frozenset(
 # Token-style subcommands not expressed as argparse ``{choices}`` in --help.
 _EXTRA_NESTED_TOKENS: dict[tuple[str, ...], frozenset[str]] = {
     ("ow", "benchmark", "gate"): frozenset({"list", "run"}),
-    ("ow", "train"): frozenset({"kaggle", "local"}),
+    ("ow", "train"): frozenset({"kaggle", "local", "colab"}),
 }
 
 

@@ -49,6 +49,7 @@ def test_ow_train_help_does_not_invoke_hydra(capsys, monkeypatch) -> None:
     captured = capsys.readouterr().out
     assert "ow train" in captured
     assert "Kaggle" in captured
+    assert "Colab" in captured
     assert "Hydra overrides" in captured
     assert "Powered by Hydra" not in captured
 
@@ -183,3 +184,58 @@ def test_validate_hydra_overrides_lists_valid_training_options() -> None:
         from src.config import validate_hydra_overrides
 
         validate_hydra_overrides(["training=2p4p_32_splitb"])
+
+
+def test_parse_train_colab_launch_forwards_overrides() -> None:
+    route = train_hosts.parse_train_argv(
+        ["colab", "training.total_updates=10", "output.campaign=colab_smoke"]
+    )
+
+    assert route.host == "colab"
+    assert route.subcommand is None
+    assert route.hydra_overrides == [
+        "training.total_updates=10",
+        "output.campaign=colab_smoke",
+    ]
+
+
+def test_parse_train_colab_preflight_subcommand() -> None:
+    route = train_hosts.parse_train_argv(["colab", "preflight"])
+
+    assert route.host == "colab"
+    assert route.subcommand == "preflight"
+    assert route.colab_argv == []
+
+
+def test_build_colab_argv_default_launch_t4_timeout() -> None:
+    route = train_hosts.TrainRoute(
+        host="colab",
+        hydra_overrides=["training.total_updates=10"],
+    )
+    argv = train_hosts._build_colab_argv(route)
+
+    assert argv[0] == "launch"
+    assert "--gpu" in argv
+    assert argv[argv.index("--gpu") + 1] == "T4"
+    assert "--timeout" in argv
+    assert argv[argv.index("--timeout") + 1] == "86400"
+    assert "--override" in argv
+
+
+def test_dispatch_colab_calls_runner(monkeypatch) -> None:
+    captured: list[list[str]] = []
+
+    def fake_run(argv: list[str] | None = None) -> int:
+        captured.append(list(argv or []))
+        return 0
+
+    monkeypatch.setattr("src.cli.train_hosts.colab_cli.run", fake_run)
+
+    train_hosts.dispatch(
+        train_hosts.TrainRoute(
+            host="colab",
+            subcommand="preflight",
+        )
+    )
+
+    assert captured == [["preflight"]]

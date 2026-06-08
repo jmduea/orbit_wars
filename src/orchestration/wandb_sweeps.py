@@ -215,3 +215,27 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def hydra_overrides_from_wandb_config(
+    config: Mapping[str, object],
+    *,
+    prefix: str = "",
+) -> list[str]:
+    """Flatten a W&B run config mapping into Hydra override strings."""
+
+    overrides: list[str] = []
+    for key, value in sorted(config.items(), key=lambda item: str(item[0])):
+        name = str(key)
+        if name.startswith("_"):
+            continue
+        full_key = f"{prefix}.{name}" if prefix else name
+        if isinstance(value, Mapping):
+            overrides.extend(hydra_overrides_from_wandb_config(value, prefix=full_key))
+            continue
+        if isinstance(value, (list, tuple)):
+            continue
+        if value is None:
+            continue
+        overrides.append(f"{full_key}={value}")
+    return overrides

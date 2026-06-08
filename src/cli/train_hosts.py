@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.cli import colab_runner as colab_cli
 from src.cli import kaggle_runner as kaggle_cli
 from src.orchestration.accelerators import DEFAULT_KAGGLE_ACCELERATOR
+from src.orchestration.colab_runner import DEFAULT_GPU
 
-HOSTS = frozenset({"local", "kaggle"})
+HOSTS = frozenset({"local", "kaggle", "colab"})
 CLI_HELP_TOKENS = frozenset({"help", "--help", "-h", "--hydra-help"})
 PRIMARY_CONFIG_GROUPS = (
     "model",
@@ -30,6 +32,18 @@ KAGGLE_SUBCOMMANDS = frozenset(
         "sync-output",
         "shortlist",
         "latest-checkpoint",
+    }
+)
+
+COLAB_SUBCOMMANDS = frozenset(
+    {
+        "preflight",
+        "prepare",
+        "launch",
+        "status",
+        "sync",
+        "shortlist",
+        "stop",
     }
 )
 
@@ -95,7 +109,7 @@ def print_ow_help() -> None:
     print(
         "Orbit Wars CLI (ow)\n\n"
         "Commands:\n"
-        "  train   Local or Kaggle JAX training via Hydra configuration\n"
+        "  train   Local, Kaggle, or Colab JAX training via Hydra configuration\n"
         "  eval    Tournament eval, artifact worker, run status, Kaggle submit\n"
         "  runs    List/show/tail campaign run directories under outputs/\n"
         "  promote Show/history/demote campaign promoted checkpoints\n"
@@ -105,7 +119,7 @@ def print_ow_help() -> None:
         "Bare `ow` or `ow KEY=VALUE` defaults to `ow train`.\n\n"
         "Usage:\n"
         "  uv run ow [HYDRA_OVERRIDES...]\n"
-        "  uv run ow train [local|kaggle] [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train [local|kaggle|colab] [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
         "  uv run ow eval tournament [OPTIONS]\n"
         "  uv run ow eval package --checkpoint outputs/.../jax_ckpt_last.pkl\n"
         "  uv run ow eval worker --run outputs/campaigns/<campaign>/runs/<run_id>\n"
@@ -136,11 +150,12 @@ def print_train_help() -> None:
     """Print ``ow train`` help without invoking Hydra."""
 
     print(
-        "ow train — JAX training (local Hydra or Kaggle remote)\n\n"
+        "ow train — JAX training (local Hydra, Kaggle remote, or Colab remote)\n\n"
         "Usage:\n"
         "  uv run ow train [local] [HYDRA_OVERRIDES...]\n"
         "  uv run ow train kaggle [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
-        "  uv run ow train --host local|kaggle ...\n\n"
+        "  uv run ow train colab [SUBCMD] [FLAGS] [HYDRA_OVERRIDES...]\n"
+        "  uv run ow train --host local|kaggle|colab ...\n\n"
         "Local (default):\n"
         "  Runs the Hydra + JAX training loop on this machine.\n"
         "  Any bare Hydra override implies local host (e.g. ow train training=smoke).\n\n"
@@ -154,15 +169,29 @@ def print_train_help() -> None:
         "    sync|sync-output KERNEL  Download kernel outputs\n"
         "    shortlist                Export W&B sweep shortlist JSON\n"
         "    latest-checkpoint        Resolve latest checkpoint from a sweep\n\n"
+        "Colab (ow train colab ...):\n"
+        "  Packages and launches a Colab GPU worker via google-colab-cli.\n"
+        "  Subcommands:\n"
+        "    preflight                Validate Colab CLI auth and workspace\n"
+        "    prepare                  Build tarball + worker-env.json only\n"
+        "    launch                   Provision session, upload, exec worker\n"
+        "    status --session SLUG    Poll session state\n"
+        "    sync --session SLUG      Download campaign outputs locally\n"
+        "    shortlist                Export W&B sweep shortlist JSON\n"
+        "    stop --session SLUG      Stop a Colab session\n\n"
         "Examples:\n"
         "  uv run ow train training=smoke training.total_updates=10\n"
         "  uv run ow train local print_resolved_config=true\n"
         "  uv run ow train kaggle preflight\n"
         "  uv run ow train kaggle status owner/kernel-slug\n"
-        "  uv run ow train kaggle --run-type smoke training=2p4p_32_split\n\n"
+        "  uv run ow train kaggle --run-type smoke training=2p4p_32_split\n"
+        "  uv run ow train colab preflight\n"
+        "  uv run ow train colab launch --gpu T4 training.total_updates=10\n\n"
         f"{_hydra_override_section()}"
         "Kaggle flag reference:\n"
         "  uv run python -m src.cli.kaggle_runner --help\n"
+        "Colab flag reference:\n"
+        "  uv run python -m src.cli.colab_runner --help\n"
     )
 
 
@@ -173,6 +202,7 @@ class TrainRoute:
     host: str = "local"
     subcommand: str | None = None
     kaggle_argv: list[str] = field(default_factory=list)
+    colab_argv: list[str] = field(default_factory=list)
     hydra_overrides: list[str] = field(default_factory=list)
 
 
@@ -191,7 +221,7 @@ def parse_train_argv(args: list[str]) -> TrainRoute:
 
     if args[0] == "--host":
         if len(args) < 2:
-            raise SystemExit("--host requires local or kaggle")
+            raise SystemExit("--host requires local, kaggle, or colab")
         host = args[1]
         index = 2
     elif args[0] in HOSTS:
@@ -207,6 +237,20 @@ def parse_train_argv(args: list[str]) -> TrainRoute:
 
     if host == "local":
         return TrainRoute(host="local", hydra_overrides=args[index:])
+
+    if host == "colab":
+        remaining = list(args[index:])
+        subcommand: str | None = None
+        if remaining and remaining[0] in COLAB_SUBCOMMANDS:
+            subcommand = remaining[0]
+            remaining = remaining[1:]
+        colab_argv, hydra_overrides = _split_colab_remaining(remaining, subcommand)
+        return TrainRoute(
+            host="colab",
+            subcommand=subcommand,
+            colab_argv=colab_argv,
+            hydra_overrides=hydra_overrides,
+        )
 
     remaining = list(args[index:])
     if "--create-sweep" in remaining:
@@ -292,6 +336,79 @@ def _split_kaggle_remaining(
     return kaggle_argv, hydra_overrides
 
 
+def _split_colab_remaining(
+    remaining: list[str], subcommand: str | None
+) -> tuple[list[str], list[str]]:
+    """Split Colab CLI flags from Hydra overrides."""
+
+    colab_argv: list[str] = []
+    hydra_overrides: list[str] = []
+    index = 0
+    while index < len(remaining):
+        token = remaining[index]
+        if is_hydra_override(token) and not token.startswith("--"):
+            hydra_overrides.extend(remaining[index:])
+            break
+        if token == "--override":
+            if index + 1 >= len(remaining):
+                raise SystemExit("--override requires KEY=VALUE")
+            colab_argv.extend([token, remaining[index + 1]])
+            index += 2
+            continue
+        if token in {
+            "--gpu",
+            "--timeout",
+            "--work-dir",
+            "--ledger",
+            "--sessions-path",
+            "--sync-dir",
+            "--from-shortlist",
+            "--rank",
+            "--trust-base-jax",
+            "--project",
+            "--entity",
+            "--sweep-id",
+            "--limit",
+            "--out",
+            "--session",
+        }:
+            if index + 1 >= len(remaining):
+                raise SystemExit(f"{token} requires a value")
+            colab_argv.extend([token, remaining[index + 1]])
+            index += 2
+            continue
+        if token in {"--dry-run", "--force"}:
+            colab_argv.append(token)
+            index += 1
+            continue
+        if token.startswith("--"):
+            raise SystemExit(f"Unknown colab flag for ow train colab: {token}")
+        if is_hydra_override(token):
+            hydra_overrides.append(token)
+            index += 1
+            continue
+        hydra_overrides.append(token)
+        index += 1
+    return colab_argv, hydra_overrides
+
+
+def _build_colab_argv(route: TrainRoute) -> list[str]:
+    """Assemble argv for ``colab_runner.run`` from a train route."""
+
+    argv: list[str] = []
+    command = route.subcommand or "launch"
+    argv.append(command)
+    if command == "launch" and route.subcommand is None:
+        if "--gpu" not in route.colab_argv:
+            argv.extend(["--gpu", DEFAULT_GPU])
+        if "--timeout" not in route.colab_argv:
+            argv.extend(["--timeout", "86400"])
+    argv.extend(route.colab_argv)
+    for override in route.hydra_overrides:
+        argv.extend(["--override", override])
+    return argv
+
+
 def _build_kaggle_argv(route: TrainRoute) -> list[str]:
     """Assemble argv for ``kaggle_runner.run`` from a train route."""
 
@@ -318,12 +435,23 @@ def _build_kaggle_argv(route: TrainRoute) -> list[str]:
 
 
 def dispatch(route: TrainRoute) -> None:
-    """Dispatch a parsed train route to local Hydra or Kaggle runner."""
+    """Dispatch a parsed train route to local Hydra, Kaggle, or Colab runner."""
 
     if route.host == "local":
         from src.cli import _run_hydra_train
 
         _run_hydra_train(route.hydra_overrides)
+        return
+
+    if route.host == "colab":
+        from src.config import validate_hydra_overrides
+
+        if route.hydra_overrides:
+            validate_hydra_overrides(route.hydra_overrides)
+        argv = _build_colab_argv(route)
+        code = colab_cli.run(argv)
+        if code != 0:
+            raise SystemExit(code)
         return
 
     argv = _build_kaggle_argv(route)
