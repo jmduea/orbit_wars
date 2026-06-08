@@ -23,6 +23,18 @@ from src.orchestration.kaggle_jax import (  # noqa: E402
     log_bootstrap_failure,
     sync_kaggle_worker_environment,
 )
+from src.orchestration.remote_worker import (  # noqa: E402
+    collect_checkpoint_paths,
+    completed_summary,
+    exception_message,
+    exit_code,
+    load_packaged_env,
+    tail,
+    write_summary,
+)
+
+# U1b: full Kaggle worker orchestration still lives here; only shared helpers are
+# extracted to src/orchestration/remote_worker.py for Colab reuse.
 
 _JAX_BACKEND_MARKER = Path(".orbit_wars_jax_backend")
 _WORKER_VENV_ENV = "ORBIT_WARS_WORKER_VENV"
@@ -54,7 +66,7 @@ _HYDRA_CONFIG_GROUP_KEYS: frozenset[str] = frozenset(
 
 def main() -> None:
     print(f"ORBIT_WARS_WORKER_ENTRY_PATCH={KAGGLE_WORKER_ENTRY_PATCH_VERSION}", flush=True)
-    _load_packaged_env()
+    load_packaged_env()
     standalone = _is_standalone_mode()
     wandb_secret: dict[str, object] | None
     if standalone:
@@ -68,11 +80,11 @@ def main() -> None:
         "worker_mode": "standalone" if standalone else "wandb",
         "wandb_secret": wandb_secret,
     }
-    _write_summary(summary)
+    write_summary(summary)
     try:
         _ensure_uv_environment(summary)
         summary["diagnostics"] = diagnostics()
-        _write_summary(summary)
+        write_summary(summary)
         _ensure_accelerator(summary)
         if standalone:
             _run_standalone_worker(summary)
@@ -80,9 +92,9 @@ def main() -> None:
             _run_wandb_worker(summary)
     except BaseException as exc:
         summary["status"] = "failed"
-        summary["error"] = _exception_message(exc)
-        summary.setdefault("exit_code", _exit_code(exc))
-        _write_summary(summary)
+        summary["error"] = exception_message(exc)
+        summary.setdefault("exit_code", exit_code(exc))
+        write_summary(summary)
         raise
 
 
@@ -90,13 +102,13 @@ def _run_standalone_worker(summary: dict[str, Any]) -> None:
     config = _load_standalone_config()
     summary["standalone_config"] = config
     summary["standalone_overrides"] = list(_config_to_overrides(config))
-    _write_summary(summary)
+    write_summary(summary)
     _run_training_candidate(summary, config, wandb_run=None)
     if summary.get("status") == "failed":
         raise SystemExit(int(summary.get("exit_code", 1)))
     summary.setdefault("exit_code", 0)
     summary["status"] = "standalone_complete"
-    _write_summary(summary)
+    write_summary(summary)
 
 
 def _run_wandb_worker(summary: dict[str, Any]) -> None:
@@ -107,7 +119,7 @@ def _run_wandb_worker(summary: dict[str, Any]) -> None:
         )
     if not os.environ.get("WANDB_API_KEY"):
         summary["wandb_secret_retry"] = _load_wandb_api_key_from_kaggle_secret()
-        _write_summary(summary)
+        write_summary(summary)
 
     if not os.environ.get("WANDB_API_KEY"):
         raise SystemExit(
@@ -123,7 +135,7 @@ def _run_wandb_worker(summary: dict[str, Any]) -> None:
         "project": wandb_project or "",
         "entity": wandb_entity or "",
     }
-    _write_summary(summary)
+    write_summary(summary)
 
     import wandb  # type: ignore
 
@@ -134,7 +146,7 @@ def _run_wandb_worker(summary: dict[str, Any]) -> None:
             "id": str(getattr(run, "id", "")),
             "name": str(getattr(run, "name", "")),
         }
-        _write_summary(summary)
+        write_summary(summary)
         try:
             _run_training_candidate(summary, dict(wandb.config), wandb_run=run)
             run.summary["kaggle_worker_exit_code"] = summary.get("exit_code", 0)
@@ -144,11 +156,11 @@ def _run_wandb_worker(summary: dict[str, Any]) -> None:
                 raise SystemExit(int(summary.get("exit_code", 1)))
         except BaseException as exc:
             summary["status"] = "failed"
-            summary["error"] = _exception_message(exc)
-            summary.setdefault("exit_code", _exit_code(exc))
-            _write_summary(summary)
+            summary["error"] = exception_message(exc)
+            summary.setdefault("exit_code", exit_code(exc))
+            write_summary(summary)
             if not run_finished:
-                run.finish(exit_code=_exit_code(exc))
+                run.finish(exit_code=exit_code(exc))
             raise
 
     wandb.agent(
@@ -162,7 +174,7 @@ def _run_wandb_worker(summary: dict[str, Any]) -> None:
         raise SystemExit(int(summary.get("exit_code", 1)))
     summary.setdefault("exit_code", 0)
     summary["status"] = "agent_complete"
-    _write_summary(summary)
+    write_summary(summary)
 
 
 def _run_training_candidate(
@@ -218,7 +230,7 @@ def _run_training_candidate(
             "results": calibration_results,
             "selected_overrides": list(selected_overrides),
         }
-        _write_summary(summary)
+        write_summary(summary)
         if wandb_run is not None:
             import wandb  # type: ignore
 
@@ -255,7 +267,7 @@ def _run_training_candidate(
         command = _render_worker_train_command(tuple(overrides))
         summary["final_command"] = command
         summary["selected_overrides"] = overrides
-        _write_summary(summary)
+        write_summary(summary)
         print("worker command:", " ".join(command), flush=True)
         env = _subprocess_env()
         if wandb_run is not None:
@@ -263,17 +275,17 @@ def _run_training_candidate(
             env.setdefault("WANDB_RESUME", "allow")
         completed = subprocess.run(command, check=False, text=True, env=env)
         summary["exit_code"] = completed.returncode
-        summary["checkpoint_paths"] = _collect_checkpoint_paths()
+        summary["checkpoint_paths"] = collect_checkpoint_paths()
         summary["status"] = "completed" if completed.returncode == 0 else "failed"
-        _write_summary(summary)
+        write_summary(summary)
         if completed.returncode != 0:
             raise SystemExit(completed.returncode)
     except BaseException as exc:
         summary["status"] = "failed"
-        summary["error"] = _exception_message(exc)
-        summary.setdefault("exit_code", _exit_code(exc))
-        summary.setdefault("checkpoint_paths", _collect_checkpoint_paths())
-        _write_summary(summary)
+        summary["error"] = exception_message(exc)
+        summary.setdefault("exit_code", exit_code(exc))
+        summary.setdefault("checkpoint_paths", collect_checkpoint_paths())
+        write_summary(summary)
         raise
 
 
@@ -335,8 +347,8 @@ def _run_jax_diagnostics_subprocess() -> dict[str, object]:
     result: dict[str, object] = {
         "command": command,
         "returncode": int(completed.returncode),
-        "stdout_tail": _tail(completed.stdout, limit=6000),
-        "stderr_tail": _tail(completed.stderr, limit=6000),
+        "stdout_tail": tail(completed.stdout, limit=6000),
+        "stderr_tail": tail(completed.stderr, limit=6000),
     }
     if completed.stdout:
         for line in reversed(completed.stdout.strip().splitlines()):
@@ -559,20 +571,20 @@ def _run_calibration(
         except subprocess.TimeoutExpired as exc:
             result["returncode"] = 124
             result["error"] = f"calibration timed out after {timeout_seconds}s"
-            result["stdout_tail"] = _tail(exc.stdout)
-            result["stderr_tail"] = _tail(exc.stderr)
+            result["stdout_tail"] = tail(exc.stdout)
+            result["stderr_tail"] = tail(exc.stderr)
             results.append(result)
             continue
         result["returncode"] = completed.returncode
-        result["stdout_tail"] = _tail(completed.stdout)
-        result["stderr_tail"] = _tail(completed.stderr)
+        result["stdout_tail"] = tail(completed.stdout)
+        result["stderr_tail"] = tail(completed.stderr)
         if completed.returncode == 0:
             try:
                 result.update(json.loads(completed.stdout.strip().splitlines()[-1]))
             except (IndexError, json.JSONDecodeError) as exc:
                 result["error"] = f"failed to parse benchmark output: {exc}"
         else:
-            result["error"] = _tail(completed.stderr or completed.stdout)
+            result["error"] = tail(completed.stderr or completed.stdout)
             print(
                 f"calibration variant {index} failed (rc={completed.returncode}):",
                 result["error"],
@@ -662,13 +674,6 @@ def _standalone_extra_overrides() -> list[str]:
     return [str(item) for item in parsed if str(item).strip()]
 
 
-def _collect_checkpoint_paths() -> list[str]:
-    root = Path("outputs")
-    if not root.exists():
-        return []
-    return sorted(str(path.resolve()) for path in root.rglob("jax_ckpt*.pkl"))
-
-
 def _apply_smoke_training_overrides(overrides: list[str]) -> list[str]:
     """Apply short training defaults for smoke validation runs."""
 
@@ -698,16 +703,6 @@ def _run_optional(command: list[str]) -> str:
         return ""
     completed = subprocess.run(command, check=False, capture_output=True, text=True)
     return completed.stdout.strip() or completed.stderr.strip()
-
-
-def _load_packaged_env() -> None:
-    env_path = Path("worker-env.json")
-    if not env_path.exists():
-        return
-    payload = json.loads(env_path.read_text(encoding="utf-8"))
-    for key, value in payload.items():
-        if value:
-            os.environ.setdefault(str(key), str(value))
 
 
 def _load_wandb_api_key_from_kaggle_secret() -> dict[str, object]:
@@ -798,8 +793,8 @@ def _ensure_uv_environment(summary: dict[str, Any]) -> None:
             capture_output=True,
             text=True,
         )
-        summary["uv_install"] = _completed_summary(completed)
-        _write_summary(summary)
+        summary["uv_install"] = completed_summary(completed)
+        write_summary(summary)
         if completed.returncode != 0:
             raise SystemExit("Failed to install uv inside Kaggle worker.")
     if Path("pyproject.toml").exists():
@@ -810,7 +805,7 @@ def _ensure_uv_environment(summary: dict[str, Any]) -> None:
             "tpu_backend": sync["tpu_backend"],
             "steps": sync["steps"],
         }
-        _write_summary(summary)
+        write_summary(summary)
         if int(sync["returncode"]) != 0:
             log_bootstrap_failure(sync["steps"])
             raise SystemExit(format_bootstrap_failure(sync["steps"]))
@@ -977,22 +972,6 @@ def _worker_venv() -> Path:
     return Path(os.environ.get(_WORKER_VENV_ENV, ".venv"))
 
 
-def _completed_summary(
-    completed: subprocess.CompletedProcess[str],
-) -> dict[str, object]:
-    return {
-        "returncode": completed.returncode,
-        "stdout_tail": _tail(completed.stdout),
-        "stderr_tail": _tail(completed.stderr),
-    }
-
-
-def _write_summary(summary: dict[str, Any]) -> None:
-    Path("worker-summary.json").write_text(
-        json.dumps(summary, indent=2) + "\n", encoding="utf-8"
-    )
-
-
 def _safe_worker_env() -> dict[str, str]:
     keys = (
         "KAGGLE_ACCELERATOR_ID",
@@ -1022,26 +1001,6 @@ def _env_int(name: str, default: int, *, minimum: int) -> int:
     except ValueError:
         return default
     return max(value, minimum)
-
-
-def _tail(text: object, *, limit: int = 2000) -> str:
-    if text is None:
-        return ""
-    if isinstance(text, bytes):
-        text = text.decode(errors="replace")
-    return str(text).strip()[-limit:]
-
-
-def _exception_message(exc: BaseException) -> str:
-    if isinstance(exc, SystemExit):
-        return str(exc.code)
-    return repr(exc)
-
-
-def _exit_code(exc: BaseException) -> int:
-    if isinstance(exc, SystemExit) and isinstance(exc.code, int):
-        return exc.code
-    return 1
 
 
 if __name__ == "__main__":

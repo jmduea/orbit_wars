@@ -2,17 +2,24 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import io
 import json
 import shutil
-import tarfile
 import textwrap
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping
 
 from src.orchestration.accelerators import is_tpu_accelerator
+from src.orchestration.remote_package import (
+    DEFAULT_KAGGLE_SCRIPTS,
+    RemotePackageOptions,
+    copy_repo_payload,
+    package_summary,
+    payload_archive,
+    payload_manifest,
+    remove_managed_payload,
+    write_worker_env,
+)
 
 KERNEL_PACKAGE_SOURCE_MODE = "embedded-payload-v6"
 
@@ -44,19 +51,23 @@ def render_kernel_package(
     """
 
     package_dir.mkdir(parents=True, exist_ok=True)
-    _remove_managed_payload(package_dir)
+    remove_managed_payload(package_dir)
     if repo_root is not None:
-        _copy_repo_payload(
+        copy_repo_payload(
             repo_root=repo_root,
             package_dir=package_dir,
-            accelerator=accelerator,
+            options=RemotePackageOptions(
+                scripts=DEFAULT_KAGGLE_SCRIPTS,
+                accelerator=accelerator,
+                strip_jax_for_nvidia_gpu=True,
+                include_map_pool=True,
+            ),
         )
-    env_path = package_dir / "worker-env.json"
-    env_path.write_text(json.dumps(dict(env), indent=2) + "\n", encoding="utf-8")
+    write_worker_env(package_dir=package_dir, env=env)
     worker_path = package_dir / "kaggle_worker_entry.py"
     payload_sha256 = None
     if repo_root is not None:
-        payload = _payload_archive(package_dir)
+        payload = payload_archive(package_dir)
         payload_sha256 = hashlib.sha256(payload).hexdigest()
         worker_path.write_text(
             _bootstrap_source(payload, manifest=_payload_manifest(package_dir)),
@@ -83,13 +94,16 @@ def render_kernel_package(
     summary_path = package_dir / "package-summary.json"
     summary_path.write_text(
         json.dumps(
-            _package_summary(
+            package_summary(
                 package_dir=package_dir,
-                kernel_id=kernel_id,
-                title=title,
-                metadata=metadata,
-                env=env,
+                package_source_mode=KERNEL_PACKAGE_SOURCE_MODE,
                 payload_sha256=payload_sha256,
+                env=env,
+                extra={
+                    "kernel_id": kernel_id,
+                    "title": title,
+                    "code_file": metadata.get("code_file"),
+                },
             ),
             indent=2,
             sort_keys=True,
@@ -105,184 +119,8 @@ def render_kernel_package(
     )
 
 
-def _copy_repo_payload(
-    *, repo_root: Path, package_dir: Path, accelerator: str | None
-) -> None:
-    for name in ("src", "conf"):
-        target = package_dir / name
-        if target.exists():
-            shutil.rmtree(target)
-        shutil.copytree(
-            repo_root / name,
-            target,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"),
-        )
-    scripts_target = package_dir / "scripts"
-    if scripts_target.exists():
-        shutil.rmtree(scripts_target)
-    scripts_target.mkdir(parents=True, exist_ok=True)
-    for script in (
-        "kaggle_worker_entry.py",
-        "benchmark_jax_rl.py",
-        "kaggle_runtime_env.py",
-    ):
-        source = repo_root / "scripts" / script
-        if source.exists():
-            shutil.copyfile(source, scripts_target / script)
-    pyproject = repo_root / "pyproject.toml"
-    copied_lock = True
-    if pyproject.exists():
-        copied_lock = _copy_pyproject_for_kaggle_gpu(
-            source=pyproject,
-            target=package_dir / "pyproject.toml",
-            accelerator=accelerator,
-        )
-    if copied_lock:
-        lock = repo_root / "uv.lock"
-        if lock.exists():
-            shutil.copyfile(lock, package_dir / "uv.lock")
-    readme = repo_root / "README.md"
-    if readme.exists():
-        shutil.copyfile(readme, package_dir / "README.md")
-
-
-def _copy_pyproject_for_kaggle_gpu(
-    *, source: Path, target: Path, accelerator: str | None
-) -> bool:
-    text = source.read_text(encoding="utf-8")
-    if not _is_nvidia_accelerator(accelerator):
-        target.write_text(text, encoding="utf-8")
-        return True
-
-    rewritten = _strip_jax_runtime_dependencies(text)
-    target.write_text(rewritten, encoding="utf-8")
-    return rewritten == text
-
-
-def _strip_jax_runtime_dependencies(text: str) -> str:
-    """Remove JAX runtime deps from packaged GPU pyproject so uv sync does not reinstall JAX."""
-
-    lines: list[str] = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith('"jax') or stripped.startswith("'jax"):
-            continue
-        lines.append(line)
-    return "\n".join(lines) + ("\n" if text.endswith("\n") else "")
-
-
-def _is_nvidia_accelerator(accelerator: str | None) -> bool:
-    return bool(accelerator and accelerator.strip().lower().startswith("nvidia"))
-
-
-def _remove_managed_payload(package_dir: Path) -> None:
-    managed_dirs = ("src", "conf", "scripts")
-    managed_files = (
-        "kaggle_worker_entry.py",
-        "kernel-metadata.json",
-        "worker-env.json",
-        "package-summary.json",
-        "pyproject.toml",
-        "uv.lock",
-        "README.md",
-    )
-    for name in managed_dirs:
-        target = package_dir / name
-        if target.exists():
-            shutil.rmtree(target)
-    for name in managed_files:
-        target = package_dir / name
-        if target.exists():
-            target.unlink()
-
-
-def _package_summary(
-    *,
-    package_dir: Path,
-    kernel_id: str,
-    title: str,
-    metadata: Mapping[str, object],
-    env: Mapping[str, str],
-    payload_sha256: str | None,
-) -> dict[str, object]:
-    return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "kernel_id": kernel_id,
-        "title": title,
-        "code_file": metadata.get("code_file"),
-        "package_source_mode": KERNEL_PACKAGE_SOURCE_MODE,
-        "payload_sha256": payload_sha256,
-        "top_level_entries": sorted(
-            {
-                *(
-                    path.name
-                    for path in package_dir.iterdir()
-                    if not path.name.startswith(".")
-                ),
-                "package-summary.json",
-            }
-        ),
-        "generated_env": {
-            key: _redact_if_secret(key, value) for key, value in sorted(env.items())
-        },
-    }
-
-
-def _redact_if_secret(key: str, value: object) -> object:
-    secret_markers = ("KEY", "TOKEN", "SECRET", "PASSWORD", "API_KEY")
-    upper_key = key.upper()
-    if any(marker in upper_key for marker in secret_markers):
-        return "<redacted>"
-    return value
-
-
 def _payload_manifest(package_dir: Path) -> dict[str, object]:
-    included_roots = (
-        "src",
-        "conf",
-        "scripts",
-        "pyproject.toml",
-        "uv.lock",
-        "README.md",
-        "worker-env.json",
-    )
-    files: list[str] = []
-    for name in included_roots:
-        path = package_dir / name
-        if not path.exists():
-            continue
-        if path.is_file():
-            files.append(name)
-            continue
-        for child in sorted(path.rglob("*")):
-            if child.is_file():
-                files.append(str(child.relative_to(package_dir)))
-    return {
-        "mode": KERNEL_PACKAGE_SOURCE_MODE,
-        "file_count": len(files),
-        "has_worker": "scripts/kaggle_worker_entry.py" in files,
-        "has_kaggle_jax": "src/orchestration/kaggle_jax.py" in files,
-        "sample": files[:25],
-    }
-
-
-def _payload_archive(package_dir: Path) -> bytes:
-    included = (
-        "src",
-        "conf",
-        "scripts",
-        "pyproject.toml",
-        "uv.lock",
-        "README.md",
-        "worker-env.json",
-    )
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
-        for name in included:
-            path = package_dir / name
-            if path.exists():
-                archive.add(path, arcname=name, recursive=True)
-    return buffer.getvalue()
+    return payload_manifest(package_dir, mode=KERNEL_PACKAGE_SOURCE_MODE)
 
 
 def _bootstrap_source(payload: bytes, *, manifest: Mapping[str, object]) -> str:

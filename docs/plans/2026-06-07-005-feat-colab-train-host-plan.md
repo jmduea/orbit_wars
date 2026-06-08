@@ -241,6 +241,54 @@ uv run ow train colab stop --session ow-colab_long-abc1234
 
 ---
 
+## U0 spike results
+
+**Date/time:** 2026-06-07 19:08–19:13 local (2026-06-08T00:08–00:13Z)  
+**Worktree:** `orbit_wars-integration`  
+**Session:** `ow-spike-u0` (stopped after spike)
+
+| Item | Result |
+|------|--------|
+| Colab CLI version | 0.5.9 (`colab version`) |
+| Auth method | OAuth2 (default `--auth oauth2`; cached credentials at `~/.colab-cli-oauth-config.json`) |
+| Auth blockers | None — `colab sessions` emitted a WSL `Parameter format not correct` warning once, then succeeded |
+| GPU provisioned | T4 (`colab status`: `Hardware: T4 \| Variant: GPU`) |
+| Tarball path / size | `/tmp/orbit_wars_colab_spike.tgz` — **2.9 MB** (includes `data/jax_map_pool/default_v1.npz` 2.4 MB) |
+| Upload method | `colab upload` → `/content/orbit_wars.tgz` in ~4 s; adequate for v1-sized payloads |
+| uv on VM | Preinstalled at `/usr/local/bin/uv` (pip install not required) |
+| `uv sync --group dev` | **PASS** — 52 s wall; fresh `.venv`; ~2 GB CUDA/JAX wheel downloads |
+| JAX version | **0.10.0** (project pin via `uv sync`, not base-image-only) |
+| `jax.devices()` | `[CudaDevice(id=0)]`, `default_backend=gpu` |
+| Base-image JAX without reinstall (`ORBIT_WARS_COLAB_TRUST_BASE_JAX`) | **Not directly tested** — spike used full `uv sync`, which installs pinned `jax==0.10.0` + CUDA wheels. GPU path works after sync; defer isolated base-JAX-only probe to U3/`colab_jax.py` if needed |
+| Smoke train command | `uv run ow train training.total_updates=3 curriculum=off task=shield_cheap opponents=base opponents.mode.opponent=noop output.campaign=colab_u0_smoke telemetry.wandb.enabled=false` |
+| Smoke exit code | **0** |
+| Total bootstrap wall | **255 s** (~4.3 min): untar 0.05 s, uv sync 52 s, JAX check 4 s, train 199 s |
+| Compile / first-update estimate | Update 1: `rollout_s=68.355`, `ppo_s=27.863`, `sps=85.1` (includes cold JAX compile) |
+| Steady-state rollout | Update 3: `rollout_s=1.491`, `ppo_s=0.411`, `sps=4307.3` |
+| Non-fatal stderr | `fatal: not a git repository` (tarball excludes `.git`; manifest metadata only) |
+| W&B | **Disabled** for smoke (`telemetry.wandb.enabled=false`); not validated in U0 |
+| Local GPU contention | `wandb agent` preflight sweep active in another terminal — Colab uses remote T4; no local GPU conflict |
+
+### Open questions (U0 answers)
+
+1. **Base JAX sufficient without pip reinstall?** Inconclusive for trust-base-JAX shortcut — full `uv sync` path works on T4 with project pins. Recommend default `ORBIT_WARS_COLAB_TRUST_BASE_JAX=0` (sync project JAX) until a base-only micro-smoke is run.
+2. **Upload adequate for 50–200 MB tarballs?** Yes at 2.9 MB; scale untested but CLI upload is viable for v1 code-only payloads. Map-pool-inclusive archives likely fine; very large pools may need Drive mount (v2).
+3. **W&B via `worker-env.json`?** Unanswered — defer to U6 with `telemetry.wandb.enabled=true` + injected `WANDB_API_KEY`.
+4. **Persistent session vs one-shot `colab run`?** Persistent session + `colab exec --timeout 7200` worked; keep manual `stop` for long runs (plan default).
+
+### Plan amendments from spike
+
+- Document that `colab exec -f` reads a **local** file path (CLI uploads code to VM); remote paths fail.
+- Default launch/exec timeout must exceed first-update compile (~70–100 s for 3-update noop smoke; budget ≥7200 s for long runs).
+- Tarball should optionally include `.git` HEAD metadata file or worker should tolerate missing git (stderr only today).
+- `uv` is preinstalled on Colab GPU runtime — worker bootstrap can skip pip-install-uv when `which uv` succeeds.
+
+### Recommendation
+
+**Proceed to U1 — yes.** Spike validated auth, T4 provisioning, tarball upload, `uv sync`, GPU JAX, and 3-update `ow train` smoke end-to-end. Follow-ups for U3/U6: W&B key injection test, base-JAX-only shortcut probe, larger tarball upload timing.
+
+---
+
 ### U1 — Shared remote package + worker extraction
 
 **Files:**
