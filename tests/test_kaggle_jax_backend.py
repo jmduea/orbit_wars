@@ -257,7 +257,7 @@ def test_kaggle_worker_bootstrap_failure_logs_failed_step(monkeypatch, capsys) -
     monkeypatch.setattr(worker, "_reset_worker_venv", lambda: None)
     monkeypatch.setattr(worker, "_activate_local_venv", lambda: None)
     monkeypatch.setattr(worker, "_reexec_with_venv_python", lambda: None)
-    monkeypatch.setattr(worker, "_write_summary", lambda summary: None)
+    monkeypatch.setattr(worker, "write_summary", lambda summary: None)
 
     with pytest.raises(SystemExit, match="verify_gpu_jax_plugins"):
         worker._ensure_uv_environment({"status": "starting"})
@@ -315,8 +315,8 @@ def test_kaggle_worker_standalone_mode_skips_wandb_secret(monkeypatch) -> None:
 
     monkeypatch.setenv("ORBIT_WARS_KAGGLE_WORKER_MODE", "standalone")
     monkeypatch.setattr(worker, "_load_wandb_api_key_from_kaggle_secret", fake_load_secret)
-    monkeypatch.setattr(worker, "_load_packaged_env", lambda: None)
-    monkeypatch.setattr(worker, "_write_summary", lambda summary: None)
+    monkeypatch.setattr(worker, "load_packaged_env", lambda: None)
+    monkeypatch.setattr(worker, "write_summary", lambda summary: None)
     monkeypatch.setattr(
         worker,
         "_ensure_uv_environment",
