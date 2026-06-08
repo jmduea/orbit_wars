@@ -5,7 +5,7 @@ max_ships: 400.0
 ship_speed: 6.0
 player_count: 4
 
-ship_feature_scale: 100.0
+ship_feature_scale: 1000.0
 feature_history_steps: 1 # temporal feature control
 
 trajectory_shield_mode: off # off | cheap | exact | tiered
