@@ -11,7 +11,7 @@ from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
 
 def run_training_benchmark_cli(args: argparse.Namespace) -> int:
     import jax
-    from src.jax.benchmark import rollout_group_summary
+    from src.benchmark.production import rollout_group_summary
     from src.jax.training_benchmark import (
         E2E_THROUGHPUT_GATE,
         aggregate_e2e_run_payloads,
