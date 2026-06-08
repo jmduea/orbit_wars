@@ -109,22 +109,39 @@ uv run ow runs show --run outputs/colab_runner/synced/colab_long/runs/<run_id>
 - Tarball upload + `uv sync --group dev` + 3-update `ow train` smoke: **PASS**
 - Bootstrap wall ~255 s; cold update 1 `rollout_s≈68s`, steady-state update 3 `rollout_s≈1.5s`
 
-### U6 operator proof
+### U6 operator proof (2026-06-07)
 
-**Status: BLOCKED (deferred to operator with live Colab session)**
+**Status: PASS**
 
-Automated U6 launch was not run in this implementation session to avoid occupying a long-lived Colab GPU while other operator jobs may be active. Re-run manually:
+| Item | Result |
+|------|--------|
+| Date/time | 2026-06-07 20:43–20:48 local (2026-06-08T01:43–01:48Z) |
+| Worktree | `orbit_wars-integration` on `feat/colab-train-host` |
+| Session | `ow-colab_smoke-12c2f68` |
+| GPU | T4 |
+| Launch wall | ~282 s (attempt 2 after one Colab API 503 retry) |
+| Worker `exit_code` | **0** (`worker-summary.json`) |
+| Sync path | `outputs/colab_runner/synced/colab_smoke/` |
+| Run id | `20260608T014414Z-s42-f34fcd96` |
+| Updates | 10 (`training.total_updates=10`, noop, `task=shield_cheap`) |
+| `rollout_seconds` | update 1 **70.07** (cold compile), update 3 **1.50**, update 10 **1.49** |
+| `ppo_seconds` | update 1 **28.13**, update 10 **0.40** |
+| Checkpoints synced | `jax_ckpt_000010.pkl`, `jax_ckpt_last.pkl` |
+| Log synced | `runs/.../logs/*_jax.jsonl` |
+
+Operator commands (Hydra overrides as separate CLI args):
 
 ```bash
+uv run ow train colab preflight
 uv run ow train colab launch --gpu T4 --timeout 7200 \
   training.total_updates=10 curriculum=off output.campaign=colab_smoke \
-  task=shield_cheap opponents=base opponents.mode.opponent=noop
-
-uv run ow train colab sync --session <slug>
-test -f outputs/colab_runner/synced/colab_smoke/runs/*/logs/*_jax.jsonl
+  task=shield_cheap opponents=base opponents.mode.opponent=noop \
+  telemetry.wandb.enabled=false
+uv run ow train colab sync --session ow-colab_smoke-12c2f68
+uv run ow train colab stop --session ow-colab_smoke-12c2f68
 ```
 
-Record wall time, GPU type, and `worker-summary.json` exit code in this section after a successful operator run.
+**Fixes landed during proof:** `colab upload/download/exec/stop/status` use `--session` flags (CLI 0.5.9); bootstrap is Python (not shell) for `colab exec -f`; sync archives campaign dir to tarball before download (directory download unsupported).
 
 ## Notes
 

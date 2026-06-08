@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tarfile
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -360,7 +361,7 @@ def launch(request: ColabRequest, *, cli: ColabCli | None = None) -> dict[str, A
     bootstrap = _bootstrap_script()
     with tempfile.NamedTemporaryFile(
         mode="w",
-        suffix=".sh",
+        suffix=".py",
         delete=False,
         encoding="utf-8",
     ) as handle:
@@ -459,18 +460,57 @@ def sync(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
     remote_campaign = f"{REMOTE_WORKDIR}/outputs/campaigns/{campaign}"
     local_target = request.sync_dir / campaign
     local_target.mkdir(parents=True, exist_ok=True)
+    remote_tar = f"/content/{campaign}_sync.tgz"
+    archive_script = _sync_archive_script(campaign=campaign, remote_tar=remote_tar)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".py",
+        delete=False,
+        encoding="utf-8",
+    ) as handle:
+        handle.write(archive_script)
+        archive_path = Path(handle.name)
+    try:
+        archive_result = colab.exec(
+            request.session,
+            command="",
+            timeout=120,
+            local_file=archive_path,
+        )
+    finally:
+        archive_path.unlink(missing_ok=True)
+    if archive_result.returncode != 0:
+        detail = (archive_result.stderr or archive_result.stdout or "").strip()
+        raise SystemExit(f"colab sync archive failed: {detail}")
+
+    local_tar = request.sync_dir / f"{campaign}.sync.tgz"
     result = colab.download(
         request.session,
-        remote_campaign,
-        local_target,
+        remote_tar,
+        local_tar,
         timeout=max(request.timeout, 600),
     )
+    if result.returncode == 0 and local_tar.is_file():
+        local_target.mkdir(parents=True, exist_ok=True)
+        with tarfile.open(local_tar, "r:gz") as archive:
+            archive.extractall(local_target)
+        local_tar.unlink(missing_ok=True)
+
+    summary_result = colab.download(
+        request.session,
+        f"{REMOTE_WORKDIR}/worker-summary.json",
+        local_target / "worker-summary.json",
+        timeout=120,
+    )
+    returncode = int(result.returncode)
+    if returncode == 0 and summary_result.returncode != 0:
+        returncode = int(summary_result.returncode)
     payload = {
         "session": request.session,
         "campaign": campaign,
         "remote_path": remote_campaign,
         "local_path": str(local_target),
-        "returncode": result.returncode,
+        "returncode": returncode,
         "stdout_tail": _tail(result.stdout),
         "stderr_tail": _tail(result.stderr),
     }
@@ -482,10 +522,10 @@ def sync(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
             "session": request.session,
             "campaign": campaign,
             "local_path": str(local_target),
-            "returncode": result.returncode,
+            "returncode": returncode,
         },
     )
-    return int(result.returncode)
+    return returncode
 
 
 def stop(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
@@ -569,14 +609,39 @@ def run_shortlist(request: ColabRequest) -> None:
     shortlist(request)
 
 
-def _bootstrap_script() -> str:
+def _sync_archive_script(*, campaign: str, remote_tar: str) -> str:
+    remote_campaign_dir = f"{REMOTE_WORKDIR}/outputs/campaigns/{campaign}"
     return (
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n"
-        f'mkdir -p "{REMOTE_WORKDIR}"\n'
-        f'tar -xzf "{REMOTE_TARBALL_PATH}" -C "{REMOTE_WORKDIR}"\n'
-        f'cd "{REMOTE_WORKDIR}"\n'
-        "exec python scripts/colab_worker_entry.py\n"
+        "import subprocess\n"
+        "import sys\n"
+        "\n"
+        f'REMOTE_CAMPAIGN_DIR = "{remote_campaign_dir}"\n'
+        f'REMOTE_TAR = "{remote_tar}"\n'
+        "\n"
+        "subprocess.run(\n"
+        '    ["tar", "-czf", REMOTE_TAR, "-C", REMOTE_CAMPAIGN_DIR, "."],\n'
+        "    check=True,\n"
+        ")\n"
+        "raise SystemExit(0)\n"
+    )
+
+
+def _bootstrap_script() -> str:
+    # ``colab exec -f`` runs the file as Python in the Colab kernel, not shell.
+    return (
+        "import os\n"
+        "import subprocess\n"
+        "import sys\n"
+        "import tarfile\n"
+        "\n"
+        f'REMOTE_WORKDIR = "{REMOTE_WORKDIR}"\n'
+        f'REMOTE_TARBALL_PATH = "{REMOTE_TARBALL_PATH}"\n'
+        "\n"
+        "os.makedirs(REMOTE_WORKDIR, exist_ok=True)\n"
+        'with tarfile.open(REMOTE_TARBALL_PATH, "r:gz") as archive:\n'
+        "    archive.extractall(REMOTE_WORKDIR)\n"
+        "os.chdir(REMOTE_WORKDIR)\n"
+        'raise SystemExit(subprocess.call([sys.executable, "scripts/colab_worker_entry.py"]))\n'
     )
 
 

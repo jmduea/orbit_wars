@@ -53,6 +53,7 @@ def test_new_exec_upload_stop_argv_assembly(monkeypatch, tmp_path: Path) -> None
             (
                 "/usr/bin/colab",
                 "upload",
+                "-s",
                 "ow-smoke-abc",
                 str(tmp_path / "orbit_wars.tgz"),
                 "/content/orbit_wars.tgz",
@@ -60,13 +61,14 @@ def test_new_exec_upload_stop_argv_assembly(monkeypatch, tmp_path: Path) -> None
             (
                 "/usr/bin/colab",
                 "exec",
+                "-s",
                 "ow-smoke-abc",
                 "--timeout",
                 "120",
                 "-f",
                 str(tmp_path / "bootstrap.sh"),
             ): subprocess.CompletedProcess([], 0, stdout="done", stderr=""),
-            ("/usr/bin/colab", "stop", "ow-smoke-abc"): subprocess.CompletedProcess(
+            ("/usr/bin/colab", "stop", "-s", "ow-smoke-abc"): subprocess.CompletedProcess(
                 [], 0, stdout="stopped", stderr=""
             ),
         }
@@ -85,9 +87,15 @@ def test_new_exec_upload_stop_argv_assembly(monkeypatch, tmp_path: Path) -> None
     )
     assert cli.stop("ow-smoke-abc").returncode == 0
     assert runner.calls[0][:4] == ["/usr/bin/colab", "new", "-s", "ow-smoke-abc"]
-    assert runner.calls[1][1:4] == ["upload", "ow-smoke-abc", str(tarball)]
-    assert runner.calls[2][1:3] == ["exec", "ow-smoke-abc"]
-    assert runner.calls[2][3:5] == ["--timeout", "120"]
+    assert runner.calls[1][1:6] == [
+        "upload",
+        "-s",
+        "ow-smoke-abc",
+        str(tarball),
+        "/content/orbit_wars.tgz",
+    ]
+    assert runner.calls[2][1:4] == ["exec", "-s", "ow-smoke-abc"]
+    assert runner.calls[2][4:6] == ["--timeout", "120"]
 
 
 def test_timeout_propagates_to_exec(monkeypatch) -> None:
@@ -95,7 +103,7 @@ def test_timeout_propagates_to_exec(monkeypatch) -> None:
     runner = _FakeRunner({})
     cli = ColabCli(runner=runner)
     cli.exec("ow-smoke", "echo hi", timeout=7200)
-    assert runner.calls[-1][3:5] == ["--timeout", "7200"]
+    assert runner.calls[-1][4:6] == ["--timeout", "7200"]
 
 
 def test_parse_sessions_json_list_and_wrapped() -> None:

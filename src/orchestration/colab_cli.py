@@ -151,7 +151,14 @@ class ColabCli:
         timeout: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
         executable = self.resolve_executable()
-        command = [executable, "upload", session, str(local_path), remote_path]
+        command = [
+            executable,
+            "upload",
+            "-s",
+            session,
+            str(local_path),
+            remote_path,
+        ]
         return self._runner(command, timeout=timeout)
 
     def download(
@@ -164,7 +171,14 @@ class ColabCli:
     ) -> subprocess.CompletedProcess[str]:
         executable = self.resolve_executable()
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        command = [executable, "download", session, remote_path, str(local_path)]
+        command = [
+            executable,
+            "download",
+            "-s",
+            session,
+            remote_path,
+            str(local_path),
+        ]
         return self._runner(command, timeout=timeout)
 
     def exec(
@@ -176,7 +190,7 @@ class ColabCli:
         local_file: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         executable = self.resolve_executable()
-        argv = [executable, "exec", session]
+        argv = [executable, "exec", "-s", session]
         if timeout is not None:
             argv.extend(["--timeout", str(int(timeout))])
         if local_file is not None:
@@ -187,11 +201,11 @@ class ColabCli:
 
     def stop(self, session: str, *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
         executable = self.resolve_executable()
-        return self._runner([executable, "stop", session], timeout=timeout)
+        return self._runner([executable, "stop", "-s", session], timeout=timeout)
 
     def status(self, session: str, *, timeout: int = 30) -> ColabSessionInfo:
         executable = self.resolve_executable()
-        completed = self._runner([executable, "status", session], timeout=timeout)
+        completed = self._runner([executable, "status", "-s", session], timeout=timeout)
         return ColabSessionInfo(
             slug=session,
             raw=(completed.stdout or completed.stderr or ""),

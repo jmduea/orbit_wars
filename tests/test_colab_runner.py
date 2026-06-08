@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -71,6 +72,17 @@ class _FakeColabCli:
         timeout: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
         self.downloads.append((session, remote_path, local_path))
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        if remote_path.endswith("_sync.tgz"):
+            payload = b"campaign payload"
+            with tarfile.open(local_path, "w:gz") as archive:
+                import io
+
+                info = tarfile.TarInfo(name="runs/run-a/logs/smoke_jax.jsonl")
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+        else:
+            local_path.write_text('{"status":"colab_complete","exit_code":0}\n', encoding="utf-8")
         return subprocess.CompletedProcess([], 0, stdout="downloaded", stderr="")
 
     def status(self, session: str, *, timeout: int = 30) -> ColabSessionInfo:
@@ -194,7 +206,9 @@ def test_status_and_sync_use_session(tmp_path: Path, capsys) -> None:
     )
     status(request, cli=cli)
     assert sync(request, cli=cli) == 0
-    assert cli.downloads[-1][1].endswith("/outputs/campaigns/colab_smoke")
+    assert cli.downloads[-1][1].endswith("worker-summary.json")
+    synced_log = tmp_path / "synced" / "colab_smoke" / "runs" / "run-a" / "logs" / "smoke_jax.jsonl"
+    assert synced_log.is_file()
 
 
 def test_stop_idempotent_when_already_stopped(tmp_path: Path, capsys) -> None:
