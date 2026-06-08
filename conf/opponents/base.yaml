@@ -1,11 +1,10 @@
+dispatch: self
+alternate_player_sides: true
+
 self_play:
   enabled: false
   update_interval: 10
   deterministic: false
-
-mode:
-  opponent: self
-  alternate_player_sides: true
 
 mix:
   weights:

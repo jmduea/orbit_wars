@@ -23,7 +23,7 @@ def _overfit_cfg() -> TrainConfig:
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 4
     cfg.training.update_chunk_rows = 4
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     return cfg
 
 

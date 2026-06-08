@@ -91,7 +91,7 @@ def _v2_curriculum_training_cfg(*, player_count: int, four_player_num_envs: int)
     cfg.task.player_count = player_count
     cfg.curriculum.enabled = True
     cfg.curriculum.stages = _self_play_staged_v2_stages()
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     cfg.opponents.self_play.enabled = True
     cfg.opponents.snapshot.pool_size = 2
     cfg.opponents.snapshot.interval_updates = 1

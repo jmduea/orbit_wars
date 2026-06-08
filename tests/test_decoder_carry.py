@@ -118,7 +118,7 @@ def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
 
 def test_rollout_initializes_env_state_decoder_hidden_for_scan_structure() -> None:
     cfg = _sampler_cfg(pointer_decoder="factorized_topk")
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     cfg.training.num_envs = 1
     cfg.training.rollout_steps = 1
     state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(10), 1), cfg.task)

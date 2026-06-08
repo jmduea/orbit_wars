@@ -56,7 +56,7 @@ def test_profile_config_composes_production_mix_overrides() -> None:
         quick=False,
     )
 
-    assert cfg.opponents.mode.opponent == "self"
+    assert cfg.opponents.dispatch == "self"
     assert cfg.curriculum.enabled is True
     assert cfg.training.rollout_steps == 256
     assert cfg.training.total_updates == 20

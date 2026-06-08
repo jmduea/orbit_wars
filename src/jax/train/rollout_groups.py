@@ -238,7 +238,7 @@ def _fresh_group_env_state(
         env_indices,
         episode_counts,
         group_cfg.task,
-        group_cfg.opponents.mode.alternate_player_sides,
+        group_cfg.opponents.alternate_player_sides,
     )
 
 
@@ -292,7 +292,7 @@ def _init_rollout_group(
         env_indices,
         episode_counts,
         group_cfg.task,
-        group_cfg.opponents.mode.alternate_player_sides,
+        group_cfg.opponents.alternate_player_sides,
     )
 
     collect_impl = collect_rollout_jax_timed if timed_collect else collect_rollout_jax

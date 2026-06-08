@@ -75,7 +75,7 @@ def _static_latest_only_self_play_sample_enabled(
 
     if is_planet_flow_pointer_decoder(cfg.model):
         return False
-    if cfg.opponents.mode.opponent != "self":
+    if cfg.opponents.dispatch != "self":
         return False
     if opponent_params_by_player is not None:
         return False
@@ -397,7 +397,7 @@ def _reset_on_done(
         env_indices,
         reset_episode_counts,
         cfg.task,
-        cfg.opponents.mode.alternate_player_sides,
+        cfg.opponents.alternate_player_sides,
     )
     if carry_enabled:
         reset_states = reset_states._replace(decoder_hidden=fresh_decoder_hidden)

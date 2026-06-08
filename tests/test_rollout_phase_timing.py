@@ -22,7 +22,7 @@ def test_profile_rollout_groups_emit_phase_metrics() -> None:
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 2
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
 
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(1), policy, cfg)
@@ -55,7 +55,7 @@ def test_profile_rollout_groups_ignore_training_microbatch_for_host_timing() -> 
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
     cfg.training.rollout_microbatch_envs = 1
-    cfg.opponents.mode.opponent = "noop"
+    cfg.opponents.dispatch = "noop"
 
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(11), policy, cfg)

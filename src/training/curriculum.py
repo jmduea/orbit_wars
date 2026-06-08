@@ -76,11 +76,15 @@ class CurriculumController:
                     "opponent_families": {"latest": 1.0},
                 }
             ]
-        self.stages = [self._parse_stage(raw, index) for index, raw in enumerate(raw_stages)]
+        self.stages = [
+            self._parse_stage(raw, index) for index, raw in enumerate(raw_stages)
+        ]
         self.stage_index = 0
         self.stage_start_update = 1
         self.cooldown_until = 0
-        self.metric_history: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=128))
+        self.metric_history: dict[str, deque[float]] = defaultdict(
+            lambda: deque(maxlen=128)
+        )
 
     @property
     def stage(self) -> CurriculumStage:
@@ -182,7 +186,9 @@ class CurriculumController:
             record[f"curriculum_family_prob_{family}"] = prob
         return record
 
-    def update(self, update_idx: int, metrics: dict[str, float]) -> dict[str, Any] | None:
+    def update(
+        self, update_idx: int, metrics: dict[str, float]
+    ) -> dict[str, Any] | None:
         for key, value in metrics.items():
             if value is not None:
                 self.metric_history[str(key)].append(float(value))
@@ -236,13 +242,16 @@ class CurriculumController:
             id=str(raw.get("id", f"stage_{index}")),
             opponent_families={
                 str(key): float(value)
-                for key, value in dict(raw.get("opponent_families", {"latest": 1.0})).items()
+                for key, value in dict(
+                    raw.get("opponent_families", {"latest": 1.0})
+                ).items()
             },
             min_updates=int(raw.get("min_updates", raw.get("min_dwell_updates", 1))),
             cooldown_updates=int(raw.get("cooldown_updates", 0)),
             promote_if=rule,
             format_weights={
-                int(key): float(value) for key, value in dict(raw.get("format_weights", {})).items()
+                int(key): float(value)
+                for key, value in dict(raw.get("format_weights", {})).items()
             },
         )
 
@@ -267,16 +276,19 @@ class CurriculumController:
 
 def default_stage_view(cfg: Any) -> StageView:
     opponents = getattr(cfg, "opponents", None)
-    mode = getattr(opponents, "mode", None) if opponents is not None else None
-    opponent = getattr(mode, "opponent", "self")
-    family = "random" if opponent == "random" else "latest"
+    dispatch = (
+        getattr(opponents, "dispatch", "self") if opponents is not None else "self"
+    )
+    family = "random" if dispatch == "random" else "latest"
     controller = CurriculumController(
         type(
             "DefaultCurriculum",
             (),
             {
                 "enabled": True,
-                "stages": [{"id": f"default_{family}", "opponent_families": {family: 1.0}}],
+                "stages": [
+                    {"id": f"default_{family}", "opponent_families": {family: 1.0}}
+                ],
             },
         )()
     )

@@ -3,32 +3,11 @@
 from __future__ import annotations
 
 LADDER_RUNG_OVERRIDES: dict[str, list[str]] = {
-    "noop": [
-        "curriculum=off",
-        "opponents=throughput_recovery_floor",
-    ],
-    "recovery": [
-        "curriculum=off",
-        "opponents=throughput_recovery",
-    ],
-    "scripted_heavy": [
-        "curriculum=scripted_heavy",
-        "opponents=base",
-        "opponents.self_play.enabled=false",
-        "opponents.snapshot.pool_size=0",
-        "opponents.snapshot.interval_updates=0",
-    ],
-    "self_play": [
-        "curriculum=self_play_only_stage",
-        "opponents=base",
-        "opponents.self_play.enabled=true",
-        "opponents.snapshot.pool_size=2",
-        "opponents.snapshot.interval_updates=10",
-    ],
-    "production_mix": [
-        "opponents=default",
-        "curriculum=production_mix",
-    ],
+    "noop": ["train_bundle=opponent_recovery_floor"],
+    "recovery": ["train_bundle=opponent_recovery"],
+    "scripted_heavy": ["train_bundle=scripted_heavy"],
+    "self_play": ["train_bundle=self_play_stage"],
+    "production_mix": ["train_bundle=production_mix"],
 }
 
 LADDER_RUNG_ORDER: tuple[str, ...] = (

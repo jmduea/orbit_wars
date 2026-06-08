@@ -240,7 +240,7 @@ def should_skip_opponent_batch_refresh_2p(
 
     if cfg.task.player_count != 2:
         return jnp.asarray(False)
-    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+    if is_noop_jax_training_opponent_mode(cfg.opponents.dispatch):
         return jnp.asarray(True)
     single_family_id = _single_stage_family_id(stage_view)
     effective_id = _maybe_effective_single_family_id(single_family_id, stage_view)
@@ -767,11 +767,11 @@ def _sample_flat_four_player_actions(
         learner_action, player_count
     )
 
-    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+    if is_noop_jax_training_opponent_mode(cfg.opponents.dispatch):
         flat_action = build_noop_action_from_edge_batch(flat_game, flat_batch, cfg)
-    elif cfg.opponents.mode.opponent == "random":
+    elif cfg.opponents.dispatch == "random":
         flat_action = _shielded_random_edge_action(key, flat_game, flat_batch, cfg)
-    elif cfg.opponents.mode.opponent == "self":
+    elif cfg.opponents.dispatch == "self":
         flat_action = _sample_flat_self_play_action(
             key,
             flat_family=flat_family,
@@ -786,7 +786,7 @@ def _sample_flat_four_player_actions(
             historical_params_pool=historical_params_pool,
         )
     else:
-        validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+        validate_jax_training_opponent_mode(cfg.opponents.dispatch)
         raise AssertionError("unreachable")
 
     flat_action = _select_env_action(flat_is_learner, learner_flat, flat_action)
@@ -894,9 +894,9 @@ def _sample_opponent_player_action(
         player_batches=player_batches,
     )
 
-    if is_noop_jax_training_opponent_mode(cfg.opponents.mode.opponent):
+    if is_noop_jax_training_opponent_mode(cfg.opponents.dispatch):
         opponent_action = build_noop_action_from_edge_batch(ctx.game, ctx.batch, cfg)
-    elif cfg.opponents.mode.opponent == "self":
+    elif cfg.opponents.dispatch == "self":
         opponent_action = _sample_self_play_opponent_action(
             ctx,
             single_family=single_family,
@@ -908,12 +908,12 @@ def _sample_opponent_player_action(
             historical_params_pool=historical_params_pool,
             opponent_params_by_player=opponent_params_by_player,
         )
-    elif cfg.opponents.mode.opponent == "random":
+    elif cfg.opponents.dispatch == "random":
         opponent_action = _shielded_random_edge_action(
             ctx.sample_key, ctx.game, ctx.batch, cfg
         )
     else:
-        validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+        validate_jax_training_opponent_mode(cfg.opponents.dispatch)
         raise AssertionError("unreachable")
 
     if player_count == 4:

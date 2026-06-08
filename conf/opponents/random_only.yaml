@@ -4,15 +4,9 @@ defaults:
 
 self_play:
   enabled: false
-  update_interval: 10
-  deterministic: false
 
 mix:
   weights:
+    random: 1.0
     latest: 0.0
     historical: 0.0
-    nearest_sniper: 0.0
-    turtle: 0.0
-    opportunistic: 0.0
-    random: 1.0
-    noop: 0.0

@@ -759,7 +759,7 @@
           "env_steps_per_sec": 3817.6282698651885,
           "seconds_per_update_mean": 2.145834906102391,
           "throughput_failures": [],
-          "train_overrides": "task=map_pool opponents=base opponents.mode.opponent=noop"
+          "train_overrides": "task=map_pool opponents=throughput_recovery_floor"
         }
       },
       "cherry_pick_shas": [

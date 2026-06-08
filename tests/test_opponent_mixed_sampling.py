@@ -207,7 +207,7 @@ def test_mixed_opponent_sampling_finite_actions() -> None:
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 2
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _mixed_stage_view(cfg)
     assert not is_single_family_noop_stage_view(stage_view)
 
@@ -249,7 +249,7 @@ def test_collect_rollout_mixed_curriculum_4p_finite() -> None:
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 2
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _mixed_stage_view(cfg)
 
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.training.num_envs)
@@ -284,7 +284,7 @@ def test_flat_four_player_sampler_restores_env_player_layout_and_learner_slots()
     cfg.model.hidden_size = 16
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 4
-    cfg.opponents.mode.opponent = "noop"
+    cfg.opponents.dispatch = "noop"
 
     env_count = cfg.training.num_envs
     reset_keys = jax.random.split(jax.random.PRNGKey(20), env_count)
@@ -357,7 +357,7 @@ def test_mixed_historical_family_sampling_finite() -> None:
     cfg.model.hidden_size = 16
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 4
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _historical_mix_stage_view(cfg)
 
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.training.num_envs)
@@ -398,7 +398,7 @@ def test_mixed_opponent_sampling_is_deterministic_for_fixed_key() -> None:
     cfg.model.hidden_size = 16
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 4
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _mixed_stage_view(cfg)
 
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.training.num_envs)
@@ -456,7 +456,7 @@ def test_collect_rollout_mixed_curriculum_finite() -> None:
     cfg.model.max_moves_k = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 2
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _mixed_stage_view(cfg)
 
     reset_keys = jax.random.split(jax.random.PRNGKey(0), cfg.training.num_envs)

@@ -153,7 +153,7 @@ def collect_rollout_jax_timed(
     map_pool: MapPoolConstants | None = None,
 ):
     del update
-    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    validate_jax_training_opponent_mode(cfg.opponents.dispatch)
     active_stage_view = default_stage_view(cfg) if stage_view is None else stage_view
     skip_opp_batch_refresh = should_skip_opponent_batch_refresh_2p(
         cfg, active_stage_view

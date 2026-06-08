@@ -6,14 +6,13 @@ parameters:
     value: rollout_selected_validate
   training:
     value: 2p4p_32_split
+  training.rollout_steps:
+    value: 256
   training.total_updates:
     value: 100
-  opponents:
-    value: throughput_recovery
-  curriculum:
-    value: "off"
-  seed:
-    value: 42
+  training.reseed_every_updates: 25
+  train_bundle:
+    value: production_mix
   output.campaign:
     value: preflight
   telemetry:
@@ -27,11 +26,10 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
-      - noop_only
-      - 2p4p_16_split
-      - 200u
-      - rsv
-      - REPLAY_ON
+      - production_mix
+      - 2p4p_32_split
+      - 100u
+      - 25u_reseed
   artifacts:
     value: default
   artifacts.artifact_pipeline.enabled: 

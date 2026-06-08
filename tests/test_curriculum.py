@@ -46,7 +46,7 @@ def _curriculum_config(stages):
     cfg.opponents.snapshot.pool_size = 2
     cfg.opponents.snapshot.interval_updates = 1
     cfg.curriculum.stages = stages
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     cfg.opponents.self_play.enabled = True
     cfg.telemetry.metric_groups.opponent_composition = True
     return cfg

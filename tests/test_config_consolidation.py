@@ -28,8 +28,6 @@ from src.jax.training_benchmark import (
     compose_benchmark_config,
     resolve_benchmark_overrides,
 )
-from src.config import audit_responsibility_base_yaml_keys, compose_hydra_train_config
-from src.config.rollout_allocation import resolve_rollout_group_specs
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
@@ -55,13 +53,11 @@ PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
     "shield_cheap": ["task=shield_cheap", "telemetry=default"],
     "workstation_mixed": ["training=workstation"],
     "opponent_recovery": [
-        "curriculum=off",
-        "opponents=throughput_recovery",
+        "train_bundle=opponent_recovery",
         "telemetry=opponent_recovery",
     ],
     "opponent_recovery_floor": [
-        "curriculum=off",
-        "opponents=throughput_recovery_floor",
+        "train_bundle=opponent_recovery_floor",
         "telemetry=opponent_recovery",
     ],
 }
@@ -378,17 +374,17 @@ def test_multitask_smoke_overrides_compose() -> None:
             "training.rollout_steps=128",
             "training.total_updates=20",
             "training.update_chunk_rows=2048",
-            "opponents.mode.opponent=no_op",
+            "opponents.dispatch=no_op",
             "curriculum=off",
             "output.campaign=multitask_smoke",
         ]
     )
     assert cfg.model.architecture == "planet_graph_transformer_small"
-    assert cfg.opponents.mode.opponent == "no_op"
+    assert cfg.opponents.dispatch == "no_op"
     from src.jax.policy import build_jax_policy
     from src.opponents.constants import validate_jax_training_opponent_mode
 
-    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    validate_jax_training_opponent_mode(cfg.opponents.dispatch)
     policy = build_jax_policy(cfg)
     assert policy.__class__.__name__ == "ComposableFactorizedPlanetPolicy"
 
@@ -425,8 +421,8 @@ def test_opponent_recovery_profiles_are_direct_and_pool_free() -> None:
         ]
     )
 
-    assert random_cfg.opponents.mode.opponent == "random"
-    assert noop_cfg.opponents.mode.opponent == "noop"
+    assert random_cfg.opponents.dispatch == "random"
+    assert noop_cfg.opponents.dispatch == "noop"
     for cfg in (random_cfg, noop_cfg):
         assert cfg.curriculum.enabled is False
         assert cfg.opponents.self_play.enabled is False

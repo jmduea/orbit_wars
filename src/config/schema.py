@@ -201,12 +201,6 @@ class OpponentSelfPlayConfig:
 
 
 @dataclass(slots=True)
-class OpponentModeConfig:
-    opponent: str = "random"
-    alternate_player_sides: bool = True
-
-
-@dataclass(slots=True)
 class BracketSelfPlayConfig:
     """Sample self-play opponents from main tournament bracket entries."""
 
@@ -216,8 +210,9 @@ class BracketSelfPlayConfig:
 
 @dataclass(slots=True)
 class OpponentsConfig:
+    dispatch: str = "noop"
+    alternate_player_sides: bool = True
     self_play: OpponentSelfPlayConfig = field(default_factory=OpponentSelfPlayConfig)
-    mode: OpponentModeConfig = field(default_factory=OpponentModeConfig)
     mix: OpponentMixConfig = field(default_factory=OpponentMixConfig)
     snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
     bracket_self_play: BracketSelfPlayConfig = field(

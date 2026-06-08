@@ -76,7 +76,7 @@ def collect_rollout_jax(
             "v2 rollout supports env.player_count of 2 or 4; "
             f"got {cfg.task.player_count}."
         )
-    validate_jax_training_opponent_mode(cfg.opponents.mode.opponent)
+    validate_jax_training_opponent_mode(cfg.opponents.dispatch)
 
     env_count = turn_batch.planet_features.shape[0]
     env_indices = jnp.arange(env_count, dtype=jnp.int32) + jnp.asarray(
