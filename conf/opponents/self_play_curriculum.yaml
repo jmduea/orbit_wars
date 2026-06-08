@@ -12,5 +12,5 @@ mix:
     historical: 0.0
 
 snapshot:
-  pool_size: 0
-  interval_updates: 0
+  pool_size: 2
+  interval_updates: 10
