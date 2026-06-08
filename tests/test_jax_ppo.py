@@ -96,7 +96,7 @@ def test_rollout_microbatching_preserves_full_environment_axis():
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 1
     cfg.training.rollout_microbatch_envs = 2
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(21), policy, cfg)
     _key, groups = init_rollout_groups(jax.random.PRNGKey(22), cfg, policy)
@@ -448,7 +448,7 @@ def test_collect_rollout_jax_supports_four_player_multi_player_step():
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     reset_keys = jax.random.split(jax.random.PRNGKey(10), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     policy = build_jax_policy(cfg=cfg)
@@ -489,7 +489,7 @@ def test_collect_rollout_jax_two_player_static_shapes():
     cfg.model.max_moves_k = 3
     cfg.training.num_envs = 3
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
 
     reset_keys = jax.random.split(jax.random.PRNGKey(60), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
@@ -546,13 +546,13 @@ def test_collect_rollout_jax_rotates_learner_after_reset_done():
     cfg.model.max_moves_k = 3
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     reset_keys = jax.random.split(jax.random.PRNGKey(30), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     env_indices = jax.numpy.arange(cfg.training.num_envs, dtype=jax.numpy.int32)
     episode_counts = jax.numpy.zeros((cfg.training.num_envs,), dtype=jax.numpy.int32)
     env_state, turn_batch = assign_learner_players(
-        env_state, env_indices, episode_counts, cfg.task, cfg.opponents.mode.alternate_player_sides
+        env_state, env_indices, episode_counts, cfg.task, cfg.opponents.alternate_player_sides
     )
     terminal_step = jax.numpy.full(
         (cfg.training.num_envs,), MAX_STEPS - 3, dtype=jax.numpy.int32
@@ -584,7 +584,7 @@ def test_collect_rollout_jax_emits_training_scalar_metric_contract():
     cfg.task.max_fleets = 16
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
 
     reset_keys = jax.random.split(jax.random.PRNGKey(40), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
@@ -621,7 +621,7 @@ def test_collect_rollout_jax_logs_trajectory_shield_metrics_and_keeps_k_step_mas
     cfg.task.max_fleets = 16
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     cfg.telemetry.metric_groups.trajectory_shield_debug = True
 
     reset_keys = jax.random.split(jax.random.PRNGKey(90), cfg.training.num_envs)
@@ -663,7 +663,7 @@ def test_jax_rollout_groups_collect_two_and_four_player_formats_under_jit():
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     _configure_rollout_groups(cfg, [
         {"name": "two_player", "player_count": 2, "num_envs": 2},
         {"name": "four_player", "player_count": 4, "num_envs": 2},
@@ -722,7 +722,7 @@ def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 4
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
 
     env_indices = jax.numpy.arange(cfg.training.num_envs, dtype=jax.numpy.int32)
     reset_keys = jax.random.split(jax.random.PRNGKey(70), cfg.training.num_envs)
@@ -732,7 +732,7 @@ def test_collect_rollout_jax_rotation_covers_all_player_ids_across_envs():
         env_indices,
         jax.numpy.zeros((cfg.training.num_envs,), dtype=jax.numpy.int32),
         cfg.task,
-        cfg.opponents.mode.alternate_player_sides,
+        cfg.opponents.alternate_player_sides,
     )
     policy = build_jax_policy(cfg=cfg)
     train_state = init_train_state(jax.random.PRNGKey(71), policy, cfg)
@@ -754,7 +754,7 @@ def test_ppo_update_jax_accepts_four_player_rollout_transitions():
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
 
     reset_keys = jax.random.split(jax.random.PRNGKey(80), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)

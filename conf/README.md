@@ -31,8 +31,9 @@ Common multi-group launches use direct Hydra overrides instead of preset bundles
 | smoke | `training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled` |
 | shield_cheap | `task=shield_cheap telemetry=default` |
 | shield_tiered | `task=shield_tiered telemetry=default` |
-| opponent recovery | `curriculum=off opponents=throughput_recovery telemetry=opponent_recovery` |
-| opponent noop floor | `curriculum=off opponents=throughput_recovery_floor telemetry=opponent_recovery` |
+| opponent recovery | `train_bundle=opponent_recovery telemetry=opponent_recovery` |
+| opponent noop floor | `train_bundle=opponent_recovery_floor telemetry=opponent_recovery` |
+| production mix | `train_bundle=production_mix` |
 
 Examples:
 
@@ -40,7 +41,7 @@ Examples:
 uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
 uv run ow train task=shield_cheap
 uv run ow train task=shield_tiered telemetry=shield_debug
-uv run ow train task=map_pool curriculum=off opponents=throughput_recovery telemetry=opponent_recovery
+uv run ow train task=map_pool opponents=throughput_recovery telemetry=opponent_recovery
 ```
 
 ---
@@ -206,7 +207,7 @@ uv run ow train task=shield_cheap
 ### **Opponent throughput recovery**
 
 ```bash
-uv run ow train task=map_pool curriculum=off opponents=throughput_recovery telemetry=opponent_recovery
+uv run ow train task=map_pool opponents=throughput_recovery telemetry=opponent_recovery
 ```
 
 Use `opponents=throughput_recovery_floor` for the direct noop lower bound.

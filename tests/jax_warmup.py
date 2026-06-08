@@ -40,7 +40,7 @@ def default_rollout_warmup_cfg(
     cfg.task.player_count = 2
     cfg.training.num_envs = profile.num_envs
     cfg.training.rollout_steps = profile.rollout_steps
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     cfg.telemetry.metric_groups.opponent_composition = True
     return cfg
 

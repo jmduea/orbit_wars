@@ -5,6 +5,7 @@ defaults:
   - training: default
   - curriculum: default
   - opponents: default
+  - train_bundle: none
   - telemetry: default
   - artifacts: default
   - _self_
@@ -14,7 +15,7 @@ seed: 42
 run_name: default
 heldout_eval_seed_set: []
 training_seed_set: []
-eval_seed_set: [43, 44, 45, 46]
+eval_seed_set: [0, 1, 2, 3, 486, 487, 488, 499]
 print_resolved_config: false
 resume_checkpoint: null
 from_promoted: null

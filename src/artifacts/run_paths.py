@@ -104,7 +104,7 @@ def _opponent_run_name_component(cfg: TrainConfig) -> str:
     if active_weights:
         opponent = max(active_weights, key=active_weights.get)
     else:
-        opponent = str(cfg.opponents.mode.opponent)
+        opponent = str(cfg.opponents.dispatch)
     return _run_name_component(opponent)
 
 

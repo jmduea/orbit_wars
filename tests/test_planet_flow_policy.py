@@ -96,7 +96,7 @@ def test_collect_rollout_jax_updates_planet_flow_pressure_action() -> None:
     cfg.task.max_fleets = 16
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     cfg.telemetry.metric_groups.action_decision = True
     reset_keys = jax.random.split(jax.random.PRNGKey(10), cfg.training.num_envs)
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)

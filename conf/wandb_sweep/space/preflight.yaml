@@ -3,13 +3,13 @@
 
 parameters:
   model:
-    values: [transformer_factorized_small, transformer_factorized, transformer_factorized_large]
-  training.rollout_steps:
-    values: [128, 256]
+    values: [transformer_factorized_small, transformer_factorized]
   task.trajectory_shield_mode:
     values: ["off", cheap]
   task.trajectory_shield_horizon:
-    values: [10, 30, 50]
+    values: [10, 30]
+  task.feature_history_steps:
+    values: [1, 2, 3]
   task.edge_rank_mode: 
     values: [snapshot, intercept_min]
   training.lr:
@@ -26,3 +26,5 @@ parameters:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
     values: [0.3, 0.5, 1.0]
+  seed:
+    values: [42, 43, 44, 45]

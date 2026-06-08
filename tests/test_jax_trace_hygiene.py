@@ -130,7 +130,7 @@ def test_tier_a_jitted_collect_fn_one_step_smoke() -> None:
     cfg.model.attention_heads = 2
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     cfg.training.format_weights = {2: 1.0}
 
     policy = build_jax_policy(cfg=cfg)

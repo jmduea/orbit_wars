@@ -486,7 +486,7 @@ def _small_planet_flow_cfg() -> TrainConfig:
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 1
     cfg.training.update_chunk_rows = 8
-    cfg.opponents.mode.opponent = "random"
+    cfg.opponents.dispatch = "random"
     return cfg
 
 

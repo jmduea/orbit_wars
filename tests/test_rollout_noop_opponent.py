@@ -52,7 +52,7 @@ def _noop_rollout_cfg(*, opponent: str) -> TrainConfig:
     cfg.training.num_envs = 2
     cfg.training.rollout_steps = 4
     cfg.training.update_chunk_rows = 16
-    cfg.opponents.mode.opponent = opponent
+    cfg.opponents.dispatch = opponent
     return cfg
 
 
@@ -65,7 +65,7 @@ def test_should_skip_opponent_batch_refresh_for_mode_noop() -> None:
 def test_should_skip_opponent_batch_refresh_for_curriculum_noop_stage() -> None:
     cfg = TrainConfig()
     cfg.task.player_count = 2
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     stage_view = _noop_only_stage_view(cfg)
     assert is_single_family_noop_stage_view(stage_view)
     assert should_skip_opponent_batch_refresh_2p(cfg, stage_view)
@@ -75,7 +75,7 @@ def test_should_not_skip_when_curriculum_off_despite_noop_mix_weights() -> None:
     cfg = TrainConfig()
     cfg.task.player_count = 2
     cfg.curriculum.enabled = False
-    cfg.opponents.mode.opponent = "self"
+    cfg.opponents.dispatch = "self"
     cfg.opponents.mix.weights = {
         "latest": 0.0,
         "historical": 0.0,
