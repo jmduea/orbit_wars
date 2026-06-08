@@ -144,7 +144,6 @@ def jax_game_from_observation(
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,
@@ -196,7 +195,6 @@ def batch_game(game: JaxGameState) -> JaxGameState:
         player=game.player[None],
         angular_velocity=game.angular_velocity[None],
         next_fleet_id=game.next_fleet_id[None],
-        episode_seed=game.episode_seed[None],
         planets=jax.tree_util.tree_map(lambda value: value[None, ...], game.planets),
         initial_planets=jax.tree_util.tree_map(
             lambda value: value[None, ...], game.initial_planets
@@ -456,7 +454,6 @@ def _jax_game_from_parsed(game, *, fleet_slots: int) -> JaxGameState:
         player=jnp.asarray(int(game.player), dtype=jnp.int32),
         angular_velocity=jnp.asarray(float(game.angular_velocity), dtype=jnp.float32),
         next_fleet_id=jnp.asarray(next_fleet_id, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=initial_planets,
         fleets=fleets,

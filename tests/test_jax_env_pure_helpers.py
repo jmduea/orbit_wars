@@ -167,7 +167,6 @@ def _minimal_game(planets: JaxPlanetState) -> JaxGameState:
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.01, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=fleets,

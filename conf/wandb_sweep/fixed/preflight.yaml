@@ -5,15 +5,15 @@ parameters:
   task:
     value: rollout_selected_validate
   training:
-    value: 2p4p_16_split
+    value: 2p4p_32_split
   training.total_updates:
-    value: 200
+    value: 100
   opponents:
-    value: noop_only
+    value: throughput_recovery
   curriculum:
     value: "off"
   seed:
-    value: 420
+    value: 42
   output.campaign:
     value: preflight
   telemetry:
@@ -49,4 +49,4 @@ parameters:
   telemetry.metric_groups.losses:
     value: true
   artifacts.checkpoint_every:
-    value: 200
+    value: 100

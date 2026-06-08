@@ -5,13 +5,13 @@
 # Register:  uv run wandb sweep outputs/_meta/sweeps/preflight_top_33.yaml
 # Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
 #
-# Objective: maximize win_rate_delta_10 (hyperband top 33% based on mean win_rate_delta_10 at step 50).
+# Objective: maximize preflight_sweep_score (hyperband top 33% based on mean preflight_sweep_score at step 50).
 
 defaults:
   - base
   - command: ow_train
   - method: bayes
-  - metric: win_rate_delta_10
+  - metric: preflight_sweep_score
   - early_terminate: top_33_at_50
   - fixed: preflight
   - space: preflight

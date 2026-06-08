@@ -23,7 +23,6 @@ from src.jax.features import (
     empty_feature_history,
     encode_turn,
 )
-from src.jax.map_pool.comets import empty_comet_state
 
 
 def _cfg(**kwargs) -> TaskConfig:
@@ -105,7 +104,6 @@ def test_encode_v2_sun_crossing_targets_are_masked() -> None:
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.03, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=fleets,

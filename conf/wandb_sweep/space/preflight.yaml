@@ -5,11 +5,11 @@ parameters:
   model:
     values: [transformer_factorized_small, transformer_factorized, transformer_factorized_large]
   training.rollout_steps:
-    values: [256, 384, 512]
+    values: [128, 256]
   task.trajectory_shield_mode:
     values: ["off", cheap]
   task.trajectory_shield_horizon:
-    values: [10, 30, 50, 100]
+    values: [10, 30, 50]
   task.edge_rank_mode: 
     values: [snapshot, intercept_min]
   training.lr:

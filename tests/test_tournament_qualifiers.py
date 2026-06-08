@@ -213,7 +213,6 @@ def test_final_ship_scores_strict_max_winner() -> None:
         player=jnp.array(0, dtype=jnp.int32),
         angular_velocity=jnp.array(0.03, dtype=jnp.float32),
         next_fleet_id=jnp.array(0, dtype=jnp.int32),
-        episode_seed=jnp.array(43, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=empty_fleets,

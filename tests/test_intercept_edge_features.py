@@ -18,7 +18,6 @@ _jax_env = importlib.import_module("src.jax." + "env")
 JaxFleetState = _jax_env.JaxFleetState
 JaxGameState = _jax_env.JaxGameState
 JaxPlanetState = _jax_env.JaxPlanetState
-from src.jax.map_pool.comets import empty_comet_state
 
 
 def _cfg(**kwargs) -> TaskConfig:
@@ -84,7 +83,6 @@ def _two_planet_game(
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(angular_velocity, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),

@@ -11,7 +11,6 @@ from src.game.shield import trajectory_shield_reason_for_launch
 from src.game.types import GameState, PlanetState
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState
 from src.jax.features import encode_turn
-from src.jax.map_pool.comets import empty_comet_state
 from src.jax.policy import JaxPolicyOutput
 from src.jax.shield import (
     apply_trajectory_shield_to_turn_batch_v2,
@@ -112,7 +111,6 @@ def _jax_game(
         player=jnp.asarray(player, dtype=jnp.int32),
         angular_velocity=jnp.asarray(angular_velocity, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planet_state,
         initial_planets=planet_state,
         fleets=fleet_state,

@@ -14,7 +14,6 @@ from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import FactoredPolicyOutput
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, reset
 from src.jax.features import encode_turn
-from src.jax.map_pool.comets import empty_comet_state
 from src.jax.shield import (
     apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
@@ -112,7 +111,6 @@ def _two_planet_game(
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.0, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
@@ -165,7 +163,6 @@ def _three_planet_sun_cross_game() -> JaxGameState:
         player=jnp.asarray(0, dtype=jnp.int32),
         angular_velocity=jnp.asarray(0.0, dtype=jnp.float32),
         next_fleet_id=jnp.asarray(0, dtype=jnp.int32),
-        episode_seed=jnp.asarray(0, dtype=jnp.int32),
         planets=planets,
         initial_planets=planets,
         fleets=_empty_fleets(),
