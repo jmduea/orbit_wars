@@ -15,13 +15,19 @@ def test_preflight_wandb_sweep_compose() -> None:
     assert cfg["metric"]["name"] == "preflight_sweep_score"
     assert cfg["metric"]["goal"] == "maximize"
     params = cfg["parameters"]
-    assert params["telemetry.wandb.tags"]["value"] == ["preflight"]
+    assert params["telemetry.wandb.tags"]["value"] == [
+        "preflight",
+        "noop_only",
+        "2p4p_16_split",
+        "200u",
+        "rsv",
+        "REPLAY_ON",
+    ]
     assert params["telemetry.wandb.log_artifacts"]["value"] is True
-    assert params["telemetry.metric_groups.action_decision"]["value"] is False
     assert params["telemetry.metric_groups.losses"]["value"] is True
-    assert params["training.total_updates"]["value"] == 50
+    assert params["training.total_updates"]["value"] == 100
     assert cfg["method"] == "bayes"
-    assert params["opponents"]["value"] == "noop_only"
+    assert params["opponents"]["value"] == "throughput_recovery"
     assert params["curriculum"]["value"] == "off"
     assert params["training.lr"]["distribution"] == "log_uniform_values"
     assert params["training.lr"]["min"] == pytest.approx(5e-5)
@@ -56,7 +62,7 @@ def test_preflight_wandb_sweep_writes_yaml(tmp_path: Path) -> None:
     assert out.name == "preflight.yaml"
     text = out.read_text(encoding="utf-8")
     assert "preflight_sweep_score" in text
-    assert "action_decision" in text
+    assert "telemetry.metric_groups.losses" in text
 
 
 def test_ssot_preflight_wandb_sweep_writes_yaml(tmp_path: Path) -> None:
