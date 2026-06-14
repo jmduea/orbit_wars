@@ -35,7 +35,7 @@ def test_preflight_wandb_sweep_compose() -> None:
 def test_ssot_preflight_wandb_sweep_compose() -> None:
     cfg = compose_sweep_gen(["wandb_sweep=ssot_preflight"])
     assert cfg["name"] == "ssot_preflight"
-    assert cfg["metric"]["name"] == "ssot_preflight_sweep_score"
+    assert cfg["metric"]["name"] == "preflight_sweep_score"
     assert cfg["metric"]["goal"] == "maximize"
     params = cfg["parameters"]
     assert params["telemetry.wandb.tags"]["value"] == [
@@ -69,4 +69,4 @@ def test_ssot_preflight_wandb_sweep_writes_yaml(tmp_path: Path) -> None:
     out = write_wandb_sweep(cfg)
     assert out.name == "ssot_preflight.yaml"
     text = out.read_text(encoding="utf-8")
-    assert "ssot_preflight_sweep_score" in text
+    assert "preflight_sweep_score" in text

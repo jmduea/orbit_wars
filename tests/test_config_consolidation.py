@@ -370,7 +370,7 @@ def test_multitask_smoke_overrides_compose() -> None:
             "task.candidate_count=3",
             "task.edge_rank_mode=intercept_min",
             "training.num_envs=2",
-            "training.rollout_microbatch_envs=2",
+            "training.rollout_microbatch_envs=1",
             "training.rollout_steps=128",
             "training.total_updates=20",
             "training.update_chunk_rows=2048",
@@ -470,7 +470,7 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
     assert cfg["name"] == "planet_flow_ppo_signal"
     assert cfg["method"] == "bayes"
     assert cfg["run_cap"] == 24
-    assert cfg["metric"] == {"name": "planet_flow_sweep_score", "goal": "maximize"}
+    assert cfg["metric"] == {"name": "preflight_sweep_score", "goal": "maximize"}
 
     parameters = cfg["parameters"]
     assert parameters["model"]["value"] == "planet_flow_target_heatmap"
@@ -490,7 +490,7 @@ def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
     assert isinstance(generated, dict)
     assert out_path == tmp_path / "planet_flow_ppo_signal.yaml"
     assert generated["metric"] == {
-        "name": "planet_flow_sweep_score",
+        "name": "preflight_sweep_score",
         "goal": "maximize",
     }
     assert generated["run_cap"] == 24

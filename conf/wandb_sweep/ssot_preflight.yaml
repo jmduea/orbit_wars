@@ -5,7 +5,7 @@
 # Register:  uv run wandb sweep outputs/_meta/sweeps/ssot_preflight.yaml
 # Agent:     uv run wandb agent <entity>/<project>/<sweep_id>
 #
-# Objective: maximize ssot_preflight_sweep_score (win_rate_delta_10 when KL/entropy
+# Objective: maximize preflight_sweep_score (win_rate_delta_10 when KL/entropy
 # floors from docs/benchmarks/preflight-calibration.json pass). Ineligible runs score -1.
 # Winner checkpoint artifact → packaging validation (step 4) before long train.
 
@@ -13,7 +13,7 @@ defaults:
   - base
   - command: ow_train
   - method: bayes
-  - metric: ssot_preflight_learning_signal
+  - metric: preflight_sweep_score
   - fixed: ssot_preflight
   - space: ssot_preflight
   - _self_

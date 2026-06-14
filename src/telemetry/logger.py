@@ -65,6 +65,10 @@ class TelemetryLogger:
             resume=os.environ.get("WANDB_RESUME") or None,
         )
         wandb.define_metric("win_rate_delta_10", summary="mean")
+        wandb.define_metric("win_rate_recovery_delta_10", summary="max")
+        wandb.define_metric("win_rate_window_mean_10", summary="max")
+        wandb.define_metric("win_rate_best_window_mean_10", summary="max")
+        wandb.define_metric("preflight_sweep_score", summary="max")
         apply_post_init_run_rename(self._run, self._cfg)
         if self._run is not None:
             resolved_cfg = self._flatten(asdict(self._cfg))

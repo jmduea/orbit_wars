@@ -85,10 +85,7 @@ class ShortlistRow:
         objective = float(
             self.metrics.get(
                 "preflight_sweep_score",
-                self.metrics.get(
-                    "ssot_preflight_sweep_score",
-                    self.metrics.get("episode_reward_mean", 0.0),
-                ),
+                self.metrics.get("episode_reward_mean", 0.0),
             )
         )
         samples = float(self.metrics.get("samples_per_sec", 0.0))
@@ -111,10 +108,7 @@ def rank_shortlist(
             float(
                 row.metrics.get(
                     "preflight_sweep_score",
-                    row.metrics.get(
-                        "ssot_preflight_sweep_score",
-                        row.metrics.get("episode_reward_mean", 0.0),
-                    ),
+                    row.metrics.get("episode_reward_mean", 0.0),
                 )
             ),
         ),

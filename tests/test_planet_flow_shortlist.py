@@ -7,7 +7,7 @@ from src.jax.planet_flow_shortlist import (
     hydra_overrides_from_config,
     rank_eligible_entries,
 )
-from src.jax.train.sweep_score import PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+from src.jax.train.sweep_score import PREFLIGHT_SWEEP_SCORE_INELIGIBLE
 
 
 def _summary(**kwargs: float) -> dict[str, object]:
@@ -35,7 +35,7 @@ def test_high_window_kl_marks_ineligible_despite_strong_trend() -> None:
     )
 
     assert entry["eligible"] is False
-    assert entry["planet_flow_sweep_score"] == PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+    assert entry["preflight_sweep_score"] == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
     assert any("approx_kl" in str(reason) for reason in entry["guardrail_reasons"])
 
 

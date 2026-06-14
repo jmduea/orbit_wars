@@ -118,8 +118,10 @@ def rows_from_wandb_runs(runs: Sequence[Any]) -> list[ShortlistRow]:
                     key: value
                     for key in (
                         "preflight_sweep_score",
-                        "ssot_preflight_sweep_score",
                         "win_rate_delta_10",
+                        "win_rate_recovery_delta_10",
+                        "win_rate_window_mean_10",
+                        "win_rate_best_window_mean_10",
                         "approx_kl_window_mean",
                         "entropy_window_mean",
                         "episode_reward_mean",

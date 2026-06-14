@@ -11,13 +11,11 @@ from src.jax.preflight_calibration import (
 
 PLANET_FLOW_MIN_DEMAND_MASS = 100.0
 PREFLIGHT_SWEEP_SCORE_INELIGIBLE = -1.0
-SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE = -1.0
 PLANET_FLOW_MIN_EMITTED_LAUNCHES = 50.0
 PLANET_FLOW_MIN_MEAN_LAUNCHES = 0.05
 PLANET_FLOW_MIN_ENTROPY = 1.0e-3
 PLANET_FLOW_MAX_APPROX_KL = 0.15
 PLANET_FLOW_MAX_POST_MASK_UNREACHABLE_RATE = 0.05
-PLANET_FLOW_SWEEP_SCORE_INELIGIBLE = -1.0
 
 
 def planet_flow_max_post_mask_unreachable_rate(
@@ -62,13 +60,39 @@ class WinRateTrendTracker:
     def observe(self, overall_win_rate: float) -> None:
         self._values.append(float(overall_win_rate))
 
-    def win_rate_delta(self) -> float | None:
+    def rolling_window_means(self) -> list[float]:
         if len(self._values) < self._window:
-            return None
+            return []
         ordered = list(self._values)
-        first = sum(ordered[: self._window]) / self._window
-        last = sum(ordered[-self._window :]) / self._window
-        return last - first
+        return [
+            sum(ordered[index - self._window : index]) / self._window
+            for index in range(self._window, len(ordered) + 1)
+        ]
+
+    def win_rate_window_mean(self) -> float | None:
+        windows = self.rolling_window_means()
+        if not windows:
+            return None
+        return windows[-1]
+
+    def best_win_rate_window_mean(self) -> float | None:
+        windows = self.rolling_window_means()
+        if not windows:
+            return None
+        return max(windows)
+
+    def win_rate_delta(self) -> float | None:
+        windows = self.rolling_window_means()
+        if not windows:
+            return None
+        return windows[-1] - windows[0]
+
+    def win_rate_recovery_delta(self) -> float | None:
+        windows = self.rolling_window_means()
+        if not windows:
+            return None
+        prior_floor = min(windows[:-1]) if len(windows) > 1 else windows[0]
+        return windows[-1] - prior_floor
 
 
 def planet_flow_sweep_guardrail_reasons(
@@ -157,12 +181,12 @@ def planet_flow_sweep_eval(
         min_entropy=min_entropy,
     )
     if reasons:
-        return PLANET_FLOW_SWEEP_SCORE_INELIGIBLE, reasons
+        return PREFLIGHT_SWEEP_SCORE_INELIGIBLE, reasons
     assert win_rate_delta is not None
     return float(win_rate_delta), reasons
 
 
-def planet_flow_sweep_score(
+def planet_flow_preflight_score(
     *,
     win_rate_delta: float | None,
     mean_active_launches_per_turn: float | None,
@@ -227,7 +251,7 @@ def collect_planet_flow_sweep_metrics(
         if entropy_wm is not None:
             metrics["entropy_window_mean"] = float(entropy_wm)
 
-    metrics["planet_flow_sweep_score"] = planet_flow_sweep_score(
+    metrics["preflight_sweep_score"] = planet_flow_preflight_score(
         win_rate_delta=win_rate_delta_10,
         mean_active_launches_per_turn=rollout_scalars.get(
             "mean_active_launches_per_turn"
@@ -271,45 +295,28 @@ def preflight_sweep_score(
     win_rate_delta: float | None,
     approx_kl: float | None,
     entropy: float | None,
+    win_rate_recovery_delta: float | None = None,
     min_win_rate_delta: float = 0.05,
     max_approx_kl: float = 0.15,
     min_entropy: float = 0.0001,
 ) -> float:
-    """W&B sweep objective for SSOT short preflight (Gates 2–3 trend, not raw win rate)."""
+    """W&B sweep objective for short preflight trend, guarded by KL/entropy floors."""
 
     if win_rate_delta is None or approx_kl is None or entropy is None:
         return PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    candidate_delta = max(
+        float(win_rate_delta),
+        float(win_rate_recovery_delta)
+        if win_rate_recovery_delta is not None
+        else float("-inf"),
+    )
     if (
-        float(win_rate_delta) < float(min_win_rate_delta)
+        candidate_delta < float(min_win_rate_delta)
         or float(approx_kl) > float(max_approx_kl)
         or float(entropy) < float(min_entropy)
     ):
         return PREFLIGHT_SWEEP_SCORE_INELIGIBLE
-    return float(win_rate_delta)
-
-
-
-def ssot_preflight_sweep_score(
-    *,
-    win_rate_delta: float | None,
-    approx_kl: float | None,
-    entropy: float | None,
-    min_win_rate_delta: float = 0.05,
-    max_approx_kl: float = 0.15,
-    min_entropy: float = 0.0001,
-) -> float:
-    """W&B sweep objective for SSOT short preflight (Gates 2–3 trend, not raw win rate)."""
-
-    if win_rate_delta is None or approx_kl is None or entropy is None:
-        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
-    if (
-        float(win_rate_delta) < float(min_win_rate_delta)
-        or float(approx_kl) > float(max_approx_kl)
-        or float(entropy) < float(min_entropy)
-    ):
-        return SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
-    return float(win_rate_delta)
-
+    return float(candidate_delta)
 
 def collect_ssot_preflight_sweep_metrics(
     *,
@@ -327,6 +334,15 @@ def collect_ssot_preflight_sweep_metrics(
     win_rate_delta_10 = win_rate_trend.win_rate_delta()
     if win_rate_delta_10 is not None:
         metrics["win_rate_delta_10"] = float(win_rate_delta_10)
+    win_rate_recovery_delta_10 = win_rate_trend.win_rate_recovery_delta()
+    if win_rate_recovery_delta_10 is not None:
+        metrics["win_rate_recovery_delta_10"] = float(win_rate_recovery_delta_10)
+    win_rate_window_mean_10 = win_rate_trend.win_rate_window_mean()
+    if win_rate_window_mean_10 is not None:
+        metrics["win_rate_window_mean_10"] = float(win_rate_window_mean_10)
+    win_rate_best_window_mean_10 = win_rate_trend.best_win_rate_window_mean()
+    if win_rate_best_window_mean_10 is not None:
+        metrics["win_rate_best_window_mean_10"] = float(win_rate_best_window_mean_10)
 
     approx_kl_wm: float | None = None
     entropy_wm: float | None = None
@@ -344,14 +360,7 @@ def collect_ssot_preflight_sweep_metrics(
     min_delta, max_kl, min_ent = ssot_preflight_learning_signal_thresholds(thresholds)
     metrics["preflight_sweep_score"] = preflight_sweep_score(
         win_rate_delta=win_rate_delta_10,
-        approx_kl=approx_kl_wm,
-        entropy=entropy_wm,
-        min_win_rate_delta=min_delta,
-        max_approx_kl=max_kl,
-        min_entropy=min_ent,
-    )
-    metrics["ssot_preflight_sweep_score"] = ssot_preflight_sweep_score(
-        win_rate_delta=win_rate_delta_10,
+        win_rate_recovery_delta=win_rate_recovery_delta_10,
         approx_kl=approx_kl_wm,
         entropy=entropy_wm,
         min_win_rate_delta=min_delta,

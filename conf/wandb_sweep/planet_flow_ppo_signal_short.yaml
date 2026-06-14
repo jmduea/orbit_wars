@@ -12,7 +12,7 @@ defaults:
   - base
   - command: ow_train
   - method: bayes
-  - metric: planet_flow_sweep_score
+  - metric: preflight_sweep_score
   - fixed: planet_flow_ppo_signal_short
   - space: planet_flow_ppo_signal
   - _self_
@@ -20,5 +20,5 @@ defaults:
 name: planet_flow_ppo_signal_short
 description: >
   Bayes PPO sweep for Planet Flow on random_only (100 updates, planet_flow profile).
-  Optimizes planet_flow_sweep_score with window-mean KL/entropy guardrails for shortlist.
+  Optimizes preflight_sweep_score with window-mean KL/entropy guardrails for shortlist.
 run_cap: 12

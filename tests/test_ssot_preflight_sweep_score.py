@@ -4,21 +4,30 @@ import pytest
 
 from src.config.schema import TelemetryConfig, TrainConfig, WandBConfig
 from src.jax.train.sweep_score import (
-    SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
+    PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_ssot_preflight_sweep_metrics,
     is_ssot_preflight_sweep,
-    ssot_preflight_sweep_score,
+    preflight_sweep_score,
 )
 
 
-def test_ssot_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
-    assert ssot_preflight_sweep_score(
+def test_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
+    assert preflight_sweep_score(
         win_rate_delta=0.08,
         approx_kl=0.1,
         entropy=0.01,
     ) == pytest.approx(0.08)
+
+
+def test_preflight_sweep_score_accepts_recovery_delta() -> None:
+    assert preflight_sweep_score(
+        win_rate_delta=0.0,
+        win_rate_recovery_delta=0.12,
+        approx_kl=0.1,
+        entropy=0.01,
+    ) == pytest.approx(0.12)
 
 
 @pytest.mark.parametrize(
@@ -32,8 +41,8 @@ def test_ssot_preflight_sweep_score_returns_delta_when_floors_pass() -> None:
         {"win_rate_delta": 0.08, "approx_kl": 0.1, "entropy": 1.0e-5},
     ],
 )
-def test_ssot_preflight_sweep_score_ineligible(kwargs: dict[str, float | None]) -> None:
-    assert ssot_preflight_sweep_score(**kwargs) == SSOT_PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+def test_preflight_sweep_score_ineligible(kwargs: dict[str, float | None]) -> None:
+    assert preflight_sweep_score(**kwargs) == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
 
 
 def test_is_ssot_preflight_sweep_detects_tag() -> None:
@@ -67,6 +76,33 @@ def test_collect_ssot_preflight_sweep_metrics_populates_score() -> None:
     )
 
     assert "win_rate_delta_10" in metrics
+    assert "win_rate_recovery_delta_10" in metrics
+    assert "win_rate_window_mean_10" in metrics
+    assert "win_rate_best_window_mean_10" in metrics
     assert "approx_kl_window_mean" in metrics
     assert "entropy_window_mean" in metrics
-    assert metrics["ssot_preflight_sweep_score"] > 0.0
+    assert metrics["preflight_sweep_score"] > 0.0
+
+
+def test_collect_ssot_preflight_sweep_metrics_recovers_from_lucky_first_window() -> None:
+    win_rate_trend = WinRateTrendTracker(window=3)
+    approx_kl_window = MetricWindowTracker(window=3)
+    entropy_window = MetricWindowTracker(window=3)
+    for rate in (1.0, 1.0, 1.0, 0.7, 0.7, 0.7, 1.0, 1.0):
+        win_rate_trend.observe(rate)
+    for kl in (0.01, 0.01):
+        approx_kl_window.observe(kl)
+    for ent in (0.8, 0.8):
+        entropy_window.observe(ent)
+
+    metrics = collect_ssot_preflight_sweep_metrics(
+        win_rate_trend=win_rate_trend,
+        approx_kl_window=approx_kl_window,
+        entropy_window=entropy_window,
+        overall_win_rate=1.0,
+        metrics_host={"approx_kl": 0.01, "entropy": 0.8},
+    )
+
+    assert metrics["win_rate_delta_10"] == pytest.approx(0.0)
+    assert metrics["win_rate_recovery_delta_10"] == pytest.approx(0.3)
+    assert metrics["preflight_sweep_score"] == pytest.approx(0.3)

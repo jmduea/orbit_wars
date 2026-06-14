@@ -22,6 +22,21 @@ _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
         "action_decision",
         "Last-window minus first-window overall_win_rate over 10 updates.",
     ),
+    "win_rate_recovery_delta_10": metric(
+        "win_rate_recovery_delta_10",
+        "action_decision",
+        "Last 10-update overall_win_rate mean minus the weakest prior 10-update mean.",
+    ),
+    "win_rate_window_mean_10": metric(
+        "win_rate_window_mean_10",
+        "action_decision",
+        "Mean overall_win_rate over the latest 10 training updates.",
+    ),
+    "win_rate_best_window_mean_10": metric(
+        "win_rate_best_window_mean_10",
+        "action_decision",
+        "Best rolling 10-update mean overall_win_rate observed so far.",
+    ),
     "approx_kl_window_mean": metric(
         "approx_kl_window_mean",
         "action_decision",
@@ -32,20 +47,10 @@ _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
         "action_decision",
         "Mean policy entropy over the last 10 training updates (preflight-aligned).",
     ),
-    "planet_flow_sweep_score": metric(
-        "planet_flow_sweep_score",
-        "action_decision",
-        "W&B sweep objective: win_rate_delta_10 when window-mean KL/entropy floors pass, else -1.",
-    ),
     "preflight_sweep_score": metric(
         "preflight_sweep_score",
         "action_decision",
-        "W&B preflight sweep objective: win_rate_delta_10 when Gates 2–3 floors pass, else -1.",
-    ),
-    "ssot_preflight_sweep_score": metric(
-        "ssot_preflight_sweep_score",
-        "action_decision",
-        "SSOT W&B preflight objective: win_rate_delta_10 when Gates 2–3 floors pass, else -1.",
+        "W&B preflight sweep objective: best eligible win-rate trend when Gates 2–3 floors pass, else -1.",
     ),
     "stop_utilization_ratio": metric(
         "stop_utilization_ratio",

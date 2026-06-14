@@ -1,5 +1,0 @@
-# @package _global_
-
-metric:
-  name: planet_flow_sweep_score
-  goal: maximize

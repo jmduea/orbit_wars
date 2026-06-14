@@ -16,7 +16,7 @@ from src.jax.preflight_calibration import (
 from src.jax.train.sweep_score import (
     PLANET_FLOW_MAX_APPROX_KL,
     PLANET_FLOW_MIN_ENTROPY,
-    PLANET_FLOW_SWEEP_SCORE_INELIGIBLE,
+    PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
     WinRateTrendTracker,
     planet_flow_sweep_eval,
 )
@@ -35,7 +35,7 @@ SUMMARY_METRIC_KEYS: tuple[str, ...] = (
     "win_rate_delta_10",
     "approx_kl_window_mean",
     "entropy_window_mean",
-    "planet_flow_sweep_score",
+    "preflight_sweep_score",
     "mean_active_launches_per_turn",
     "planet_flow_demanded_mass_sum",
     "planet_flow_emitted_launch_count",
@@ -155,7 +155,7 @@ def evaluate_shortlist_run(
         max_approx_kl=max_kl,
         min_entropy=min_entropy,
     )
-    eligible = score != PLANET_FLOW_SWEEP_SCORE_INELIGIBLE
+    eligible = score != PREFLIGHT_SWEEP_SCORE_INELIGIBLE
     entry: dict[str, object] = {
         "run_id": run.run_id,
         "name": run.name,
@@ -163,7 +163,7 @@ def evaluate_shortlist_run(
         "win_rate_delta_10": win_rate_delta,
         "approx_kl_window_mean": approx_kl,
         "entropy_window_mean": entropy,
-        "planet_flow_sweep_score": score,
+        "preflight_sweep_score": score,
         "mean_active_launches_per_turn": mean_launches,
         "planet_flow_emitted_launch_count": emitted_launches,
         "env_steps_per_sec": _summary_float(summary, "env_steps_per_sec"),
