@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import netrc
 import os
 import subprocess
 import tarfile
@@ -190,7 +191,23 @@ def _worker_env(
         extra["WANDB_API_KEY"] = wandb_api_key
     elif os.environ.get("WANDB_API_KEY"):
         extra["WANDB_API_KEY"] = os.environ["WANDB_API_KEY"]
+    else:
+        netrc_key = _wandb_api_key_from_netrc()
+        if netrc_key:
+            extra["WANDB_API_KEY"] = netrc_key
     return worker_env_with_hydra_overrides(overrides, extra=extra)
+
+
+def _wandb_api_key_from_netrc() -> str | None:
+    try:
+        auth = netrc.netrc()
+    except (FileNotFoundError, netrc.NetrcParseError, OSError):
+        return None
+    for host in ("api.wandb.ai", "wandb.ai"):
+        entry = auth.authenticators(host)
+        if entry and entry[2]:
+            return str(entry[2])
+    return None
 
 
 def prepare_package(

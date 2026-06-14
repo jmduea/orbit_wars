@@ -119,6 +119,41 @@ def test_prepare_renders_tarball_and_summary(tmp_path: Path, monkeypatch) -> Non
     assert "training.total_updates=10" in summary["hydra_overrides"]
 
 
+def test_prepare_uses_wandb_key_from_env(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("WANDB_API_KEY", "env-key")
+    work_dir = tmp_path / "kernel"
+    request = ColabRequest(
+        work_dir=work_dir,
+        hydra_overrides=["training.total_updates=10"],
+    )
+    prepare_package(request)
+    env = json.loads((work_dir / "worker-env.json").read_text(encoding="utf-8"))
+    summary = json.loads((work_dir / "package-summary.json").read_text(encoding="utf-8"))
+    assert env["WANDB_API_KEY"] == "env-key"
+    assert summary["generated_env"]["WANDB_API_KEY"] == "<redacted>"
+
+
+def test_prepare_uses_wandb_key_from_netrc_when_env_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    netrc_path = tmp_path / ".netrc"
+    netrc_path.write_text(
+        "machine api.wandb.ai login user password netrc-key\n",
+        encoding="utf-8",
+    )
+    netrc_path.chmod(0o600)
+    work_dir = tmp_path / "kernel"
+    request = ColabRequest(
+        work_dir=work_dir,
+        hydra_overrides=["training.total_updates=10"],
+    )
+    prepare_package(request)
+    env = json.loads((work_dir / "worker-env.json").read_text(encoding="utf-8"))
+    assert env["WANDB_API_KEY"] == "netrc-key"
+
+
 def test_launch_dry_run_emits_json_without_subprocess(tmp_path: Path, capsys) -> None:
     request = ColabRequest(
         work_dir=tmp_path / "kernel",

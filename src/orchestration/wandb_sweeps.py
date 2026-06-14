@@ -115,13 +115,19 @@ def rows_from_wandb_runs(runs: Sequence[Any]) -> list[ShortlistRow]:
                     str(alias) for alias in checkpoint.get("aliases", ())
                 ),
                 metrics={
-                    key: float(summary[key])
+                    key: value
                     for key in (
+                        "preflight_sweep_score",
+                        "ssot_preflight_sweep_score",
+                        "win_rate_delta_10",
+                        "approx_kl_window_mean",
+                        "entropy_window_mean",
                         "episode_reward_mean",
                         "samples_per_sec",
                         "ppo_samples_per_sec",
                     )
-                    if key in summary and summary[key] is not None
+                    for value in [_optional_float(summary.get(key))]
+                    if value is not None
                 },
                 config=dict(config),
             )
@@ -215,6 +221,15 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def hydra_overrides_from_wandb_config(

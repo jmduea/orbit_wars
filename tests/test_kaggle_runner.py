@@ -36,6 +36,7 @@ from src.orchestration.wandb_sweeps import (
     add_population_metadata,
     resolve_standalone_parameters,
     resolve_wandb_group_from_sweep,
+    rows_from_wandb_runs,
 )
 
 
@@ -240,6 +241,46 @@ def test_shortlist_ranks_finished_checkpointed_runs_first() -> None:
     ]
 
     assert rank_shortlist(rows, limit=1)[0].run_id == "good"
+
+
+def test_shortlist_prefers_preflight_sweep_score_when_present() -> None:
+    rows = [
+        ShortlistRow(
+            run_id="reward_only",
+            name="reward_only",
+            state="finished",
+            checkpoint_artifact="checkpoint:v1",
+            metrics={"episode_reward_mean": 1.0, "preflight_sweep_score": 0.01},
+        ),
+        ShortlistRow(
+            run_id="preflight_winner",
+            name="preflight_winner",
+            state="finished",
+            checkpoint_artifact="checkpoint:v2",
+            metrics={"episode_reward_mean": -0.2, "preflight_sweep_score": 0.09},
+        ),
+    ]
+
+    assert rank_shortlist(rows, limit=1)[0].run_id == "preflight_winner"
+
+
+def test_rows_from_wandb_runs_skip_non_scalar_summary_metrics() -> None:
+    class _Run:
+        id = "run-id"
+        name = "run-name"
+        state = "finished"
+        config = {}
+        summary = {
+            "preflight_sweep_score": {"nested": "not-a-scalar"},
+            "win_rate_delta_10": 0.08,
+        }
+
+        def logged_artifacts(self):
+            return []
+
+    rows = rows_from_wandb_runs([_Run()])
+
+    assert rows[0].metrics == {"win_rate_delta_10": 0.08}
 
 
 def test_add_population_metadata_preserves_existing_tags() -> None:

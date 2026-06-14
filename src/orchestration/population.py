@@ -82,11 +82,19 @@ class ShortlistRow:
 
     @property
     def score(self) -> float:
-        reward = float(self.metrics.get("episode_reward_mean", 0.0))
+        objective = float(
+            self.metrics.get(
+                "preflight_sweep_score",
+                self.metrics.get(
+                    "ssot_preflight_sweep_score",
+                    self.metrics.get("episode_reward_mean", 0.0),
+                ),
+            )
+        )
         samples = float(self.metrics.get("samples_per_sec", 0.0))
         ppo_samples = float(self.metrics.get("ppo_samples_per_sec", 0.0))
         stability = 1.0 if self.is_finished and self.has_checkpoint else 0.0
-        return (1000.0 * stability) + reward + 0.0001 * min(samples, ppo_samples)
+        return (1000.0 * stability) + objective + 0.0001 * min(samples, ppo_samples)
 
 
 def rank_shortlist(
@@ -100,7 +108,15 @@ def rank_shortlist(
             row.is_finished,
             row.has_checkpoint,
             row.score,
-            float(row.metrics.get("episode_reward_mean", 0.0)),
+            float(
+                row.metrics.get(
+                    "preflight_sweep_score",
+                    row.metrics.get(
+                        "ssot_preflight_sweep_score",
+                        row.metrics.get("episode_reward_mean", 0.0),
+                    ),
+                )
+            ),
         ),
         reverse=True,
     )[: max(int(limit), 0)]

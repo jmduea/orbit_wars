@@ -120,7 +120,10 @@ def run_create_cli(args: argparse.Namespace) -> int:
             payload = {"backend": "wandb", "yaml": str(yaml_path), "dry_run": True}
             print(json.dumps(payload, indent=2))
             return 0
-        cmd = ["uv", "run", "wandb", "sweep", str(yaml_path)]
+        cmd = ["uv", "run", "wandb", "sweep", "--project", args.project]
+        if args.entity:
+            cmd.extend(["--entity", args.entity])
+        cmd.append(str(yaml_path))
         print(
             "Note: prefer `ow sweep create --backend wandb`; bare `wandb sweep` is deprecated.",
             file=sys.stderr,
@@ -180,8 +183,7 @@ def run_list_cli(args: argparse.Namespace) -> int:
 
     api = wandb.Api()
     entity = args.entity
-    path = f"{entity}/{args.project}" if entity else args.project
-    sweeps = api.project(path).sweeps()
+    sweeps = api.project(args.project, entity=entity).sweeps()
     rows = []
     for sweep in list(sweeps)[: max(int(args.limit), 1)]:
         rows.append(
