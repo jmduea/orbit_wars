@@ -350,7 +350,7 @@ Correction:
 
 - `conf/wandb_sweep/fixed/preflight.yaml` now uses `train_bundle=opponent_recovery_floor`, which resolves to noop dispatch with self-play off and curriculum off.
 - Tags now identify this as `noop` instead of `production_mix`.
-- A corrected W&B sweep must be registered before continuing local preflight agents.
+- Corrected W&B sweep registered: `jmduea-jdueadev/orbit_wars/0mn8n6g0`
 
 1. Register a corrected W&B preflight sweep from the local recipe.
 2. Run one local W&B preflight agent at a time against the corrected sweep.
