@@ -239,7 +239,7 @@ Decision: do not launch the full long run yet. Stop and reassess before spending
 
 The branch already carries a W&B `preflight` sweep recipe intended to identify promising configurations before spending long-run Colab compute. The Colab pilots above are valid operational/package proofs, but they are not sufficient recipe selection.
 
-Current sweep recipe:
+Current sweep recipe, as initially registered:
 
 - Source: `conf/wandb_sweep/preflight.yaml`
 - Generated YAML: `outputs/_meta/sweeps/preflight.yaml`
@@ -255,6 +255,7 @@ Fixes made before relying on this path:
 - Corrected `ow sweep list` to query W&B with `api.project(project, entity=entity)`.
 - Corrected `ow sweep create --backend wandb` to pass `--project` and `--entity` through to `wandb sweep`.
 - Corrected shortlist ranking so `preflight_sweep_score` / `ssot_preflight_sweep_score` wins over raw `episode_reward_mean` when present.
+- Later verification found this registered W&B sweep is not suitable for preflight candidate selection because `train_bundle=production_mix` resolves to latest self-play, not noop/random. Treat sweep `85u3e192` as invalidated for long-run launch decisions.
 
 Next decision path:
 
@@ -334,7 +335,25 @@ Result: 25 passed, 1 skipped.
 
 Conclusion: integration has the critical launch deduplication/masking learning-quality techniques. No launch-hygiene cherry-pick is currently indicated before continuing the preflight shortlist path.
 
-1. Run W&B preflight agents against sweep `85u3e192`.
-2. Generate a Colab shortlist from that sweep.
-3. Package/Docker validate the shortlist winner checkpoint.
-4. Launch the long Colab run from the validated shortlist winner's overrides only if the preflight objective and artifact validation pass.
+## Preflight Opponent Verification - 2026-06-14
+
+Verification request: confirm that preflight sweeps test against noop and/or random opponents.
+
+Result:
+
+- Registered W&B sweep `85u3e192` does not test against noop or random.
+- Its fixed axis used `train_bundle=production_mix`, which composes to `opponents=self_play_curriculum` and `curriculum=production_mix`.
+- `production_mix` currently weights `latest: 1.0`, `historical: 0.0`, `noop: 0.0`, `random: 0.0`.
+- A local agent run from `85u3e192` was interrupted and its child `ow train` process was terminated to avoid spending hardware on the wrong opponent mix.
+
+Correction:
+
+- `conf/wandb_sweep/fixed/preflight.yaml` now uses `train_bundle=opponent_recovery_floor`, which resolves to noop dispatch with self-play off and curriculum off.
+- Tags now identify this as `noop` instead of `production_mix`.
+- A corrected W&B sweep must be registered before continuing local preflight agents.
+
+1. Register a corrected W&B preflight sweep from the local recipe.
+2. Run one local W&B preflight agent at a time against the corrected sweep.
+3. Generate a Colab shortlist from that corrected sweep.
+4. Package/Docker validate the shortlist winner checkpoint.
+5. Launch the long Colab run from the validated shortlist winner's overrides only if the preflight objective and artifact validation pass.

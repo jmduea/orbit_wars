@@ -1,5 +1,5 @@
 # @package _global_
-# Fixed axes for preflight sweep (200 updates, noop_only, rollout_selected_validate).
+# Fixed axes for preflight sweep (100 updates, noop opponent, rollout_selected_validate).
 
 parameters:
   task:
@@ -13,7 +13,7 @@ parameters:
   training.reseed_every_updates:
     value: 25
   train_bundle:
-    value: production_mix
+    value: opponent_recovery_floor
   output.campaign:
     value: preflight
   telemetry:
@@ -27,7 +27,7 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
-      - production_mix
+      - noop
       - 2p4p_32_split
       - 100u
       - 25u_reseed

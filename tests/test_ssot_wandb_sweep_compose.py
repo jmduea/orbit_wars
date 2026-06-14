@@ -17,7 +17,7 @@ def test_preflight_wandb_sweep_compose() -> None:
     params = cfg["parameters"]
     assert params["telemetry.wandb.tags"]["value"] == [
         "preflight",
-        "production_mix",
+        "noop",
         "2p4p_32_split",
         "100u",
         "25u_reseed",
@@ -25,7 +25,7 @@ def test_preflight_wandb_sweep_compose() -> None:
     assert params["telemetry.wandb.log_artifacts"]["value"] is True
     assert params["telemetry.metric_groups.losses"]["value"] is True
     assert params["training.total_updates"]["value"] == 100
-    assert params["train_bundle"]["value"] == "production_mix"
+    assert params["train_bundle"]["value"] == "opponent_recovery_floor"
     assert cfg["method"] == "bayes"
     assert params["training.lr"]["distribution"] == "log_uniform_values"
     assert params["training.lr"]["min"] == pytest.approx(5e-5)
