@@ -214,6 +214,15 @@ def _aggregate_ppo_metrics(
         {
             "sample_count",
             "log_ratio_abs_max",
+            "old_log_prob_min",
+            "old_log_prob_max",
+            "new_log_prob_min",
+            "new_log_prob_max",
+            "old_log_prob_at_neg100_frac",
+            "new_log_prob_at_neg100_frac",
+            "source_log_prob_min",
+            "target_log_prob_min",
+            "ship_log_prob_min",
             *format_metric_names,
             *format_sample_names,
         }
@@ -265,9 +274,31 @@ def _aggregate_ppo_metrics(
             metrics[f"{name}_first_minibatch"] = values[0]
             metrics[f"{name}_last_minibatch"] = values[last_active]
     if "log_ratio_abs_max" in metrics_by_minibatch:
+        log_ratio_abs_max_values = metrics_by_minibatch["log_ratio_abs_max"]
+        safe_log_ratio_abs_max = jnp.where(active, log_ratio_abs_max_values, 0.0)
+        max_log_ratio_minibatch = jnp.argmax(safe_log_ratio_abs_max)
+        metrics["log_ratio_abs_max"] = safe_log_ratio_abs_max[max_log_ratio_minibatch]
+        metrics["log_ratio_abs_max_minibatch"] = max_log_ratio_minibatch.astype(
+            jnp.float32
+        )
         metrics["log_ratio_abs_max_last_minibatch"] = metrics_by_minibatch[
             "log_ratio_abs_max"
         ][last_active]
+        for name in (
+            "old_log_prob_min",
+            "old_log_prob_max",
+            "new_log_prob_min",
+            "new_log_prob_max",
+            "old_log_prob_at_neg100_frac",
+            "new_log_prob_at_neg100_frac",
+            "source_log_prob_min",
+            "target_log_prob_min",
+            "ship_log_prob_min",
+        ):
+            if name in metrics_by_minibatch:
+                metrics[f"{name}_at_log_ratio_abs_max"] = metrics_by_minibatch[name][
+                    max_log_ratio_minibatch
+                ]
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
     return metrics
 
@@ -661,6 +692,45 @@ def _ppo_update_factorized_jax(
             log_ratio_abs_max = sampling["log_ratio_abs_max"]
             importance_ratio_mean = sampling["importance_ratio_mean"]
             clip_fraction = sampling["clip_fraction"]
+            active_mask = minibatch["mask"] > 0.0
+            old_log_prob_min = jnp.min(
+                jnp.where(active_mask, minibatch["old_log_prob"], jnp.inf)
+            )
+            old_log_prob_max = jnp.max(
+                jnp.where(active_mask, minibatch["old_log_prob"], -jnp.inf)
+            )
+            new_log_prob_min = jnp.min(jnp.where(active_mask, new_log_prob, jnp.inf))
+            new_log_prob_max = jnp.max(jnp.where(active_mask, new_log_prob, -jnp.inf))
+            old_log_prob_at_neg100_frac = masked_mean(
+                (minibatch["old_log_prob"] <= -100.0).astype(jnp.float32),
+                minibatch["mask"],
+            )
+            new_log_prob_at_neg100_frac = masked_mean(
+                (new_log_prob <= -100.0).astype(jnp.float32),
+                minibatch["mask"],
+            )
+            source_log_prob = (
+                replay.source_log_prob
+                if replay.source_log_prob is not None
+                else jnp.zeros_like(new_log_prob)
+            )
+            target_log_prob = (
+                replay.target_log_prob
+                if replay.target_log_prob is not None
+                else jnp.zeros_like(new_log_prob)
+            )
+            ship_log_prob = (
+                replay.ship_log_prob
+                if replay.ship_log_prob is not None
+                else jnp.zeros_like(new_log_prob)
+            )
+            source_log_prob_min = jnp.min(
+                jnp.where(active_mask, source_log_prob, jnp.inf)
+            )
+            target_log_prob_min = jnp.min(
+                jnp.where(active_mask, target_log_prob, jnp.inf)
+            )
+            ship_log_prob_min = jnp.min(jnp.where(active_mask, ship_log_prob, jnp.inf))
             policy_objective = _clipped_policy_objective(
                 minibatch["advantages"],
                 ratio,
@@ -699,6 +769,15 @@ def _ppo_update_factorized_jax(
                 "approx_kl_v2": approx_kl_v2,
                 "log_ratio_abs_mean": log_ratio_abs_mean,
                 "log_ratio_abs_max": log_ratio_abs_max,
+                "old_log_prob_min": old_log_prob_min,
+                "old_log_prob_max": old_log_prob_max,
+                "new_log_prob_min": new_log_prob_min,
+                "new_log_prob_max": new_log_prob_max,
+                "old_log_prob_at_neg100_frac": old_log_prob_at_neg100_frac,
+                "new_log_prob_at_neg100_frac": new_log_prob_at_neg100_frac,
+                "source_log_prob_min": source_log_prob_min,
+                "target_log_prob_min": target_log_prob_min,
+                "ship_log_prob_min": ship_log_prob_min,
                 "importance_ratio_mean": importance_ratio_mean,
                 "clip_fraction": clip_fraction,
                 "loss": loss,

@@ -69,6 +69,61 @@ _LOSSES_BY_NAME: dict[str, MetricDefinition] = {
         "losses",
         "Max absolute log-probability delta on the final PPO minibatch.",
     ),
+    "log_ratio_abs_max": metric(
+        "log_ratio_abs_max",
+        "losses",
+        "Max absolute log-probability delta across all PPO minibatches.",
+    ),
+    "log_ratio_abs_max_minibatch": metric(
+        "log_ratio_abs_max_minibatch",
+        "losses",
+        "Minibatch index containing the max absolute log-probability delta.",
+    ),
+    "old_log_prob_min_at_log_ratio_abs_max": metric(
+        "old_log_prob_min_at_log_ratio_abs_max",
+        "losses",
+        "Minimum active old log-probability in the max log-ratio minibatch.",
+    ),
+    "old_log_prob_max_at_log_ratio_abs_max": metric(
+        "old_log_prob_max_at_log_ratio_abs_max",
+        "losses",
+        "Maximum active old log-probability in the max log-ratio minibatch.",
+    ),
+    "new_log_prob_min_at_log_ratio_abs_max": metric(
+        "new_log_prob_min_at_log_ratio_abs_max",
+        "losses",
+        "Minimum active new log-probability in the max log-ratio minibatch.",
+    ),
+    "new_log_prob_max_at_log_ratio_abs_max": metric(
+        "new_log_prob_max_at_log_ratio_abs_max",
+        "losses",
+        "Maximum active new log-probability in the max log-ratio minibatch.",
+    ),
+    "old_log_prob_at_neg100_frac_at_log_ratio_abs_max": metric(
+        "old_log_prob_at_neg100_frac_at_log_ratio_abs_max",
+        "losses",
+        "Fraction of active old log-probs <= -100 in the max log-ratio minibatch.",
+    ),
+    "new_log_prob_at_neg100_frac_at_log_ratio_abs_max": metric(
+        "new_log_prob_at_neg100_frac_at_log_ratio_abs_max",
+        "losses",
+        "Fraction of active new log-probs <= -100 in the max log-ratio minibatch.",
+    ),
+    "source_log_prob_min_at_log_ratio_abs_max": metric(
+        "source_log_prob_min_at_log_ratio_abs_max",
+        "losses",
+        "Minimum active source log-probability in the max log-ratio minibatch.",
+    ),
+    "target_log_prob_min_at_log_ratio_abs_max": metric(
+        "target_log_prob_min_at_log_ratio_abs_max",
+        "losses",
+        "Minimum active target log-probability in the max log-ratio minibatch.",
+    ),
+    "ship_log_prob_min_at_log_ratio_abs_max": metric(
+        "ship_log_prob_min_at_log_ratio_abs_max",
+        "losses",
+        "Minimum active ship log-probability in the max log-ratio minibatch.",
+    ),
     "importance_ratio_mean": metric(
         "importance_ratio_mean",
         "losses",

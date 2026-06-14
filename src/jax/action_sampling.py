@@ -241,7 +241,8 @@ def _sample_factored_step_from_logits(
     )
 
     row_bucket_mask = ship_bucket_mask[source]
-    target_mask = row_bucket_mask.any(axis=-1)
+    decoder_target_mask = target_logits > jnp.finfo(jnp.float32).min
+    target_mask = row_bucket_mask.any(axis=-1) & decoder_target_mask
     has_target = target_mask.any()
     stop = jnp.where(launch_active & (~has_target), jnp.ones_like(stop), stop)
     launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0

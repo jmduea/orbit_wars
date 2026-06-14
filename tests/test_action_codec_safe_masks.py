@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from src.jax.action_codec import (
+    _factored_step_log_prob_entropy_components,
     _factored_step_log_prob_entropy,
     _safe_categorical_entropy,
     _safe_categorical_log_prob,
@@ -67,3 +68,38 @@ def test_factored_step_stop_masks_move_terms_without_nan() -> None:
         assert np.isfinite(np.asarray(arr)).all()
     assert float(np.asarray(move_entropy)[0]) == pytest.approx(0.0)
     assert float(np.asarray(move_entropy)[2]) == pytest.approx(0.0)
+
+
+def test_factored_step_ignores_decoder_masked_target_sentinel() -> None:
+    sentinel = jnp.finfo(jnp.float32).min
+    source_logits = jnp.array([[0.0]], dtype=jnp.float32)
+    target_logits = jnp.array([[sentinel, 0.0]], dtype=jnp.float32)
+    stop_logit = jnp.array([-5.0], dtype=jnp.float32)
+    ship_logits = jnp.zeros((1, 2, 2), dtype=jnp.float32)
+    source_mask = jnp.array([[True]], dtype=bool)
+    ship_bucket_mask = jnp.zeros((1, 1, 2, 2), dtype=bool)
+    ship_bucket_mask = ship_bucket_mask.at[0, 0, 0, 1].set(True)
+
+    (
+        log_prob,
+        _entropy,
+        _stop_entropy,
+        _move_entropy,
+        _source_lp,
+        target_lp,
+        _ship_lp,
+    ) = _factored_step_log_prob_entropy_components(
+        source_logits,
+        target_logits,
+        stop_logit,
+        ship_logits,
+        source_mask,
+        ship_bucket_mask,
+        jnp.array([0], dtype=jnp.int32),
+        jnp.array([0], dtype=jnp.int32),
+        jnp.array([1], dtype=jnp.int32),
+        jnp.array([0], dtype=jnp.float32),
+    )
+
+    assert np.isfinite(np.asarray(log_prob)).all()
+    assert float(np.asarray(target_lp)[0]) > float(sentinel)

@@ -378,7 +378,7 @@ def factored_action_log_prob_and_entropy(
     return log_prob, entropy
 
 
-def _factored_step_log_prob_entropy(
+def _factored_step_log_prob_entropy_components(
     source_logits: jax.Array,
     target_logits: jax.Array,
     stop_logit: jax.Array,
@@ -390,8 +390,16 @@ def _factored_step_log_prob_entropy(
     ship_bucket: jax.Array,
     stop_flag: jax.Array,
     ship_fraction: jax.Array | None = None,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
-    """Match rollout ``_sample_factored_step_from_logits`` log-prob math (batched)."""
+) -> tuple[
+    jax.Array,
+    jax.Array,
+    jax.Array,
+    jax.Array,
+    jax.Array,
+    jax.Array,
+    jax.Array,
+]:
+    """Match rollout log-prob math and expose component log-probs for diagnostics."""
 
     stop = stop_flag.astype(jnp.float32)
     stop_log_probs = jax.nn.log_sigmoid(stop_logit)
@@ -421,8 +429,12 @@ def _factored_step_log_prob_entropy(
     )
 
     row_bucket_mask = ship_bucket_mask[batch_idx, source_index]
-    target_mask = row_bucket_mask.any(axis=-1)
-    target_mask = target_mask.at[batch_idx, target_slot].set(True)
+    decoder_target_mask = target_logits > jnp.finfo(jnp.float32).min
+    target_mask = row_bucket_mask.any(axis=-1) & decoder_target_mask
+    selected_target_decoder_valid = decoder_target_mask[batch_idx, target_slot]
+    target_mask = target_mask.at[batch_idx, target_slot].set(
+        selected_target_decoder_valid
+    )
     target_lp = _safe_categorical_log_prob(
         target_logits,
         target_mask,
@@ -472,6 +484,42 @@ def _factored_step_log_prob_entropy(
     )
     log_prob = stop_lp + move_lp
     entropy = stop_entropy + move_entropy
+    source_lp = jnp.where(launch_active > 0.0, source_lp, 0.0)
+    target_lp = jnp.where(launch_active > 0.0, target_lp, 0.0)
+    ship_lp = jnp.where(launch_active > 0.0, ship_lp, 0.0)
+    return log_prob, entropy, stop_entropy, move_entropy, source_lp, target_lp, ship_lp
+
+
+def _factored_step_log_prob_entropy(
+    source_logits: jax.Array,
+    target_logits: jax.Array,
+    stop_logit: jax.Array,
+    ship_logits: jax.Array,
+    source_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    source_index: jax.Array,
+    target_slot: jax.Array,
+    ship_bucket: jax.Array,
+    stop_flag: jax.Array,
+    ship_fraction: jax.Array | None = None,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Match rollout ``_sample_factored_step_from_logits`` log-prob math (batched)."""
+
+    log_prob, entropy, stop_entropy, move_entropy, _, _, _ = (
+        _factored_step_log_prob_entropy_components(
+            source_logits,
+            target_logits,
+            stop_logit,
+            ship_logits,
+            source_mask,
+            ship_bucket_mask,
+            source_index,
+            target_slot,
+            ship_bucket,
+            stop_flag,
+            ship_fraction=ship_fraction,
+        )
+    )
     return log_prob, entropy, stop_entropy, move_entropy
 
 

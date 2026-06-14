@@ -19,6 +19,7 @@ from src.features.registry import PLANET_FEATURE_SCHEMA, edge_k
 from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
     FactoredPolicyOutput,
+    _factored_step_log_prob_entropy_components,
     _factored_step_log_prob_entropy,
     source_mask_from_bucket_mask_and_ships,
 )
@@ -45,6 +46,9 @@ class FactoredSequenceLogProbResult(NamedTuple):
     move_entropy: jax.Array
     value: jax.Array | None = None
     value_logits: jax.Array | None = None
+    source_log_prob: jax.Array | None = None
+    target_log_prob: jax.Array | None = None
+    ship_log_prob: jax.Array | None = None
 
 
 def owned_planet_ships_from_turn_batch(
@@ -95,6 +99,9 @@ def _replay_logprobs_with_prefix_forwards(
     entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     stop_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     move_entropy_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    source_log_prob_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    target_log_prob_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
+    ship_log_prob_out = jnp.zeros((env_count, sequence_k), dtype=jnp.float32)
     use_distributional = cfg.model.value_head.strip().lower() == "distributional"
     value_logits_out: jax.Array | None = (
         jnp.zeros((env_count, cfg.model.value_bins), dtype=jnp.float32)
@@ -128,6 +135,9 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            source_log_prob_out,
+            target_log_prob_out,
+            ship_log_prob_out,
             cumulative_forbidden,
         ) = carry
 
@@ -157,7 +167,15 @@ def _replay_logprobs_with_prefix_forwards(
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
         )
-        step_lp, step_ent, stop_ent, move_ent = _factored_step_log_prob_entropy(
+        (
+            step_lp,
+            step_ent,
+            stop_ent,
+            move_ent,
+            source_lp,
+            target_lp,
+            ship_lp,
+        ) = _factored_step_log_prob_entropy_components(
             step_output.source_logits[:, step_idx, :],
             step_output.target_logits[:, step_idx, :],
             step_output.stop_logits[:, step_idx],
@@ -175,11 +193,17 @@ def _replay_logprobs_with_prefix_forwards(
         step_ent = step_ent * active_f
         stop_ent = stop_ent * active_f
         move_ent = move_ent * active_f
+        source_lp = source_lp * active_f
+        target_lp = target_lp * active_f
+        ship_lp = ship_lp * active_f
 
         log_prob_out = log_prob_out.at[:, step_idx].set(step_lp)
         entropy_out = entropy_out.at[:, step_idx].set(step_ent)
         stop_entropy_out = stop_entropy_out.at[:, step_idx].set(stop_ent)
         move_entropy_out = move_entropy_out.at[:, step_idx].set(move_ent)
+        source_log_prob_out = source_log_prob_out.at[:, step_idx].set(source_lp)
+        target_log_prob_out = target_log_prob_out.at[:, step_idx].set(target_lp)
+        ship_log_prob_out = ship_log_prob_out.at[:, step_idx].set(ship_lp)
 
         stored_stop = stop_flag[:, step_idx]
         stored_source = source_index[:, step_idx]
@@ -234,6 +258,9 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            source_log_prob_out,
+            target_log_prob_out,
+            ship_log_prob_out,
             cumulative_forbidden,
         ), None
 
@@ -244,6 +271,9 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            source_log_prob_out,
+            target_log_prob_out,
+            ship_log_prob_out,
             _cumulative_forbidden,
         ),
         _,
@@ -255,6 +285,9 @@ def _replay_logprobs_with_prefix_forwards(
             entropy_out,
             stop_entropy_out,
             move_entropy_out,
+            source_log_prob_out,
+            target_log_prob_out,
+            ship_log_prob_out,
             cumulative_forbidden,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
@@ -266,6 +299,9 @@ def _replay_logprobs_with_prefix_forwards(
         move_entropy=move_entropy_out,
         value=value_out_scalar,
         value_logits=value_logits_out,
+        source_log_prob=source_log_prob_out,
+        target_log_prob=target_log_prob_out,
+        ship_log_prob=ship_log_prob_out,
     )
 
 
