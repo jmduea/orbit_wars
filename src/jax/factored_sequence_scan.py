@@ -1,10 +1,8 @@
 """Shared stepwise factorized sequence scan for rollout sampling and PPO replay.
 
-Rollout sampling and PPO replay both score sub-steps with the same shield-prefix
-decoder semantics: teacher columns ``0..step_idx-1`` committed, column
-``step_idx`` zeroed (see :func:`build_shield_prefix_teacher_sequences`). Each path
-encodes ``TurnBatch`` once and reuses ``PlanetEdgeEncoderOutput`` for decoder-only
-prefix forwards.
+Rollout sampling and PPO replay both score sub-steps with incremental
+``decode_step`` on cached ``PlanetEdgeEncoderOutput`` and a scan-local
+``FactorizedDecodeCarry``.
 """
 
 from __future__ import annotations
@@ -25,6 +23,11 @@ from src.jax.action_codec import (
 )
 from src.jax.array_ops import masked_mean
 from src.jax.decoder_carry import decoder_carry_enabled
+from src.jax.factored_decode_scan import (
+    advance_scan_decode_carry,
+    init_scan_decode_carry,
+    scan_decode_step,
+)
 from src.jax.features import TurnBatch, ship_feature_scale
 from src.jax.launch_hygiene import (
     apply_cumulative_forbidden_to_shield,
@@ -34,6 +37,8 @@ from src.jax.launch_hygiene import (
     empty_cumulative_forbidden,
 )
 from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
+from src.jax.shield import rollout_factorized_sampling_mode
+from src.jax.shield.trajectory import cheap_factorized_topk_masks_from_remaining
 from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
 
@@ -49,6 +54,21 @@ class FactoredSequenceLogProbResult(NamedTuple):
     source_log_prob: jax.Array | None = None
     target_log_prob: jax.Array | None = None
     ship_log_prob: jax.Array | None = None
+
+
+def shield_bucket_mask_for_replay_step(
+    cfg: TrainConfig,
+    batch: TurnBatch,
+    remaining_ships: jax.Array,
+    stored_mask: jax.Array,
+) -> jax.Array:
+    """Resolve per-step replay masks; rebuild cheap shield when ``selected_validate``."""
+
+    if rollout_factorized_sampling_mode(cfg.task) == "selected_validate":
+        return cheap_factorized_topk_masks_from_remaining(
+            batch, cfg.task, remaining_ships
+        ).ship_bucket_mask
+    return stored_mask
 
 
 def owned_planet_ships_from_turn_batch(
@@ -84,7 +104,7 @@ def _replay_logprobs_with_prefix_forwards(
     decoder_hidden: jax.Array | None = None,
     encoder_out=None,
 ) -> FactoredSequenceLogProbResult:
-    """Replay log-probs with one shield-prefix decoder forward per sub-step."""
+    """Replay log-probs with one incremental decoder step per sub-step."""
 
     env_count = source_index.shape[0]
     sequence_k = source_index.shape[1]
@@ -127,6 +147,9 @@ def _replay_logprobs_with_prefix_forwards(
         buckets=cfg.task.ship_bucket_count,
         max_launches=sequence_k,
     )
+    decode_carry = init_scan_decode_carry(
+        params, policy, encoder_out, cfg, decoder_hidden
+    )
 
     def scan_step(carry, step_idx):
         (
@@ -139,26 +162,27 @@ def _replay_logprobs_with_prefix_forwards(
             target_log_prob_out,
             ship_log_prob_out,
             cumulative_forbidden,
+            decode_carry,
         ) = carry
 
-        source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
-            source_index, target_slot, step_idx
-        )
-        step_output = forward_factored_policy(
+        step_logits, decode_carry = scan_decode_step(
             params,
             policy,
-            batch,
-            cfg,
-            player_count=player_count,
-            source_sequence=source_prefix,
-            target_slot_sequence=target_prefix,
-            decoder_hidden=decoder_hidden,
+            encoder_out,
+            decode_carry,
+            teacher_source=jnp.zeros((env_count,), dtype=jnp.int32),
+            teacher_target_slot=jnp.zeros((env_count,), dtype=jnp.int32),
             deterministic=True,
-            encoder_out=encoder_out,
         )
         step_active = step_mask[:, step_idx] > 0.0
-        step_bucket_mask = apply_cumulative_forbidden_to_shield(
+        step_bucket_mask = shield_bucket_mask_for_replay_step(
+            cfg,
+            batch,
+            remaining_ships,
             ship_bucket_mask[:, step_idx],
+        )
+        step_bucket_mask = apply_cumulative_forbidden_to_shield(
+            step_bucket_mask,
             cumulative_forbidden,
         )
         fraction_arg = None
@@ -176,10 +200,10 @@ def _replay_logprobs_with_prefix_forwards(
             target_lp,
             ship_lp,
         ) = _factored_step_log_prob_entropy_components(
-            step_output.source_logits[:, step_idx, :],
-            step_output.target_logits[:, step_idx, :],
-            step_output.stop_logits[:, step_idx],
-            step_output.ship_logits[:, step_idx, :, :],
+            step_logits.source_logits,
+            step_logits.target_logits,
+            step_logits.stop_logits,
+            step_logits.ship_logits,
             source_mask,
             step_bucket_mask,
             source_index[:, step_idx],
@@ -251,6 +275,12 @@ def _replay_logprobs_with_prefix_forwards(
                 current_source_ships,
             )
         )
+        decode_carry = advance_scan_decode_carry(
+            encoder_out,
+            decode_carry,
+            source=stored_source,
+            target_slot=target_slot[:, step_idx],
+        )
 
         return (
             remaining_ships,
@@ -262,6 +292,7 @@ def _replay_logprobs_with_prefix_forwards(
             target_log_prob_out,
             ship_log_prob_out,
             cumulative_forbidden,
+            decode_carry,
         ), None
 
     (
@@ -275,6 +306,7 @@ def _replay_logprobs_with_prefix_forwards(
             target_log_prob_out,
             ship_log_prob_out,
             _cumulative_forbidden,
+            _decode_carry,
         ),
         _,
     ) = jax.lax.scan(
@@ -289,6 +321,7 @@ def _replay_logprobs_with_prefix_forwards(
             target_log_prob_out,
             ship_log_prob_out,
             cumulative_forbidden,
+            decode_carry,
         ),
         jnp.arange(sequence_k, dtype=jnp.int32),
     )

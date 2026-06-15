@@ -987,21 +987,50 @@ batched_step = jax.vmap(step, in_axes=(0, 0, 0, None, None))
 batched_step_multi_player = jax.vmap(step_multi_player, in_axes=(0, 0, None, None))
 
 
-def jit_reset(key: jax.Array, cfg: TaskConfig):
-    """JIT-compiled reset helper for a closed-over ``TaskConfig``."""
+def make_batched_reset_fn(task_cfg: TaskConfig):
+    """Return a jitted ``batched_reset`` for one resolved task config.
 
-    return jax.jit(lambda k: reset(k, cfg))(key)
+    Compile once at train/test setup; do not call ``jax.jit`` per invocation.
+    """
+
+    @jax.jit
+    def reset_fn(keys: jax.Array):
+        return batched_reset(keys, task_cfg)
+
+    return reset_fn
 
 
-def jit_step(
-    state: JaxEnvState,
-    learner_action: JaxAction,
-    opponent_action: JaxAction,
-    cfg: TaskConfig,
-    reward_cfg: RewardConfig,
-):
-    """JIT-compiled step helper for a closed-over ``TaskConfig``."""
+def make_batched_reset_with_pool_fn(task_cfg: TaskConfig, map_pool):
+    """Return a jitted ``batched_reset_with_pool`` for fixed task + pool tables."""
 
-    return jax.jit(lambda s, a0, a1: step(s, a0, a1, cfg, reward_cfg))(
-        state, learner_action, opponent_action
-    )
+    @jax.jit
+    def reset_fn(keys: jax.Array, map_ids: jax.Array):
+        return batched_reset_with_pool(keys, task_cfg, map_pool, map_ids)
+
+    return reset_fn
+
+
+def make_batched_step_fn(task_cfg: TaskConfig, reward_cfg: RewardConfig):
+    """Return a jitted 2p ``batched_step`` for fixed task + reward configs."""
+
+    @jax.jit
+    def step_fn(
+        state: JaxEnvState,
+        learner_action: JaxAction,
+        opponent_action: JaxAction,
+    ):
+        return batched_step(
+            state, learner_action, opponent_action, task_cfg, reward_cfg
+        )
+
+    return step_fn
+
+
+def make_batched_step_multi_player_fn(task_cfg: TaskConfig, reward_cfg: RewardConfig):
+    """Return a jitted 4p ``batched_step_multi_player`` for fixed configs."""
+
+    @jax.jit
+    def step_fn(state: JaxEnvState, player_actions: JaxAction):
+        return batched_step_multi_player(state, player_actions, task_cfg, reward_cfg)
+
+    return step_fn

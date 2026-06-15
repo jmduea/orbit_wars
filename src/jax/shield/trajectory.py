@@ -844,29 +844,15 @@ def selected_factored_launch_passes_cheap_shield_jax(
     return (~should_check) | bucket_ok
 
 
-def apply_cheap_trajectory_shield_factorized_topk(
-    game,
+def cheap_factorized_topk_masks_from_remaining(
     batch,
     env_cfg: Any,
-    remaining_planet_ships: jax.Array | None = None,
+    remaining_planet_ships: jax.Array,
 ) -> ShieldedBatchResult:
-    """Cheap shield for factorized top-K decoding.
-
-    This intentionally avoids horizon scans. It uses edge features already
-    computed by encode_turn:
-
-      - batch.edge_mask for source ownership, active target, not-current-sun-cross
-      - per-anchor sun_cross_at_intercept_* for launch-speed buckets
-      - per-bucket ship availability
-
-    It is not a perfect physics validator. It is a low-cost mask for PPO
-    collection and training.
-    """
+    """Cheap factorized top-K masks from ``TurnBatch`` and per-step ship counts."""
 
     bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
-    planet_ships = (
-        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
-    )
+    planet_ships = remaining_planet_ships
 
     bucket_ids = jnp.arange(bucket_count, dtype=jnp.int32)
     real_bucket = bucket_ids > 0
@@ -895,19 +881,34 @@ def apply_cheap_trajectory_shield_factorized_topk(
     ).astype(jnp.int32)
     bucket_sun_blocked = jnp.take(sun_by_anchor, anchor_idx, axis=-1)
 
-    ship_counts = ship_count_for_bucket_jax(
-        planet_ships[:, None],
-        bucket_ids[None, :],
-        bucket_count,
-    )
-    bucket_has_ships = (ship_counts > 0.0) & (ship_counts <= planet_ships[:, None])
-
-    bucket_legal = (
-        batch.edge_mask[..., None]
-        & real_bucket[None, None, :]
-        & bucket_has_ships[:, None, :]
-        & (~bucket_sun_blocked)
-    )
+    if planet_ships.ndim == 1:
+        ship_counts = ship_count_for_bucket_jax(
+            planet_ships[:, None],
+            bucket_ids[None, :],
+            bucket_count,
+        )
+        bucket_has_ships = (ship_counts > 0.0) & (ship_counts <= planet_ships[:, None])
+        bucket_legal = (
+            batch.edge_mask[..., None]
+            & real_bucket[None, None, :]
+            & bucket_has_ships[:, None, :]
+            & (~bucket_sun_blocked)
+        )
+    else:
+        ship_counts = ship_count_for_bucket_jax(
+            planet_ships[..., None],
+            bucket_ids[None, None, :],
+            bucket_count,
+        )
+        bucket_has_ships = (ship_counts > 0.0) & (
+            ship_counts <= planet_ships[..., None]
+        )
+        bucket_legal = (
+            batch.edge_mask[..., None]
+            & real_bucket[None, None, None, :]
+            & bucket_has_ships[..., None, :]
+            & (~bucket_sun_blocked)
+        )
 
     shielded_edge_mask = bucket_legal[..., 1:].any(axis=-1)
 
@@ -945,6 +946,31 @@ def apply_cheap_trajectory_shield_factorized_topk(
         ship_bucket_mask=bucket_legal,
         diagnostics=diagnostics,
     )
+
+
+def apply_cheap_trajectory_shield_factorized_topk(
+    game,
+    batch,
+    env_cfg: Any,
+    remaining_planet_ships: jax.Array | None = None,
+) -> ShieldedBatchResult:
+    """Cheap shield for factorized top-K decoding.
+
+    This intentionally avoids horizon scans. It uses edge features already
+    computed by encode_turn:
+
+      - batch.edge_mask for source ownership, active target, not-current-sun-cross
+      - per-anchor sun_cross_at_intercept_* for launch-speed buckets
+      - per-bucket ship availability
+
+    It is not a perfect physics validator. It is a low-cost mask for PPO
+    collection and training.
+    """
+
+    planet_ships = (
+        game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
+    )
+    return cheap_factorized_topk_masks_from_remaining(batch, env_cfg, planet_ships)
 
 
 def apply_configured_trajectory_shield_factorized_topk(

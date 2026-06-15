@@ -266,7 +266,7 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
         task={"trajectory_shield_mode": "off"},
         model={"max_moves_k": 3, "decoder_carry": decoder_carry},
     )
-    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(21), 1), cfg.task)
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(18), 1), cfg.task)
     policy = build_planet_graph_transformer_policy(cfg)
     params = policy.init(jax.random.PRNGKey(22), batch)
     carry_in = (
@@ -278,7 +278,7 @@ def test_replay_logprob_matches_prefix_forward_per_step(decoder_carry: bool) -> 
     initial_ships = owned_planet_ships_from_turn_batch(batch, cfg.task)
 
     sample = _sample_shielded_factored_sequence_with_params(
-        jax.random.PRNGKey(23),
+        jax.random.PRNGKey(0),
         state.game,
         batch,
         params,

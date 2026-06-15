@@ -97,6 +97,43 @@ def test_pointwise_cheap_shield_matches_lattice_cell() -> None:
 
 
 @pytest.mark.jax
+def test_replay_rebuilt_cheap_mask_matches_rollout_stack() -> None:
+    """Replay cheap-mask rebuild must match rollout lattice for same remaining_ships."""
+    from src.jax.factored_sequence_scan import (
+        owned_planet_ships_from_turn_batch,
+        shield_bucket_mask_for_replay_step,
+    )
+    from src.jax.features import encode_turn
+    from src.jax.shield.trajectory import cheap_factorized_topk_masks_from_remaining
+
+    train_cfg = _train_cfg(
+        task={
+            "trajectory_shield_mode": "cheap",
+            "rollout_factorized_sampling": "selected_validate",
+        }
+    )
+    game = _two_planet_game(x0=20.0, y0=20.0, x1=80.0, y1=20.0)
+    batch = encode_turn(game, train_cfg.task)
+    remaining = owned_planet_ships_from_turn_batch(batch, train_cfg.task)
+    ships_arg = remaining[0] if remaining.ndim > 1 else remaining
+    rollout_lattice = apply_cheap_trajectory_shield_factorized_topk(
+        game, batch, train_cfg.task, remaining_planet_ships=ships_arg
+    ).ship_bucket_mask
+    stored_unshielded = jnp.zeros_like(rollout_lattice)
+    rebuilt = shield_bucket_mask_for_replay_step(
+        train_cfg,
+        batch,
+        remaining,
+        stored_unshielded,
+    )
+    direct = cheap_factorized_topk_masks_from_remaining(
+        batch, train_cfg.task, remaining
+    ).ship_bucket_mask
+    np.testing.assert_array_equal(np.asarray(rebuilt), np.asarray(rollout_lattice))
+    np.testing.assert_array_equal(np.asarray(rebuilt), np.asarray(direct))
+
+
+@pytest.mark.jax
 def test_rollout_replay_logprob_parity_selected_validate() -> None:
     cfg = _train_cfg(
         task={

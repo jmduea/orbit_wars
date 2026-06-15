@@ -115,7 +115,6 @@ def test_factorized_sampler_carry_matches_replay_from_incoming_hidden() -> None:
     )
 
 
-
 def test_rollout_initializes_env_state_decoder_hidden_for_scan_structure() -> None:
     cfg = _sampler_cfg(pointer_decoder="factorized_topk")
     cfg.opponents.dispatch = "random"
@@ -135,10 +134,13 @@ def test_rollout_initializes_env_state_decoder_hidden_for_scan_structure() -> No
         cfg,
     )
 
+    from src.jax.rollout.types import require_factorized_replay
+
     assert next_state.decoder_hidden is not None
     assert next_state.decoder_hidden.shape == (1, cfg.model.hidden_size)
-    assert transitions.decoder_hidden is not None
-    assert transitions.decoder_hidden.shape == (
+    replay = require_factorized_replay(transitions)
+    assert replay.decoder_hidden is not None
+    assert replay.decoder_hidden.shape == (
         cfg.training.rollout_steps,
         cfg.training.num_envs,
         cfg.model.hidden_size,

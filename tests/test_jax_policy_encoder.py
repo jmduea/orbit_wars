@@ -144,6 +144,100 @@ def test_build_jax_policy_dispatches_planet_graph_transformer_small() -> None:
 
 
 @pytest.mark.jax
+def test_scan_decode_step_logits_match_prefix_forward() -> None:
+    """Incremental step logits must match prefix-forward oracle at each step_idx."""
+    from src.jax.factored_decode_scan import (
+        advance_scan_decode_carry,
+        init_scan_decode_carry,
+        scan_decode_step,
+    )
+    from src.jax.factored_sequence_scan import (
+        build_shield_prefix_teacher_sequences,
+        forward_factorized_encode,
+        forward_factored_policy,
+    )
+    from src.jax.policy import factorized_decode
+
+    cfg = _train_cfg(architecture="planet_graph_transformer")
+    cfg.model.max_moves_k = 3
+    cfg.model.decoder_carry = True
+    policy = build_jax_policy(cfg)
+    batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(10))
+    params = policy.init(jax.random.PRNGKey(11), batch)
+    encoder_out = forward_factorized_encode(params, policy, batch)
+    source_seq = jnp.array([[0, 1, 0], [0, 0, 1]], dtype=jnp.int32)
+    slot_seq = jnp.array([[0, 1, 2], [1, 0, 0]], dtype=jnp.int32)
+    player_count = jnp.full((2,), cfg.task.player_count, dtype=jnp.int32)
+
+    carry = init_scan_decode_carry(params, policy, encoder_out, cfg)
+    for step_idx in range(cfg.model.max_moves_k):
+        source_prefix, target_prefix = build_shield_prefix_teacher_sequences(
+            source_seq, slot_seq, step_idx
+        )
+        prefix_out = forward_factored_policy(
+            params,
+            policy,
+            batch,
+            cfg,
+            player_count=player_count,
+            source_sequence=source_prefix,
+            target_slot_sequence=target_prefix,
+            deterministic=True,
+            encoder_out=encoder_out,
+        )
+        step_logits, carry = scan_decode_step(
+            params,
+            policy,
+            encoder_out,
+            carry,
+            teacher_source=source_prefix[:, step_idx],
+            teacher_target_slot=target_prefix[:, step_idx],
+            deterministic=True,
+        )
+        np.testing.assert_allclose(
+            step_logits.source_logits,
+            prefix_out.source_logits[:, step_idx, :],
+            rtol=0.0,
+            atol=1e-5,
+        )
+        np.testing.assert_allclose(
+            step_logits.target_logits,
+            prefix_out.target_logits[:, step_idx, :],
+            rtol=0.0,
+            atol=1e-5,
+        )
+        np.testing.assert_allclose(
+            step_logits.stop_logits,
+            prefix_out.stop_logits[:, step_idx],
+            rtol=0.0,
+            atol=1e-5,
+        )
+        np.testing.assert_allclose(
+            step_logits.ship_logits,
+            prefix_out.ship_logits[:, step_idx, :, :],
+            rtol=0.0,
+            atol=1e-5,
+        )
+        carry = advance_scan_decode_carry(
+            encoder_out,
+            carry,
+            source=source_seq[:, step_idx],
+            target_slot=slot_seq[:, step_idx],
+        )
+
+    full = factorized_decode(
+        params,
+        policy,
+        encoder_out,
+        source_sequence=source_seq,
+        target_slot_sequence=slot_seq,
+        deterministic=True,
+    )
+    assert carry is not None
+    np.testing.assert_allclose(carry.state, full.decoder_hidden, rtol=0.0, atol=1e-5)
+
+
+@pytest.mark.jax
 def test_incremental_factorized_decode_matches_full_teacher_path() -> None:
     """Rollout incremental decode must match full factorized_decode on teacher prefix."""
     from src.jax.factored_sequence_scan import forward_factorized_encode
@@ -199,7 +293,7 @@ def test_incremental_factorized_decode_matches_full_teacher_path() -> None:
 @pytest.mark.jax
 def test_teacher_carry_replay_matches_full_factorized_decode() -> None:
     """Lightweight carry replay must match full decode decoder_hidden export."""
-    from src.jax.action_sampling import _factorized_decoder_hidden_from_teacher_sequence
+    from src.jax.factored_decode_scan import factorized_decoder_hidden_from_teacher_sequence
     from src.jax.factored_sequence_scan import forward_factorized_encode
     from src.jax.policy import factorized_decode
 
@@ -221,10 +315,11 @@ def test_teacher_carry_replay_matches_full_factorized_decode() -> None:
         target_slot_sequence=slot_seq,
         deterministic=True,
     )
-    replay_hidden = _factorized_decoder_hidden_from_teacher_sequence(
+    replay_hidden = factorized_decoder_hidden_from_teacher_sequence(
         params,
         policy,
         encoder_out,
+        cfg=cfg,
         source_sequence=source_seq,
         target_slot_sequence=slot_seq,
         decoder_hidden_in=None,

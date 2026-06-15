@@ -11,7 +11,11 @@ import pytest
 import jax
 from src.config import RewardConfig, TrainConfig
 from src.game.constants import MAX_PLANETS
-from src.jax.env import batched_reset, batched_step, empty_action
+from src.jax.env import (
+    empty_action,
+    make_batched_reset_fn,
+    make_batched_step_fn,
+)
 from src.jax.policy import build_jax_policy
 from src.jax.train import init_rollout_groups, init_train_state
 
@@ -106,18 +110,14 @@ def test_tier_a_batched_env_reset_step_under_jit() -> None:
         lambda x: jnp.broadcast_to(x, (2,) + jnp.asarray(x).shape), action
     )
 
-    reset_fn = jax.jit(lambda k: batched_reset(k, cfg.task))
-    step_fn = jax.jit(
-        lambda states, actions: batched_step(
-            states, actions, actions, cfg.task, reward_cfg
-        )
-    )
+    reset_fn = make_batched_reset_fn(cfg.task)
+    step_fn = make_batched_step_fn(cfg.task, reward_cfg)
 
     states, batches = reset_fn(keys)
     assert states.game.planets.x.shape == (2, MAX_PLANETS)
     assert batches.planet_features.shape[0] == 2
 
-    next_states, results = step_fn(states, batched_action)
+    next_states, results = step_fn(states, batched_action, batched_action)
     assert next_states.game.step.shape == (2,)
     assert results.reward.shape == (2,)
 
