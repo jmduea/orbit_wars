@@ -69,6 +69,7 @@ from src.jax.train.state import init_train_state, validate_policy_param_shapes
 from src.jax.train.sweep_score import (
     EntropyTrendTracker,
     MetricWindowTracker,
+    PreflightSweepScoreTracker,
     WinRateTrendTracker,
     collect_planet_flow_sweep_metrics,
     collect_preflight_sweep_metrics,
@@ -218,6 +219,9 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     approx_kl_window = MetricWindowTracker() if track_learning_signal_sweep else None
     entropy_window = MetricWindowTracker() if track_learning_signal_sweep else None
     entropy_trend = EntropyTrendTracker() if track_preflight_sweep else None
+    preflight_sweep_score_tracker = (
+        PreflightSweepScoreTracker() if track_learning_signal_sweep else None
+    )
     planet_flow_unreachable_ceiling = (
         planet_flow_max_post_mask_unreachable_rate(
             load_thresholds(
@@ -499,6 +503,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                         overall_win_rate=overall_win_rate,
                         metrics_host=metrics_host,
                         entropy_trend=entropy_trend,
+                        preflight_sweep_score_tracker=preflight_sweep_score_tracker,
                     )
                 elif (
                     track_planet_flow_sweep
@@ -517,6 +522,7 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
                             if planet_flow_unreachable_ceiling is not None
                             else 0.05
                         ),
+                        preflight_sweep_score_tracker=preflight_sweep_score_tracker,
                     )
             saved_checkpoint_path: Path | None = None
             checkpoint_every = int(cfg.artifacts.checkpoint_every)

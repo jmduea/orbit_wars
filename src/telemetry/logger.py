@@ -72,7 +72,6 @@ class TelemetryLogger:
             define_metric("win_rate_best_window_mean_10", summary="max")
             define_metric("entropy_delta_10", summary="min")
             define_metric("entropy_retention_ratio_10", summary="min")
-            define_metric("preflight_sweep_score", summary="max")
         apply_post_init_run_rename(self._run, self._cfg)
         if self._run is not None:
             resolved_cfg = self._flatten(asdict(self._cfg))

@@ -7,8 +7,10 @@ from src.jax.train.sweep_score import (
     PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
     EntropyTrendTracker,
     MetricWindowTracker,
+    PreflightSweepScoreTracker,
     WinRateTrendTracker,
     collect_preflight_sweep_metrics,
+    finalize_preflight_sweep_score_logging,
     is_preflight_sweep,
     preflight_sweep_score,
 )
@@ -108,6 +110,64 @@ def test_collect_preflight_sweep_metrics_populates_score() -> None:
     assert "entropy_delta_10" in metrics
     assert "entropy_retention_ratio_10" in metrics
     assert metrics["preflight_sweep_score"] > 0.0
+    assert metrics["preflight_sweep_score_update"] == metrics["preflight_sweep_score"]
+
+
+def test_preflight_sweep_score_tracker_preserves_running_best() -> None:
+    tracker = PreflightSweepScoreTracker()
+    metrics: dict[str, float] = {}
+    finalize_preflight_sweep_score_logging(metrics, update_score=0.12, tracker=tracker)
+    assert metrics == {
+        "preflight_sweep_score_update": pytest.approx(0.12),
+        "preflight_sweep_score": pytest.approx(0.12),
+    }
+
+    metrics = {}
+    finalize_preflight_sweep_score_logging(
+        metrics,
+        update_score=PREFLIGHT_SWEEP_SCORE_INELIGIBLE,
+        tracker=tracker,
+    )
+    assert metrics["preflight_sweep_score_update"] == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    assert metrics["preflight_sweep_score"] == pytest.approx(0.12)
+
+
+def test_collect_preflight_sweep_metrics_uses_running_best_tracker() -> None:
+    win_rate_trend = WinRateTrendTracker(window=3)
+    approx_kl_window = MetricWindowTracker(window=3)
+    entropy_window = MetricWindowTracker(window=3)
+    tracker = PreflightSweepScoreTracker()
+    for rate in (0.40, 0.45, 0.50, 0.55, 0.60):
+        win_rate_trend.observe(rate)
+    for kl in (0.05, 0.06, 0.07):
+        approx_kl_window.observe(kl)
+    for ent in (0.02, 0.03, 0.04):
+        entropy_window.observe(ent)
+
+    first = collect_preflight_sweep_metrics(
+        win_rate_trend=win_rate_trend,
+        approx_kl_window=approx_kl_window,
+        entropy_window=entropy_window,
+        overall_win_rate=0.65,
+        metrics_host={"approx_kl": 0.07, "entropy": 0.04},
+        preflight_sweep_score_tracker=tracker,
+    )
+    assert first["preflight_sweep_score"] > 0.0
+    assert first["preflight_sweep_score_update"] == first["preflight_sweep_score"]
+
+    win_rate_trend.observe(0.10)
+    approx_kl_window.observe(0.5)
+    entropy_window.observe(1.0e-5)
+    second = collect_preflight_sweep_metrics(
+        win_rate_trend=win_rate_trend,
+        approx_kl_window=approx_kl_window,
+        entropy_window=entropy_window,
+        overall_win_rate=0.10,
+        metrics_host={"approx_kl": 0.5, "entropy": 1.0e-5},
+        preflight_sweep_score_tracker=tracker,
+    )
+    assert second["preflight_sweep_score_update"] == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    assert second["preflight_sweep_score"] == first["preflight_sweep_score"]
 
 
 def test_collect_preflight_sweep_metrics_rejects_entropy_collapse() -> None:
@@ -134,6 +194,7 @@ def test_collect_preflight_sweep_metrics_rejects_entropy_collapse() -> None:
 
     assert metrics["entropy_retention_ratio_10"] < 0.25
     assert metrics["preflight_sweep_score"] == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
+    assert metrics["preflight_sweep_score_update"] == PREFLIGHT_SWEEP_SCORE_INELIGIBLE
 
 
 def test_collect_preflight_sweep_metrics_recovers_from_lucky_first_window() -> None:
@@ -158,3 +219,4 @@ def test_collect_preflight_sweep_metrics_recovers_from_lucky_first_window() -> N
     assert metrics["win_rate_delta_10"] == pytest.approx(0.0)
     assert metrics["win_rate_recovery_delta_10"] == pytest.approx(0.3)
     assert metrics["preflight_sweep_score"] == pytest.approx(0.3)
+    assert metrics["preflight_sweep_score_update"] == pytest.approx(0.3)

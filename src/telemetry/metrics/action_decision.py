@@ -60,7 +60,12 @@ _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
     "preflight_sweep_score": metric(
         "preflight_sweep_score",
         "action_decision",
-        "W&B preflight sweep objective: best eligible win-rate trend when Gates 2–3 floors pass, else -1.",
+        "W&B preflight sweep objective: running best eligible score logged each update.",
+    ),
+    "preflight_sweep_score_update": metric(
+        "preflight_sweep_score_update",
+        "action_decision",
+        "Per-update preflight sweep score before running-best aggregation.",
     ),
     "stop_utilization_ratio": metric(
         "stop_utilization_ratio",

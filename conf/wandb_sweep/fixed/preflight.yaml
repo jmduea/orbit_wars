@@ -2,33 +2,44 @@
 # Fixed axes for preflight sweep (100 updates).
 
 parameters:
-  task:
-    value: rollout_selected_validate
-  training.num_envs:
-    value: 32
-  training.rollout_microbatch_envs:
-    value: 32
+  training:
+    value: 2p_32
   training.rollout_steps:
     value: 512
   training.total_updates:
     value: 100
   training.reseed_every_updates:
     value: 50
+  # from previous preflight sweeps
+  training.clip_coef:
+    value: 0.25
+  training.max_grad_norm:
+    value: 0.5
+  training.vf_coef:
+    value: 0.25
+  training.ent_coef:
+    value: 0.005
+  training.lr:
+    value: 0.00014
+  model:
+    value: transformer_factorized_small
+  # end hand-picked values from previous preflight sweeps
   curriculum:
-    value: noop_only
+    value: nearest_only
   output.campaign:
-    value: preflight
+    value: preflight_v2
   telemetry:
     value: default
   telemetry.wandb.enabled:
     value: true
   telemetry.wandb.group:
-    value: preflight
+    value: preflight_v2
   telemetry.wandb.log_artifacts:
     value: true
   telemetry.wandb.tags:
     value:
       - preflight
+      - v2
       - 100u
       - 50u_reseed
   artifacts:

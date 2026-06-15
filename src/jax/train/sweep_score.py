@@ -95,6 +95,38 @@ class WinRateTrendTracker:
         return windows[-1] - prior_floor
 
 
+class PreflightSweepScoreTracker:
+    """Running best eligible preflight sweep score for W&B scalar summary."""
+
+    def __init__(self) -> None:
+        self._best: float | None = None
+
+    def observe(self, update_score: float) -> float:
+        score = float(update_score)
+        if self._best is None or score > self._best:
+            self._best = score
+        return self._best
+
+    @property
+    def best(self) -> float | None:
+        return self._best
+
+
+def finalize_preflight_sweep_score_logging(
+    metrics: dict[str, float],
+    *,
+    update_score: float,
+    tracker: PreflightSweepScoreTracker | None,
+) -> None:
+    """Log per-update score plus scalar running-best objective for W&B sweeps."""
+
+    metrics["preflight_sweep_score_update"] = float(update_score)
+    if tracker is None:
+        metrics["preflight_sweep_score"] = float(update_score)
+        return
+    metrics["preflight_sweep_score"] = tracker.observe(update_score)
+
+
 class EntropyTrendTracker:
     """Rolling entropy buffer for collapse detection before long-run promotion."""
 
@@ -262,6 +294,7 @@ def collect_planet_flow_sweep_metrics(
     metrics_host: dict[str, object],
     rollout_scalars: dict[str, float | None],
     max_post_mask_unreachable_rate: float,
+    preflight_sweep_score_tracker: PreflightSweepScoreTracker | None = None,
 ) -> dict[str, float]:
     """Build W&B sweep metrics from live training-loop trackers."""
 
@@ -284,7 +317,7 @@ def collect_planet_flow_sweep_metrics(
         if entropy_wm is not None:
             metrics["entropy_window_mean"] = float(entropy_wm)
 
-    metrics["preflight_sweep_score"] = planet_flow_preflight_score(
+    update_score = planet_flow_preflight_score(
         win_rate_delta=win_rate_delta_10,
         mean_active_launches_per_turn=rollout_scalars.get(
             "mean_active_launches_per_turn"
@@ -301,6 +334,11 @@ def collect_planet_flow_sweep_metrics(
             "planet_flow_unreachable_demand_rate"
         ),
         max_post_mask_unreachable_rate=max_post_mask_unreachable_rate,
+    )
+    finalize_preflight_sweep_score_logging(
+        metrics,
+        update_score=update_score,
+        tracker=preflight_sweep_score_tracker,
     )
     return metrics
 
@@ -367,6 +405,7 @@ def collect_preflight_sweep_metrics(
     metrics_host: dict[str, object],
     thresholds: dict[str, object] | None = None,
     entropy_trend: EntropyTrendTracker | None = None,
+    preflight_sweep_score_tracker: PreflightSweepScoreTracker | None = None,
 ) -> dict[str, float]:
     """Build preflight sweep metrics from live training-loop trackers."""
 
@@ -408,7 +447,7 @@ def collect_preflight_sweep_metrics(
                 metrics["entropy_retention_ratio_10"] = float(retention_ratio)
 
     min_delta, max_kl, min_ent = preflight_learning_signal_thresholds(thresholds)
-    metrics["preflight_sweep_score"] = preflight_sweep_score(
+    update_score = preflight_sweep_score(
         win_rate_delta=win_rate_delta_10,
         win_rate_recovery_delta=win_rate_recovery_delta_10,
         approx_kl=approx_kl_wm,
@@ -417,6 +456,11 @@ def collect_preflight_sweep_metrics(
         min_win_rate_delta=min_delta,
         max_approx_kl=max_kl,
         min_entropy=min_ent,
+    )
+    finalize_preflight_sweep_score_logging(
+        metrics,
+        update_score=update_score,
+        tracker=preflight_sweep_score_tracker,
     )
     return metrics
 

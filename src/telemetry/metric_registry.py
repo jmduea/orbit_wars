@@ -36,6 +36,7 @@ KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES: frozenset[str] = frozenset(
         "overall_win_rate",
         "env_steps_per_sec",
         "preflight_sweep_score",
+        "preflight_sweep_score_update",
         "win_rate_delta_10",
         "win_rate_recovery_delta_10",
         "win_rate_window_mean_10",

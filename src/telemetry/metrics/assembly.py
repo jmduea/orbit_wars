@@ -149,6 +149,7 @@ _REGISTRY_ASSEMBLY_ORDER: tuple[str, ...] = (
     "entropy_delta_10",
     "entropy_retention_ratio_10",
     "preflight_sweep_score",
+    "preflight_sweep_score_update",
     "ssot_qualifier_phase",
     "ssot_qualifier_stage",
     "ssot_rollout_family_prob_latest",

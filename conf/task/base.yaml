@@ -1,4 +1,4 @@
-candidate_count: 3
+candidate_count: 6 # number of candidate actions, maps are generated with 5-10 symmetric groups of 4. candidate_count > 4 ensures at least one candidate is selected outside of the source planet's group.
 ship_bucket_count: 5
 max_fleets: 256
 max_ships: 400.0
@@ -6,7 +6,7 @@ ship_speed: 6.0
 player_count: 4
 
 ship_feature_scale: 1000.0
-feature_history_steps: 1 # temporal feature control
+feature_history_steps: 5 # temporal feature control
 
 trajectory_shield_mode: off # off | cheap | exact | tiered
 rollout_factorized_sampling: lattice # lattice | selected_validate
@@ -20,5 +20,5 @@ edge_rank_mode: intercept_min
 ship_action_mode: continuous_fraction # continuous_fraction or buckets
 
 env_parity_mode: train
-map_pool_path: null
+map_pool_path: data/jax_map_pool/default_v1.npz
 map_pool_sha256: null
