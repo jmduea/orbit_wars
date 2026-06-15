@@ -1,8 +1,0 @@
-ts	phase	decision	why	evidence	result
-2026-05-31T00:00:00Z	frame	Next phase is src audit Phase 3 (#147-#150); Phases 1-2 closed	gh issue list #136-#146 CLOSED; #147-#150 OPEN	docs/ROADMAP.md, gh #156	VERIFIED
-2026-05-31T00:00:00Z	frame	Phase gate predicate: all four Phase 3 issues closed + make test-fast green + short train smoke	prove-it-works bar from #156 global directives	gh #156 body	open
-2026-05-31T00:00:00Z	design	Serial spine #147 then #148; parallel lane #149+#150 with #147	execution graph #156 P3-A blocks P3-B; max 2 workers	gh #156 P3 table	open
-2026-05-31T14:00:00Z	p3a	relocated trajectory_shield to jax/shield + game/shield*	phase 3 spine; deduped orbital_position_at_step_jax	make test-fast 339 passed	VERIFIED
-2026-05-31T14:30:00Z	p3c	opponents/constants.py + runtime validation import	eliminate duplicated family allowlist	src/opponents/constants.py make test-fast	VERIFIED
-2026-05-31T14:45:00Z	p3d	promotion_manifest.py shared writer	metric + tournament promotion I/O unified	src/artifacts/promotion_manifest.py tests/test_promotion.py	VERIFIED
-2026-05-31T15:00:00Z	p3b	jax/action_sampling.py extracted from builders	learner shielded sampling ownership tests/test_decoder_carry.py make test-fast	VERIFIED
