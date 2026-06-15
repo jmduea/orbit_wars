@@ -13,9 +13,7 @@ from src.jax.action_sampling import (
 )
 from src.jax.env import JaxAction
 from src.jax.features import TurnBatch, encode_turn
-from src.jax.policy import edge_action_count
 from src.jax.rollout.types import JaxTrainState
-from src.jax.shield import apply_trajectory_shield_to_turn_batch_v2
 from src.opponents.constants import (
     OPPONENT_HISTORICAL,
     OPPONENT_LATEST,
@@ -268,57 +266,22 @@ def _maybe_effective_single_family_id(
     )
 
 
-def _edge_bucket_mask(
-    shielded,
-    cfg: TrainConfig,
-    *,
-    env_count: int,
-) -> jax.Array:
-    edge_count = edge_action_count(cfg.task)
-    return shielded.ship_bucket_mask.reshape(
-        env_count, edge_count, cfg.task.ship_bucket_count
-    )
-
-
-def _shielded_random_edge_action(
-    key: jax.Array,
-    game,
-    batch: TurnBatch,
-    cfg: TrainConfig,
-) -> JaxAction:
-    env_count = batch.planet_features.shape[0]
-    shielded = jax.vmap(
-        lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
-            game_row, batch_row, cfg.task
-        )
-    )(game, batch)
-    return build_random_action_from_edge_batch(
-        key,
-        game,
-        shielded.batch,
-        cfg,
-        _edge_bucket_mask(shielded, cfg, env_count=env_count),
-    )
-
-
-def _shielded_scripted_edge_action(
+def _scripted_edge_action(
     game,
     batch: TurnBatch,
     cfg: TrainConfig,
     builder,
 ) -> JaxAction:
-    env_count = batch.planet_features.shape[0]
-    shielded = jax.vmap(
-        lambda game_row, batch_row: apply_trajectory_shield_to_turn_batch_v2(
-            game_row, batch_row, cfg.task
-        )
-    )(game, batch)
-    return builder(
-        game,
-        shielded.batch,
-        cfg,
-        _edge_bucket_mask(shielded, cfg, env_count=env_count),
-    )
+    return builder(game, batch, cfg)
+
+
+def _random_edge_action(
+    key: jax.Array,
+    game,
+    batch: TurnBatch,
+    cfg: TrainConfig,
+) -> JaxAction:
+    return build_random_action_from_edge_batch(key, game, batch, cfg)
 
 
 def _switch_sample_opponent_family(
@@ -353,20 +316,20 @@ def _switch_sample_opponent_family(
         return historical_action
 
     def random_branch(_: None) -> JaxAction:
-        return _shielded_random_edge_action(random_key, game, batch, cfg)
+        return _random_edge_action(random_key, game, batch, cfg)
 
     def nearest_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
+        return _scripted_edge_action(
             game, batch, cfg, build_sniper_action_from_edge_batch
         )
 
     def turtle_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
+        return _scripted_edge_action(
             game, batch, cfg, build_turtle_action_from_edge_batch
         )
 
     def opportunistic_branch(_: None) -> JaxAction:
-        return _shielded_scripted_edge_action(
+        return _scripted_edge_action(
             game, batch, cfg, build_opportunistic_action_from_edge_batch
         )
 
@@ -763,14 +726,12 @@ def _sample_flat_four_player_actions(
         player_count=player_count,
         env_count=env_count,
     )
-    learner_flat = _broadcast_learner_action_player_major(
-        learner_action, player_count
-    )
+    learner_flat = _broadcast_learner_action_player_major(learner_action, player_count)
 
     if is_noop_jax_training_opponent_mode(cfg.opponents.dispatch):
         flat_action = build_noop_action_from_edge_batch(flat_game, flat_batch, cfg)
     elif cfg.opponents.dispatch == "random":
-        flat_action = _shielded_random_edge_action(key, flat_game, flat_batch, cfg)
+        flat_action = _random_edge_action(key, flat_game, flat_batch, cfg)
     elif cfg.opponents.dispatch == "self":
         flat_action = _sample_flat_self_play_action(
             key,
@@ -909,9 +870,7 @@ def _sample_opponent_player_action(
             opponent_params_by_player=opponent_params_by_player,
         )
     elif cfg.opponents.dispatch == "random":
-        opponent_action = _shielded_random_edge_action(
-            ctx.sample_key, ctx.game, ctx.batch, cfg
-        )
+        opponent_action = _random_edge_action(ctx.sample_key, ctx.game, ctx.batch, cfg)
     else:
         validate_jax_training_opponent_mode(cfg.opponents.dispatch)
         raise AssertionError("unreachable")

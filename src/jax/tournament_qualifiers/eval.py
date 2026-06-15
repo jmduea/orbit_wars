@@ -31,8 +31,8 @@ from src.opponents.jax_actions.builders import (
     build_sniper_action_from_edge_batch,
 )
 from src.opponents.jax_actions.sampling import (
-    _shielded_random_edge_action,
-    _shielded_scripted_edge_action,
+    _random_edge_action,
+    _scripted_edge_action,
 )
 
 LEG_BUILDERS: dict[str, str] = {
@@ -128,9 +128,9 @@ def _opponent_action_for_leg(
     if leg == "noop":
         return build_noop_action_from_edge_batch(game, batch, cfg)
     if leg == "random":
-        return _shielded_random_edge_action(key, game, batch, cfg)
+        return _random_edge_action(key, game, batch, cfg)
     if leg == "nearest_sniper":
-        return _shielded_scripted_edge_action(
+        return _scripted_edge_action(
             game, batch, cfg, build_sniper_action_from_edge_batch
         )
     raise ValueError(f"unknown qualifier leg {leg!r}")

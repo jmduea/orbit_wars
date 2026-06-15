@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import math
 from collections import namedtuple
+from dataclasses import replace
 from typing import Any, Protocol
 
 from src.config import TrainConfig
 from src.game.shield import (
-    filter_moves_with_trajectory_shield,
     is_trajectory_safe_for_launch,
 )
 from src.game.types import parse_observation
@@ -14,15 +14,22 @@ from src.game.types import parse_observation
 Planet = namedtuple(
     "Planet", ["id", "owner", "x", "y", "radius", "ships", "production"]
 )
-DEFAULT_RUNTIME_ENV = TrainConfig().task
+# Tournament/replay baselines run in Kaggle env; do not apply learner shield filtering
+# (cheap shield can reject every sniper angle on some seeds, making baselines noop).
+BASELINE_RUNTIME_ENV = replace(TrainConfig().task, trajectory_shield_mode="off")
 
 
 class OpponentPolicy(Protocol):
-    def act(self, observation: Any) -> list[list[float | int]]: ...
+    def act(
+        self, observation: Any, configuration: Any = None
+    ) -> list[list[float | int]]: ...
 
 
 class SniperOpponent:
-    def act(self, observation: Any) -> list[list[float | int]]:
+    def act(
+        self, observation: Any, configuration: Any = None
+    ) -> list[list[float | int]]:
+        del configuration
         moves: list[list[float | int]] = []
         state = parse_observation(observation)
         player = obs_get(observation, "player", 0)
@@ -47,7 +54,7 @@ class SniperOpponent:
                 int(nearest.id),
                 angle,
                 ships_needed,
-                DEFAULT_RUNTIME_ENV,
+                BASELINE_RUNTIME_ENV,
             ):
                 continue
             moves.append([source.id, angle, ships_needed])
@@ -60,22 +67,22 @@ class KaggleRandomOpponent:
 
         self._agent = random_agent
 
-    def act(self, observation: Any) -> list[list[float | int]]:
-        payload = {
-            "player": obs_get(observation, "player", 0),
-            "planets": list(obs_get(observation, "planets", [])),
-        }
-        state = parse_observation(observation)
-        return filter_moves_with_trajectory_shield(
-            list(self._agent(payload)), state, DEFAULT_RUNTIME_ENV
-        )
+    def act(
+        self, observation: Any, configuration: Any = None
+    ) -> list[list[float | int]]:
+        del configuration
+        # Match Kaggle reference random_agent: no trajectory shield (shield rejects
+        # almost all random angles and makes this baseline identical to noop).
+        return list(self._agent(observation))
 
 
 class NoopOpponent:
     """Pass/no-launch baseline (matches JAX ``opponents.dispatch=noop``)."""
 
-    def act(self, observation: Any) -> list[list[float | int]]:
-        del observation
+    def act(
+        self, observation: Any, configuration: Any = None
+    ) -> list[list[float | int]]:
+        del observation, configuration
         return []
 
 
