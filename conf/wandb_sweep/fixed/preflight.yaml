@@ -5,9 +5,9 @@ parameters:
   task:
     value: rollout_selected_validate
   training:
-    value: 2p4p_32_split
+    value: 4p_32
   training.rollout_steps:
-    value: 256
+    value: 512
   training.total_updates:
     value: 100
   training.reseed_every_updates:
