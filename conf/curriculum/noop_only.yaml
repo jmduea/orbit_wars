@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+enabled: false
+stages:
+  - id: noop_only
+    opponent_families:
+      noop: 1.0

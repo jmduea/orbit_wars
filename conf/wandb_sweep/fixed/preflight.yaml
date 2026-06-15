@@ -14,8 +14,8 @@ parameters:
     value: 100
   training.reseed_every_updates:
     value: 50
-  opponents:
-    value: nearest_only
+  curriculum:
+    value: noop_only
   output.campaign:
     value: preflight
   telemetry:

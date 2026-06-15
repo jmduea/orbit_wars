@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+enabled: false
+stages:
+  - id: latest_only
+    opponent_families:
+      latest: 1.0

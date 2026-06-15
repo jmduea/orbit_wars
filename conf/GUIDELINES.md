@@ -16,7 +16,7 @@ When several groups should change together, pass explicit Hydra overrides:
 
 | Recipe | Overrides |
 | --- | --- |
-| smoke | `training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled` |
+| smoke | `training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled` |
 | shield_cheap | `task=shield_cheap telemetry=default` |
 | shield_tiered | `task=shield_tiered telemetry=default` |
 
@@ -81,7 +81,7 @@ uv run ow train task=shield_cheap print_resolved_config=true
 ### 3. Run a smoke test
 
 ```bash
-uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
+uv run ow train training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled
 ```
 
 ### 4. If running many trials, define

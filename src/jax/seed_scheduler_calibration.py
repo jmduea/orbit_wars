@@ -33,7 +33,6 @@ DEFAULT_BASELINE = "noop"
 SEED_SCHED_TRAIN_BASE: tuple[str, ...] = (
     "training=workstation",
     "task=shield_off",
-    "curriculum=off",
     f"seed={DEFAULT_TRAIN_SEED}",
     "telemetry.wandb.enabled=false",
     "artifacts.artifact_pipeline.enabled=false",
@@ -401,7 +400,7 @@ def run_seed_scheduler_sweep(
         )
         overrides = [
             *SEED_SCHED_TRAIN_BASE,
-            f"opponents={opponent}",
+            f"curriculum={opponent}",
             f"training.total_updates={total_updates}",
             f"training.reseed_every_updates={reseed_interval}",
             f"output.campaign={campaign}",

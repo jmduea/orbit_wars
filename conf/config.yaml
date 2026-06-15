@@ -4,8 +4,6 @@ defaults:
   - reward: default
   - training: default
   - curriculum: default
-  - opponents: default
-  - train_bundle: none
   - telemetry: default
   - artifacts: default
   - _self_

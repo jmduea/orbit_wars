@@ -5,7 +5,7 @@ defaults:
   - command: ow_train
   - method: bayes
   - metric: overall_win_rate
-  - fixed: budget
+  - fixed: no_artifacts
   - space: budget
   - _self_
 

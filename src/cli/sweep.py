@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_KAGGLE_SWEEP = REPO_ROOT / "conf" / "wandb_sweep" / "2p_only_throughput.yaml"
+DEFAULT_KAGGLE_SWEEP = REPO_ROOT / "conf" / "wandb_sweep" / "preflight.yaml"
 
 
 def print_sweep_help() -> None:
@@ -21,10 +21,10 @@ def print_sweep_help() -> None:
         "  list      List recent sweeps for a project (W&B API)\n"
         "  cancel    Cancel active runs in a W&B sweep\n\n"
         "Examples:\n"
-        "  uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/2p_only_throughput.yaml\n"
+        "  uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml\n"
         "  uv run ow make wandb_sweep=shield_cheap_history\n"
         "  uv run ow sweep create --backend wandb --make wandb_sweep=shield_cheap_history\n"
-        "  uv run ow sweep create --backend kaggle --sweep-yaml conf/wandb_sweep/2p_only_throughput.yaml --dry-run\n"
+        "  uv run ow sweep create --backend kaggle --sweep-yaml conf/wandb_sweep/preflight.yaml --dry-run\n"
         "  uv run ow sweep status --backend wandb --sweep-id <id> --project orbit_wars\n\n"
         "Deprecated: bare `wandb sweep` and `ow train kaggle launch --create-sweep` "
         "(still work; prefer `ow sweep create`).\n"
@@ -58,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--sweep-yaml",
         type=Path,
         default=DEFAULT_KAGGLE_SWEEP,
-        help="Packaged sweep YAML for kaggle backend (default conf/wandb_sweep/2p_only_throughput.yaml).",
+        help="Packaged sweep YAML for kaggle backend (default conf/wandb_sweep/preflight.yaml).",
     )
     create.add_argument("--project", default="orbit_wars")
     create.add_argument("--entity", default=None)

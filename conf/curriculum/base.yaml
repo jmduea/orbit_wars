@@ -1,2 +1,9 @@
 enabled: false
+alternate_player_sides: true
 stages: []
+snapshot:
+  pool_size: 0
+  interval_updates: 0
+  deterministic: true
+  selection: uniform
+  fallback: latest

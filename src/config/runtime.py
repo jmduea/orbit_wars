@@ -21,7 +21,6 @@ from .schema import (
     ArtifactsConfig,
     CurriculumConfig,
     ModelConfig,
-    OpponentsConfig,
     RewardConfig,
     TaskConfig,
     TelemetryConfig,
@@ -36,7 +35,6 @@ _RESPONSIBILITY_GROUP_SCHEMAS: dict[str, type] = {
     "reward": RewardConfig,
     "training": TrainingConfig,
     "curriculum": CurriculumConfig,
-    "opponents": OpponentsConfig,
     "telemetry": TelemetryConfig,
     "artifacts": ArtifactsConfig,
 }
@@ -196,6 +194,7 @@ def compose_hydra_train_config(overrides: list[str] | None = None) -> TrainConfi
 
     config_dir = Path(__file__).resolve().parents[2] / "conf"
     override_list = overrides or []
+    _reject_public_opponent_overrides(override_list)
     register_runtime_resolvers()
     register_config_schemas()
     with initialize_config_dir(version_base="1.3", config_dir=str(config_dir)):
@@ -216,6 +215,25 @@ def validate_hydra_overrides(overrides: list[str]) -> None:
 
     if overrides:
         compose_hydra_train_config(overrides)
+
+
+def _reject_public_opponent_overrides(overrides: list[str]) -> None:
+    blocked: list[str] = []
+    for raw in overrides:
+        item = str(raw).strip()
+        normalized = item.lstrip("+~")
+        if normalized == "curriculum=off":
+            blocked.append(item)
+            continue
+        if normalized.startswith("opponents") or normalized.startswith("train_bundle"):
+            blocked.append(item)
+    if blocked:
+        raise ValueError(
+            "Public opponent configuration is curriculum-only. Replace "
+            "`opponents=...`, `train_bundle=...`, and `curriculum=off` with "
+            "`curriculum=<profile>`; blocked overrides: "
+            f"{', '.join(blocked)}."
+        )
 
 
 def config_from_plain(data: dict[str, Any]) -> TrainConfig:
@@ -252,8 +270,71 @@ def train_config_from_omegaconf(
     cfg.training_seed_set = _parse_seed_set(cfg.training_seed_set)
     cfg.eval_seed_set = _parse_seed_set(cfg.eval_seed_set)
     _apply_from_promoted(cfg)
+    _ensure_default_curriculum_stage(cfg)
+    _derive_private_opponents_from_curriculum(cfg)
     _validate_train_config(cfg)
     return cfg
+
+
+def _ensure_default_curriculum_stage(cfg: TrainConfig) -> None:
+    if cfg.curriculum.stages:
+        return
+    cfg.curriculum.enabled = False
+    cfg.curriculum.stages = [
+        {"id": "random_only", "opponent_families": {"random": 1.0}}
+    ]
+
+
+def _stage_family_weights(stage: dict[str, Any]) -> dict[str, float]:
+    weights = dict(stage.get("opponent_families", {}) or {})
+    return {str(key): float(value) for key, value in weights.items()}
+
+
+def _single_static_family(cfg: TrainConfig) -> str | None:
+    curriculum = cfg.curriculum
+    stages = list(curriculum.stages or [])
+    if bool(curriculum.enabled) or len(stages) != 1:
+        return None
+    positive = [
+        family
+        for family, weight in _stage_family_weights(stages[0]).items()
+        if float(weight) > 0.0
+    ]
+    return positive[0] if len(positive) == 1 else None
+
+
+def _curriculum_has_family(cfg: TrainConfig, family: str) -> bool:
+    return any(
+        _stage_family_weights(stage).get(family, 0.0) > 0.0
+        for stage in (cfg.curriculum.stages or [])
+    )
+
+
+def _first_stage_mix_weights(cfg: TrainConfig) -> dict[str, float]:
+    weights = {family: 0.0 for family in _CURRICULUM_FAMILIES}
+    if cfg.curriculum.stages:
+        weights.update(_stage_family_weights(cfg.curriculum.stages[0]))
+    return weights
+
+
+def _derive_private_opponents_from_curriculum(cfg: TrainConfig) -> None:
+    """Populate the legacy runtime cache from the public curriculum profile."""
+
+    static_family = _single_static_family(cfg)
+    if static_family == "noop":
+        cfg.opponents.dispatch = "noop"
+    elif static_family == "random":
+        cfg.opponents.dispatch = "random"
+    else:
+        cfg.opponents.dispatch = "self"
+
+    cfg.opponents.alternate_player_sides = bool(cfg.curriculum.alternate_player_sides)
+    cfg.opponents.mix.weights = _first_stage_mix_weights(cfg)
+    cfg.opponents.mix.temperature = 1.0
+    cfg.opponents.snapshot = cfg.curriculum.snapshot
+    cfg.opponents.self_play.enabled = _curriculum_has_family(
+        cfg, "latest"
+    ) or _curriculum_has_family(cfg, "historical")
 
 
 def _validate_train_config(cfg: TrainConfig) -> None:
@@ -389,29 +470,23 @@ def _validate_train_config(cfg: TrainConfig) -> None:
     validate_curriculum_format_weights(cfg)
     validate_rollout_allocation(cfg)
 
-    opponents = cfg.opponents
-    if not opponents.self_play.enabled:
-        if opponents.snapshot.pool_size != 0:
+    if _curriculum_has_family(cfg, "historical"):
+        if cfg.curriculum.snapshot.pool_size <= 0:
             raise ValueError(
-                "opponents.snapshot.pool_size must be 0 when opponents.self_play.enabled is false."
+                "curriculum historical opponents require curriculum.snapshot.pool_size > 0."
             )
-        if opponents.snapshot.interval_updates != 0:
+        if cfg.curriculum.snapshot.interval_updates <= 0:
             raise ValueError(
-                "opponents.snapshot.interval_updates must be 0 when opponents.self_play.enabled is false."
-            )
-        historical_weight = float(opponents.mix.weights.get("historical", 0.0))
-        if historical_weight > 0.0:
-            raise ValueError(
-                "opponents.mix.weights.historical must be 0 when opponents.self_play.enabled is false."
+                "curriculum historical opponents require curriculum.snapshot.interval_updates > 0."
             )
     else:
-        if opponents.snapshot.pool_size <= 0:
+        if cfg.curriculum.snapshot.pool_size != 0:
             raise ValueError(
-                "opponents.snapshot.pool_size must be > 0 when opponents.self_play.enabled is true."
+                "curriculum.snapshot.pool_size must be 0 when no stage uses historical opponents."
             )
-        if opponents.snapshot.interval_updates <= 0:
+        if cfg.curriculum.snapshot.interval_updates != 0:
             raise ValueError(
-                "opponents.snapshot.interval_updates must be > 0 when opponents.self_play.enabled is true."
+                "curriculum.snapshot.interval_updates must be 0 when no stage uses historical opponents."
             )
 
 
@@ -486,11 +561,6 @@ def _validate_planet_flow_profile(cfg: TrainConfig) -> None:
             f"Unsupported settings: {', '.join(unsupported)}."
         )
 
-    if cfg.curriculum.enabled:
-        raise ValueError(
-            "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs require "
-            "curriculum=off; historical snapshot/self-play support is P1."
-        )
     if cfg.opponents.self_play.enabled:
         raise ValueError(
             "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs do not "
@@ -621,20 +691,22 @@ def _validate_artifact_pipeline_modes(cfg: TrainConfig) -> None:
 
 def _validate_curriculum_config(cfg: TrainConfig) -> None:
     curriculum = cfg.curriculum
-    if not curriculum.enabled:
-        return
     if not curriculum.stages:
         raise ValueError(
-            "curriculum.stages must be non-empty when curriculum.enabled is true."
+            "curriculum.stages must be non-empty."
         )
-    snapshot = cfg.opponents.snapshot
+    if not curriculum.enabled and len(curriculum.stages) != 1:
+        raise ValueError(
+            "static curriculum profiles must set curriculum.enabled=false with exactly one stage."
+        )
+    snapshot = curriculum.snapshot
     if snapshot.selection not in {"uniform", "recent_biased"}:
         raise ValueError(
-            "opponents.snapshot.selection must be 'uniform' or 'recent_biased'."
+            "curriculum.snapshot.selection must be 'uniform' or 'recent_biased'."
         )
     if snapshot.fallback != "latest":
         raise ValueError(
-            "opponents.snapshot.fallback currently supports only 'latest'."
+            "curriculum.snapshot.fallback currently supports only 'latest'."
         )
     seen_ids: set[str] = set()
     for index, stage in enumerate(curriculum.stages):
@@ -680,8 +752,8 @@ def _validate_curriculum_config(cfg: TrainConfig) -> None:
         if float(weights.get("historical", 0.0)) > 0.0:
             if int(snapshot.pool_size) <= 0 or int(snapshot.interval_updates) <= 0:
                 raise ValueError(
-                    "curriculum historical opponents require opponents.snapshot.pool_size > 0 "
-                    "and opponents.snapshot.interval_updates > 0."
+                    "curriculum historical opponents require curriculum.snapshot.pool_size > 0 "
+                    "and curriculum.snapshot.interval_updates > 0."
                 )
         promote_if = stage.get("promote_if")
         if promote_if:

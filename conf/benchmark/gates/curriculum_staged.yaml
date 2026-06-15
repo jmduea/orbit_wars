@@ -25,7 +25,7 @@ train:
     train_overrides:
       - training=planet_flow
       - training.total_updates=500
-      - opponents=random_only
+      - curriculum=random_only
     evaluation:
       min_win_rate_delta: null
       require_planet_flow_control_metrics: true

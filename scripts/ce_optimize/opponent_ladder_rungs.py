@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 LADDER_RUNG_OVERRIDES: dict[str, list[str]] = {
-    "noop": ["train_bundle=opponent_recovery_floor"],
-    "recovery": ["train_bundle=opponent_recovery"],
-    "scripted_heavy": ["train_bundle=scripted_heavy"],
-    "self_play": ["train_bundle=self_play_stage"],
-    "production_mix": ["train_bundle=production_mix"],
+    "noop": ["curriculum=noop_only"],
+    "recovery": ["curriculum=random_only"],
+    "scripted_heavy": ["curriculum=scripted_heavy"],
+    "self_play": ["curriculum=latest_only"],
+    "production_mix": ["curriculum=production_mix"],
 }
 
 LADDER_RUNG_ORDER: tuple[str, ...] = (

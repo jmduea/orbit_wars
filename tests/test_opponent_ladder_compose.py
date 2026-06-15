@@ -61,10 +61,11 @@ def test_scripted_heavy_stage_view_excludes_latest_and_historical() -> None:
     }
     assert probs["latest"] == pytest.approx(0.0)
     assert probs["historical"] == pytest.approx(0.0)
-    assert probs["random"] == pytest.approx(0.25)
-    assert probs["nearest_sniper"] == pytest.approx(0.25)
-    assert probs["turtle"] == pytest.approx(0.25)
-    assert probs["opportunistic"] == pytest.approx(0.25)
+    assert probs["random"] == pytest.approx(0.4)
+    assert probs["nearest_sniper"] == pytest.approx(0.2)
+    assert probs["noop"] == pytest.approx(0.4)
+    assert probs["turtle"] == pytest.approx(0.0)
+    assert probs["opportunistic"] == pytest.approx(0.0)
 
 
 def test_self_play_rung_latest_only() -> None:
@@ -77,7 +78,7 @@ def test_self_play_rung_latest_only() -> None:
 
 def test_production_mix_rung_has_latest_weight_and_snapshot_pool() -> None:
     cfg = compose_hydra_train_config(LADDER_RUNG_OVERRIDES["production_mix"])
-    assert cfg.opponents.snapshot.pool_size > 0
+    assert cfg.opponents.snapshot.pool_size == 0
     assert cfg.curriculum.enabled is True
     view = _stage_view_at_update(cfg)
     assert float(view.family_probs[OPPONENT_LATEST]) > 0.0

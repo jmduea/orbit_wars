@@ -42,7 +42,7 @@ def test_admission_profile_full_geometry_opt_in() -> None:
     assert "training=2p4p_32_split" in overrides
     assert "training.rollout_steps=256" in overrides
     assert "task.candidate_count=3" in overrides
-    assert "opponents=noop_only" in overrides
+    assert "curriculum=noop_only" in overrides
     assert "task=map_pool" in overrides
     assert "training.total_updates=5" in overrides
     assert "telemetry=rollout_phase_timing" not in overrides
@@ -51,7 +51,7 @@ def test_admission_profile_full_geometry_opt_in() -> None:
 def test_profile_config_composes_production_mix_overrides() -> None:
     cfg = compose_profile_config(
         preset="admission",
-        extra_overrides=("opponents=default", "curriculum=production_mix"),
+        extra_overrides=("curriculum=production_mix",),
         updates=20,
         quick=False,
     )
@@ -115,9 +115,7 @@ def test_profile_breakdown_includes_opponent_subphase_details() -> None:
 
 @pytest.mark.jax
 def test_maybe_seed_historical_snapshots_for_production_mix() -> None:
-    cfg = compose_hydra_train_config(
-        ["opponents=default", "curriculum=default", "training.total_updates=1"]
-    )
+    cfg = compose_hydra_train_config(["curriculum=self_play_staged", "training.total_updates=1"])
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(0), policy, cfg)
     pool = init_historical_snapshot_pool(
@@ -136,10 +134,6 @@ def test_maybe_seed_historical_snapshots_skips_without_historical_weight() -> No
     cfg = compose_hydra_train_config(
         [
             "curriculum=scripted_heavy",
-            "opponents=base",
-            "opponents.self_play.enabled=true",
-            "opponents.snapshot.pool_size=2",
-            "opponents.snapshot.interval_updates=10",
             "training.total_updates=1",
         ]
     )

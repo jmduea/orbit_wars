@@ -39,7 +39,7 @@ def _read_resolved_config_snapshot(
         "print_resolved_config=true",
         "training=smoke",
         "training.total_updates=10",
-        "curriculum=off",
+        "curriculum=noop_only",
     ]
     pointer: dict[str, object] = {
         "present": True,

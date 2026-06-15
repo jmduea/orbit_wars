@@ -13,8 +13,7 @@ train:
       - training=2p_16
       - training.rollout_steps=128
       - training.total_updates=300
-      - opponents=random_only
-      - curriculum=off
+      - curriculum=random_only
     evaluation:
       min_win_rate_delta: from_thresholds
 
@@ -25,7 +24,7 @@ train:
     train_overrides:
       - training=planet_flow
       - training.total_updates=300
-      - opponents=random_only
+      - curriculum=random_only
     evaluation:
       min_win_rate_delta: from_thresholds
       require_planet_flow_control_metrics: true

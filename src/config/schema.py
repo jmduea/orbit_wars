@@ -130,6 +130,8 @@ class CurriculumSnapshotConfig:
 class CurriculumConfig:
     enabled: bool = False
     stages: list[dict[str, Any]] = field(default_factory=list)
+    alternate_player_sides: bool = True
+    snapshot: CurriculumSnapshotConfig = field(default_factory=CurriculumSnapshotConfig)
 
 
 @dataclass(slots=True)

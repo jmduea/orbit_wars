@@ -4,8 +4,8 @@
 parameters:
   training:
     values: [2p_32, 4p_32, 2p4p_64_split]
-  opponents:
-    values: [noop_only, self_play_only]
+  curriculum:
+    values: [noop_only, latest_only]
   training.rollout_steps:
     values: [64, 128, 256, 512, 768, 1024]
   training.rollout_microbatch_envs:

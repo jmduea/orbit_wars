@@ -299,8 +299,7 @@ def calibration_train_overrides(
         f"training={training_profile}",
         *rollout_steps,
         f"training.total_updates={total_updates}",
-        f"opponents={opponent}",
-        "curriculum=off",
+        f"curriculum={opponent}",
         *PREFLIGHT_TRAIN_BASE,
         *ppo_profile,
         *(

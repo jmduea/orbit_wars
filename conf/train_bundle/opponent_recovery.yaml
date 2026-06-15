@@ -1,5 +1,0 @@
-# @package _global_
-defaults:
-  - override /opponents: throughput_recovery
-  - override /curriculum: "off"
-  - _self_

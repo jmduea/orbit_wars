@@ -24,9 +24,8 @@ from src.jax.preflight_calibration import (
 PLANET_FLOW_SMOKE_TRAIN_BASE: tuple[str, ...] = (
     "model=planet_flow_target_heatmap",
     "training=planet_flow",
-    "opponents=noop_only",
+    "curriculum=noop_only",
     "training.total_updates=200",
-    "curriculum=off",
     "telemetry.wandb.enabled=false",
     "artifacts=planet_flow_proof",
     "artifacts.artifact_pipeline.enabled=true",

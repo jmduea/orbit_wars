@@ -15,11 +15,11 @@ def test_load_gate_yaml_includes_train_section() -> None:
     assert "planet_flow_target_heatmap" in train
 
 
-def test_build_gate_spec_matches_legacy_beat_noop_overrides() -> None:
+def test_build_gate_spec_uses_curriculum_only_beat_noop_overrides() -> None:
     spec = build_gate_spec("beat_noop", model="transformer_factorized_small")
     assert spec.gate_id == "beat_noop"
     assert "model=transformer_factorized_small" in spec.train_overrides
-    assert "opponents=noop_only" in spec.train_overrides
+    assert "curriculum=noop_only" in spec.train_overrides
     assert "training.total_updates=200" in spec.train_overrides
     assert spec.min_win_rate_delta is not None
 

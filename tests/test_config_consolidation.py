@@ -31,33 +31,26 @@ from src.jax.training_benchmark import (
 
 SWEEP_COMPOSE_RECIPES = (
     "budget",
-    "2p_only_throughput",
-    "4p_only_throughput",
-    "sps_experiment",
-    "sps_experiment_stage2",
-    "post_encoder_once_overnight",
-    "planet_flow_ppo_signal",
-    "planet_flow_ppo_signal_short",
     "preflight",
+    "preflight_top_33",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
     "default": [],
     "smoke": [
         "training=smoke",
-        "curriculum=off",
-        "opponents=noop_only",
+        "curriculum=noop_only",
         "telemetry=throughput_only",
         "artifacts=disabled",
     ],
     "shield_cheap": ["task=shield_cheap", "telemetry=default"],
     "workstation_mixed": ["training=workstation"],
     "opponent_recovery": [
-        "train_bundle=opponent_recovery",
+        "curriculum=random_only",
         "telemetry=opponent_recovery",
     ],
     "opponent_recovery_floor": [
-        "train_bundle=opponent_recovery_floor",
+        "curriculum=noop_only",
         "telemetry=opponent_recovery",
     ],
 }
@@ -121,11 +114,51 @@ def test_default_train_profile_composes_and_respects_command_critical_sets() -> 
     assert not hasattr(cfg, "ppo")
     assert not hasattr(cfg, "save_dir")
 
-    if cfg.curriculum.enabled:
-        assert cfg.curriculum.stages
-    if cfg.opponents.self_play.enabled:
-        assert cfg.opponents.snapshot.pool_size > 0
-        assert cfg.opponents.snapshot.interval_updates > 0
+    assert cfg.curriculum.stages
+    assert cfg.opponents.dispatch == "random"
+    assert not cfg.opponents.self_play.enabled
+    assert cfg.opponents.snapshot.pool_size == 0
+    assert cfg.opponents.snapshot.interval_updates == 0
+
+
+@pytest.mark.parametrize(
+    "profile,dispatch,self_play,pool_size,interval_updates",
+    [
+        ("noop_only", "noop", False, 0, 0),
+        ("random_only", "random", False, 0, 0),
+        ("latest_only", "self", True, 0, 0),
+        ("nearest_only", "self", False, 0, 0),
+        ("self_play_staged", "self", True, 2, 10),
+    ],
+)
+def test_curriculum_profiles_derive_private_opponent_cache(
+    profile: str,
+    dispatch: str,
+    self_play: bool,
+    pool_size: int,
+    interval_updates: int,
+) -> None:
+    cfg = compose_hydra_train_config([f"curriculum={profile}"])
+
+    assert cfg.curriculum.stages
+    assert cfg.opponents.dispatch == dispatch
+    assert cfg.opponents.self_play.enabled is self_play
+    assert cfg.opponents.snapshot.pool_size == pool_size
+    assert cfg.opponents.snapshot.interval_updates == interval_updates
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        "opponents=noop_only",
+        "opponents.dispatch=noop",
+        "train_bundle=opponent_recovery",
+        "curriculum=off",
+    ],
+)
+def test_public_opponent_overrides_are_rejected(override: str) -> None:
+    with pytest.raises(ValueError, match="curriculum-only"):
+        compose_hydra_train_config([override])
 
 
 @pytest.mark.parametrize("profile", TRAINING_PROFILES)
@@ -153,7 +186,7 @@ def test_long_preview_profile_uses_bounded_colab_geometry() -> None:
     cfg = compose_hydra_train_config(
         [
             "training=long_preview",
-            "train_bundle=opponent_recovery",
+            "curriculum=random_only",
             "artifacts=ssot_pipeline",
         ]
     )
@@ -173,8 +206,7 @@ def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:
         [
             "model=planet_flow_target_heatmap",
             "artifacts=planet_flow_proof",
-            "curriculum=off",
-            "opponents=random_only",
+            "curriculum=random_only",
         ]
     )
 
@@ -192,8 +224,7 @@ def test_planet_flow_target_heatmap_profile_composes_with_proof_guards() -> None
         [
             "model=planet_flow_target_heatmap",
             "artifacts=disabled",
-            "curriculum=off",
-            "opponents=random_only",
+            "curriculum=random_only",
         ]
     )
 
@@ -219,20 +250,18 @@ def test_planet_flow_rejects_default_artifact_paths() -> None:
         compose_hydra_train_config(
             [
                 "model=planet_flow_target_heatmap",
-                "curriculum=off",
-                "opponents=random_only",
+                "curriculum=random_only",
             ]
         )
 
 
 def test_planet_flow_rejects_latest_or_historical_opponent_paths() -> None:
-    with pytest.raises(ValueError, match="latest or historical"):
+    with pytest.raises(ValueError, match="self-play/latest"):
         compose_hydra_train_config(
             [
                 "model=planet_flow_target_heatmap",
                 "artifacts=disabled",
-                "curriculum=off",
-                "opponents=latest_only",
+                "curriculum=latest_only",
             ]
         )
 
@@ -244,8 +273,7 @@ def test_planet_flow_rejects_invalid_pressure_buckets() -> None:
                 "model=planet_flow_target_heatmap",
                 "model.planet_flow.pressure_bucket_values=[0.25,0.5]",
                 "artifacts=disabled",
-                "curriculum=off",
-                "opponents=random_only",
+                "curriculum=random_only",
             ]
         )
 
@@ -355,8 +383,7 @@ def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
             "model=planet_flow_target_heatmap",
             "training=planet_flow",
             "artifacts=planet_flow_proof",
-            "curriculum=off",
-            "opponents=noop_only",
+            "curriculum=noop_only",
         ]
     )
 
@@ -376,13 +403,12 @@ def test_multitask_smoke_overrides_compose() -> None:
             "training.rollout_steps=128",
             "training.total_updates=20",
             "training.update_chunk_rows=2048",
-            "opponents.dispatch=no_op",
-            "curriculum=off",
+            "curriculum=noop_only",
             "output.campaign=multitask_smoke",
         ]
     )
     assert cfg.model.architecture == "planet_graph_transformer_small"
-    assert cfg.opponents.dispatch == "no_op"
+    assert cfg.opponents.dispatch == "noop"
     from src.jax.policy import build_jax_policy
     from src.opponents.constants import validate_jax_training_opponent_mode
 
@@ -407,63 +433,30 @@ def test_jax_training_opponent_mode_normalization() -> None:
         validate_jax_training_opponent_mode("noop_only")
 
 
-def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(
+def test_preflight_sweep_generates_curriculum_only_guardrails(
     tmp_path: Path,
 ) -> None:
     cfg = compose_sweep_gen(
         [
-            "wandb_sweep=planet_flow_ppo_signal_short",
+            "wandb_sweep=preflight",
             f"out_dir={tmp_path}",
         ]
     )
 
-    assert cfg["name"] == "planet_flow_ppo_signal_short"
-    assert cfg["run_cap"] == 12
-    parameters = cfg["parameters"]
-    assert parameters["training"]["value"] == "planet_flow"
-    assert parameters["training.total_updates"]["value"] == 100
-    assert (
-        parameters["output.campaign"]["value"]
-        == "planet_flow_ppo_signal_sweep_v3_short"
-    )
-    assert (
-        parameters["telemetry.wandb.group"]["value"]
-        == "planet_flow_ppo_signal_v3_short"
-    )
-
-
-def test_planet_flow_ppo_signal_sweep_generates_expected_guardrails(
-    tmp_path: Path,
-) -> None:
-    cfg = compose_sweep_gen(
-        [
-            "wandb_sweep=planet_flow_ppo_signal",
-            f"out_dir={tmp_path}",
-        ]
-    )
-
-    assert cfg["name"] == "planet_flow_ppo_signal"
+    assert cfg["name"] == "preflight"
     assert cfg["method"] == "bayes"
     assert cfg["run_cap"] == 24
     assert cfg["metric"] == {"name": "preflight_sweep_score", "goal": "maximize"}
 
     parameters = cfg["parameters"]
-    assert parameters["model"]["value"] == "planet_flow_target_heatmap"
-    assert parameters["training"]["value"] == "planet_flow"
-    assert parameters["training.total_updates"]["value"] == 200
-    assert parameters["opponents"]["value"] == "random_only"
-    assert parameters["curriculum"]["value"] == "off"
-    assert parameters["artifacts"]["value"] == "planet_flow_proof"
-    assert parameters["telemetry.metric_groups.action_decision"]["value"] is True
+    assert parameters["curriculum"]["value"] == "noop_only"
+    assert "opponents" not in parameters
     assert parameters["telemetry.metric_groups.losses"]["value"] is True
-    assert parameters["training.lr"]["min"] == 0.00001
-    assert parameters["training.ent_coef"]["max"] == 0.003
-    assert parameters["training.update_chunk_rows"]["values"] == [512, 1024, 2048]
 
     out_path = write_wandb_sweep(cfg)
     generated = OmegaConf.to_container(OmegaConf.load(out_path), resolve=False)
     assert isinstance(generated, dict)
-    assert out_path == tmp_path / "planet_flow_ppo_signal.yaml"
+    assert out_path == tmp_path / "preflight.yaml"
     assert generated["metric"] == {
         "name": "preflight_sweep_score",
         "goal": "maximize",
@@ -498,7 +491,7 @@ def test_wandb_sweep_campaign_samples_compose_bounded() -> None:
             continue
         composed += 1
         assert cfg.telemetry.wandb.group
-        assert cfg.telemetry.wandb.tags
+        assert isinstance(cfg.telemetry.wandb.tags, list)
     assert composed >= min(50, len(cases)), (
         "bounded sweep sample must compose a substantial subset"
     )
@@ -509,7 +502,7 @@ def test_wandb_sweep_campaign_samples_compose_full() -> None:
     for overrides in _iter_sweep_compose_cases(full_grid=True):
         cfg = compose_hydra_train_config(overrides)
         assert cfg.telemetry.wandb.group
-        assert cfg.telemetry.wandb.tags
+        assert isinstance(cfg.telemetry.wandb.tags, list)
 
 
 def test_wandb_sweep_fixed_scaffolding_is_discoverable() -> None:

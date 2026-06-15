@@ -52,12 +52,15 @@ def _curriculum_config(stages):
     return cfg
 
 
-def test_default_hydra_config_keeps_curriculum_off_on_integration():
+def test_default_hydra_config_uses_static_random_curriculum_on_integration():
     cfg = compose_hydra_train_config(["training.total_updates=1"])
 
     assert cfg.curriculum.enabled is False
-    assert cfg.curriculum.stages == []
-    assert cfg.opponents.snapshot.pool_size == 2
+    assert cfg.curriculum.stages == [
+        {"id": "random_only", "opponent_families": {"random": 1.0}}
+    ]
+    assert cfg.opponents.dispatch == "random"
+    assert cfg.opponents.snapshot.pool_size == 0
 
 
 def test_curriculum_rejects_unknown_family():

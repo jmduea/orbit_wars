@@ -353,7 +353,6 @@ def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
         {
             "model": "transformer_factorized",
             "training": "2p4p_16_rotate",
-            "opponents": "self_play_curriculum",
             "curriculum": "self_play_staged",
             "training.lr": 0.0003,
             "kaggle_worker.selected_overrides": ["ignored=true"],
@@ -362,7 +361,6 @@ def test_kaggle_worker_config_to_overrides_includes_hydra_groups() -> None:
 
     assert "model=transformer_factorized" in overrides
     assert "training=2p4p_16_rotate" in overrides
-    assert "opponents=self_play_curriculum" in overrides
     assert "curriculum=self_play_staged" in overrides
     assert "training.lr=0.0003" in overrides
     assert all(not item.startswith("kaggle_worker.") for item in overrides)

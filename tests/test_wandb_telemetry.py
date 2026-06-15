@@ -157,12 +157,12 @@ def test_derive_config_group_tags_from_choices() -> None:
         choices={
             "model": "transformer_factorized",
             "training": "2p4p_32_split",
-            "opponents": "random",
+            "curriculum": "random_only",
         },
     )
     assert tags == [
+        "curriculum:random_only",
         "model:transformer_factorized",
-        "opponents:random",
         "training:2p4p_32_split",
     ]
 

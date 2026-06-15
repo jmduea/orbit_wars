@@ -1,5 +1,0 @@
-# @package _global_
-defaults:
-  - override /opponents: self_play_curriculum
-  - override /curriculum: production_mix
-  - _self_

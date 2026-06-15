@@ -3,6 +3,9 @@ defaults:
   - _self_
 
 enabled: true
+snapshot:
+  pool_size: 2
+  interval_updates: 10
 stages:
   - id: soft_start
     min_updates: 500

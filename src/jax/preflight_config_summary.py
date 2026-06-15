@@ -43,7 +43,6 @@ def format_gate_train_config_summary(overrides: list[str]) -> tuple[str, ...]:
         for player_count, weight in sorted(format_weights.items())
     )
     training_group = _last_group_override(overrides, "training") or "(defaults)"
-    opponents = _last_group_override(overrides, "opponents") or "(default mix)"
     task_group = _last_group_override(overrides, "task") or "(defaults)"
 
     return (
@@ -51,7 +50,6 @@ def format_gate_train_config_summary(overrides: list[str]) -> tuple[str, ...]:
         f"  model: {_model_label(cfg, overrides)}",
         f"  training group: {training_group}",
         f"  task group: {task_group}",
-        f"  opponents: {opponents}",
         f"  curriculum: {_curriculum_label(cfg, overrides)}",
         "  geometry:",
         f"    num_envs={training.num_envs}  format_weights={{{format_line}}}",

@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+enabled: false
+stages:
+  - id: nearest_only
+    opponent_families:
+      nearest_sniper: 1.0

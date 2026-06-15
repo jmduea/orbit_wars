@@ -55,7 +55,7 @@ from src.training.curriculum import CurriculumController
 METRIC_KEYS = ("policy_loss", "value_loss", "approx_kl", "entropy", "total_loss")
 ROLLOUT_KEYS = ("mean_active_launches_per_turn", "overall_win_rate")
 
-# Workstation validation profile: no curriculum, pure self-play (stability gate).
+# Workstation validation profile: static latest self-play (stability gate).
 WORKSTATION_VALIDATION_OVERRIDES = [
     "model=transformer_factorized",
     "training=2p4p_32_split",
@@ -64,8 +64,7 @@ WORKSTATION_VALIDATION_OVERRIDES = [
     "training.update_chunk_rows=2048",
     "training.enable_gradient_checkpointing=true",
     "training.lean_rollout_metrics=true",
-    "opponents=self_play_only",
-    "curriculum=off",
+    "curriculum=latest_only",
     "telemetry.wandb.enabled=false",
     "artifacts.artifact_pipeline.enabled=false",
     "seed=42",
@@ -73,8 +72,7 @@ WORKSTATION_VALIDATION_OVERRIDES = [
 
 DEFAULT_OVERRIDES = [
     "model=transformer_factorized",
-    "opponents=self_play_only",
-    "curriculum=off",
+    "curriculum=latest_only",
     "seed=42",
 ]
 

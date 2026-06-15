@@ -71,7 +71,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 ## Train
 
 ```bash
-uv run ow train training=smoke training.total_updates=10 curriculum=off
+uv run ow train training=smoke training.total_updates=10 curriculum=noop_only
 uv run ow train print_resolved_config=true
 uv run ow train kaggle preflight
 ```
@@ -201,7 +201,7 @@ uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoi
 | 2 | Preliminary tests | `make test-fast` (blocks GPU/Docker on failure) |
 | 3a | W&B short preflight | `uv run ow make wandb_sweep=preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml` → `wandb agent …`; objective `preflight_sweep_score` with recovery-window and entropy-retention guardrails |
 | 3b | Random proof | `uv run ow benchmark gate run beat_random --out /tmp/beat_random.json` for the selected config; do not long-run a noop-only winner |
-| 3c | Bounded preview | `uv run ow train training=long_preview train_bundle=opponent_recovery artifacts=ssot_pipeline telemetry.wandb.enabled=true telemetry.metric_groups.action_decision=true` before any 2000+ update Colab run |
+| 3c | Bounded preview | `uv run ow train training=long_preview curriculum=random_only artifacts=ssot_pipeline telemetry.wandb.enabled=true telemetry.metric_groups.action_decision=true` before any 2000+ update Colab run |
 | 4 | Packaging validation | `uv run ow eval package --checkpoint <sweep_winner.pkl> --output-dir <dir> --validate-docker --packaging-seed 0 --packaging-player-count 4` → stdout JSON `"ok": true` |
 | 5 | Long train | `uv run ow train artifacts=ssot_pipeline telemetry.wandb.enabled=true …` (≤500M env steps; W&B on) |
 | — | Tournament qualifiers (JAX) | *U5 planned* — checkpoint-tick held-out eval on `eval_seed_set` only |
@@ -321,7 +321,7 @@ make help
 
 **Short train smoke after CLI change**
 
-> Run `uv run ow train training=smoke training.total_updates=5 curriculum=off task=shield_off` and confirm `orbit_train_start` / `orbit_train_complete` lines and `logs/*_jax.jsonl` under the run dir.
+> Run `uv run ow train training=smoke training.total_updates=5 curriculum=noop_only task=shield_off` and confirm `orbit_train_start` / `orbit_train_complete` lines and `logs/*_jax.jsonl` under the run dir.
 
 **Validate checkpoint for submission (SSOT spine when #211-bound)**
 

@@ -61,7 +61,7 @@ ent_coef: 0.005
 Examples:
 
 ```bash
-uv run ow train training=smoke_2p_16 curriculum=off opponents=noop_only
+uv run ow train training=smoke_2p_16 curriculum=noop_only
 uv run ow train training=workstation
 uv run ow train training=2p4p_32_split training.total_updates=2
 ```

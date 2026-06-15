@@ -69,7 +69,7 @@ class CurriculumController:
         self.snapshot_selection = str(getattr(snapshot_cfg, "selection", "uniform"))
         self.static_format_weights = dict(static_format_weights or {2: 1.0, 4: 1.0})
         raw_stages = list(getattr(curriculum_cfg, "stages", []) or [])
-        if not self.enabled or not raw_stages:
+        if not raw_stages:
             raw_stages = [
                 {
                     "id": "default_latest",

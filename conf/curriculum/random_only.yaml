@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+enabled: false
+stages:
+  - id: random_only
+    opponent_families:
+      random: 1.0

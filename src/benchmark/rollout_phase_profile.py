@@ -51,8 +51,7 @@ ADMISSION_PROFILE_OVERRIDES: tuple[str, ...] = (
     "training=2p4p_32_split",
     "training.rollout_steps=256",
     "task.candidate_count=3",
-    "opponents=noop_only",
-    "curriculum=off",
+    "curriculum=noop_only",
     "artifacts.replay.enabled=false",
     "artifacts.artifact_pipeline.enabled=false",
 )

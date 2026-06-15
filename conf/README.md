@@ -7,7 +7,7 @@ This folder contains the Hydra configuration system for Orbit Wars training, eva
 The intended workflow is:
 
 ```bash
-uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
+uv run ow train training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled
 uv run ow train task=shield_cheap
 uv run ow train print_resolved_config=true
 ```
@@ -28,20 +28,20 @@ Common multi-group launches use direct Hydra overrides instead of preset bundles
 
 | Recipe | Overrides |
 | --- | --- |
-| smoke | `training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled` |
+| smoke | `training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled` |
 | shield_cheap | `task=shield_cheap telemetry=default` |
 | shield_tiered | `task=shield_tiered telemetry=default` |
-| opponent recovery | `train_bundle=opponent_recovery telemetry=opponent_recovery` |
-| opponent noop floor | `train_bundle=opponent_recovery_floor telemetry=opponent_recovery` |
-| production mix | `train_bundle=production_mix` |
+| opponent recovery | `curriculum=random_only telemetry=opponent_recovery` |
+| opponent noop floor | `curriculum=noop_only telemetry=opponent_recovery` |
+| production mix | `curriculum=production_mix` |
 
 Examples:
 
 ```bash
-uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled
+uv run ow train training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled
 uv run ow train task=shield_cheap
 uv run ow train task=shield_tiered telemetry=shield_debug
-uv run ow train task=map_pool opponents=throughput_recovery telemetry=opponent_recovery
+uv run ow train task=map_pool curriculum=random_only telemetry=opponent_recovery
 ```
 
 ---
@@ -97,7 +97,6 @@ defaults:
   - training: default
   - format: default
   - curriculum: default
-  - opponents: default
   - telemetry: default
   - artifacts: default
   - _self_
@@ -195,7 +194,7 @@ Follow links to readme's for more info
 ### **Smoke test**
 
 ```bash
-uv run ow train training=smoke format=2p_16env curriculum=off opponents=noop_only telemetry=throughput_only artifacts=disabled print_resolved_config=true
+uv run ow train training=smoke format=2p_16env curriculum=noop_only telemetry=throughput_only artifacts=disabled print_resolved_config=true
 ```
 
 ### **Cheap shield training**
@@ -207,10 +206,10 @@ uv run ow train task=shield_cheap
 ### **Opponent throughput recovery**
 
 ```bash
-uv run ow train task=map_pool opponents=throughput_recovery telemetry=opponent_recovery
+uv run ow train task=map_pool curriculum=random_only telemetry=opponent_recovery
 ```
 
-Use `opponents=throughput_recovery_floor` for the direct noop lower bound.
+Use `curriculum=noop_only` for the direct noop lower bound.
 
 ### **Tiered shield debug**
 

@@ -23,7 +23,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GATES_DIR = REPO_ROOT / "conf" / "benchmark" / "gates"
 
 PLANET_FLOW_TRAIN_BASE: tuple[str, ...] = (
-    "curriculum=off",
     "telemetry.metric_groups.action_decision=true",
     *PREFLIGHT_TRAIN_BASE,
     "artifacts=planet_flow_proof",

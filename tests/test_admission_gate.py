@@ -94,7 +94,7 @@ def test_admission_gate_recipe_includes_operator_locked_overrides() -> None:
 def test_admission_gate_train_overrides_match_beat_noop_plus_recipe() -> None:
     overrides = admission_gate_train_overrides()
     assert "training.rollout_steps=256" in overrides
-    assert "opponents=noop_only" in overrides
+    assert "curriculum=noop_only" in overrides
     assert "training=2p4p_32_split" in overrides
 
 
