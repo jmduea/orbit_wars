@@ -1,5 +1,0 @@
-# @package _global_
-defaults:
-  - override /opponents: self_play_curriculum
-  - override /curriculum: self_play_only_stage
-  - _self_
