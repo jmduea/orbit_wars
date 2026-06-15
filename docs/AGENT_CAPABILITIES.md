@@ -65,7 +65,7 @@ Operator actions agents should use (same CLI as humans). **Maintain this table w
 
 | Tier | Examples | Use when |
 |------|----------|----------|
-| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb`, `ow make wandb_sweep=ssot_preflight`, `ow eval package --packaging-seed 0 --packaging-player-count 4` | Inspect or mutate one artifact; compose in agent scripts |
+| **Primitive** | `ow runs list`, `ow runs watch`, `ow runs archive`, `ow runs checkpoint delete`, `ow eval status`, `ow eval results list`, `ow eval jobs cancel`, `ow promote show`, `ow promote demote`, `ow benchmark gate run beat_noop`, `ow benchmark gate run beat_random`, `ow benchmark gate run curriculum_staged`, `ow benchmark tournament-proof`, `ow benchmark factorized-sampler`, `ow sweep create --backend wandb\|kaggle`, `ow sweep cancel --backend wandb`, `ow make wandb_sweep=preflight`, `ow eval package --packaging-seed 0 --packaging-player-count 4` | Inspect or mutate one artifact; compose in agent scripts |
 | **Workflow** | `ow benchmark learn-proof`, `make preflight-learn-proof`, `ow train ... artifacts=hybrid_promotion` | Human/CI end-to-end gates; **legacy** until SSOT U8 teardown — prefer SSOT spine + primitives for agent loops |
 
 ## Train
@@ -199,9 +199,9 @@ uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoi
 |------|--------|----------------|
 | 1 | Config setup | `uv run ow train print_resolved_config=true` |
 | 2 | Preliminary tests | `make test-fast` (blocks GPU/Docker on failure) |
-| 3 | W&B short preflight | `uv run ow make wandb_sweep=preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml` → `wandb agent …`; objective `preflight_sweep_score` (Gates 2–3 floors from calibration JSON) |
-
-| 3 | W&B short preflight | `uv run ow make wandb_sweep=ssot_preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml` → `wandb agent …`; objective `preflight_sweep_score` (Gates 2–3 floors from calibration JSON) |
+| 3a | W&B short preflight | `uv run ow make wandb_sweep=preflight` → `uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml` → `wandb agent …`; objective `preflight_sweep_score` with recovery-window and entropy-retention guardrails |
+| 3b | Random proof | `uv run ow benchmark gate run beat_random --out /tmp/beat_random.json` for the selected config; do not long-run a noop-only winner |
+| 3c | Bounded preview | `uv run ow train training=long_preview train_bundle=opponent_recovery artifacts=ssot_pipeline telemetry.wandb.enabled=true telemetry.metric_groups.action_decision=true` before any 2000+ update Colab run |
 | 4 | Packaging validation | `uv run ow eval package --checkpoint <sweep_winner.pkl> --output-dir <dir> --validate-docker --packaging-seed 0 --packaging-player-count 4` → stdout JSON `"ok": true` |
 | 5 | Long train | `uv run ow train artifacts=ssot_pipeline telemetry.wandb.enabled=true …` (≤500M env steps; W&B on) |
 | — | Tournament qualifiers (JAX) | *U5 planned* — checkpoint-tick held-out eval on `eval_seed_set` only |
@@ -213,12 +213,11 @@ uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoi
 **SSOT preflight sweep (step 3) — copy-paste:**
 
 ```bash
-uv run ow make wandb_sweep=ssot_preflight
-uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/ssot_preflight.yaml
+uv run ow make wandb_sweep=preflight
+uv run ow sweep create --backend wandb --yaml outputs/_meta/sweeps/preflight.yaml
 # Agent: uv run wandb agent <entity>/<project>/<sweep_id>
-# Pick winner from W&B (Gates 2–3 pass + preflight_sweep_score); no local config registry.
-
-# Pick winner from W&B (Gates 2–3 pass + preflight_sweep_score); no local config registry.
+# Pick winner from W&B only after preflight_sweep_score, entropy_retention_ratio_10,
+# and win_rate_best_window_mean_10 are present in the run history.
 ```
 
 **Packaging on sweep winner (step 4) — copy-paste:**

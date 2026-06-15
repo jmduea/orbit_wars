@@ -42,6 +42,8 @@ KNOWN_SWEEP_OBJECTIVE_METRIC_NAMES: frozenset[str] = frozenset(
         "win_rate_best_window_mean_10",
         "approx_kl_window_mean",
         "entropy_window_mean",
+        "entropy_delta_10",
+        "entropy_retention_ratio_10",
     }
 )
 

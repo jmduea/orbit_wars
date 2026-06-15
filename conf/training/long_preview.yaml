@@ -1,0 +1,7 @@
+defaults:
+  - 2p4p_32_split
+  - _self_
+
+total_updates: 500
+rollout_steps: 256
+reseed_every_updates: 25

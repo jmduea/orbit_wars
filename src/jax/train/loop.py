@@ -67,11 +67,12 @@ from src.jax.train.snapshots import (
 )
 from src.jax.train.state import init_train_state, validate_policy_param_shapes
 from src.jax.train.sweep_score import (
+    EntropyTrendTracker,
     MetricWindowTracker,
     WinRateTrendTracker,
     collect_planet_flow_sweep_metrics,
-    collect_ssot_preflight_sweep_metrics,
-    is_ssot_preflight_sweep,
+    collect_preflight_sweep_metrics,
+    is_preflight_sweep,
     planet_flow_max_post_mask_unreachable_rate,
 )
 from src.jax.train.telemetry import (
@@ -211,11 +212,12 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
     phase_events: list[dict[str, object]] = []
     train_start_time = time.perf_counter()
     track_planet_flow_sweep = is_planet_flow_pointer_decoder(cfg.model)
-    track_ssot_preflight_sweep = is_ssot_preflight_sweep(cfg)
-    track_learning_signal_sweep = track_planet_flow_sweep or track_ssot_preflight_sweep
+    track_preflight_sweep = is_preflight_sweep(cfg)
+    track_learning_signal_sweep = track_planet_flow_sweep or track_preflight_sweep
     win_rate_trend = WinRateTrendTracker() if track_learning_signal_sweep else None
     approx_kl_window = MetricWindowTracker() if track_learning_signal_sweep else None
     entropy_window = MetricWindowTracker() if track_learning_signal_sweep else None
+    entropy_trend = EntropyTrendTracker() if track_preflight_sweep else None
     planet_flow_unreachable_ceiling = (
         planet_flow_max_post_mask_unreachable_rate(
             load_thresholds(
@@ -489,13 +491,14 @@ def run_jax_training(cfg: TrainConfig, resume_checkpoint: str | None = None) -> 
             phase_events = []
             planet_flow_sweep_metrics: dict[str, float] = {}
             if win_rate_trend is not None:
-                if track_ssot_preflight_sweep:
-                    planet_flow_sweep_metrics = collect_ssot_preflight_sweep_metrics(
+                if track_preflight_sweep:
+                    planet_flow_sweep_metrics = collect_preflight_sweep_metrics(
                         win_rate_trend=win_rate_trend,
                         approx_kl_window=approx_kl_window,
                         entropy_window=entropy_window,
                         overall_win_rate=overall_win_rate,
                         metrics_host=metrics_host,
+                        entropy_trend=entropy_trend,
                     )
                 elif (
                     track_planet_flow_sweep

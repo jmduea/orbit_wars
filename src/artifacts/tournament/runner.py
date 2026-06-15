@@ -33,6 +33,20 @@ def reward_to_result(reward: float) -> str:
     return "draw"
 
 
+def challenger_won_2p(outcome: MatchOutcome, challenger_id: str) -> bool:
+    """True when challenger strictly beat the sole opponent (ties do not count)."""
+
+    if len(outcome.agent_ids) != 2:
+        return False
+    left, right = outcome.agent_ids
+    if challenger_id not in (left, right):
+        return False
+    opponent_id = right if challenger_id == left else left
+    challenger_reward = float(outcome.rewards.get(challenger_id, 0.0))
+    opponent_reward = float(outcome.rewards.get(opponent_id, 0.0))
+    return challenger_reward > opponent_reward
+
+
 def normalize_baseline_name(name: str) -> str:
     """Map curriculum family ids to Python runtime opponent names."""
 
@@ -65,7 +79,8 @@ def build_checkpoint_agent(
     if isinstance(params, dict) and "params" in params and len(params) == 1:
         params = params["params"]
     cfg = apply_feature_metadata_to_model_config(
-        cfg, checkpoint_feature_metadata(checkpoint),
+        cfg,
+        checkpoint_feature_metadata(checkpoint),
         allow_planet_flow=True,
     )
     policy = build_jax_policy(cfg=cfg)
@@ -108,7 +123,9 @@ def _agent_action(
     return agent.act(observation)
 
 
-def _placements_from_rewards(agent_ids: Sequence[str], rewards: dict[str, float]) -> dict[str, int]:
+def _placements_from_rewards(
+    agent_ids: Sequence[str], rewards: dict[str, float]
+) -> dict[str, int]:
     ranked = sorted(
         agent_ids,
         key=lambda agent_id: (-rewards.get(agent_id, 0.0), agent_id),

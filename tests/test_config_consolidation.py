@@ -38,7 +38,7 @@ SWEEP_COMPOSE_RECIPES = (
     "post_encoder_once_overnight",
     "planet_flow_ppo_signal",
     "planet_flow_ppo_signal_short",
-    "ssot_preflight",
+    "preflight",
 )
 
 PRIMARY_TRAIN_PROFILES: dict[str, list[str]] = {
@@ -157,6 +157,25 @@ def test_hybrid_promotion_artifacts_profile_composes() -> None:
     assert not cfg.artifacts.artifact_pipeline.docker_validation_async
     assert not cfg.artifacts.artifact_pipeline.replay_async
     assert not cfg.artifacts.replay.enabled
+
+
+def test_long_preview_profile_uses_bounded_colab_geometry() -> None:
+    cfg = compose_hydra_train_config(
+        [
+            "training=long_preview",
+            "train_bundle=opponent_recovery",
+            "artifacts=ssot_pipeline",
+        ]
+    )
+
+    assert cfg.training.total_updates == 500
+    assert cfg.training.rollout_steps == 256
+    assert cfg.training.reseed_every_updates == 25
+    assert cfg.artifacts.ssot_pipeline.enabled
+    assert cfg.artifacts.artifact_pipeline.enabled
+    assert cfg.artifacts.checkpoint_every == 100
+    assert cfg.opponents.dispatch == "random"
+    validate_rollout_allocation(cfg)
 
 
 def test_planet_flow_proof_artifacts_compose_with_local_replay() -> None:

@@ -47,6 +47,16 @@ _ACTION_DECISION_BY_NAME: dict[str, MetricDefinition] = {
         "action_decision",
         "Mean policy entropy over the last 10 training updates (preflight-aligned).",
     ),
+    "entropy_delta_10": metric(
+        "entropy_delta_10",
+        "action_decision",
+        "Latest 10-update entropy mean minus the first tracked 10-update entropy mean.",
+    ),
+    "entropy_retention_ratio_10": metric(
+        "entropy_retention_ratio_10",
+        "action_decision",
+        "Latest 10-update entropy mean divided by the first tracked 10-update entropy mean.",
+    ),
     "preflight_sweep_score": metric(
         "preflight_sweep_score",
         "action_decision",

@@ -1,11 +1,11 @@
 # @package _global_
-# PPO hyperparameter search space for SSOT short preflight (no tag override).
+# PPO hyperparameter search space for preflight sweep (no tag override).
 
 parameters:
   model:
     values: [transformer_factorized_small, transformer_factorized]
-  task.trajectory_shield_mode:
-    values: ["off", cheap]
+  # task.trajectory_shield_mode:
+  #   values: ["off", cheap]
   task.trajectory_shield_horizon:
     values: [10, 30]
   task.feature_history_steps:
@@ -22,9 +22,11 @@ parameters:
     distribution: log_uniform_values
     min: 0.001
     max: 0.01
+  training.epochs:
+    values: [1, 2]
   training.vf_coef:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
     values: [0.3, 0.5, 1.0]
-  seed:
-    values: [42, 43, 44, 45]
+  # seed:
+  #   values: [42, 43, 44, 45]

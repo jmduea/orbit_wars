@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
+from src.artifacts.tournament.runner import challenger_won_2p
 from src.artifacts.tournament.types import MatchOutcome
 
 FOUR_P_FORMATS = frozenset({"4p_free_for_all", "4p_challenger_vs_baselines"})
@@ -69,7 +70,7 @@ def aggregate_format_win_rate(
         if format_name in FOUR_P_FORMATS:
             if outcome.placements.get(challenger_id) == 1:
                 wins += 1
-        elif outcome.results.get(challenger_id) == "win":
+        elif challenger_won_2p(outcome, challenger_id):
             wins += 1
     return _win_rate(wins, games)
 

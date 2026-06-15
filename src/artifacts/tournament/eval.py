@@ -39,21 +39,22 @@ def _schedule_matches(
     """Return (format_name, baseline_name, agent_ids, agents) schedules."""
 
     schedules: list[tuple[str, str, tuple[str, ...], list[object]]] = []
-    baseline_name = cfg.baselines[0] if cfg.baselines else "sniper"
-    baseline_id = f"baseline:{baseline_name}"
-    baseline_agent = build_baseline_agent(baseline_name)
+    baseline_names = list(cfg.baselines) if cfg.baselines else ["sniper"]
 
     formats = {value.strip() for value in cfg.formats}
     if "2p_vs_baseline" in formats:
-        for candidate in candidates:
-            schedules.append(
-                (
-                    "2p_vs_baseline",
-                    baseline_name,
-                    (candidate.agent_id, baseline_id),
-                    [candidate.act_fn, baseline_agent],
+        for baseline_name in baseline_names:
+            baseline_id = f"baseline:{baseline_name}"
+            baseline_agent = build_baseline_agent(baseline_name)
+            for candidate in candidates:
+                schedules.append(
+                    (
+                        "2p_vs_baseline",
+                        baseline_name,
+                        (candidate.agent_id, baseline_id),
+                        [candidate.act_fn, baseline_agent],
+                    )
                 )
-            )
     if "2p_head_to_head" in formats and incumbent is not None:
         for candidate in candidates:
             if candidate.agent_id == incumbent.agent_id:
@@ -78,7 +79,11 @@ def _schedule_matches(
         )
     if "4p_challenger_vs_baselines" in formats and len(candidates) == 1:
         candidate = candidates[0]
-        fillers = cfg.baselines[:3] if len(cfg.baselines) >= 3 else ["noop", "random", "random"]
+        fillers = (
+            cfg.baselines[:3]
+            if len(cfg.baselines) >= 3
+            else ["noop", "random", "random"]
+        )
         filler_agents = [build_baseline_agent(name) for name in fillers]
         filler_ids = tuple(f"baseline:{name}" for name in fillers)
         schedules.append(
@@ -138,7 +143,9 @@ def run_tournament(
             raise ValueError(f"candidate {candidate.agent_id!r} is missing act_fn.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    tournament_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + f"_{uuid4().hex[:8]}"
+    tournament_id = (
+        datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + f"_{uuid4().hex[:8]}"
+    )
     per_step_seconds, overage_budget_seconds = _tournament_timing(cfg)
     seeds = _match_seeds(cfg)
     games_per_pair = max(int(cfg.games_per_pair), 1)

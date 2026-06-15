@@ -146,6 +146,8 @@ _REGISTRY_ASSEMBLY_ORDER: tuple[str, ...] = (
     "win_rate_best_window_mean_10",
     "approx_kl_window_mean",
     "entropy_window_mean",
+    "entropy_delta_10",
+    "entropy_retention_ratio_10",
     "preflight_sweep_score",
     "ssot_qualifier_phase",
     "ssot_qualifier_stage",

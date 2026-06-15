@@ -13,7 +13,7 @@ parameters:
   training.reseed_every_updates:
     value: 25
   train_bundle:
-    value: opponent_recovery_floor
+    value: production_mix
   output.campaign:
     value: preflight
   telemetry:
@@ -27,7 +27,7 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
-      - noop
+      - production_mix
       - 2p4p_32_split
       - 100u
       - 25u_reseed
@@ -44,6 +44,8 @@ parameters:
   artifacts.artifact_pipeline.checkpoint_eval_async: 
     value: true
   artifacts.artifact_pipeline.docker_validation_async: 
+    value: true
+  telemetry.metric_groups.action_decision:
     value: true
   telemetry.metric_groups.losses:
     value: true

@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from src.config.schema import PromotionTournamentConfig
 
+from .runner import challenger_won_2p
 from .types import AgentEntry, LeaderboardRow, MatchOutcome
 
 
@@ -31,9 +32,9 @@ def aggregate_pairwise_win_rates(
         left, right = outcome.agent_ids
         key = _pair_key(left, right)
         games[key] += 1
-        if outcome.results.get(left) == "win":
+        if challenger_won_2p(outcome, left):
             wins[key][left] += 1
-        elif outcome.results.get(right) == "win":
+        elif challenger_won_2p(outcome, right):
             wins[key][right] += 1
 
     matrix: dict[str, dict[str, float]] = defaultdict(dict)
@@ -75,14 +76,17 @@ def build_leaderboard(
             if outcome.format_name == "2p_vs_baseline":
                 if baseline_id in outcome.agent_ids:
                     vs_sniper_games += 1
-                    if outcome.results.get(candidate.agent_id) == "win":
+                    if challenger_won_2p(outcome, candidate.agent_id):
                         vs_sniper_wins += 1
             elif outcome.format_name == "2p_head_to_head" and incumbent_id is not None:
                 if incumbent_id in outcome.agent_ids:
                     vs_incumbent_games += 1
-                    if outcome.results.get(candidate.agent_id) == "win":
+                    if challenger_won_2p(outcome, candidate.agent_id):
                         vs_incumbent_wins += 1
-            elif outcome.format_name in {"4p_free_for_all", "4p_challenger_vs_baselines"}:
+            elif outcome.format_name in {
+                "4p_free_for_all",
+                "4p_challenger_vs_baselines",
+            }:
                 four_player_games += 1
                 if outcome.placements.get(candidate.agent_id) == 1:
                     first_places += 1

@@ -22,7 +22,7 @@ from src.artifacts.tournament.resolve import (
     run_context_for_agent,
     validate_agents_feature_compatible,
 )
-from src.artifacts.tournament.runner import run_match
+from src.artifacts.tournament.runner import challenger_won_2p, run_match
 from src.artifacts.tournament.types import (
     AgentEntry,
     LeaderboardRow,
@@ -146,6 +146,46 @@ def test_aggregate_pairwise_win_rates() -> None:
     assert matrix["b"]["a"] == 0.5
 
 
+def test_challenger_won_2p_rejects_mutual_positive_rewards() -> None:
+    tie = MatchOutcome(
+        match_id="tie",
+        format_name="2p_vs_baseline",
+        seed=0,
+        agent_ids=("cand_a", "baseline:noop"),
+        rewards={"cand_a": 1.0, "baseline:noop": 1.0},
+        results={"cand_a": "win", "baseline:noop": "win"},
+    )
+
+    assert challenger_won_2p(tie, "cand_a") is False
+    assert challenger_won_2p(tie, "baseline:noop") is False
+
+    rows = build_leaderboard(
+        (_candidate("cand_a"),),
+        (tie,),
+        incumbent_id=None,
+        baseline_name="noop",
+    )
+    assert rows[0].win_rate_vs_sniper == 0.0
+
+
+def test_aggregate_pairwise_win_rates_ignores_ties() -> None:
+    outcomes = (
+        MatchOutcome(
+            match_id="tie",
+            format_name="2p_head_to_head",
+            seed=0,
+            agent_ids=("a", "b"),
+            rewards={"a": 1.0, "b": 1.0},
+            results={"a": "win", "b": "win"},
+        ),
+    )
+
+    matrix = aggregate_pairwise_win_rates(outcomes)
+
+    assert matrix["a"]["b"] == 0.0
+    assert matrix["b"]["a"] == 0.0
+
+
 def test_tournament_improves_incumbent_requires_higher_sniper_rate(
     tmp_path: Path,
 ) -> None:
@@ -188,7 +228,9 @@ def test_run_context_for_agent_uses_checkpoint_run_dir(tmp_path: Path) -> None:
         act_fn=lambda _obs: [],
     )
 
-    context = run_context_for_agent(agent, campaign="demo", output_root=str(tmp_path / "outputs"))
+    context = run_context_for_agent(
+        agent, campaign="demo", output_root=str(tmp_path / "outputs")
+    )
 
     assert context.run_id == "run_a"
     assert context.run_dir == run_dir
@@ -232,10 +274,22 @@ def test_validate_agents_feature_compatible_rejects_mismatch() -> None:
     with patch(
         "src.artifacts.tournament.resolve.feature_metadata_for_agent",
         side_effect=[
-            {"schema_version": 5, "planet_feature_dim": 13, "edge_feature_dim": 12,
-             "global_feature_dim": 46, "edge_k": 3, "encoder_backbone": "planet_graph"},
-            {"schema_version": 5, "planet_feature_dim": 99, "edge_feature_dim": 12,
-             "global_feature_dim": 46, "edge_k": 3, "encoder_backbone": "planet_graph"},
+            {
+                "schema_version": 5,
+                "planet_feature_dim": 13,
+                "edge_feature_dim": 12,
+                "global_feature_dim": 46,
+                "edge_k": 3,
+                "encoder_backbone": "planet_graph",
+            },
+            {
+                "schema_version": 5,
+                "planet_feature_dim": 99,
+                "edge_feature_dim": 12,
+                "global_feature_dim": 46,
+                "edge_k": 3,
+                "encoder_backbone": "planet_graph",
+            },
         ],
     ):
         with pytest.raises(ValueError, match="planet_feature_dim"):
