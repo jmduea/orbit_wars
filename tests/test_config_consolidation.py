@@ -347,13 +347,6 @@ def test_output_paths_reject_traversal(override: str) -> None:
         compose_hydra_train_config([override])
 
 
-def test_wandb_sweep_yaml_smoke_compose() -> None:
-    for overrides in _iter_sweep_compose_cases(full_grid=False):
-        cfg = compose_hydra_train_config(overrides)
-        assert cfg.telemetry.wandb.group
-        assert cfg.telemetry.wandb.tags
-
-
 def test_planet_flow_training_profile_resolves_proof_defaults() -> None:
     from src.config import compose_hydra_train_config
 

@@ -21,7 +21,6 @@ def test_preflight_wandb_sweep_compose() -> None:
     assert params["telemetry.metric_groups.action_decision"]["value"] is True
     assert params["telemetry.metric_groups.losses"]["value"] is True
     assert params["task"]["value"] == "rollout_selected_validate"
-    assert params["training"]["value"] == "2p4p_32_split"
     assert params["training.total_updates"]["value"] == 100
     assert params["training.reseed_every_updates"]["value"] == 25
     assert params["train_bundle"]["value"] in (

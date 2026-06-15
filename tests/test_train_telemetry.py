@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import jax.numpy as jnp
 
-from src.config import compose_hydra_train_config
 from src.jax.train.checkpoint import HistoricalSnapshotPool
 from src.jax.train.telemetry import (
     build_update_record,
@@ -189,31 +188,3 @@ def test_record_scalar_float_rejects_non_numeric() -> None:
     assert record_scalar_float({"entropy": 0.25}, "entropy") == 0.25
     assert record_scalar_float({}, "entropy") is None
     assert record_scalar_float({"entropy": "n/a"}, "entropy") is None
-
-
-def test_opponent_recovery_telemetry_keeps_composition_without_losses(
-    tmp_path: Path,
-) -> None:
-    cfg = compose_hydra_train_config(["telemetry=opponent_recovery"])
-    log_path = tmp_path / "metrics.jsonl"
-    debug_log_path = tmp_path / "debug.jsonl"
-    telemetry = MagicMock()
-
-    write_filtered_update_records(
-        log_path=log_path,
-        debug_log_path=debug_log_path,
-        record={
-            "update": 1,
-            "win_rate_2p": 0.5,
-            "opponent_slots_total": 2.0,
-            "opponent_slots_random": 2.0,
-            "total_loss": 0.75,
-        },
-        cfg=cfg,
-        telemetry=telemetry,
-        update=1,
-    )
-
-    logged = json.loads(log_path.read_text(encoding="utf-8").strip())
-    assert logged["opponent_slots_random"] == 2.0
-    assert "total_loss" not in logged

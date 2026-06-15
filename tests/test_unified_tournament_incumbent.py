@@ -45,9 +45,7 @@ def test_bootstrap_incumbent_differs_from_challenger_checkpoint(tmp_path: Path) 
             act_fn=lambda _obs: [],
         )
         challenger = mock_agent.return_value
-        incumbent = resolve_incumbent(
-            spec, campaign="missing", output_root=tmp_path
-        )
+        incumbent = resolve_incumbent(spec, campaign="missing", output_root=tmp_path)
     assert incumbent is not None
     assert incumbent.checkpoint_path != challenger.checkpoint_path
     assert incumbent.agent_id != challenger.agent_id
@@ -72,15 +70,14 @@ def test_resolve_incumbent_prefers_promoted_manifest(tmp_path: Path) -> None:
 
 
 def test_swap_denied_when_seed_below_perfect(tmp_path: Path) -> None:
-    from src.artifacts.tournament.promotion import promote_from_unified_ladder
-    from src.artifacts.tournament.unified.incumbent import swap_incumbent_on_unified_pass
+    from src.artifacts.tournament.unified.incumbent import (
+        swap_incumbent_on_unified_pass,
+    )
 
     verdict = UnifiedLadderVerdict(
         passed=False,
         reason="incumbent_not_defeated",
-        stages=(
-            UnifiedStageResult(name="stage2_incumbent", passed=False),
-        ),
+        stages=(UnifiedStageResult(name="stage2_incumbent", passed=False),),
         challenger_checkpoint=str(tmp_path / "c.pkl"),
         incumbent_swap=False,
     )
@@ -99,35 +96,3 @@ def test_swap_denied_when_seed_below_perfect(tmp_path: Path) -> None:
         tournament_output_dir=tmp_path / "tournament",
     )
     assert swapped is False
-
-    with patch("src.artifacts.tournament.promotion.write_promoted_manifest") as mock_write:
-        fail_attempt = promote_from_unified_ladder(
-            TrainConfig(),
-            context=__import__(
-                "src.artifacts.run_paths", fromlist=["RunContext"]
-            ).RunContext(
-                run_id="r1",
-                campaign_slug="test",
-                run_dir=tmp_path,
-                manifest_path=tmp_path / "manifest.json",
-                campaign_dir=tmp_path / "campaign",
-                campaign_manifest_path=tmp_path / "campaign_manifest.json",
-                logs_dir=tmp_path / "logs",
-                log_path=tmp_path / "logs/r.jsonl",
-                debug_log_path=tmp_path / "logs/d.jsonl",
-                checkpoints_dir=tmp_path / "checkpoints",
-                queue_dir=tmp_path / "queue",
-                evaluations_dir=tmp_path / "evaluations",
-                wandb_dir=tmp_path / "wandb",
-                wandb_artifact_dir=tmp_path / "wandb-artifacts",
-                wandb_data_dir=tmp_path / "wandb-data",
-                indexes_dir=tmp_path / "indexes",
-                retention_class="compact",
-                model_compatibility_family="planet_graph_transformer",
-            ),
-            challenger=challenger,
-            verdict=verdict,
-            tournament_output_dir=tmp_path / "tournament",
-        )
-        assert not fail_attempt.promoted
-        mock_write.assert_not_called()

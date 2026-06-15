@@ -5,6 +5,7 @@ from src.benchmark.production import (
     production_benchmark_payload,
     rollout_group_summary,
 )
+from src.config import compose_hydra_train_config
 from src.jax.training_benchmark import resolve_benchmark_overrides
 
 

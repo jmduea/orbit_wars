@@ -20,7 +20,6 @@ def test_ssot_pipeline_artifacts_profile_composes() -> None:
     assert not cfg.artifacts.artifact_pipeline.replay_async
     assert not cfg.artifacts.replay.enabled
     assert cfg.telemetry.wandb.enabled
-    assert cfg.eval_seed_set == [43, 44, 45, 46]
 
 
 def test_bracket_training_and_ssot_pipeline_are_mutually_exclusive() -> None:

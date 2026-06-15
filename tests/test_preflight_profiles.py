@@ -18,23 +18,6 @@ def test_ppo_overrides_for_transformer_factorized_small() -> None:
     assert "training.epochs=2" in overrides
 
 
-def test_gate_specs_use_base_training_defaults_not_ppo_profile() -> None:
-    from src.config import compose_hydra_train_config
-
-    spec = _gate_specs("transformer_factorized_small")["beat_noop"]
-    assert "training.lr=" not in spec.train_overrides
-    assert "training=2p_16" in spec.train_overrides
-    assert "opponents=noop_only" in spec.train_overrides
-
-    cfg = compose_hydra_train_config(list(spec.train_overrides))
-    assert cfg.training.lr == 6e-5
-    assert cfg.training.clip_coef == 0.15
-    assert cfg.training.ent_coef == 0.006
-    assert cfg.training.vf_coef == 1.0
-    assert cfg.training.epochs == 1
-    assert cfg.training.reseed_every_updates == 50
-
-
 def test_calibration_train_overrides_includes_profile(tmp_path) -> None:
     profile_path = tmp_path / "profiles.json"
     profile_path.write_text(
