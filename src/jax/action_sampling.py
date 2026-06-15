@@ -314,6 +314,141 @@ def _sample_factored_step_from_logits(
     return source, target_slot, bucket, stop, log_prob, entropy, ship_fraction
 
 
+def _sample_factored_source_and_stop_from_logits(
+    key: jax.Array,
+    source_logits: jax.Array,
+    stop_logits: jax.Array,
+    source_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    deterministic: bool,
+    deterministic_eval: bool = False,
+) -> tuple[jax.Array, jax.Array]:
+    """Sample the stop/source factors before source-conditioned target decode."""
+
+    key_stop, key_source = jax.random.split(key)
+    stop_prob = jax.nn.sigmoid(stop_logits)
+    stop = jnp.where(
+        deterministic,
+        (stop_prob >= 0.5).astype(jnp.int32),
+        jax.random.bernoulli(key_stop, stop_prob).astype(jnp.int32),
+    )
+    continuous_heads = ship_bucket_mask.shape[-1] == 1
+    has_real_bucket = ship_bucket_mask[..., 1:].any()
+    can_launch = source_mask.any() & (has_real_bucket | continuous_heads)
+    stop = jnp.where(
+        deterministic & deterministic_eval & can_launch,
+        jnp.zeros_like(stop),
+        stop,
+    )
+    stop = jnp.where(can_launch, stop, jnp.ones_like(stop))
+    launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
+
+    masked_source_logits = jnp.where(
+        source_mask, source_logits, jnp.full_like(source_logits, -1.0e9)
+    )
+    source = jnp.where(
+        launch_active,
+        jnp.where(
+            deterministic,
+            jnp.argmax(masked_source_logits, axis=-1),
+            jax.random.categorical(key_source, masked_source_logits, axis=-1),
+        ),
+        jnp.zeros_like(stop),
+    )
+    return source, stop
+
+
+def _sample_factored_target_from_source_logits(
+    key: jax.Array,
+    source_logits: jax.Array,
+    target_logits: jax.Array,
+    stop_logits: jax.Array,
+    ship_logits: jax.Array,
+    source_mask: jax.Array,
+    ship_bucket_mask: jax.Array,
+    source: jax.Array,
+    stop: jax.Array,
+    deterministic: bool,
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    """Sample target/ship factors from logits already conditioned on ``source``."""
+
+    key_target, key_ship = jax.random.split(key)
+    row_bucket_mask = ship_bucket_mask[source]
+    decoder_target_mask = target_logits > jnp.finfo(jnp.float32).min
+    target_mask = row_bucket_mask.any(axis=-1) & decoder_target_mask
+    launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
+    has_target = target_mask.any()
+    stop = jnp.where(launch_active & (~has_target), jnp.ones_like(stop), stop)
+    launch_active = (1.0 - stop.astype(jnp.float32)) > 0.0
+    masked_target_logits = jnp.where(
+        target_mask, target_logits, jnp.full_like(target_logits, -1.0e9)
+    )
+    target_slot = jnp.where(
+        launch_active,
+        jnp.where(
+            deterministic,
+            jnp.argmax(masked_target_logits, axis=-1),
+            jax.random.categorical(key_target, masked_target_logits, axis=-1),
+        ),
+        jnp.zeros_like(source),
+    )
+
+    selected_bucket_mask = row_bucket_mask[target_slot]
+    selected_ship_logits = ship_logits[target_slot]
+    continuous_ship = selected_ship_logits.shape[-1] == 1
+    ship_fraction = jnp.zeros_like(source, dtype=jnp.float32)
+    if continuous_ship:
+        ship_logit = selected_ship_logits[..., 0]
+        selected_target_legal = target_mask[target_slot]
+        ship_logit = jnp.where(selected_target_legal, ship_logit, -1.0e9)
+        if deterministic:
+            ship_fraction = fraction_from_logit(ship_logit)
+        else:
+            ship_logit = ship_logit + jax.random.logistic(key_ship, ship_logit.shape)
+            ship_fraction = fraction_from_logit(ship_logit)
+        bucket = jnp.where(
+            launch_active & (ship_fraction > 0.0),
+            jnp.ones_like(target_slot, dtype=jnp.int32),
+            jnp.zeros_like(target_slot, dtype=jnp.int32),
+        )
+    else:
+        selected_ship_logits = jnp.where(
+            selected_bucket_mask, selected_ship_logits, -1.0e9
+        )
+        bucket = jnp.where(
+            launch_active,
+            jnp.where(
+                deterministic,
+                jnp.argmax(selected_ship_logits, axis=-1),
+                jax.random.categorical(key_ship, selected_ship_logits, axis=-1),
+            ),
+            jnp.zeros_like(target_slot, dtype=jnp.int32),
+        )
+
+    log_prob, entropy, _, _ = _factored_step_log_prob_entropy(
+        source_logits[None, :],
+        target_logits[None, :],
+        stop_logits[None],
+        ship_logits[None, :, :],
+        source_mask[None, :],
+        ship_bucket_mask[None, ...],
+        source[None],
+        target_slot[None],
+        bucket[None],
+        stop.astype(jnp.float32)[None],
+        ship_fraction=ship_fraction[None] if continuous_ship else None,
+    )
+    log_prob = log_prob[0]
+    entropy = entropy[0]
+    source = jnp.where(stop.astype(bool), jnp.zeros_like(source), source)
+    target_slot = jnp.where(stop.astype(bool), jnp.zeros_like(target_slot), target_slot)
+    bucket = jnp.where(stop.astype(bool), jnp.zeros_like(bucket), bucket)
+    ship_fraction = jnp.where(
+        stop.astype(bool), jnp.zeros_like(ship_fraction), ship_fraction
+    )
+    return source, target_slot, bucket, stop, log_prob, entropy, ship_fraction
+
+
 def _sample_shielded_factored_sequence_with_params(
     key: jax.Array,
     game,
@@ -407,12 +542,13 @@ def _sample_shielded_factored_sequence_with_params(
             decode_carry,
             cumulative_forbidden,
         ) = carry
-        step_logits, decode_carry = scan_decode_step(
+        decode_carry_in = decode_carry
+        source_step_logits, decode_carry = scan_decode_step(
             params,
             policy,
             encoder_out,
-            decode_carry,
-            teacher_source=source_sequence[:, step_idx],
+            decode_carry_in,
+            teacher_source=None,
             teacher_target_slot=slot_sequence[:, step_idx],
             rng=jax.random.fold_in(key, step_idx),
             deterministic=deterministic,
@@ -465,19 +601,42 @@ def _sample_shielded_factored_sequence_with_params(
         source_mask = jax.vmap(source_mask_from_bucket_mask_and_ships, in_axes=(0, 0))(
             step_bucket_mask, remaining_ships
         )
-        source, target_slot, bucket, stop, log_prob, entropy, ship_fraction = jax.vmap(
-            _sample_factored_step_from_logits,
-            in_axes=(0, 0, 0, 0, 0, 0, 0, None, None),
+        source, stop = jax.vmap(
+            _sample_factored_source_and_stop_from_logits,
+            in_axes=(0, 0, 0, 0, 0, None, None),
         )(
             jax.random.split(jax.random.fold_in(key, 10_000 + step_idx), env_count),
-            step_logits.source_logits,
-            step_logits.target_logits,
-            step_logits.stop_logits,
-            step_logits.ship_logits,
+            source_step_logits.source_logits,
+            source_step_logits.stop_logits,
             source_mask,
             step_bucket_mask,
             deterministic,
             deterministic_eval,
+        )
+        target_step_logits, _ = scan_decode_step(
+            params,
+            policy,
+            encoder_out,
+            decode_carry_in,
+            teacher_source=source,
+            teacher_target_slot=slot_sequence[:, step_idx],
+            rng=jax.random.fold_in(key, 20_000 + step_idx),
+            deterministic=deterministic,
+        )
+        source, target_slot, bucket, stop, log_prob, entropy, ship_fraction = jax.vmap(
+            _sample_factored_target_from_source_logits,
+            in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None),
+        )(
+            jax.random.split(jax.random.fold_in(key, 30_000 + step_idx), env_count),
+            source_step_logits.source_logits,
+            target_step_logits.target_logits,
+            source_step_logits.stop_logits,
+            target_step_logits.ship_logits,
+            source_mask,
+            step_bucket_mask,
+            source,
+            stop,
+            deterministic,
         )
         step_active = sequence_active.astype(jnp.float32)
         stop = jnp.where(sequence_active, stop, jnp.zeros_like(stop))
@@ -679,7 +838,11 @@ def _sample_shielded_factored_sequence_with_params(
         noop_idx,
         target_sequence,
     )
-    decoder_hidden_out = decode_carry_out.state if carry_enabled and decode_carry_out is not None else None
+    decoder_hidden_out = (
+        decode_carry_out.state
+        if carry_enabled and decode_carry_out is not None
+        else None
+    )
     tiered_revalidate = trajectory_shield_mode(
         cfg.task
     ) == "tiered" and trajectory_shield_final_validate_selected(cfg.task)

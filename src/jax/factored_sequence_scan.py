@@ -165,16 +165,26 @@ def _replay_logprobs_with_prefix_forwards(
             decode_carry,
         ) = carry
 
-        step_logits, decode_carry = scan_decode_step(
+        decode_carry_in = decode_carry
+        source_step_logits, decode_carry = scan_decode_step(
             params,
             policy,
             encoder_out,
-            decode_carry,
+            decode_carry_in,
             teacher_source=jnp.zeros((env_count,), dtype=jnp.int32),
             teacher_target_slot=jnp.zeros((env_count,), dtype=jnp.int32),
             deterministic=True,
         )
         step_active = step_mask[:, step_idx] > 0.0
+        target_step_logits, _ = scan_decode_step(
+            params,
+            policy,
+            encoder_out,
+            decode_carry_in,
+            teacher_source=source_index[:, step_idx],
+            teacher_target_slot=jnp.zeros((env_count,), dtype=jnp.int32),
+            deterministic=True,
+        )
         step_bucket_mask = shield_bucket_mask_for_replay_step(
             cfg,
             batch,
@@ -200,10 +210,10 @@ def _replay_logprobs_with_prefix_forwards(
             target_lp,
             ship_lp,
         ) = _factored_step_log_prob_entropy_components(
-            step_logits.source_logits,
-            step_logits.target_logits,
-            step_logits.stop_logits,
-            step_logits.ship_logits,
+            source_step_logits.source_logits,
+            target_step_logits.target_logits,
+            source_step_logits.stop_logits,
+            target_step_logits.ship_logits,
             source_mask,
             step_bucket_mask,
             source_index[:, step_idx],
@@ -437,8 +447,9 @@ def build_shield_prefix_teacher_sequences(
     """Teacher sequences matching shield scan ``policy.apply`` at ``step_idx``."""
 
     step_cols = jnp.arange(source_index.shape[1], dtype=jnp.int32)
+    current_or_committed = step_cols <= jnp.asarray(step_idx, dtype=jnp.int32)
     committed = step_cols < jnp.asarray(step_idx, dtype=jnp.int32)
-    source_prefix = jnp.where(committed[None, :], source_index, 0)
+    source_prefix = jnp.where(current_or_committed[None, :], source_index, 0)
     target_prefix = jnp.where(committed[None, :], target_slot, 0)
     return source_prefix, target_prefix
 
@@ -849,7 +860,6 @@ def factored_logprob_parity_metrics(
     mask = step_mask.astype(jnp.float32)
     log_ratio = delta
     ratio20 = jnp.exp(jnp.clip(log_ratio, -20.0, 20.0))
-    seq_valid = mask
     approx_kl_v1 = masked_mean(old_log_prob - new_log_prob, mask)
     approx_kl_v2 = masked_mean((ratio20 - 1.0) - log_ratio, mask)
     metrics: dict[str, jax.Array] = {

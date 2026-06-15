@@ -114,6 +114,35 @@ def test_rollout_replay_logprob_parity_with_stepwise_scan() -> None:
 
 
 @pytest.mark.jax
+def test_factored_sampler_conditions_targets_on_sampled_source() -> None:
+    cfg = _train_cfg(task={"trajectory_shield_mode": "cheap"})
+    state, batch = batched_reset(jax.random.split(jax.random.PRNGKey(1), 1), cfg.task)
+    owned = (
+        state.game.planets.owner[0] == state.game.player[0]
+    ) & state.game.planets.active[0]
+    owned_sources = np.flatnonzero(np.asarray(owned))
+    assert owned_sources.tolist() == [20]
+
+    policy = build_planet_graph_transformer_policy(cfg)
+    params = policy.init(jax.random.PRNGKey(101), batch)
+
+    sample = _sample_shielded_factored_sequence_with_params(
+        jax.random.PRNGKey(201),
+        state.game,
+        batch,
+        params,
+        policy,
+        cfg,
+        deterministic=True,
+        deterministic_eval=True,
+    )
+
+    assert float(sample.diagnostics.legal_non_noop_count[0]) > 0.0
+    assert int(sample.stop_flag[0, 0]) == 0
+    assert int(sample.source_index[0, 0]) == int(owned_sources[0])
+
+
+@pytest.mark.jax
 def test_prefix_scan_step_lp_populates_each_active_column() -> None:
     """Regression: scan body must assign step_lp into log_prob_out per active step."""
     cfg = _train_cfg(task={"trajectory_shield_mode": "cheap"})
