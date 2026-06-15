@@ -4,8 +4,10 @@
 parameters:
   task:
     value: rollout_selected_validate
-  training:
-    value: 4p_32
+  training.num_envs:
+    value: 32
+  training.rollout_microbatch_envs:
+    value: 32
   training.rollout_steps:
     value: 512
   training.total_updates:
@@ -13,7 +15,7 @@ parameters:
   training.reseed_every_updates:
     value: 25
   train_bundle:
-    value: production_mix
+    value: scripted_heavy
   output.campaign:
     value: preflight
   telemetry:
@@ -27,8 +29,7 @@ parameters:
   telemetry.wandb.tags:
     value:
       - preflight
-      - production_mix
-      - 2p4p_32_split
+      - scripted_heavy
       - 100u
       - 25u_reseed
   artifacts:

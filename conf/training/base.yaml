@@ -16,7 +16,7 @@ lr: 0.00006
 max_grad_norm: 1.0
 
 # <= each rollout group's num_envs and must divide it evenly (see conf/training/README.md).
-rollout_microbatch_envs: 16
+rollout_microbatch_envs: 32
 
 rotate_format_rollouts: false
 lean_rollout_metrics: true

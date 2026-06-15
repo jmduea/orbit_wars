@@ -6,6 +6,8 @@ parameters:
     values: [transformer_factorized_small, transformer_factorized]
   # task.trajectory_shield_mode:
   #   values: ["off", cheap]
+  training.format_weights:
+    values: ['{2: 0.5, 4: 0.5}', '{2: 1.0, 4: 0.0}', '{2: 0.0, 4: 1.0}']
   task.trajectory_shield_horizon:
     values: [10, 30]
   task.feature_history_steps:
@@ -22,8 +24,8 @@ parameters:
     distribution: log_uniform_values
     min: 0.001
     max: 0.01
-  training.epochs:
-    values: [1, 2]
+  # training.epochs:
+  #   values: [1, 2]
   training.vf_coef:
     values: [0.25, 0.5, 1.0]
   training.max_grad_norm:
