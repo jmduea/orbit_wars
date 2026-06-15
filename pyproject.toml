@@ -28,12 +28,8 @@ module-name = "src"
 module-root = ""
 
 [tool.pytest.ini_options]
-testpaths = [
-    "tests"
-]
-addopts = [
-    "--strict-markers",
-]
+testpaths = ["tests"]
+addopts = ["--strict-markers"]
 markers = [
     "slow: integration or expensive tests excluded from the fast dev loop",
     "sweep: full W&B sweep Cartesian compose grid (weekly/explicit only)",
@@ -46,7 +42,6 @@ markers = [
     "artifacts: artifact pipeline, replay, and packaging tests",
     "curriculum: curriculum controller and training-loop tests",
 ]
-venv = ".venv"
 
 [tool.ty.environment]
 root = ["."]
@@ -60,11 +55,7 @@ venvPath = "."
 venv = ".venv"
 
 [tool.pyrefly]
-project-includes = [
-    "src",
-    "tests",
-    "scripts",
-]
+project-includes = ["src", "tests", "scripts"]
 search-path = ["."]
 python-version = "3.12.0"
 infer-with-first-use = false
@@ -84,11 +75,7 @@ dev = [
 [tool.coverage.run]
 branch = true
 source = ["src"]
-omit = [
-    "*/tests/*",
-    "*/scripts/*",
-    "*/__main__.py",
-]
+omit = ["*/tests/*", "*/scripts/*", "*/__main__.py"]
 
 [tool.coverage.report]
 exclude_lines = [
