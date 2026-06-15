@@ -282,6 +282,8 @@ class SsotPipelineConfig:
     qualifier_max_env_steps: int = 500_000_000
     qualifier_eval_interval_updates: int = 50
     qualifier_games_per_seed: int = 0
+    require_packaging_validation: bool = True
+    packaging_validation_path: str | None = None
 
 
 @dataclass(slots=True)

@@ -318,8 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     encode_turn.add_argument("--out", type=Path, default=None)
 
+    from src.benchmark.map_pool import build_map_pool_parser
     from src.cli.benchmark.env_parity_ab import add_env_parity_ab_parser
 
+    build_map_pool_parser(subparsers)
     add_env_parity_ab_parser(subparsers)
 
     calibrate = subparsers.add_parser(

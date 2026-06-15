@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.benchmark.map_pool import dispatch_map_pool
 from src.cli.benchmark.admission_throughput import run_admission_throughput_cli
 from src.cli.benchmark.calibrate import run_calibrate_cli
 from src.cli.benchmark.calibrate_qualifier_seeds import (
@@ -15,8 +16,8 @@ from src.cli.benchmark.common import (
     _init_benchmark_runtime,
     print_benchmark_help,
 )
-from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.encode_turn import run_encode_turn_cli
+from src.cli.benchmark.env_parity_ab import run_env_parity_ab_cli
 from src.cli.benchmark.factorized import run_factorized_sampler_cli
 from src.cli.benchmark.gate import run_gate_cli
 from src.cli.benchmark.learn_proof import run_learn_proof_cli
@@ -101,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_rollout_phase_breakdown_cli(args)
         case "tournament-proof":
             return run_tournament_proof_cli(args)
+        case "map-pool":
+            return dispatch_map_pool(args)
         case _:
             parser.error(f"unknown benchmark command: {args.command!r}")
             return 2
