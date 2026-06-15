@@ -76,3 +76,44 @@ def test_wandb_list_uses_project_name_and_entity(monkeypatch, capsys) -> None:
     assert sweep.run_list_cli(args) == 0
     assert api.calls == [("orbit_wars", "jmduea-jdueadev")]
     assert "abc123" in capsys.readouterr().out
+
+
+def test_wandb_cancel_success_returns_zero(monkeypatch, capsys) -> None:
+    calls: list[list[str]] = []
+
+    def _run(cmd, **kwargs):
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, stdout="stopped\n")
+
+    class _Sweep:
+        state = "STOPPED"
+        runs = [object()]
+
+    class _Api:
+        def sweep(self, path: str):
+            assert path == "jmduea-jdueadev/orbit_wars-integration/abc123"
+            return _Sweep()
+
+    class _Wandb:
+        Api = lambda self=None: _Api()
+
+    monkeypatch.setattr(sweep.subprocess, "run", _run)
+    monkeypatch.setitem(__import__("sys").modules, "wandb", _Wandb())
+    args = argparse.Namespace(
+        backend="wandb",
+        sweep_id="abc123",
+        project="orbit_wars-integration",
+        entity="jmduea-jdueadev",
+        dry_run=False,
+    )
+
+    assert sweep.run_cancel_cli(args) == 0
+    assert calls == [
+        [
+            "wandb",
+            "sweep",
+            "--stop",
+            "jmduea-jdueadev/orbit_wars-integration/abc123",
+        ]
+    ]
+    assert "wandb_sweep_stop" in capsys.readouterr().out

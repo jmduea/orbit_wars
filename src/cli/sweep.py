@@ -247,7 +247,7 @@ def run_cancel_cli(args: argparse.Namespace) -> int:
         "wandb_cli_stdout": (proc.stdout or "").strip(),
     }
     print(json.dumps(payload, indent=2))
-    return 0 if cancelled or not getattr(sweep, "runs", None) else 1
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -16,24 +16,24 @@ parameters:
   #   values: [6, 8]
   model.max_moves_k:
     values: [2, 3]
-  # training.lr:
-  #   distribution: log_uniform_values
-  #   min: 0.00005
-  #   max: 0.0003
-  # training.clip_coef:
-  #   values: [0.1, 0.15, 0.2, 0.25]
-  # training.ent_coef:
-  #   distribution: log_uniform_values
-  #   min: 0.001
-  #   max: 0.01
-  # training.epochs:
-  #   values: [1, 2]
-  # training.vf_coef:
-  #   values: [0.25, 0.5, 1.0]
-  # training.max_grad_norm:
-  #   values: [0.3, 0.5, 1.0]
-  # seed:
-  #   values: [42, 43, 44, 45]
+  training.lr:
+    distribution: log_uniform_values
+    min: 0.00005
+    max: 0.0003
+  training.clip_coef:
+    values: [0.1, 0.15, 0.2, 0.25]
+  training.ent_coef:
+    distribution: log_uniform_values
+    min: 0.001
+    max: 0.01
+  training.epochs:
+    values: [1, 2]
+  training.vf_coef:
+    values: [0.25, 0.5, 1.0]
+  training.max_grad_norm:
+    values: [0.3, 0.5, 1.0]
+  seed:
+    values: [42, 43, 44, 45]
   reward.terminal_reward_mode:
     values: [binary_win, ranked, normalized_ship_differential]
   reward.early_terminal_reward_shaping_enabled:

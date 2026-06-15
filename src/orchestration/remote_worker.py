@@ -157,6 +157,7 @@ def run_colab_worker() -> None:
                 "ORBIT_WARS_COLAB_WORKER_MODE",
                 "ORBIT_WARS_COLAB_TRUST_BASE_JAX",
                 "HYDRA_OVERRIDES",
+                "TF_GPU_ALLOCATOR",
             )
         ),
     }
@@ -346,6 +347,7 @@ payload = {
     "sys_prefix": sys.prefix,
     "sys_base_prefix": getattr(sys, "base_prefix", ""),
     "JAX_PLATFORMS": os.environ.get("JAX_PLATFORMS", ""),
+    "TF_GPU_ALLOCATOR": os.environ.get("TF_GPU_ALLOCATOR", ""),
     "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
     "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", ""),
 }

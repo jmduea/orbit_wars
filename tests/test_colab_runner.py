@@ -11,6 +11,7 @@ from src.orchestration.colab_cli import ColabSessionInfo
 from src.orchestration.colab_runner import (
     ColabRequest,
     _merge_shortlist_overrides,
+    _bootstrap_script,
     default_session_slug,
     launch,
     prepare_package,
@@ -130,6 +131,7 @@ def test_prepare_uses_wandb_key_from_env(tmp_path: Path, monkeypatch) -> None:
     env = json.loads((work_dir / "worker-env.json").read_text(encoding="utf-8"))
     summary = json.loads((work_dir / "package-summary.json").read_text(encoding="utf-8"))
     assert env["WANDB_API_KEY"] == "env-key"
+    assert env["TF_GPU_ALLOCATOR"] == "cuda_malloc_async"
     assert summary["generated_env"]["WANDB_API_KEY"] == "<redacted>"
 
 
@@ -186,6 +188,14 @@ def test_launch_records_ledger_and_sessions(tmp_path: Path, capsys) -> None:
     assert json.loads(ledger_lines[-1])["event"] == "launch"
     sessions = json.loads(sessions_path.read_text(encoding="utf-8"))
     assert any(key.startswith("ow-colab_launch-") for key in sessions)
+
+
+def test_bootstrap_starts_worker_detached_for_keepalive_safety() -> None:
+    bootstrap = _bootstrap_script()
+    assert "subprocess.Popen" in bootstrap
+    assert "start_new_session=True" in bootstrap
+    assert "colab-worker.pid" in bootstrap
+    assert "subprocess.call" not in bootstrap
 
 
 def test_shortlist_merges_from_json_rank(tmp_path: Path) -> None:

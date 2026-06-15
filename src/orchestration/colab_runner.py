@@ -186,6 +186,7 @@ def _worker_env(
     extra: dict[str, str] = {
         "ORBIT_WARS_COLAB_WORKER_MODE": "standalone",
         "ORBIT_WARS_COLAB_TRUST_BASE_JAX": trust_base_jax,
+        "TF_GPU_ALLOCATOR": "cuda_malloc_async",
     }
     if wandb_api_key:
         extra["WANDB_API_KEY"] = wandb_api_key
@@ -650,6 +651,7 @@ def _bootstrap_script() -> str:
         "import subprocess\n"
         "import sys\n"
         "import tarfile\n"
+        "from pathlib import Path\n"
         "\n"
         f'REMOTE_WORKDIR = "{REMOTE_WORKDIR}"\n'
         f'REMOTE_TARBALL_PATH = "{REMOTE_TARBALL_PATH}"\n'
@@ -658,7 +660,17 @@ def _bootstrap_script() -> str:
         'with tarfile.open(REMOTE_TARBALL_PATH, "r:gz") as archive:\n'
         "    archive.extractall(REMOTE_WORKDIR)\n"
         "os.chdir(REMOTE_WORKDIR)\n"
-        'raise SystemExit(subprocess.call([sys.executable, "scripts/colab_worker_entry.py"]))\n'
+        'stdout = open("colab-worker.stdout.log", "ab", buffering=0)\n'
+        'stderr = open("colab-worker.stderr.log", "ab", buffering=0)\n'
+        "process = subprocess.Popen(\n"
+        '    [sys.executable, "scripts/colab_worker_entry.py"],\n'
+        "    stdout=stdout,\n"
+        "    stderr=stderr,\n"
+        "    start_new_session=True,\n"
+        ")\n"
+        'Path("colab-worker.pid").write_text(str(process.pid) + "\\n", encoding="utf-8")\n'
+        'print(f"colab worker started pid={process.pid}", flush=True)\n'
+        "raise SystemExit(0)\n"
     )
 
 
