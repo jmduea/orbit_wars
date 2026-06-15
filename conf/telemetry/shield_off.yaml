@@ -1,9 +1,0 @@
-defaults:
-  - base
-  - _self_
-
-metric_groups:
-  trajectory_shield_debug: false
-
-wandb:
-  tags: ["shield_off"]

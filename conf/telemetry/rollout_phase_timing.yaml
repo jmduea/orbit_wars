@@ -1,7 +1,0 @@
-# Deprecated on ow train — use `ow benchmark rollout-phase-profile` instead.
-defaults:
-  - base
-  - _self_
-
-metric_groups:
-  rollout_phase_timing: true

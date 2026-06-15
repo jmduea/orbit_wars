@@ -7,21 +7,21 @@ metric_groups:
   core_progress: true
   losses: true
   timing: true
-  curriculum: false
-  opponent_composition: false
-  action_decision: false
-  game_state: false
-  trajectory_shield_debug: false
-  historical_pool: false
-  debug: false
-  events: false
+  curriculum: true
+  opponent_composition: true
+  action_decision: true
+  game_state: true
+  trajectory_shield_debug: true
+  historical_pool: true
+  debug: true
+  events: true
 
 wandb:
-  enabled: false
+  enabled: true
   project: orbit_wars
-  entity: null
-  group: ablation
-  tags: [ablation]
+  entity: jmduea-jdueadev
+  group: debug
+  tags: [debug]
   log_artifacts: false
   log_model_every: 1000
   watch_model: false
