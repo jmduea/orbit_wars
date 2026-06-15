@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import flax.linen as nn
 import jax.numpy as jnp
 
@@ -69,6 +71,8 @@ def collect_rollout_jax(
     env_index_offset: int | jax.Array = 0,
     norm_state: ObservationNormState | None = None,
     map_pool: MapPoolConstants | None = None,
+    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]] | None = None,
+    multi_player_step_fn: Callable[[object, object], tuple[object, object]] | None = None,
 ):
     del update
     if cfg.task.player_count not in (2, 4):
@@ -247,11 +251,16 @@ def collect_rollout_jax(
                     state, learner_action, opponent_action, cfg.task, cfg.reward
                 )
             else:
-                from src.jax.env import batched_step_multi_player
+                if multi_player_step_fn is not None:
+                    next_state, result = multi_player_step_fn(
+                        state, multi_player_action
+                    )
+                else:
+                    from src.jax.env import batched_step_multi_player
 
-                next_state, result = batched_step_multi_player(
-                    state, multi_player_action, cfg.task, cfg.reward
-                )
+                    next_state, result = batched_step_multi_player(
+                        state, multi_player_action, cfg.task, cfg.reward
+                    )
         else:
             next_state, result = _env_step_with_opponents(
                 cfg=cfg,
@@ -266,6 +275,7 @@ def collect_rollout_jax(
                 historical_params_pool=historical_params_pool,
                 opponent_params_by_player=opponent_params_by_player,
                 env_count=env_count,
+                multi_player_step_fn=multi_player_step_fn,
             )
 
         if carry_enabled:
@@ -286,6 +296,7 @@ def collect_rollout_jax(
                 env_count=env_count,
                 env_indices=env_indices,
                 map_pool=map_pool,
+                pool_reset_fn=pool_reset_fn,
                 cfg=cfg,
                 carry_enabled=carry_enabled,
                 fresh_decoder_hidden=fresh_decoder_hidden,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import jax.numpy as jnp
@@ -373,6 +374,7 @@ def _reset_on_done(
     env_count: int,
     env_indices: jax.Array,
     map_pool: MapPoolConstants | None,
+    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]] | None = None,
     cfg: TrainConfig,
     carry_enabled: bool,
     fresh_decoder_hidden,
@@ -387,9 +389,12 @@ def _reset_on_done(
         map_ids = (reset_episode_counts + env_indices) % jnp.asarray(
             map_pool.pool_size, dtype=jnp.int32
         )
-        reset_states, reset_batches = batched_reset_with_pool(
-            reset_keys, cfg.task, map_pool, map_ids
-        )
+        if pool_reset_fn is not None:
+            reset_states, reset_batches = pool_reset_fn(reset_keys, map_ids)
+        else:
+            reset_states, reset_batches = batched_reset_with_pool(
+                reset_keys, cfg.task, map_pool, map_ids
+            )
     else:
         reset_states, reset_batches = batched_reset(reset_keys, cfg.task)
     reset_states, reset_batches = assign_learner_players(
@@ -589,6 +594,7 @@ def _env_step_with_opponents(
     historical_params_pool: dict | None,
     opponent_params_by_player: tuple[dict, ...] | None,
     env_count: int,
+    multi_player_step_fn: Callable[[object, object], tuple[object, object]] | None = None,
 ) -> tuple[object, object]:
     if cfg.task.player_count == 2:
         opp_game = state.game._replace(
@@ -625,4 +631,6 @@ def _env_step_with_opponents(
         opponent_params_by_player=opponent_params_by_player,
         env_count=env_count,
     )
+    if multi_player_step_fn is not None:
+        return multi_player_step_fn(state, multi_player_action)
     return batched_step_multi_player(state, multi_player_action, cfg.task, cfg.reward)

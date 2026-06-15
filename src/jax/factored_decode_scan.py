@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+from flax import linen as nn
 
 import jax
 from src.config import TrainConfig
@@ -38,7 +39,7 @@ def advance_scan_decode_carry(
 
 def init_scan_decode_carry(
     params: dict,
-    policy: object,
+    policy: nn.Module,
     encoder_out: PlanetEdgeEncoderOutput,
     cfg: TrainConfig,
     decoder_hidden_in: jax.Array | None = None,
@@ -56,7 +57,7 @@ def init_scan_decode_carry(
 
 def scan_decode_step(
     params: dict,
-    policy: object,
+    policy: nn.Module,
     encoder_out: PlanetEdgeEncoderOutput,
     carry: FactorizedDecodeCarry,
     *,
@@ -75,62 +76,5 @@ def scan_decode_step(
         teacher_source=teacher_source,
         teacher_target_slot=teacher_target_slot,
         rng=rng,
-        deterministic=deterministic,
-    )
-
-
-def decoder_hidden_from_teacher_sequence(
-    params: dict,
-    policy: object,
-    encoder_out: PlanetEdgeEncoderOutput,
-    cfg: TrainConfig,
-    *,
-    source_sequence: jax.Array,
-    target_slot_sequence: jax.Array,
-    decoder_hidden_in: jax.Array | None = None,
-    deterministic: bool = True,
-) -> jax.Array:
-    """Replay decoder GRU state from a committed teacher prefix sequence."""
-
-    carry = init_scan_decode_carry(params, policy, encoder_out, cfg, decoder_hidden_in)
-    sequence_k = source_sequence.shape[1]
-    for step_idx in range(sequence_k):
-        _, carry = scan_decode_step(
-            params,
-            policy,
-            encoder_out,
-            carry,
-            deterministic=deterministic,
-        )
-        carry = advance_scan_decode_carry(
-            encoder_out,
-            carry,
-            source=source_sequence[:, step_idx],
-            target_slot=target_slot_sequence[:, step_idx],
-        )
-    return carry.state
-
-
-def factorized_decoder_hidden_from_teacher_sequence(
-    params: dict,
-    policy: object,
-    encoder_out: PlanetEdgeEncoderOutput,
-    cfg: TrainConfig,
-    *,
-    source_sequence: jax.Array,
-    target_slot_sequence: jax.Array,
-    decoder_hidden_in: jax.Array | None = None,
-    deterministic: bool = True,
-) -> jax.Array:
-    """Alias for tests and carry replay callers."""
-
-    return decoder_hidden_from_teacher_sequence(
-        params,
-        policy,
-        encoder_out,
-        cfg,
-        source_sequence=source_sequence,
-        target_slot_sequence=target_slot_sequence,
-        decoder_hidden_in=decoder_hidden_in,
         deterministic=deterministic,
     )

@@ -13,7 +13,8 @@ from src.jax.env import (
     JaxEnvState,
     assign_learner_players,
     batched_reset,
-    batched_reset_with_pool,
+    make_batched_reset_with_pool_fn,
+    make_batched_step_multi_player_fn,
 )
 from src.jax.features import TurnBatch
 from src.jax.map_pool.load import MapPoolConstants, load_map_pool
@@ -37,6 +38,8 @@ class JaxRolloutGroup:
     turn_batch: TurnBatch
     collect_fn: Callable
     map_pool: MapPoolConstants | None = None
+    pool_reset_fn: Callable | None = None
+    multi_player_step_fn: Callable | None = None
 
 
 def _load_shared_map_pool(
@@ -126,6 +129,8 @@ def _collect_rollout_microbatched(
     update=jnp.asarray(0, dtype=jnp.int32),
     norm_state=None,
     map_pool: MapPoolConstants | None = None,
+    pool_reset_fn: Callable | None = None,
+    multi_player_step_fn: Callable | None = None,
     timed_collect: bool = False,
 ) -> tuple[jax.Array, JaxEnvState, TurnBatch, JaxTransitionBatch, dict[str, jax.Array]]:
     env_count = int(cfg.training.num_envs)
@@ -161,6 +166,8 @@ def _collect_rollout_microbatched(
             env_index_offset=start,
             norm_state=norm_state,
             map_pool=map_pool,
+            pool_reset_fn=pool_reset_fn,
+            multi_player_step_fn=multi_player_step_fn,
         )
         return next_state, next_batch, chunk_transitions, chunk_metrics
 
@@ -278,13 +285,21 @@ def _init_rollout_group(
     reset_keys = jax.random.split(key, group_cfg.training.num_envs)
     env_indices = jnp.arange(group_cfg.training.num_envs, dtype=jnp.int32)
     episode_counts = jnp.zeros((group_cfg.training.num_envs,), dtype=jnp.int32)
-    if map_pool is not None:
+    pool_reset_fn = (
+        make_batched_reset_with_pool_fn(group_cfg.task, map_pool)
+        if map_pool is not None
+        else None
+    )
+    multi_player_step_fn = (
+        make_batched_step_multi_player_fn(group_cfg.task, group_cfg.reward)
+        if player_count == 4
+        else None
+    )
+    if pool_reset_fn is not None:
         map_ids = (episode_counts + env_indices) % jnp.asarray(
             map_pool.pool_size, dtype=jnp.int32
         )
-        env_state, turn_batch = batched_reset_with_pool(
-            reset_keys, group_cfg.task, map_pool, map_ids
-        )
+        env_state, turn_batch = pool_reset_fn(reset_keys, map_ids)
     else:
         env_state, turn_batch = batched_reset(reset_keys, group_cfg.task)
     env_state, turn_batch = assign_learner_players(
@@ -320,6 +335,8 @@ def _init_rollout_group(
                 update=update_idx,
                 norm_state=norm_state,
                 map_pool=map_pool,
+                pool_reset_fn=pool_reset_fn,
+                multi_player_step_fn=multi_player_step_fn,
             )
         return _collect_rollout_microbatched(
             rollout_key,
@@ -334,6 +351,8 @@ def _init_rollout_group(
             update=update_idx,
             norm_state=norm_state,
             map_pool=map_pool,
+            pool_reset_fn=pool_reset_fn,
+            multi_player_step_fn=multi_player_step_fn,
             timed_collect=timed_collect,
         )
 
@@ -346,6 +365,8 @@ def _init_rollout_group(
         turn_batch=turn_batch,
         collect_fn=collect_fn,
         map_pool=map_pool,
+        pool_reset_fn=pool_reset_fn,
+        multi_player_step_fn=multi_player_step_fn,
     )
 
 
@@ -400,6 +421,9 @@ def replace_rollout_group_state(
         env_state=env_state,
         turn_batch=turn_batch,
         collect_fn=group.collect_fn,
+        map_pool=group.map_pool,
+        pool_reset_fn=group.pool_reset_fn,
+        multi_player_step_fn=group.multi_player_step_fn,
     )
 
 

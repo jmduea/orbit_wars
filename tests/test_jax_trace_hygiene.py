@@ -14,8 +14,12 @@ from src.game.constants import MAX_PLANETS
 from src.jax.env import (
     empty_action,
     make_batched_reset_fn,
+    make_batched_reset_with_pool_fn,
     make_batched_step_fn,
+    make_batched_step_multi_player_fn,
 )
+from src.jax.map_pool.bake import bake_one_entry, stack_entries
+from src.jax.map_pool.load import map_pool_constants_from_numpy
 from src.jax.policy import build_jax_policy
 from src.jax.train import init_rollout_groups, init_train_state
 
@@ -26,6 +30,7 @@ TIER_A_CLEAN = (
     "src/jax/features.py",
     "src/jax/action_sampling.py",
     "src/jax/factored_sequence_scan.py",
+    "src/jax/factored_decode_scan.py",
     "src/jax/planet_flow.py",
     "src/jax/action_codec.py",
 )
@@ -118,6 +123,49 @@ def test_tier_a_batched_env_reset_step_under_jit() -> None:
     assert batches.planet_features.shape[0] == 2
 
     next_states, results = step_fn(states, batched_action, batched_action)
+    assert next_states.game.step.shape == (2,)
+    assert results.reward.shape == (2,)
+
+
+def test_tier_a_batched_reset_with_pool_under_jit() -> None:
+    entries = [bake_one_entry(seed) for seed in (0, 1, 2)]
+    tiny_pool = map_pool_constants_from_numpy(stack_entries(entries))
+    cfg = TrainConfig()
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    cfg.task.map_pool_path = "unused"
+    keys = jax.random.split(jax.random.PRNGKey(11), 2)
+    map_ids = jnp.array([0, 1], dtype=jnp.int32)
+
+    reset_fn = make_batched_reset_with_pool_fn(cfg.task, tiny_pool)
+    states, batches = reset_fn(keys, map_ids)
+    assert states.game.planets.x.shape == (2, MAX_PLANETS)
+    assert batches.planet_features.shape[0] == 2
+
+
+def test_tier_a_batched_step_multi_player_under_jit() -> None:
+    cfg = TrainConfig()
+    cfg.task.player_count = 4
+    cfg.task.max_fleets = 16
+    cfg.task.candidate_count = 4
+    reward_cfg = RewardConfig()
+    keys = jax.random.split(jax.random.PRNGKey(12), 2)
+    action = empty_action(cfg.task)
+    per_player_action = jax.tree.map(
+        lambda x: jnp.broadcast_to(x, (cfg.task.player_count,) + jnp.asarray(x).shape),
+        action,
+    )
+    batched_action = jax.tree.map(
+        lambda x: jnp.broadcast_to(x, (2,) + jnp.asarray(x).shape), per_player_action
+    )
+
+    reset_fn = make_batched_reset_fn(cfg.task)
+    step_fn = make_batched_step_multi_player_fn(cfg.task, reward_cfg)
+
+    states, batches = reset_fn(keys)
+    assert batches.planet_features.shape[0] == 2
+
+    next_states, results = step_fn(states, batched_action)
     assert next_states.game.step.shape == (2,)
     assert results.reward.shape == (2,)
 

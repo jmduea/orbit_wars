@@ -119,6 +119,7 @@ def test_replay_rebuilt_cheap_mask_matches_rollout_stack() -> None:
     rollout_lattice = apply_cheap_trajectory_shield_factorized_topk(
         game, batch, train_cfg.task, remaining_planet_ships=ships_arg
     ).ship_bucket_mask
+    assert bool(np.asarray(rollout_lattice).any())
     stored_unshielded = jnp.zeros_like(rollout_lattice)
     rebuilt = shield_bucket_mask_for_replay_step(
         train_cfg,
@@ -131,6 +132,66 @@ def test_replay_rebuilt_cheap_mask_matches_rollout_stack() -> None:
     ).ship_bucket_mask
     np.testing.assert_array_equal(np.asarray(rebuilt), np.asarray(rollout_lattice))
     np.testing.assert_array_equal(np.asarray(rebuilt), np.asarray(direct))
+
+    stored_all_true = jnp.ones_like(rollout_lattice, dtype=bool)
+    rebuilt_ignores_stored = shield_bucket_mask_for_replay_step(
+        train_cfg,
+        batch,
+        remaining,
+        stored_all_true,
+    )
+    np.testing.assert_array_equal(np.asarray(rebuilt_ignores_stored), np.asarray(rollout_lattice))
+
+
+@pytest.mark.jax
+def test_replay_lattice_mode_returns_stored_mask_unchanged() -> None:
+    """Lattice replay must pass through stored rollout masks without rebuilding."""
+    from src.jax.factored_sequence_scan import shield_bucket_mask_for_replay_step
+    from src.jax.features import encode_turn
+
+    train_cfg = _train_cfg(
+        task={
+            "trajectory_shield_mode": "cheap",
+            "rollout_factorized_sampling": "lattice",
+        }
+    )
+    game = _two_planet_game(x0=20.0, y0=20.0, x1=80.0, y1=20.0)
+    batch = encode_turn(game, train_cfg.task)
+    remaining = owned_planet_ships_from_turn_batch(batch, train_cfg.task)
+    stored = jnp.ones((MAX_PLANETS, edge_k(train_cfg.task), train_cfg.task.ship_bucket_count))
+    out = shield_bucket_mask_for_replay_step(train_cfg, batch, remaining, stored)
+    np.testing.assert_array_equal(np.asarray(out), np.asarray(stored))
+
+
+@pytest.mark.parametrize("mode", ["lattice", "selected_validate"])
+@pytest.mark.jax
+def test_shield_bucket_mask_for_replay_step_respects_sampling_mode(mode: str) -> None:
+    from src.jax.factored_sequence_scan import shield_bucket_mask_for_replay_step
+    from src.jax.features import encode_turn
+    from src.jax.shield.trajectory import cheap_factorized_topk_masks_from_remaining
+
+    train_cfg = _train_cfg(
+        task={
+            "trajectory_shield_mode": "cheap",
+            "rollout_factorized_sampling": mode,
+        }
+    )
+    game = _two_planet_game(x0=20.0, y0=20.0, x1=80.0, y1=20.0)
+    batch = encode_turn(game, train_cfg.task)
+    remaining = owned_planet_ships_from_turn_batch(batch, train_cfg.task)
+    stored = jnp.zeros(
+        (MAX_PLANETS, edge_k(train_cfg.task), train_cfg.task.ship_bucket_count),
+        dtype=bool,
+    )
+    out = shield_bucket_mask_for_replay_step(train_cfg, batch, remaining, stored)
+    if mode == "lattice":
+        np.testing.assert_array_equal(np.asarray(out), np.asarray(stored))
+    else:
+        assert not np.array_equal(np.asarray(out), np.asarray(stored))
+        direct = cheap_factorized_topk_masks_from_remaining(
+            batch, train_cfg.task, remaining
+        ).ship_bucket_mask
+        np.testing.assert_array_equal(np.asarray(out), np.asarray(direct))
 
 
 @pytest.mark.jax

@@ -8,6 +8,7 @@ as padded arrays so ``reset``/``step`` can be composed with ``jax.vmap`` and
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import NamedTuple
 
 import jax.numpy as jnp
@@ -24,6 +25,7 @@ from src.game.constants import (
     SUN_RADIUS,
     TOTAL_COMETS,
 )
+from src.jax.map_pool.load import MapPoolConstants
 from src.jax.map_pool.comets import (
     JaxCometState,
     activate_baked_comet_group,
@@ -1000,7 +1002,9 @@ def make_batched_reset_fn(task_cfg: TaskConfig):
     return reset_fn
 
 
-def make_batched_reset_with_pool_fn(task_cfg: TaskConfig, map_pool):
+def make_batched_reset_with_pool_fn(
+    task_cfg: TaskConfig, map_pool: MapPoolConstants
+) -> Callable[[jax.Array, jax.Array], tuple[JaxEnvState, TurnBatch]]:
     """Return a jitted ``batched_reset_with_pool`` for fixed task + pool tables."""
 
     @jax.jit
@@ -1026,7 +1030,9 @@ def make_batched_step_fn(task_cfg: TaskConfig, reward_cfg: RewardConfig):
     return step_fn
 
 
-def make_batched_step_multi_player_fn(task_cfg: TaskConfig, reward_cfg: RewardConfig):
+def make_batched_step_multi_player_fn(
+    task_cfg: TaskConfig, reward_cfg: RewardConfig
+) -> Callable[[JaxEnvState, JaxAction], tuple[JaxEnvState, JaxStepResult]]:
     """Return a jitted 4p ``batched_step_multi_player`` for fixed configs."""
 
     @jax.jit

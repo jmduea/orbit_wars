@@ -14,6 +14,7 @@ from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import FactoredPolicyOutput
 from src.jax.env import JaxFleetState, JaxGameState, JaxPlanetState, reset
 from src.jax.features import encode_turn
+from src.jax.policy import build_jax_policy, make_synthetic_turn_batch
 from src.jax.shield import (
     apply_cheap_trajectory_shield_factorized_topk,
     apply_configured_trajectory_shield_factorized_topk,
@@ -315,6 +316,31 @@ def test_cheap_factorized_shield_allows_safe_nonzero_bucket() -> None:
     result = apply_cheap_trajectory_shield_factorized_topk(game, batch, cfg)
 
     assert bool(np.asarray(result.ship_bucket_mask[0, 0, 1:]).any())
+
+
+@pytest.mark.jax
+def test_cheap_masks_batched_row_matches_1d() -> None:
+    """2-D remaining_ships batched path must match per-row 1-D mask oracle."""
+    from src.jax.factored_sequence_scan import owned_planet_ships_from_turn_batch
+    from src.jax.shield.trajectory import cheap_factorized_topk_masks_from_remaining
+
+    cfg = _modes_cfg()
+    batch = make_synthetic_turn_batch(2, cfg, key=jax.random.PRNGKey(44))
+    remaining_2d = owned_planet_ships_from_turn_batch(batch, cfg)
+    assert remaining_2d.ndim == 2
+    assert remaining_2d.shape[0] == 2
+
+    batched = cheap_factorized_topk_masks_from_remaining(
+        batch, cfg, remaining_2d
+    ).ship_bucket_mask
+    for row_idx in range(remaining_2d.shape[0]):
+        row_mask = cheap_factorized_topk_masks_from_remaining(
+            batch, cfg, remaining_2d[row_idx]
+        ).ship_bucket_mask
+        np.testing.assert_array_equal(
+            np.asarray(batched[row_idx]),
+            np.asarray(row_mask[row_idx]),
+        )
 
 
 def test_cheap_factorized_shield_blocks_when_source_has_no_ships() -> None:

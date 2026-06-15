@@ -91,6 +91,23 @@ def test_aggregate_ppo_metrics_ignores_empty_minibatches() -> None:
     assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
 
 
+def test_aggregate_ppo_metrics_empty_minibatches_avoid_inf_at_log_ratio_abs_max() -> None:
+    from src.jax.ppo_update import _aggregate_ppo_metrics
+
+    metrics_by_minibatch = {
+        "sample_count": jnp.array([0.0, 0.0], dtype=jnp.float32),
+        "log_ratio_abs_max": jnp.array([jnp.inf, jnp.inf], dtype=jnp.float32),
+        "old_log_prob_min": jnp.array([jnp.inf, jnp.inf], dtype=jnp.float32),
+        "loss_sample_count_2p": jnp.array([0.0, 0.0], dtype=jnp.float32),
+        "loss_sample_count_4p": jnp.array([0.0, 0.0], dtype=jnp.float32),
+    }
+    metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count=2)
+
+    assert float(metrics["log_ratio_abs_max"]) == pytest.approx(0.0)
+    assert float(metrics["old_log_prob_min_at_log_ratio_abs_max"]) == pytest.approx(0.0)
+    assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
+
+
 @pytest.mark.parametrize(
     ("overrides", "attr", "expected"),
     [

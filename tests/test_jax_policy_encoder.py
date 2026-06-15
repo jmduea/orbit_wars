@@ -293,7 +293,11 @@ def test_incremental_factorized_decode_matches_full_teacher_path() -> None:
 @pytest.mark.jax
 def test_teacher_carry_replay_matches_full_factorized_decode() -> None:
     """Lightweight carry replay must match full decode decoder_hidden export."""
-    from src.jax.factored_decode_scan import factorized_decoder_hidden_from_teacher_sequence
+    from src.jax.factored_decode_scan import (
+        advance_scan_decode_carry,
+        init_scan_decode_carry,
+        scan_decode_step,
+    )
     from src.jax.factored_sequence_scan import forward_factorized_encode
     from src.jax.policy import factorized_decode
 
@@ -315,17 +319,75 @@ def test_teacher_carry_replay_matches_full_factorized_decode() -> None:
         target_slot_sequence=slot_seq,
         deterministic=True,
     )
-    replay_hidden = factorized_decoder_hidden_from_teacher_sequence(
+    carry = init_scan_decode_carry(params, policy, encoder_out, cfg)
+    for step_idx in range(cfg.model.max_moves_k):
+        _, carry = scan_decode_step(
+            params,
+            policy,
+            encoder_out,
+            carry,
+            deterministic=True,
+        )
+        carry = advance_scan_decode_carry(
+            encoder_out,
+            carry,
+            source=source_seq[:, step_idx],
+            target_slot=slot_seq[:, step_idx],
+        )
+    np.testing.assert_allclose(carry.state, full.decoder_hidden, rtol=0.0, atol=1e-5)
+
+
+@pytest.mark.jax
+def test_advance_scan_decode_carry_matches_decoder_advance() -> None:
+    """Scan carry advance must match FactorizedTopKPointerDecoder.advance_carry_input."""
+    from src.jax.factored_decode_scan import (
+        advance_scan_decode_carry,
+        init_scan_decode_carry,
+    )
+    from src.jax.factored_sequence_scan import forward_factorized_encode
+    from src.jax.policy import factorized_decode_advance_carry
+
+    cfg = _train_cfg(architecture="planet_graph_transformer")
+    cfg.model.max_moves_k = 3
+    cfg.model.decoder_carry = True
+    policy = build_jax_policy(cfg)
+    batch = make_synthetic_turn_batch(2, cfg.task, key=jax.random.PRNGKey(5))
+    params = policy.init(jax.random.PRNGKey(6), batch)
+    encoder_out = forward_factorized_encode(params, policy, batch)
+    rng = jax.random.PRNGKey(7)
+    source = jax.random.randint(rng, (2,), 0, MAX_PLANETS, dtype=jnp.int32)
+    target_slot = jax.random.randint(
+        jax.random.fold_in(rng, 1), (2,), 0, edge_k(cfg.task), dtype=jnp.int32
+    )
+
+    carry = init_scan_decode_carry(params, policy, encoder_out, cfg)
+    scan_carry = advance_scan_decode_carry(
+        encoder_out,
+        carry,
+        source=source,
+        target_slot=target_slot,
+    )
+    decoder_carry = factorized_decode_advance_carry(
         params,
         policy,
         encoder_out,
-        cfg=cfg,
-        source_sequence=source_seq,
-        target_slot_sequence=slot_seq,
-        decoder_hidden_in=None,
-        deterministic=True,
+        carry,
+        source=source,
+        target_slot=target_slot,
     )
-    np.testing.assert_allclose(replay_hidden, full.decoder_hidden, rtol=0.0, atol=1e-5)
+
+    np.testing.assert_allclose(
+        scan_carry.input_emb,
+        decoder_carry.input_emb,
+        rtol=0.0,
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        scan_carry.state,
+        decoder_carry.state,
+        rtol=0.0,
+        atol=1e-5,
+    )
 
 
 def test_build_jax_policy_dispatches_factorized_transformer() -> None:

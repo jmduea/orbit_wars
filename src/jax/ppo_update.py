@@ -276,14 +276,23 @@ def _aggregate_ppo_metrics(
     if "log_ratio_abs_max" in metrics_by_minibatch:
         log_ratio_abs_max_values = metrics_by_minibatch["log_ratio_abs_max"]
         safe_log_ratio_abs_max = jnp.where(active, log_ratio_abs_max_values, 0.0)
+        has_active = jnp.any(active)
         max_log_ratio_minibatch = jnp.argmax(safe_log_ratio_abs_max)
-        metrics["log_ratio_abs_max"] = safe_log_ratio_abs_max[max_log_ratio_minibatch]
-        metrics["log_ratio_abs_max_minibatch"] = max_log_ratio_minibatch.astype(
-            jnp.float32
+        metrics["log_ratio_abs_max"] = jnp.where(
+            has_active,
+            log_ratio_abs_max_values[max_log_ratio_minibatch],
+            jnp.array(0.0, dtype=jnp.float32),
         )
-        metrics["log_ratio_abs_max_last_minibatch"] = metrics_by_minibatch[
-            "log_ratio_abs_max"
-        ][last_active]
+        metrics["log_ratio_abs_max_minibatch"] = jnp.where(
+            has_active,
+            max_log_ratio_minibatch.astype(jnp.float32),
+            jnp.array(0.0, dtype=jnp.float32),
+        )
+        metrics["log_ratio_abs_max_last_minibatch"] = jnp.where(
+            has_active,
+            metrics_by_minibatch["log_ratio_abs_max"][last_active],
+            jnp.array(0.0, dtype=jnp.float32),
+        )
         for name in (
             "old_log_prob_min",
             "old_log_prob_max",
@@ -296,9 +305,11 @@ def _aggregate_ppo_metrics(
             "ship_log_prob_min",
         ):
             if name in metrics_by_minibatch:
-                metrics[f"{name}_at_log_ratio_abs_max"] = metrics_by_minibatch[name][
-                    max_log_ratio_minibatch
-                ]
+                metrics[f"{name}_at_log_ratio_abs_max"] = jnp.where(
+                    has_active,
+                    metrics_by_minibatch[name][max_log_ratio_minibatch],
+                    jnp.array(0.0, dtype=jnp.float32),
+                )
     metrics["minibatches"] = jnp.array(minibatch_count, dtype=jnp.float32)
     return metrics
 

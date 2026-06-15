@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import jax.numpy as jnp
@@ -151,6 +152,8 @@ def collect_rollout_jax_timed(
     env_index_offset: int | jax.Array = 0,
     norm_state: ObservationNormState | None = None,
     map_pool: MapPoolConstants | None = None,
+    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]] | None = None,
+    multi_player_step_fn: Callable[[object, object], tuple[object, object]] | None = None,
 ):
     del update
     validate_jax_training_opponent_mode(cfg.opponents.dispatch)
@@ -285,12 +288,18 @@ def collect_rollout_jax_timed(
         )
 
     @jax.jit
-    def env_step_4p(state_in, multi_player_action):
+    def env_step_4p_batched(state_in, multi_player_action):
         from src.jax.env import batched_step_multi_player
 
         return batched_step_multi_player(
             state_in, multi_player_action, cfg.task, cfg.reward
         )
+
+    step_4p_fn = (
+        multi_player_step_fn
+        if multi_player_step_fn is not None
+        else env_step_4p_batched
+    )
 
     @jax.jit
     def opp_encode_4p_flat(state_in):
@@ -382,7 +391,7 @@ def collect_rollout_jax_timed(
                 next_state, result = _timed_call(
                     phases,
                     "env_step",
-                    env_step_4p,
+                    step_4p_fn,
                     state,
                     multi_player_action,
                 )
@@ -468,7 +477,7 @@ def collect_rollout_jax_timed(
             next_state, result = _timed_call(
                 phases,
                 "env_step",
-                env_step_4p,
+                step_4p_fn,
                 state,
                 multi_player_action,
             )
@@ -493,6 +502,7 @@ def collect_rollout_jax_timed(
                 env_count=env_count,
                 env_indices=env_indices,
                 map_pool=map_pool,
+                pool_reset_fn=pool_reset_fn,
                 cfg=cfg,
                 carry_enabled=carry_enabled,
                 fresh_decoder_hidden=fresh_decoder_hidden,
