@@ -5,7 +5,7 @@ parameters:
   task:
     value: rollout_selected_validate
   training.num_envs:
-    value: 64
+    value: 32
   training.rollout_microbatch_envs:
     value: 32
   training.rollout_steps:

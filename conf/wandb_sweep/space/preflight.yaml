@@ -7,11 +7,9 @@ parameters:
   # task.trajectory_shield_mode:
   #   values: ["off", cheap]
   training.format_weights:
-    values: ['{2: 0.5, 4: 0.5}', '{2: 1.0, 4: 0.0}', '{2: 0.0, 4: 1.0}']
-  task.trajectory_shield_horizon:
-    values: [10, 30]
+    values: ['{2: 1.0, 4: 0.0}', '{2: 0.0, 4: 1.0}']
   task.feature_history_steps:
-    values: [1, 2, 3]
+    values: [1, 2, 5]
   task.edge_rank_mode: 
     values: [snapshot, intercept_min]
   training.lr:

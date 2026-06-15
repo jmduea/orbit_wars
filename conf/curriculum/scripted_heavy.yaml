@@ -10,8 +10,8 @@ stages:
     opponent_families:
       latest: 0.0
       historical: 0.0
-      random: 0.20
-      noop: 0.20
+      random: 0.40
+      noop: 0.40
       nearest_sniper: 0.20
-      turtle: 0.20
-      opportunistic: 0.20
+      turtle: 0.0
+      opportunistic: 0.0
