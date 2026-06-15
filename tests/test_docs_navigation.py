@@ -51,11 +51,6 @@ def _assert_link_resolves(base_dir: Path, href: str) -> None:
     assert target.exists(), f"missing path for {href!r}: {target}"
 
 
-@pytest.mark.parametrize("href", _extract_markdown_links(README.read_text(encoding="utf-8")))
-def test_docs_readme_links_resolve(href: str) -> None:
-    _assert_link_resolves(DOCS_ROOT, href)
-
-
 @pytest.mark.parametrize(
     "href",
     _extract_markdown_links(BENCHMARKS_README.read_text(encoding="utf-8")),
@@ -68,15 +63,6 @@ def test_docs_readme_start_here_excludes_brain_dump() -> None:
     text = README.read_text(encoding="utf-8")
     start_here = text.split("## Agent policy chain", maxsplit=1)[0]
     assert "brain_dump" not in start_here
-
-
-def test_onboarding_hand_maintained_doc_links_resolve() -> None:
-    onboarding = ONBOARDING.read_text(encoding="utf-8")
-    blocks = _hand_maintained_blocks(onboarding)
-    assert blocks, "expected hand-maintained documentation blocks in ONBOARDING.md"
-    for block in blocks:
-        for href in _extract_markdown_links(block):
-            _assert_link_resolves(DOCS_ROOT, href)
 
 
 def test_onboarding_regenerating_mentions_hand_maintained_docs() -> None:

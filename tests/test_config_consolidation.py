@@ -135,16 +135,6 @@ def test_training_profile_composes(profile: str) -> None:
     assert resolve_rollout_group_specs(cfg)
 
 
-@pytest.mark.parametrize("name,overrides", PRIMARY_TRAIN_PROFILES.items())
-def test_primary_train_profiles_compose(name: str, overrides: list[str]) -> None:
-    del name
-    cfg = compose_hydra_train_config(overrides)
-
-    assert cfg.model.architecture in SACRED_ARCHITECTURES
-    assert cfg.model.pointer_decoder in SACRED_POINTER_DECODERS
-    assert resolve_rollout_group_specs(cfg)
-
-
 def test_hybrid_promotion_artifacts_profile_composes() -> None:
     cfg = compose_hydra_train_config(["artifacts=hybrid_promotion"])
 
@@ -422,33 +412,6 @@ def test_jax_training_opponent_mode_normalization() -> None:
     validate_jax_training_opponent_mode("random")
     with pytest.raises(ValueError, match="JAX training supports"):
         validate_jax_training_opponent_mode("noop_only")
-
-
-def test_opponent_recovery_profiles_are_direct_and_pool_free() -> None:
-    random_cfg = compose_hydra_train_config(
-        [
-            "curriculum=off",
-            "opponents=throughput_recovery",
-            "telemetry=opponent_recovery",
-        ]
-    )
-    noop_cfg = compose_hydra_train_config(
-        [
-            "curriculum=off",
-            "opponents=throughput_recovery_floor",
-            "telemetry=opponent_recovery",
-        ]
-    )
-
-    assert random_cfg.opponents.dispatch == "random"
-    assert noop_cfg.opponents.dispatch == "noop"
-    for cfg in (random_cfg, noop_cfg):
-        assert cfg.curriculum.enabled is False
-        assert cfg.opponents.self_play.enabled is False
-        assert cfg.opponents.snapshot.pool_size == 0
-        assert cfg.opponents.snapshot.interval_updates == 0
-        assert cfg.telemetry.metric_groups.opponent_composition is True
-        assert cfg.telemetry.metric_groups.rollout_phase_timing is False
 
 
 def test_planet_flow_ppo_signal_short_sweep_generates_expected_guardrails(

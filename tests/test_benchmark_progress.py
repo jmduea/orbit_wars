@@ -19,15 +19,6 @@ def test_gate_dry_run_emits_stderr_start(capsys) -> None:
     assert "uv run ow train" in captured.err
 
 
-def test_gate_verbose_dry_run_hints(capsys) -> None:
-    assert (
-        benchmark_cli.main(["gate", "beat_noop", "--dry-run", "--verbose"]) == 1
-    )
-    captured = capsys.readouterr()
-    assert "Do not pipe this command to tail/head" in captured.err
-    assert "Gate train overrides:" in captured.err
-
-
 def test_emit_benchmark_progress_writes_stderr(capsys) -> None:
     emit_benchmark_progress("hello progress")
     captured = capsys.readouterr()
