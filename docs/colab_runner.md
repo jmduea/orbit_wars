@@ -41,8 +41,10 @@ uv run ow train colab prepare --gpu T4 training.total_updates=10 output.campaign
 # Shortlist after local W&B preflight sweep
 uv run ow train colab shortlist --sweep-id <id> --out outputs/colab_runner/shortlist.json
 
-# Long run (explicit overrides)
+# Long run (explicit overrides, then monitor/sync/evaluate automatically)
 uv run ow train colab launch --gpu T4 --timeout 86400 \
+  --monitor-after-launch \
+  --interval-seconds 300 --stale-seconds 900 \
   training.total_updates=2000 \
   opponents=throughput_recovery \
   output.campaign=colab_long \
@@ -55,6 +57,9 @@ uv run ow train colab launch --from-shortlist outputs/colab_runner/shortlist.jso
 # Poll + pull artifacts
 uv run ow train colab status --session ow-colab_long-<sha>
 uv run ow train colab sync --session ow-colab_long-<sha>
+uv run ow train colab monitor --session ow-colab_long-<sha> \
+  --interval-seconds 300 --stale-seconds 900 \
+  --eval-baselines noop,random,sniper --eval-seeds 0,1,2,3,4
 uv run ow train colab stop --session ow-colab_long-<sha>
 ```
 
@@ -88,15 +93,17 @@ wandb agent <entity>/orbit_wars/<sweep_id>
 uv run ow train colab shortlist --sweep-id <sweep_id> \
   --out outputs/colab_runner/shortlist.json
 
-# Long run on Colab
+# Long run on Colab, then keep syncing/evaluating checkpoints locally
 uv run ow train colab launch \
   --from-shortlist outputs/colab_runner/shortlist.json --rank 0 \
   --gpu T4 --timeout 86400 \
+  --monitor-after-launch \
+  --interval-seconds 300 --stale-seconds 900 \
   training.total_updates=2000 \
   output.campaign=colab_long \
   task=map_pool
 
-# Pull results for local pipeline
+# Recovery/manual pull if the monitor terminal closed
 uv run ow train colab sync --session <slug>
 uv run ow runs show --run outputs/colab_runner/synced/colab_long/runs/<run_id>
 ```
@@ -142,6 +149,56 @@ uv run ow train colab stop --session ow-colab_smoke-12c2f68
 ```
 
 **Fixes landed during proof:** `colab upload/download/exec/stop/status` use `--session` flags (CLI 0.5.9); bootstrap is Python (not shell) for `colab exec -f`; sync archives campaign dir to tarball before download (directory download unsupported).
+
+## Active long-run monitor
+
+Use `--monitor-after-launch` for long Colab runs instead of passively waiting for `last`:
+
+```bash
+uv run ow train colab launch --gpu T4 --timeout 86400 \
+  --monitor-after-launch \
+  --interval-seconds 300 \
+  --stale-seconds 900 \
+  --eval-baselines noop,random,sniper \
+  --eval-seeds 0,1,2,3,4 \
+  --eval-formats 2p_vs_baseline \
+  training.total_updates=2000 \
+  artifacts.checkpoint_every=50 \
+  training.reseed_every_updates=100 \
+  curriculum=scripted_heavy \
+  output.campaign=colab_fixed_path_long \
+  telemetry.wandb.enabled=true \
+  telemetry.wandb.tags=[preflight]
+```
+
+If the monitor process exits or the terminal is interrupted, restart it against the same session:
+
+```bash
+uv run ow train colab monitor --session ow-colab_fixed_path_long-<sha> \
+  --interval-seconds 300 \
+  --stale-seconds 900 \
+  --eval-baselines noop,random,sniper \
+  --eval-seeds 0,1,2,3,4 \
+  --eval-formats 2p_vs_baseline
+```
+
+`monitor` repeatedly:
+
+1. Calls `colab status` so the local operator sees whether the VM still exists.
+2. Calls `colab sync`, which runs a small remote archive command before download; this also touches the Colab session so it is less likely to be treated as idle.
+3. Reads the newest synced `logs/*_jax.jsonl` and flags stale progress when no metric row or checkpoint has changed for `--stale-seconds`.
+4. Evaluates newly synced numbered checkpoints locally with `ow eval tournament` and stores raw match summaries under `outputs/colab_runner/monitor/evals/`.
+5. Persists state in `outputs/colab_runner/monitor/<session>.json` so restarting the monitor does not re-evaluate checkpoints already processed.
+
+Useful options:
+
+- `--once` — one sync/eval/stale-check pass; good for cron/manual polling.
+- `--max-iterations N` — bounded watch loop for supervised terminal sessions.
+- `--no-eval-checkpoints` — monitor liveness only.
+- `--eval-write-replays` — write HTML replays during checkpoint eval; use sparingly because replay files are large.
+- `--stop-on-stale` — stop the Colab session when stale progress is detected. Use only when protecting credits matters more than preserving the VM.
+
+For 4p, run a second targeted eval pass on promising checkpoints with `ow eval tournament --formats 4p_challenger_vs_baselines`; evaluating every checkpoint in 4p is slower and usually not the right default during an active long run.
 
 ## Notes
 

@@ -42,6 +42,7 @@ COLAB_SUBCOMMANDS = frozenset(
         "launch",
         "status",
         "sync",
+        "monitor",
         "shortlist",
         "stop",
     }
@@ -177,6 +178,7 @@ def print_train_help() -> None:
         "    launch                   Provision session, upload, exec worker\n"
         "    status --session SLUG    Poll session state\n"
         "    sync --session SLUG      Download campaign outputs locally\n"
+        "    monitor --session SLUG   Watch/sync/evaluate checkpoints\n"
         "    shortlist                Export W&B sweep shortlist JSON\n"
         "    stop --session SLUG      Stop a Colab session\n\n"
         "Examples:\n"
@@ -187,6 +189,7 @@ def print_train_help() -> None:
         "  uv run ow train kaggle --run-type smoke training=2p4p_32_split\n"
         "  uv run ow train colab preflight\n"
         "  uv run ow train colab launch --gpu T4 training.total_updates=10\n\n"
+        "  uv run ow train colab monitor --session ow-colab_long-<sha> --once\n\n"
         f"{_hydra_override_section()}"
         "Kaggle flag reference:\n"
         "  uv run python -m src.cli.kaggle_runner --help\n"
@@ -362,6 +365,7 @@ def _split_colab_remaining(
             "--ledger",
             "--sessions-path",
             "--sync-dir",
+            "--monitor-dir",
             "--from-shortlist",
             "--rank",
             "--trust-base-jax",
@@ -371,13 +375,29 @@ def _split_colab_remaining(
             "--limit",
             "--out",
             "--session",
+            "--interval-seconds",
+            "--stale-seconds",
+            "--max-iterations",
+            "--eval-baselines",
+            "--eval-seeds",
+            "--eval-formats",
+            "--eval-games-per-pair",
+            "--eval-max-steps",
         }:
             if index + 1 >= len(remaining):
                 raise SystemExit(f"{token} requires a value")
             colab_argv.extend([token, remaining[index + 1]])
             index += 2
             continue
-        if token in {"--dry-run", "--force"}:
+        if token in {
+            "--dry-run",
+            "--force",
+            "--monitor-after-launch",
+            "--once",
+            "--no-eval-checkpoints",
+            "--eval-write-replays",
+            "--stop-on-stale",
+        }:
             colab_argv.append(token)
             index += 1
             continue

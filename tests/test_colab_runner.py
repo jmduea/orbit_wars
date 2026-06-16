@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import tarfile
+import time
 from pathlib import Path
-
-import pytest
 
 from src.orchestration.colab_cli import ColabSessionInfo
 from src.orchestration.colab_runner import (
@@ -14,6 +13,7 @@ from src.orchestration.colab_runner import (
     _bootstrap_script,
     default_session_slug,
     launch,
+    monitor,
     prepare_package,
     preflight,
     shortlist,
@@ -39,7 +39,9 @@ class _FakeColabCli:
     def auth_check(self, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess([], 0, stdout="[]", stderr="")
 
-    def new(self, slug: str, *, gpu: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+    def new(
+        self, slug: str, *, gpu: str, timeout: int = 120
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess([], 0, stdout=f"session {slug}", stderr="")
 
     def upload(
@@ -75,15 +77,32 @@ class _FakeColabCli:
         self.downloads.append((session, remote_path, local_path))
         local_path.parent.mkdir(parents=True, exist_ok=True)
         if remote_path.endswith("_sync.tgz"):
-            payload = b"campaign payload"
             with tarfile.open(local_path, "w:gz") as archive:
                 import io
 
+                log_payload = (
+                    b'{"update":1,"overall_win_rate":0.5,'
+                    b'"preflight_sweep_score":-1.0}\n'
+                )
                 info = tarfile.TarInfo(name="runs/run-a/logs/smoke_jax.jsonl")
-                info.size = len(payload)
-                archive.addfile(info, io.BytesIO(payload))
+                info.mtime = time.time()
+                info.size = len(log_payload)
+                archive.addfile(info, io.BytesIO(log_payload))
+                checkpoint_payload = b"checkpoint"
+                ckpt = tarfile.TarInfo(
+                    name="runs/run-a/checkpoints/jax_ckpt_000010.pkl"
+                )
+                ckpt.mtime = time.time()
+                ckpt.size = len(checkpoint_payload)
+                archive.addfile(ckpt, io.BytesIO(checkpoint_payload))
+                last = tarfile.TarInfo(name="runs/run-a/checkpoints/jax_ckpt_last.pkl")
+                last.mtime = time.time()
+                last.size = len(checkpoint_payload)
+                archive.addfile(last, io.BytesIO(checkpoint_payload))
         else:
-            local_path.write_text('{"status":"colab_complete","exit_code":0}\n', encoding="utf-8")
+            local_path.write_text(
+                '{"status":"colab_complete","exit_code":0}\n', encoding="utf-8"
+            )
         return subprocess.CompletedProcess([], 0, stdout="downloaded", stderr="")
 
     def status(self, session: str, *, timeout: int = 30) -> ColabSessionInfo:
@@ -91,9 +110,55 @@ class _FakeColabCli:
             return ColabSessionInfo(slug=session, raw="stopped", returncode=0)
         return ColabSessionInfo(slug=session, raw="running on T4", returncode=0)
 
-    def stop(self, session: str, *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+    def stop(
+        self, session: str, *, timeout: int = 60
+    ) -> subprocess.CompletedProcess[str]:
         self.stopped = True
         return subprocess.CompletedProcess([], 0, stdout="stopped", stderr="")
+
+
+class _StaleOutputColabCli(_FakeColabCli):
+    def download(
+        self,
+        session: str,
+        remote_path: str,
+        local_path: Path,
+        *,
+        timeout: int | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if remote_path.endswith("_sync.tgz"):
+            import io
+
+            self.downloads.append((session, remote_path, local_path))
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            old_mtime = time.time() - 3600
+            with tarfile.open(local_path, "w:gz") as archive:
+                log_payload = (
+                    b'{"update":1,"overall_win_rate":0.5,'
+                    b'"preflight_sweep_score":-1.0}\n'
+                )
+                info = tarfile.TarInfo(name="runs/run-a/logs/smoke_jax.jsonl")
+                info.mtime = old_mtime
+                info.size = len(log_payload)
+                archive.addfile(info, io.BytesIO(log_payload))
+                checkpoint_payload = b"checkpoint"
+                ckpt = tarfile.TarInfo(
+                    name="runs/run-a/checkpoints/jax_ckpt_000010.pkl"
+                )
+                ckpt.mtime = old_mtime
+                ckpt.size = len(checkpoint_payload)
+                archive.addfile(ckpt, io.BytesIO(checkpoint_payload))
+                last = tarfile.TarInfo(name="runs/run-a/checkpoints/jax_ckpt_last.pkl")
+                last.mtime = old_mtime
+                last.size = len(checkpoint_payload)
+                archive.addfile(last, io.BytesIO(checkpoint_payload))
+            return subprocess.CompletedProcess([], 0, stdout="downloaded", stderr="")
+        return super().download(
+            session,
+            remote_path,
+            local_path,
+            timeout=timeout,
+        )
 
 
 def test_preflight_reports_colab_and_gpu(monkeypatch, tmp_path: Path) -> None:
@@ -129,7 +194,9 @@ def test_prepare_uses_wandb_key_from_env(tmp_path: Path, monkeypatch) -> None:
     )
     prepare_package(request)
     env = json.loads((work_dir / "worker-env.json").read_text(encoding="utf-8"))
-    summary = json.loads((work_dir / "package-summary.json").read_text(encoding="utf-8"))
+    summary = json.loads(
+        (work_dir / "package-summary.json").read_text(encoding="utf-8")
+    )
     assert env["WANDB_API_KEY"] == "env-key"
     assert env["TF_GPU_ALLOCATOR"] == "cuda_malloc_async"
     assert summary["generated_env"]["WANDB_API_KEY"] == "<redacted>"
@@ -188,6 +255,35 @@ def test_launch_records_ledger_and_sessions(tmp_path: Path, capsys) -> None:
     assert json.loads(ledger_lines[-1])["event"] == "launch"
     sessions = json.loads(sessions_path.read_text(encoding="utf-8"))
     assert any(key.startswith("ow-colab_launch-") for key in sessions)
+
+
+def test_launch_can_start_monitor_after_worker_bootstrap(
+    tmp_path: Path, capsys
+) -> None:
+    work_dir = tmp_path / "kernel"
+    ledger = tmp_path / "launches.jsonl"
+    sessions_path = tmp_path / "sessions.json"
+    cli = _FakeColabCli()
+    request = ColabRequest(
+        work_dir=work_dir,
+        ledger=ledger,
+        sessions_path=sessions_path,
+        sync_dir=tmp_path / "synced",
+        monitor_dir=tmp_path / "monitor",
+        timeout=120,
+        hydra_overrides=["training.total_updates=3", "output.campaign=colab_launch"],
+        monitor_after_launch=True,
+        once=True,
+        eval_checkpoints=False,
+        stale_seconds=9999,
+    )
+
+    payload = launch(request, cli=cli)
+
+    assert payload["monitor_hint"].startswith("ow train colab monitor --session")
+    assert payload["monitor_payload"]["stale"] is False
+    assert payload["monitor_payload"]["progress"]["latest_update"] == 1
+    assert len(cli.exec_calls) >= 2
 
 
 def test_bootstrap_starts_worker_detached_for_keepalive_safety() -> None:
@@ -252,21 +348,169 @@ def test_status_and_sync_use_session(tmp_path: Path, capsys) -> None:
     status(request, cli=cli)
     assert sync(request, cli=cli) == 0
     assert cli.downloads[-1][1].endswith("worker-summary.json")
-    synced_log = tmp_path / "synced" / "colab_smoke" / "runs" / "run-a" / "logs" / "smoke_jax.jsonl"
+    synced_log = (
+        tmp_path
+        / "synced"
+        / "colab_smoke"
+        / "runs"
+        / "run-a"
+        / "logs"
+        / "smoke_jax.jsonl"
+    )
     assert synced_log.is_file()
+
+
+def test_monitor_syncs_and_evaluates_new_checkpoints(tmp_path: Path, capsys) -> None:
+    sessions_path = tmp_path / "sessions.json"
+    sessions_path.write_text(
+        json.dumps(
+            {
+                "ow-colab_smoke-abc": {
+                    "session": "ow-colab_smoke-abc",
+                    "campaign": "colab_smoke",
+                    "hydra_overrides": ["output.campaign=colab_smoke"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    eval_commands: list[list[str]] = []
+
+    def evaluator(
+        command: list[str], output_dir: Path
+    ) -> subprocess.CompletedProcess[str]:
+        eval_commands.append(command)
+        matches = output_dir / "matches"
+        matches.mkdir(parents=True, exist_ok=True)
+        (matches / "2p_vs_baseline_0000.json").write_text(
+            json.dumps(
+                {
+                    "agent_ids": ["jax_ckpt_000010", "baseline:noop"],
+                    "baseline_name": "noop",
+                    "format_name": "2p_vs_baseline",
+                    "results": {"jax_ckpt_000010": "win", "baseline:noop": "loss"},
+                    "placements": {"jax_ckpt_000010": 1, "baseline:noop": 2},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    request = ColabRequest(
+        session="ow-colab_smoke-abc",
+        ledger=tmp_path / "launches.jsonl",
+        sessions_path=sessions_path,
+        sync_dir=tmp_path / "synced",
+        monitor_dir=tmp_path / "monitor",
+        once=True,
+        stale_seconds=9999,
+    )
+    payload = monitor(
+        request, cli=_FakeColabCli(), evaluator=evaluator, sleep=lambda _: None
+    )
+    assert payload["stale"] is False
+    assert payload["progress"]["latest_update"] == 1
+    assert len(payload["evaluated"]) == 1
+    assert payload["evaluated"][0]["summary"]["by_baseline"]["noop"]["win_rate"] == 1.0
+    assert eval_commands
+    state = json.loads((tmp_path / "monitor" / "ow-colab_smoke-abc.json").read_text())
+    assert len(state["evaluated_checkpoints"]) == 1
+
+
+def test_monitor_skips_previously_evaluated_checkpoints(tmp_path: Path, capsys) -> None:
+    sessions_path = tmp_path / "sessions.json"
+    sessions_path.write_text(
+        json.dumps(
+            {
+                "ow-colab_smoke-abc": {
+                    "session": "ow-colab_smoke-abc",
+                    "campaign": "colab_smoke",
+                    "hydra_overrides": ["output.campaign=colab_smoke"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    eval_count = 0
+
+    def evaluator(
+        command: list[str], output_dir: Path
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal eval_count
+        eval_count += 1
+        return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
+
+    request = ColabRequest(
+        session="ow-colab_smoke-abc",
+        ledger=tmp_path / "launches.jsonl",
+        sessions_path=sessions_path,
+        sync_dir=tmp_path / "synced",
+        monitor_dir=tmp_path / "monitor",
+        once=True,
+        stale_seconds=9999,
+    )
+    monitor(request, cli=_FakeColabCli(), evaluator=evaluator, sleep=lambda _: None)
+    second_payload = monitor(
+        request, cli=_FakeColabCli(), evaluator=evaluator, sleep=lambda _: None
+    )
+
+    assert eval_count == 1
+    assert second_payload["evaluated"] == []
+
+
+def test_monitor_marks_running_session_stale_when_synced_activity_is_old(
+    tmp_path: Path, capsys
+) -> None:
+    sessions_path = tmp_path / "sessions.json"
+    sessions_path.write_text(
+        json.dumps(
+            {
+                "ow-colab_smoke-abc": {
+                    "session": "ow-colab_smoke-abc",
+                    "campaign": "colab_smoke",
+                    "hydra_overrides": ["output.campaign=colab_smoke"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    request = ColabRequest(
+        session="ow-colab_smoke-abc",
+        ledger=tmp_path / "launches.jsonl",
+        sessions_path=sessions_path,
+        sync_dir=tmp_path / "synced",
+        monitor_dir=tmp_path / "monitor",
+        once=True,
+        stale_seconds=30,
+        eval_checkpoints=False,
+    )
+
+    payload = monitor(
+        request, cli=_StaleOutputColabCli(), evaluator=None, sleep=lambda _: None
+    )
+
+    assert payload["remote_status"] == "running"
+    assert payload["stale"] is True
+    assert any(
+        reason.startswith("activity_stale_") for reason in payload["stale_reasons"]
+    )
 
 
 def test_stop_idempotent_when_already_stopped(tmp_path: Path, capsys) -> None:
     cli = _FakeColabCli()
     cli.stopped = True
-    request = ColabRequest(session="ow-colab_smoke-abc", ledger=tmp_path / "ledger.jsonl")
+    request = ColabRequest(
+        session="ow-colab_smoke-abc", ledger=tmp_path / "ledger.jsonl"
+    )
     assert stop(request, cli=cli) == 0
     captured = capsys.readouterr()
     assert "idempotent" in captured.out
 
 
 def test_default_session_slug_uses_campaign() -> None:
-    slug = default_session_slug(["output.campaign=colab_long", "training.total_updates=10"])
+    slug = default_session_slug(
+        ["output.campaign=colab_long", "training.total_updates=10"]
+    )
     assert slug.startswith("ow-colab_long-")
 
 

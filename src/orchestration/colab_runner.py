@@ -8,12 +8,17 @@ import os
 import subprocess
 import tarfile
 import tempfile
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from src.orchestration.colab_cli import ColabCli, ColabCliError, parse_session_slug_from_text
+from src.orchestration.colab_cli import (
+    ColabCli,
+    ColabCliError,
+    parse_session_slug_from_text,
+)
 from src.orchestration.remote_package import (
     REMOTE_PACKAGE_SOURCE_MODE,
     RemotePackageOptions,
@@ -32,6 +37,7 @@ DEFAULT_LEDGER = REPO_ROOT / "outputs/colab_runner/launches.jsonl"
 DEFAULT_SESSIONS = REPO_ROOT / "outputs/colab_runner/sessions.json"
 DEFAULT_SYNC_DIR = REPO_ROOT / "outputs/colab_runner/synced"
 DEFAULT_SHORTLIST = REPO_ROOT / "outputs/colab_runner/shortlist.json"
+DEFAULT_MONITOR_DIR = REPO_ROOT / "outputs/colab_runner/monitor"
 REMOTE_TARBALL_NAME = "orbit_wars.tgz"
 REMOTE_TARBALL_PATH = f"/content/{REMOTE_TARBALL_NAME}"
 REMOTE_WORKDIR = "/content/orbit_wars"
@@ -64,10 +70,27 @@ class ColabRequest:
     force: bool = False
     trust_base_jax: str = "0"
     wandb_api_key: str | None = None
+    monitor_dir: Path = field(default_factory=lambda: DEFAULT_MONITOR_DIR)
+    monitor_after_launch: bool = False
+    interval_seconds: int = 300
+    stale_seconds: int = 900
+    max_iterations: int | None = None
+    once: bool = False
+    eval_checkpoints: bool = True
+    eval_baselines: str = "noop,random,sniper"
+    eval_seeds: str = "0,1,2,3,4"
+    eval_formats: str = "2p_vs_baseline"
+    eval_games_per_pair: int = 1
+    eval_max_steps: int = 500
+    eval_write_replays: bool = False
+    stop_on_stale: bool = False
 
     @classmethod
     def from_namespace(cls, args: Any) -> "ColabRequest":
-        data = {f.name: getattr(args, f.name, None) for f in cls.__dataclass_fields__.values()}
+        data = {
+            f.name: getattr(args, f.name, None)
+            for f in cls.__dataclass_fields__.values()
+        }
         if data.get("hydra_overrides") is None:
             data["hydra_overrides"] = []
         if data.get("work_dir") is None:
@@ -84,6 +107,30 @@ class ColabRequest:
             data["timeout"] = DEFAULT_LAUNCH_TIMEOUT
         if data.get("trust_base_jax") is None:
             data["trust_base_jax"] = "0"
+        if data.get("monitor_dir") is None:
+            data["monitor_dir"] = DEFAULT_MONITOR_DIR
+        if data.get("monitor_after_launch") is None:
+            data["monitor_after_launch"] = False
+        if data.get("interval_seconds") is None:
+            data["interval_seconds"] = 300
+        if data.get("stale_seconds") is None:
+            data["stale_seconds"] = 900
+        if data.get("eval_checkpoints") is None:
+            data["eval_checkpoints"] = True
+        if data.get("eval_baselines") is None:
+            data["eval_baselines"] = "noop,random,sniper"
+        if data.get("eval_seeds") is None:
+            data["eval_seeds"] = "0,1,2,3,4"
+        if data.get("eval_formats") is None:
+            data["eval_formats"] = "2p_vs_baseline"
+        if data.get("eval_games_per_pair") is None:
+            data["eval_games_per_pair"] = 1
+        if data.get("eval_max_steps") is None:
+            data["eval_max_steps"] = 500
+        if data.get("eval_write_replays") is None:
+            data["eval_write_replays"] = False
+        if data.get("stop_on_stale") is None:
+            data["stop_on_stale"] = False
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
@@ -120,7 +167,9 @@ def _git_short_sha() -> str:
 
 def default_session_slug(overrides: list[str]) -> str:
     campaign = _campaign_from_overrides(overrides)
-    safe_campaign = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in campaign)
+    safe_campaign = "".join(
+        ch if ch.isalnum() or ch in "-_" else "-" for ch in campaign
+    )
     return f"ow-{safe_campaign}-{_git_short_sha()}"
 
 
@@ -141,7 +190,9 @@ def _shortlist_payload(row: Any) -> dict[str, Any]:
 
 
 def _replace_request(request: ColabRequest, **updates: object) -> ColabRequest:
-    data = {field: getattr(request, field) for field in ColabRequest.__dataclass_fields__}
+    data = {
+        field: getattr(request, field) for field in ColabRequest.__dataclass_fields__
+    }
     data.update(updates)
     return ColabRequest(**data)
 
@@ -310,7 +361,9 @@ def preflight(request: ColabRequest, *, cli: ColabCli | None = None) -> dict[str
 
     try:
         request.work_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=request.work_dir, prefix=".preflight-", delete=True):
+        with tempfile.NamedTemporaryFile(
+            dir=request.work_dir, prefix=".preflight-", delete=True
+        ):
             pass
         _record_check(checks, "package_dir_writable", "ok", str(request.work_dir))
     except OSError as exc:
@@ -363,9 +416,12 @@ def launch(request: ColabRequest, *, cli: ColabCli | None = None) -> dict[str, A
         detail = (new_result.stderr or new_result.stdout or "").strip()
         raise SystemExit(f"colab new failed: {detail}")
 
-    resolved_slug = parse_session_slug_from_text(
-        (new_result.stdout or "") + "\n" + (new_result.stderr or "")
-    ) or session_slug
+    resolved_slug = (
+        parse_session_slug_from_text(
+            (new_result.stdout or "") + "\n" + (new_result.stderr or "")
+        )
+        or session_slug
+    )
 
     upload_result = colab.upload(
         resolved_slug,
@@ -428,10 +484,14 @@ def launch(request: ColabRequest, *, cli: ColabCli | None = None) -> dict[str, A
         "returncode": exec_result.returncode,
         "remote_workdir": REMOTE_WORKDIR,
         "sync_hint": f"ow train colab sync --session {resolved_slug}",
+        "monitor_hint": f"ow train colab monitor --session {resolved_slug}",
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
     if exec_result.returncode != 0:
         raise SystemExit(exec_result.returncode)
+    if request.monitor_after_launch:
+        monitor_request = _replace_request(request, session=resolved_slug)
+        payload["monitor_payload"] = monitor(monitor_request, cli=colab)
     return payload
 
 
@@ -546,6 +606,135 @@ def sync(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
     return returncode
 
 
+def monitor(
+    request: ColabRequest,
+    *,
+    cli: ColabCli | None = None,
+    evaluator: Any | None = None,
+    sleep: Any = time.sleep,
+) -> dict[str, Any]:
+    """Poll/sync a Colab session and evaluate newly synced checkpoints locally."""
+
+    if not request.session:
+        raise SystemExit("--session is required for colab monitor.")
+    colab = cli or ColabCli()
+    state = _load_monitor_state(request)
+    iterations = 0
+    last_payload: dict[str, Any] = {}
+    while True:
+        iterations += 1
+        payload = monitor_once(request, cli=colab, evaluator=evaluator, state=state)
+        last_payload = payload
+        print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
+        if payload.get("stale") and request.stop_on_stale:
+            stop(_replace_request(request, session=request.session), cli=colab)
+            payload["stopped_for_stale"] = True
+            last_payload = payload
+            break
+        if request.once:
+            break
+        if request.max_iterations is not None and iterations >= request.max_iterations:
+            break
+        if payload.get("remote_status") in {"stopped", "failed"}:
+            break
+        sleep(max(int(request.interval_seconds), 1))
+    _save_monitor_state(request, state)
+    return last_payload
+
+
+def monitor_once(
+    request: ColabRequest,
+    *,
+    cli: ColabCli,
+    evaluator: Any | None = None,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run one monitor iteration: status, sync, stale check, checkpoint eval."""
+
+    if not request.session:
+        raise SystemExit("--session is required for colab monitor.")
+    state = state if state is not None else _load_monitor_state(request)
+    now = datetime.now(timezone.utc)
+    status_error: str | None = None
+    sync_error: str | None = None
+    try:
+        status_payload = status(request, cli=cli)
+    except Exception as exc:
+        status_error = str(exc)
+        status_payload = {
+            "session": request.session,
+            "status": "failed",
+            "returncode": 1,
+            "error": status_error,
+        }
+    try:
+        sync_returncode = sync(request, cli=cli)
+    except SystemExit as exc:
+        sync_returncode = int(exc.code) if isinstance(exc.code, int) else 1
+        sync_error = str(exc)
+    except Exception as exc:
+        sync_returncode = 1
+        sync_error = str(exc)
+    run_dir = _latest_synced_run_dir(request)
+    progress = _synced_run_progress(run_dir, now=now)
+    stale_reasons = _stale_reasons(
+        progress,
+        stale_seconds=int(request.stale_seconds),
+        remote_status=str(status_payload.get("status") or "unknown"),
+    )
+    eval_payloads: list[dict[str, Any]] = []
+    if request.eval_checkpoints and run_dir is not None:
+        for checkpoint in _new_checkpoints_for_eval(run_dir, state):
+            eval_payload = _evaluate_checkpoint(
+                request,
+                checkpoint=checkpoint,
+                evaluator=evaluator,
+            )
+            eval_payloads.append(eval_payload)
+            if int(eval_payload["returncode"]) == 0:
+                state.setdefault("evaluated_checkpoints", {})[
+                    str(checkpoint.resolve())
+                ] = eval_payload
+            else:
+                state.setdefault("failed_evaluations", {})[
+                    str(checkpoint.resolve())
+                ] = eval_payload
+    all_stale_reasons = [
+        *stale_reasons,
+        *(["status_error"] if status_error else []),
+        *(["sync_error"] if sync_error else []),
+    ]
+    payload = {
+        "session": request.session,
+        "remote_status": status_payload.get("status"),
+        "status_error": status_error,
+        "sync_returncode": sync_returncode,
+        "sync_error": sync_error,
+        "run_dir": str(run_dir) if run_dir is not None else None,
+        "progress": progress,
+        "stale": bool(all_stale_reasons),
+        "stale_reasons": all_stale_reasons,
+        "evaluated": eval_payloads,
+    }
+    state["last_monitor_payload"] = payload
+    state["updated_at"] = now.isoformat()
+    _save_monitor_state(request, state)
+    _append_ledger(
+        request.ledger,
+        {
+            "event": "monitor",
+            "session": request.session,
+            "remote_status": payload["remote_status"],
+            "sync_returncode": sync_returncode,
+            "run_dir": payload["run_dir"],
+            "stale": payload["stale"],
+            "stale_reasons": all_stale_reasons,
+            "evaluated_count": len(eval_payloads),
+        },
+    )
+    return payload
+
+
 def stop(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
     """Stop a Colab session; idempotent when already stopped."""
 
@@ -619,6 +808,10 @@ def run_sync(request: ColabRequest) -> int:
     return sync(request)
 
 
+def run_monitor(request: ColabRequest) -> None:
+    monitor(request)
+
+
 def run_stop(request: ColabRequest) -> int:
     return stop(request)
 
@@ -642,6 +835,236 @@ def _sync_archive_script(*, campaign: str, remote_tar: str) -> str:
         ")\n"
         "raise SystemExit(0)\n"
     )
+
+
+def _monitor_state_path(request: ColabRequest) -> Path:
+    session = request.session or "unknown"
+    safe_session = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in session)
+    return request.monitor_dir / f"{safe_session}.json"
+
+
+def _load_monitor_state(request: ColabRequest) -> dict[str, Any]:
+    path = _monitor_state_path(request)
+    if not path.is_file():
+        return {"evaluated_checkpoints": {}}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"evaluated_checkpoints": {}}
+    if not isinstance(payload, dict):
+        return {"evaluated_checkpoints": {}}
+    payload.setdefault("evaluated_checkpoints", {})
+    return payload
+
+
+def _save_monitor_state(request: ColabRequest, state: Mapping[str, Any]) -> None:
+    path = _monitor_state_path(request)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(dict(state), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def _session_campaign(request: ColabRequest) -> str:
+    if not request.session:
+        return _campaign_from_overrides(request.hydra_overrides)
+    sessions = _load_sessions(request.sessions_path)
+    session_meta = sessions.get(request.session, {})
+    campaign = session_meta.get("campaign")
+    if isinstance(campaign, str) and campaign:
+        return campaign
+    overrides = list(session_meta.get("hydra_overrides") or request.hydra_overrides)
+    return _campaign_from_overrides(overrides)
+
+
+def _latest_synced_run_dir(request: ColabRequest) -> Path | None:
+    campaign = _session_campaign(request)
+    runs_dir = request.sync_dir / campaign / "runs"
+    if not runs_dir.is_dir():
+        return None
+    candidates = [path for path in runs_dir.iterdir() if path.is_dir()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda path: path.stat().st_mtime)
+
+
+def _latest_metric_row(log_path: Path) -> dict[str, Any] | None:
+    latest: dict[str, Any] | None = None
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload.get("update"), int) and "overall_win_rate" in payload:
+            latest = payload
+    return latest
+
+
+def _synced_run_progress(run_dir: Path | None, *, now: datetime) -> dict[str, Any]:
+    if run_dir is None:
+        return {"ok": False, "reason": "no_synced_run"}
+    logs = sorted((run_dir / "logs").glob("*_jax.jsonl"))
+    checkpoints = sorted((run_dir / "checkpoints").glob("jax_ckpt_*.pkl"))
+    latest_log = max(logs, key=lambda path: path.stat().st_mtime) if logs else None
+    latest_checkpoint = (
+        max(checkpoints, key=lambda path: path.stat().st_mtime) if checkpoints else None
+    )
+    latest_row = _latest_metric_row(latest_log) if latest_log is not None else None
+    latest_mtime = None
+    latest_source = None
+    for path, source in ((latest_log, "log"), (latest_checkpoint, "checkpoint")):
+        if path is None:
+            continue
+        mtime = path.stat().st_mtime
+        if latest_mtime is None or mtime > latest_mtime:
+            latest_mtime = mtime
+            latest_source = source
+    age_seconds = (
+        None if latest_mtime is None else max(now.timestamp() - latest_mtime, 0.0)
+    )
+    return {
+        "ok": True,
+        "latest_log": str(latest_log) if latest_log is not None else None,
+        "latest_checkpoint": str(latest_checkpoint)
+        if latest_checkpoint is not None
+        else None,
+        "checkpoint_count": len(checkpoints),
+        "latest_update": latest_row.get("update") if latest_row else None,
+        "latest_win_rate": latest_row.get("overall_win_rate") if latest_row else None,
+        "latest_preflight_sweep_score": latest_row.get("preflight_sweep_score")
+        if latest_row
+        else None,
+        "latest_activity_source": latest_source,
+        "activity_age_seconds": age_seconds,
+    }
+
+
+def _stale_reasons(
+    progress: Mapping[str, Any],
+    *,
+    stale_seconds: int,
+    remote_status: str,
+) -> list[str]:
+    reasons: list[str] = []
+    if remote_status in {"stopped", "failed"}:
+        reasons.append(f"remote_status_{remote_status}")
+    if not progress.get("ok"):
+        reasons.append(str(progress.get("reason") or "missing_progress"))
+        return reasons
+    if progress.get("latest_update") is None:
+        reasons.append("no_metric_rows")
+    age = progress.get("activity_age_seconds")
+    if isinstance(age, (int, float)) and age > stale_seconds:
+        reasons.append(f"activity_stale_{int(age)}s")
+    return reasons
+
+
+def _new_checkpoints_for_eval(run_dir: Path, state: Mapping[str, Any]) -> list[Path]:
+    evaluated = set((state.get("evaluated_checkpoints") or {}).keys())
+    checkpoints = sorted((run_dir / "checkpoints").glob("jax_ckpt_*.pkl"))
+    result: list[Path] = []
+    for checkpoint in checkpoints:
+        if checkpoint.name == "jax_ckpt_last.pkl":
+            continue
+        if str(checkpoint.resolve()) not in evaluated:
+            result.append(checkpoint)
+    return result
+
+
+def _evaluate_checkpoint(
+    request: ColabRequest,
+    *,
+    checkpoint: Path,
+    evaluator: Any | None,
+) -> dict[str, Any]:
+    output_dir = (
+        request.monitor_dir / "evals" / checkpoint.parent.parent.name / checkpoint.stem
+    )
+    command = [
+        "uv",
+        "run",
+        "ow",
+        "eval",
+        "tournament",
+        "--campaign",
+        "colab_monitor",
+        "--output-dir",
+        str(output_dir),
+        "--checkpoint",
+        str(checkpoint),
+        "--seeds",
+        request.eval_seeds,
+        "--games-per-pair",
+        str(int(request.eval_games_per_pair)),
+        "--max-steps",
+        str(int(request.eval_max_steps)),
+        "--formats",
+        request.eval_formats,
+        "--baselines",
+        request.eval_baselines,
+    ]
+    if request.eval_write_replays:
+        command.append("--write-replays")
+    if evaluator is None:
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        completed = evaluator(command, output_dir)
+    summary = _summarize_eval_output(output_dir)
+    return {
+        "checkpoint": str(checkpoint),
+        "output_dir": str(output_dir),
+        "returncode": int(completed.returncode),
+        "stdout_tail": _tail(completed.stdout),
+        "stderr_tail": _tail(completed.stderr),
+        "summary": summary,
+    }
+
+
+def _summarize_eval_output(output_dir: Path) -> dict[str, Any]:
+    matches_dir = output_dir / "matches"
+    if not matches_dir.is_dir():
+        return {"match_count": 0, "by_baseline": {}}
+    by_baseline: dict[str, dict[str, Any]] = {}
+    for path in sorted(matches_dir.glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        checkpoint_ids = [
+            str(agent_id)
+            for agent_id in payload.get("agent_ids", [])
+            if str(agent_id).startswith("jax_ckpt")
+        ]
+        if not checkpoint_ids:
+            continue
+        checkpoint_id = checkpoint_ids[0]
+        baseline = str(
+            payload.get("baseline_name") or payload.get("format_name") or "unknown"
+        )
+        bucket = by_baseline.setdefault(
+            baseline,
+            {"wins": 0, "games": 0, "placements": {}},
+        )
+        bucket["games"] += 1
+        result = (payload.get("results") or {}).get(checkpoint_id)
+        if result == "win":
+            bucket["wins"] += 1
+        placement = (payload.get("placements") or {}).get(checkpoint_id)
+        if placement is not None:
+            key = str(placement)
+            bucket["placements"][key] = int(bucket["placements"].get(key, 0)) + 1
+    for bucket in by_baseline.values():
+        games = max(int(bucket["games"]), 1)
+        bucket["win_rate"] = float(bucket["wins"]) / games
+    return {
+        "match_count": sum(int(bucket["games"]) for bucket in by_baseline.values()),
+        "by_baseline": by_baseline,
+    }
 
 
 def _bootstrap_script() -> str:

@@ -164,7 +164,9 @@ def test_dispatch_local_calls_hydra(monkeypatch) -> None:
     monkeypatch.setattr("src.cli._run_hydra_train", fake_train)
 
     train_hosts.dispatch(
-        train_hosts.TrainRoute(host="local", hydra_overrides=["print_resolved_config=true"])
+        train_hosts.TrainRoute(
+            host="local", hydra_overrides=["print_resolved_config=true"]
+        )
     )
 
     assert captured == [["print_resolved_config=true"]]
@@ -205,6 +207,59 @@ def test_parse_train_colab_preflight_subcommand() -> None:
     assert route.host == "colab"
     assert route.subcommand == "preflight"
     assert route.colab_argv == []
+
+
+def test_parse_train_colab_monitor_subcommand() -> None:
+    route = train_hosts.parse_train_argv(
+        [
+            "colab",
+            "monitor",
+            "--session",
+            "ow-colab_long-abc",
+            "--once",
+            "--eval-baselines",
+            "noop,random,sniper",
+            "--no-eval-checkpoints",
+        ]
+    )
+
+    assert route.host == "colab"
+    assert route.subcommand == "monitor"
+    assert route.colab_argv == [
+        "--session",
+        "ow-colab_long-abc",
+        "--once",
+        "--eval-baselines",
+        "noop,random,sniper",
+        "--no-eval-checkpoints",
+    ]
+
+
+def test_parse_train_colab_launch_monitor_flags() -> None:
+    route = train_hosts.parse_train_argv(
+        [
+            "colab",
+            "--monitor-after-launch",
+            "--interval-seconds",
+            "300",
+            "--stale-seconds",
+            "900",
+            "--no-eval-checkpoints",
+            "training.total_updates=10",
+        ]
+    )
+
+    assert route.host == "colab"
+    assert route.subcommand is None
+    assert route.colab_argv == [
+        "--monitor-after-launch",
+        "--interval-seconds",
+        "300",
+        "--stale-seconds",
+        "900",
+        "--no-eval-checkpoints",
+    ]
+    assert route.hydra_overrides == ["training.total_updates=10"]
 
 
 def test_build_colab_argv_default_launch_t4_timeout() -> None:
