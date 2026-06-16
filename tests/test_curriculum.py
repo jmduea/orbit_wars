@@ -24,6 +24,7 @@ def _configure_rollout_groups(cfg, groups):
         for group in active
     }
 
+
 from src.config import (
     TrainConfig,
     compose_hydra_train_config,
@@ -37,7 +38,7 @@ from src.jax.rollout.metric_contract import (
     TRAJECTORY_SHIELD_COUNT_KEYS,
 )
 from src.jax.train import init_train_state
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def _curriculum_config(stages):
@@ -436,10 +437,13 @@ def test_training_loop_logs_curriculum_events_on_same_update(tmp_path, monkeypat
     cfg.telemetry.metric_groups.debug = True
     cfg.task.max_fleets = 16
     cfg.task.candidate_count = 4
-    _configure_rollout_groups(cfg, [
-        {"name": "two_player", "player_count": 2, "num_envs": 1},
-        {"name": "four_player", "player_count": 4, "num_envs": 1},
-    ])
+    _configure_rollout_groups(
+        cfg,
+        [
+            {"name": "two_player", "player_count": 2, "num_envs": 1},
+            {"name": "four_player", "player_count": 4, "num_envs": 1},
+        ],
+    )
     cfg.model.hidden_size = 16
     cfg.model.attention_heads = 2
     assert cfg.training.num_envs >= 2

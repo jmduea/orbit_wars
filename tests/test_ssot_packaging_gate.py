@@ -6,8 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from src.config.schema import ArtifactsConfig, OutputConfig, SsotPipelineConfig, TrainConfig
-from src.ssot.packaging_validation import (
+from src.config.schema import (
+    ArtifactsConfig,
+    OutputConfig,
+    SsotPipelineConfig,
+    TrainConfig,
+)
+from src.artifacts.packaging_validation import (
     assert_ssot_packaging_gate,
     write_packaging_validation_record,
 )

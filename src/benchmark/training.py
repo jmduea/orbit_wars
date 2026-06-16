@@ -28,7 +28,7 @@ from src.jax.train.rollout_groups import (
     replace_rollout_group_state,
 )
 from src.jax.train.snapshots import init_historical_snapshot_pool
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 UPDATE_METRIC_KEYS: tuple[str, ...] = (
     "policy_loss",

@@ -20,7 +20,7 @@ from src.opponents.jax_actions.sampling import (
     _select_env_action,
     _single_stage_family_id,
 )
-from src.training.curriculum import StageView
+from src.opponents.curriculum import StageView
 
 
 def _noop_action(env_count: int, *, source_fill: int = 0) -> JaxAction:

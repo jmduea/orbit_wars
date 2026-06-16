@@ -17,8 +17,8 @@ from src.features.registry import PLANET_FEATURE_SCHEMA, edge_k
 from src.game.constants import MAX_PLANETS
 from src.jax.action_codec import (
     FactoredPolicyOutput,
-    _factored_step_log_prob_entropy_components,
     _factored_step_log_prob_entropy,
+    _factored_step_log_prob_entropy_components,
     source_mask_from_bucket_mask_and_ships,
 )
 from src.jax.array_ops import masked_mean
@@ -36,9 +36,9 @@ from src.jax.launch_hygiene import (
     compose_hygiene_with_shield_mask,
     empty_cumulative_forbidden,
 )
-from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
 from src.jax.shield import rollout_factorized_sampling_mode
 from src.jax.shield.trajectory import cheap_factorized_topk_masks_from_remaining
+from src.jax.ship_action import is_continuous_ship_mode, ship_count_for_action
 from src.opponents.jax_actions.builders import ship_count_for_bucket_jax
 
 
@@ -859,9 +859,10 @@ def factored_logprob_parity_metrics(
     delta = new_log_prob - old_log_prob
     mask = step_mask.astype(jnp.float32)
     log_ratio = delta
-    ratio20 = jnp.exp(jnp.clip(log_ratio, -20.0, 20.0))
+    log_ratio_clipped = jnp.clip(log_ratio, -20.0, 20.0)
+    ratio20 = jnp.exp(log_ratio_clipped)
     approx_kl_v1 = masked_mean(old_log_prob - new_log_prob, mask)
-    approx_kl_v2 = masked_mean((ratio20 - 1.0) - log_ratio, mask)
+    approx_kl_v2 = masked_mean((ratio20 - 1.0) - log_ratio_clipped, mask)
     metrics: dict[str, jax.Array] = {
         "debug/logprob_delta_mean": masked_mean(delta, mask),
         "debug/logprob_delta_abs_mean": masked_mean(jnp.abs(delta), mask),

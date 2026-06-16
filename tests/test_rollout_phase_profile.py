@@ -17,7 +17,7 @@ from src.jax.rollout.phase_timing_report import (
 )
 from src.jax.train import init_train_state
 from src.jax.train.snapshots import init_historical_snapshot_pool
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def test_admission_profile_quick_geometry_by_default() -> None:
@@ -115,7 +115,9 @@ def test_profile_breakdown_includes_opponent_subphase_details() -> None:
 
 @pytest.mark.jax
 def test_maybe_seed_historical_snapshots_for_production_mix() -> None:
-    cfg = compose_hydra_train_config(["curriculum=self_play_staged", "training.total_updates=1"])
+    cfg = compose_hydra_train_config(
+        ["curriculum=self_play_staged", "training.total_updates=1"]
+    )
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(0), policy, cfg)
     pool = init_historical_snapshot_pool(

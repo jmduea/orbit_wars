@@ -16,7 +16,7 @@ from src.opponents.jax_actions.sampling import (
     is_single_family_noop_stage_view,
     should_skip_opponent_batch_refresh_2p,
 )
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def _empty_snapshot_kwargs() -> dict[str, jax.Array]:

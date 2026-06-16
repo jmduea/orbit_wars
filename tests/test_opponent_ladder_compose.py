@@ -15,7 +15,7 @@ from src.opponents.constants import (
     is_noop_jax_training_opponent_mode,
     normalize_jax_training_opponent_mode,
 )
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def _stage_view_at_update(cfg, *, update: int = 5):

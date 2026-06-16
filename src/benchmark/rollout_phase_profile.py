@@ -38,7 +38,7 @@ from src.jax.train.snapshots import (
     add_historical_snapshot,
     init_historical_snapshot_pool,
 )
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 ADMISSION_PROFILE_OVERRIDES: tuple[str, ...] = (
     "model=transformer_factorized_small",

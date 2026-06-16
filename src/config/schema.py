@@ -115,6 +115,7 @@ class TrainingConfig:
     plateau_window: int = 10
     plateau_delta: float = 0.0
     debug_replay_parity: bool = False
+    ppo_grad_accumulation: bool = False
 
 
 @dataclass(slots=True)

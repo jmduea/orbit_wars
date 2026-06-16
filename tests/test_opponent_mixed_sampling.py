@@ -33,7 +33,7 @@ from src.opponents.jax_actions.sampling import (
     _single_stage_family_id,
     is_single_family_noop_stage_view,
 )
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def _empty_snapshot_kwargs() -> dict[str, jax.Array]:
@@ -274,7 +274,9 @@ def test_collect_rollout_mixed_curriculum_4p_finite() -> None:
 
 
 @pytest.mark.jax
-def test_flat_four_player_sampler_restores_env_player_layout_and_learner_slots() -> None:
+def test_flat_four_player_sampler_restores_env_player_layout_and_learner_slots() -> (
+    None
+):
     from src.jax.env import assign_learner_players
 
     cfg = TrainConfig()

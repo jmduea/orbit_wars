@@ -51,7 +51,7 @@ from src.opponents.jax_actions.sampling import (
     should_skip_opponent_batch_refresh_2p,
 )
 from src.telemetry.metric_registry import rollout_collection_enabled_groups
-from src.training.curriculum import StageView, default_stage_view
+from src.opponents.curriculum import StageView, default_stage_view
 
 from .metrics import rollout_metrics
 
@@ -152,8 +152,10 @@ def collect_rollout_jax_timed(
     env_index_offset: int | jax.Array = 0,
     norm_state: ObservationNormState | None = None,
     map_pool: MapPoolConstants | None = None,
-    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]] | None = None,
-    multi_player_step_fn: Callable[[object, object], tuple[object, object]] | None = None,
+    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]]
+    | None = None,
+    multi_player_step_fn: Callable[[object, object], tuple[object, object]]
+    | None = None,
 ):
     del update
     validate_jax_training_opponent_mode(cfg.opponents.dispatch)
@@ -185,8 +187,8 @@ def collect_rollout_jax_timed(
     collection_groups = rollout_collection_enabled_groups(cfg)
     include_opponent_metrics = "opponent_composition" in collection_groups
     include_shield_metrics = "trajectory_shield_debug" in collection_groups
-    stack_latest_policy_sample = (
-        _static_latest_only_self_play_sample_enabled(cfg, opponent_params_by_player)
+    stack_latest_policy_sample = _static_latest_only_self_play_sample_enabled(
+        cfg, opponent_params_by_player
     )
 
     params = train_state.params

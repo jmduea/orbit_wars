@@ -30,3 +30,6 @@ plateau_metric: episode_reward_mean
 plateau_window: 10
 plateau_delta: 0.0
 debug_replay_parity: false
+# Average PPO gradients across update_chunk_rows minibatches before one optimizer step.
+# Avoids chained within-update policy drift that inflates approx_kl_v2_last_minibatch.
+ppo_grad_accumulation: false

@@ -91,7 +91,9 @@ def test_aggregate_ppo_metrics_ignores_empty_minibatches() -> None:
     assert jnp.isfinite(jnp.array(list(metrics.values()))).all()
 
 
-def test_aggregate_ppo_metrics_empty_minibatches_avoid_inf_at_log_ratio_abs_max() -> None:
+def test_aggregate_ppo_metrics_empty_minibatches_avoid_inf_at_log_ratio_abs_max() -> (
+    None
+):
     from src.jax.ppo_update import _aggregate_ppo_metrics
 
     metrics_by_minibatch = {
@@ -210,7 +212,7 @@ def _factorized_ship_bucket_mask(
     cfg: TrainConfig, *, rollout_steps: int, num_envs: int, sequence_k: int
 ) -> jax.Array:
     from src.features.registry import edge_k
-    
+
     k_slots = edge_k(cfg.task)
     return jnp.ones(
         (
@@ -231,7 +233,7 @@ def _sparse_factorized_ship_bucket_mask(
     """Per-source bucket legality that differs across planets (rollout-realistic)."""
 
     from src.features.registry import edge_k
-    
+
     k_slots = edge_k(cfg.task)
     mask = jnp.zeros(
         (
@@ -350,7 +352,9 @@ def _factorized_transition_batch(
             source_index=source_index,
             target_slot=target_slot,
             stop_flag=jnp.zeros((rollout_steps, num_envs, sequence_k), dtype=jnp.int32),
-            step_mask=jnp.ones((rollout_steps, num_envs, sequence_k), dtype=jnp.float32),
+            step_mask=jnp.ones(
+                (rollout_steps, num_envs, sequence_k), dtype=jnp.float32
+            ),
         ),
     )
 
@@ -382,7 +386,10 @@ def _build_factorized_on_policy_transitions(
     source_index = output.decoded_source_sequence
     target_slot = output.decoded_target_slot_sequence
     ship_bucket_mask = ship_bucket_mask_fn(
-        cfg, rollout_steps=rollout_steps, num_envs=num_envs, sequence_k=cfg.model.max_moves_k
+        cfg,
+        rollout_steps=rollout_steps,
+        num_envs=num_envs,
+        sequence_k=cfg.model.max_moves_k,
     )
     log_prob = _factorized_behavior_log_prob(
         cfg,
@@ -460,6 +467,7 @@ def test_ppo_vf_and_ent_coefs_scale_reported_total_loss() -> None:
     )
     assert float(metrics["value_loss"]) > 0.0
     assert float(metrics["entropy"]) > 0.0
+
 
 @pytest.mark.jax
 def test_ppo_update_factorized_path_matches_on_policy_kl() -> None:
@@ -567,6 +575,7 @@ def test_ppo_update_factorized_source_aware_masks_match_on_policy_kl() -> None:
 def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
     cfg = _small_factorized_cfg()
     cfg.training.debug_replay_parity = True
+    cfg.training.ppo_grad_accumulation = False
     cfg.training.lr = 0.05
     cfg.training.update_chunk_rows = 4
     num_envs = 8
@@ -603,6 +612,39 @@ def test_ppo_last_minibatch_kl_exceeds_first_with_high_lr() -> None:
 
 
 @pytest.mark.jax
+def test_ppo_grad_accumulation_keeps_last_minibatch_kl_near_first() -> None:
+    cfg = _small_factorized_cfg()
+    cfg.training.debug_replay_parity = True
+    cfg.training.ppo_grad_accumulation = True
+    cfg.training.lr = 0.05
+    cfg.training.update_chunk_rows = 4
+    num_envs = 8
+    key = jax.random.PRNGKey(23)
+    policy = build_jax_policy(cfg)
+    train_state = init_train_state(jax.random.fold_in(key, 1), policy, cfg)
+    turn_batch = make_synthetic_turn_batch(
+        num_envs, cfg.task, key=jax.random.fold_in(key, 2)
+    )
+    transitions, _output = _build_factorized_on_policy_transitions(
+        cfg,
+        train_state,
+        policy,
+        turn_batch,
+        rollout_steps=1,
+        reward=jnp.array(
+            [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0],
+            dtype=jnp.float32,
+        ),
+    )
+    _, metrics = ppo_update_jax(train_state, policy, transitions, cfg)
+
+    assert float(metrics["minibatches"]) > 1.0
+    assert float(metrics["approx_kl_v2_last_minibatch"]) == pytest.approx(
+        float(metrics["approx_kl_v2_first_minibatch"]), abs=1e-4
+    )
+
+
+@pytest.mark.jax
 def test_ppo_update_changes_params_after_optimizer_step() -> None:
     cfg = _small_factorized_cfg()
     num_envs = 2
@@ -629,6 +671,7 @@ def test_ppo_update_changes_params_after_optimizer_step() -> None:
         not jnp.array_equal(before, after)
         for before, after in zip(flat_before, flat_after, strict=True)
     )
+
 
 @pytest.mark.jax
 @pytest.mark.parametrize("checkpointing", [False, True])

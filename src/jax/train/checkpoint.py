@@ -17,7 +17,10 @@ from src.artifacts.checkpoint_compat import (
     validate_checkpoint_feature_compatibility,
     validate_checkpoint_pointer_decoder_compatibility,
 )
-from src.artifacts.checkpoint_retention import collect_metric_by_update, prune_checkpoints
+from src.artifacts.checkpoint_retention import (
+    collect_metric_by_update,
+    prune_checkpoints,
+)
 from src.artifacts.pipeline import (
     AsyncArtifactPipeline,
     CheckpointJob,
@@ -36,7 +39,7 @@ from src.jax.train.queue import (
     start_artifact_worker_if_needed,
 )
 from src.telemetry.metric_registry import filter_event_record
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 @dataclass(slots=True)
@@ -324,9 +327,7 @@ class CheckpointHandler:
             promotion_metric = str(getattr(promotion, "metric_name", "") or "").strip()
             if promotion_metric:
                 names.add(promotion_metric)
-        return {
-            name: collect_metric_by_update(self.log_path, name) for name in names
-        }
+        return {name: collect_metric_by_update(self.log_path, name) for name in names}
 
     def protected_artifact_paths(self) -> set[Path]:
         paths = {self.run_dir / "jax_ckpt_last.pkl"}

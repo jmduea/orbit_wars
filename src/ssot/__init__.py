@@ -1,1 +1,0 @@
-"""SSOT operator spine helpers."""

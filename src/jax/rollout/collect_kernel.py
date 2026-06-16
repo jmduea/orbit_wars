@@ -43,7 +43,7 @@ from src.opponents.jax_actions.sampling import (
     _maybe_effective_single_family_id,
 )
 from src.opponents.pool import sample_opponent_type_ids_jax
-from src.training.curriculum import StageView
+from src.opponents.curriculum import StageView
 
 from .metrics import OPPONENT_SLOT_METRIC_KEYS
 
@@ -374,7 +374,8 @@ def _reset_on_done(
     env_count: int,
     env_indices: jax.Array,
     map_pool: MapPoolConstants | None,
-    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]] | None = None,
+    pool_reset_fn: Callable[[jax.Array, jax.Array], tuple[object, TurnBatch]]
+    | None = None,
     cfg: TrainConfig,
     carry_enabled: bool,
     fresh_decoder_hidden,
@@ -594,7 +595,8 @@ def _env_step_with_opponents(
     historical_params_pool: dict | None,
     opponent_params_by_player: tuple[dict, ...] | None,
     env_count: int,
-    multi_player_step_fn: Callable[[object, object], tuple[object, object]] | None = None,
+    multi_player_step_fn: Callable[[object, object], tuple[object, object]]
+    | None = None,
 ) -> tuple[object, object]:
     if cfg.task.player_count == 2:
         opp_game = state.game._replace(

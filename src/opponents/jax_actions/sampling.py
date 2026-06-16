@@ -32,7 +32,7 @@ from src.opponents.jax_actions.builders import (
     build_sniper_action_from_edge_batch,
     build_turtle_action_from_edge_batch,
 )
-from src.training.curriculum import StageView
+from src.opponents.curriculum import StageView
 
 
 def _encode_opponent_turn_batch_2p(

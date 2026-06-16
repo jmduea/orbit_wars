@@ -20,7 +20,7 @@ from src.opponents.constants import (
     OPPONENT_RANDOM,
 )
 from src.opponents.pool import OPPONENT_FAMILY_IDS
-from src.training.curriculum import StageView
+from src.opponents.curriculum import StageView
 
 QualifierStage = Literal[1, 2, 3, 4]
 

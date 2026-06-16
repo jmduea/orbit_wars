@@ -356,13 +356,16 @@ def _ppo_importance_sampling(
     """Shared PPO ratio, KL, and clip diagnostics for factorized and Planet Flow."""
     log_ratio_raw = new_log_prob - old_log_prob
     approx_kl = masked_mean(old_log_prob - new_log_prob, mask)
-    ratio_for_kl = jnp.exp(jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP))
-    approx_kl_v2 = masked_mean((ratio_for_kl - 1.0) - log_ratio_raw, mask)
     log_ratio = jnp.clip(log_ratio_raw, -_LOG_RATIO_CLIP, _LOG_RATIO_CLIP)
+    ratio_for_kl = jnp.exp(log_ratio)
+    # Use the same clipped log-ratio in both terms so extreme replay deltas do not
+    # inflate KL diagnostics beyond the trust-region clip used for policy ratios.
+    approx_kl_v2 = masked_mean((ratio_for_kl - 1.0) - log_ratio, mask)
     ratio = jnp.exp(log_ratio)
     clipped_ratio = jnp.clip(ratio, 1.0 - clip_coef, 1.0 + clip_coef)
     return {
         "log_ratio_raw": log_ratio_raw,
+        "log_ratio": log_ratio,
         "approx_kl": approx_kl,
         "ratio_for_kl": ratio_for_kl,
         "approx_kl_v2": approx_kl_v2,
@@ -412,9 +415,25 @@ def _finalize_ppo_epoch_scan(
     *,
     extra_metrics: dict[str, jax.Array] | None = None,
 ) -> tuple[JaxTrainState, dict[str, jax.Array]]:
-    (params, opt_state), metrics_by_minibatch = jax.lax.scan(
-        update_minibatch, (train_state.params, train_state.opt_state), minibatches
-    )
+    if cfg.training.ppo_grad_accumulation:
+        zero_grads = jax.tree.map(jnp.zeros_like, train_state.params)
+        (_, opt_state, accum_grads), metrics_by_minibatch = jax.lax.scan(
+            update_minibatch,
+            (train_state.params, train_state.opt_state, zero_grads),
+            minibatches,
+        )
+        grad_denominator = jnp.maximum(
+            jnp.asarray(float(minibatch_count), dtype=jnp.float32), 1.0
+        )
+        avg_grads = jax.tree.map(lambda grad: grad / grad_denominator, accum_grads)
+        updates, opt_state = train_state.optimizer.update(
+            avg_grads, opt_state, train_state.params
+        )
+        params = optax.apply_updates(train_state.params, updates)
+    else:
+        (params, opt_state), metrics_by_minibatch = jax.lax.scan(
+            update_minibatch, (train_state.params, train_state.opt_state), minibatches
+        )
     metrics = _aggregate_ppo_metrics(metrics_by_minibatch, minibatch_count)
     if extra_metrics:
         metrics.update(extra_metrics)
@@ -638,8 +657,13 @@ def _ppo_update_factorized_jax(
             ),
         )
 
+    grad_accumulation = cfg.training.ppo_grad_accumulation
+
     def update_minibatch(carry, minibatch):
-        params, opt_state = carry
+        if grad_accumulation:
+            params, opt_state, accum_grads = carry
+        else:
+            params, opt_state = carry
         mb_batch = TurnBatch(
             planet_features=minibatch["planet_features"],
             planet_mask=minibatch["planet_mask"],
@@ -694,6 +718,7 @@ def _ppo_update_factorized_jax(
                 clip_coef=cfg.training.clip_coef,
             )
             log_ratio_raw = sampling["log_ratio_raw"]
+            log_ratio = sampling["log_ratio"]
             approx_kl = sampling["approx_kl"]
             ratio_for_kl = sampling["ratio_for_kl"]
             approx_kl_v2 = sampling["approx_kl_v2"]
@@ -810,7 +835,7 @@ def _ppo_update_factorized_jax(
                     format_mask,
                 )
                 format_approx_kl_v2 = masked_mean(
-                    (ratio_for_kl - 1.0) - log_ratio_raw,
+                    (ratio_for_kl - 1.0) - log_ratio,
                     format_mask,
                 )
                 format_total_loss = (
@@ -828,10 +853,13 @@ def _ppo_update_factorized_jax(
             return loss, metrics
 
         (_loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
-        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
         metrics = dict(metrics)
         metrics["total_loss"] = _loss
+        if grad_accumulation:
+            accum_grads = jax.tree.map(jnp.add, accum_grads, grads)
+            return (params, opt_state, accum_grads), metrics
+        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
         return (params, opt_state), metrics
 
     extra_metrics = dict(parity_metrics)
@@ -930,8 +958,13 @@ def _ppo_update_planet_flow_jax(
         ),
     }
 
+    grad_accumulation = cfg.training.ppo_grad_accumulation
+
     def update_minibatch(carry, minibatch):
-        params, opt_state = carry
+        if grad_accumulation:
+            params, opt_state, accum_grads = carry
+        else:
+            params, opt_state = carry
         mb_batch = TurnBatch(
             planet_features=minibatch["planet_features"],
             planet_mask=minibatch["planet_mask"],
@@ -964,6 +997,7 @@ def _ppo_update_planet_flow_jax(
                 clip_coef=cfg.training.clip_coef,
             )
             log_ratio_raw = sampling["log_ratio_raw"]
+            log_ratio = sampling["log_ratio"]
             approx_kl = sampling["approx_kl"]
             ratio_for_kl = sampling["ratio_for_kl"]
             approx_kl_v2 = sampling["approx_kl_v2"]
@@ -1011,7 +1045,7 @@ def _ppo_update_planet_flow_jax(
                     format_mask,
                 )
                 format_approx_kl_v2 = masked_mean(
-                    (ratio_for_kl - 1.0) - log_ratio_raw,
+                    (ratio_for_kl - 1.0) - log_ratio,
                     format_mask,
                 )
                 format_total_loss = (
@@ -1029,10 +1063,13 @@ def _ppo_update_planet_flow_jax(
             return loss, metrics
 
         (_loss, metrics), grads = jax.value_and_grad(loss_fn, has_aux=True)(params)
-        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
-        params = optax.apply_updates(params, updates)
         metrics = dict(metrics)
         metrics["total_loss"] = _loss
+        if grad_accumulation:
+            accum_grads = jax.tree.map(jnp.add, accum_grads, grads)
+            return (params, opt_state, accum_grads), metrics
+        updates, opt_state = train_state.optimizer.update(grads, opt_state, params)
+        params = optax.apply_updates(params, updates)
         return (params, opt_state), metrics
 
     return _finalize_ppo_epoch_scan(

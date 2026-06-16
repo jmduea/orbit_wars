@@ -91,8 +91,8 @@ from src.telemetry.metric_registry import (
     required_ppo_metric_names,
     required_rollout_scalar_names,
 )
-from src.training.curriculum import CurriculumController
-from src.training.seed_scheduler import (
+from src.opponents.curriculum import CurriculumController
+from src.opponents.seed_scheduler import (
     SeedScheduleConfig,
     SeedScheduler,
     resolve_reseed_every_updates,

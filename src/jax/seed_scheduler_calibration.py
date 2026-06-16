@@ -15,7 +15,7 @@ from src.jax.preflight_calibration import (
     read_jsonl_records,
     run_ow_train,
 )
-from src.training.seed_scheduler import resolve_reseed_every_updates
+from src.opponents.seed_scheduler import resolve_reseed_every_updates
 
 OpponentProfile = Literal["noop_only", "random_only", "self_play_only"]
 

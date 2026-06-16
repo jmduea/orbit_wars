@@ -22,7 +22,7 @@ from src.opponents.jax_actions.sampling import (
     _random_edge_action,
     _scripted_edge_action,
 )
-from src.training.curriculum import CurriculumController
+from src.opponents.curriculum import CurriculumController
 
 
 def _v2_cfg(*, player_count: int = 2) -> TrainConfig:
@@ -87,7 +87,9 @@ def test_v2_self_play_scripted_family_slots(
 ) -> None:
     cfg = _v2_cfg(player_count=player_count)
     cfg.curriculum.stages = [{"id": family, "opponent_families": {family: 1.0}}]
-    reset_keys = jax.random.split(jax.random.PRNGKey(10 + player_count), cfg.training.num_envs)
+    reset_keys = jax.random.split(
+        jax.random.PRNGKey(10 + player_count), cfg.training.num_envs
+    )
     env_state, turn_batch = batched_reset(reset_keys, cfg.task)
     policy = build_jax_policy(cfg)
     train_state = init_train_state(jax.random.PRNGKey(11 + player_count), policy, cfg)
