@@ -1,0 +1,2417 @@
+{
+  "goal": "inventory the codebase for duplication and provide a comprehensive list of occurrences",
+  "scan_meta": {
+    "generated_turn": 11,
+    "scopes": [
+      "src",
+      "tests",
+      "scripts",
+      "conf",
+      "docs",
+      "AGENTS.md",
+      "Makefile",
+      "docs/tools/*.html"
+    ],
+    "src_py": 224,
+    "test_py": 148,
+    "conf_yaml": 96
+  },
+  "occurrences": [
+    {
+      "id": "O-0001",
+      "category": "identical_file",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 1,
+      "description": "Byte-identical file pair",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/jax/factorized_sampler_benchmark.py"
+    },
+    {
+      "id": "O-0002",
+      "category": "identical_file",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 1,
+      "description": "Byte-identical file pair",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py"
+    },
+    {
+      "id": "O-0003",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/cli/promote.py",
+      "line": 17,
+      "description": "_default_outputs_root exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "356e4f7b67bf"
+    },
+    {
+      "id": "O-0004",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/cli/runs.py",
+      "line": 14,
+      "description": "_default_outputs_root exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/cli/promote.py:17:_default_outputs_root",
+      "cluster_hash": "356e4f7b67bf"
+    },
+    {
+      "id": "O-0005",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/telemetry/wandb_run_name.py",
+      "line": 52,
+      "description": "_hydra_job_num exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/artifacts/run_paths.py:56:_hydra_job_num",
+      "cluster_hash": "5973652e4063"
+    },
+    {
+      "id": "O-0006",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/run_paths.py",
+      "line": 56,
+      "description": "_hydra_job_num exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "5973652e4063"
+    },
+    {
+      "id": "O-0007",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/telemetry/wandb_run_name.py",
+      "line": 65,
+      "description": "_run_name_component exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/artifacts/run_paths.py:111:_run_name_component",
+      "cluster_hash": "fc7dcb477ba4"
+    },
+    {
+      "id": "O-0008",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/run_paths.py",
+      "line": 111,
+      "description": "_run_name_component exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "fc7dcb477ba4"
+    },
+    {
+      "id": "O-0009",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/telemetry/wandb_run_name.py",
+      "line": 232,
+      "description": "_repo_root exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/jax/preflight.py:65:_repo_root",
+      "cluster_hash": "a33630cf9ed1"
+    },
+    {
+      "id": "O-0010",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/preflight.py",
+      "line": 65,
+      "description": "_repo_root exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "a33630cf9ed1"
+    },
+    {
+      "id": "O-0011",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/benchmark/map_pool.py",
+      "line": 19,
+      "description": "_git_head_sha exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "9db1f6789d1a"
+    },
+    {
+      "id": "O-0012",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/cli/benchmark/common.py",
+      "line": 20,
+      "description": "_git_head_sha exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/map_pool.py:19:_git_head_sha",
+      "cluster_hash": "9db1f6789d1a"
+    },
+    {
+      "id": "O-0013",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/jsonl_window.py",
+      "line": 36,
+      "description": "resolve_log_path_from_input exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "014ab374736f"
+    },
+    {
+      "id": "O-0014",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/admission_throughput.py",
+      "line": 53,
+      "description": "resolve_log_path_from_input exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/jsonl_window.py:36:resolve_log_path_from_input",
+      "cluster_hash": "014ab374736f"
+    },
+    {
+      "id": "O-0015",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/jsonl_window.py",
+      "line": 22,
+      "description": "first_update exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "cfc28df97324"
+    },
+    {
+      "id": "O-0016",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/admission_throughput.py",
+      "line": 35,
+      "description": "first_update exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/jsonl_window.py:22:first_update",
+      "cluster_hash": "cfc28df97324"
+    },
+    {
+      "id": "O-0017",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/rollout/phase_timing_report.py",
+      "line": 54,
+      "description": "first_update exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/jsonl_window.py:22:first_update",
+      "cluster_hash": "cfc28df97324"
+    },
+    {
+      "id": "O-0018",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/jsonl_window.py",
+      "line": 25,
+      "description": "includes exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "eb361ec681ee"
+    },
+    {
+      "id": "O-0019",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/admission_throughput.py",
+      "line": 49,
+      "description": "includes exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/jsonl_window.py:25:includes",
+      "cluster_hash": "eb361ec681ee"
+    },
+    {
+      "id": "O-0020",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/rollout/phase_timing_report.py",
+      "line": 57,
+      "description": "includes exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/jsonl_window.py:25:includes",
+      "cluster_hash": "eb361ec681ee"
+    },
+    {
+      "id": "O-0021",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 18,
+      "description": "_task_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "45b92578735c"
+    },
+    {
+      "id": "O-0022",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 18,
+      "description": "_task_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py:18:_task_cfg",
+      "cluster_hash": "45b92578735c"
+    },
+    {
+      "id": "O-0023",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 24,
+      "description": "_train_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "c3f6c4458b98"
+    },
+    {
+      "id": "O-0024",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 24,
+      "description": "_train_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py:24:_train_cfg",
+      "cluster_hash": "c3f6c4458b98"
+    },
+    {
+      "id": "O-0025",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 35,
+      "description": "_expected_apply_count exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "319f7f432eb5"
+    },
+    {
+      "id": "O-0026",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 35,
+      "description": "_expected_apply_count exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py:35:_expected_apply_count",
+      "cluster_hash": "319f7f432eb5"
+    },
+    {
+      "id": "O-0027",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 41,
+      "description": "run_factorized_sampler_benchmark exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "e61b16beae5f"
+    },
+    {
+      "id": "O-0028",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 41,
+      "description": "run_factorized_sampler_benchmark exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py:41:run_factorized_sampler_benchmark",
+      "cluster_hash": "e61b16beae5f"
+    },
+    {
+      "id": "O-0029",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/benchmark/factorized_sampler.py",
+      "line": 64,
+      "description": "sample exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "c0fa716f26bd"
+    },
+    {
+      "id": "O-0030",
+      "category": "duplicate_function_body",
+      "severity": "high",
+      "path": "src/jax/factorized_sampler_benchmark.py",
+      "line": 64,
+      "description": "sample exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/benchmark/factorized_sampler.py:64:sample",
+      "cluster_hash": "c0fa716f26bd"
+    },
+    {
+      "id": "O-0031",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/pipeline.py",
+      "line": 353,
+      "description": "_fsync_dir exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "5aca89259b37"
+    },
+    {
+      "id": "O-0032",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/run_paths.py",
+      "line": 351,
+      "description": "_fsync_dir exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/artifacts/pipeline.py:353:_fsync_dir",
+      "cluster_hash": "5aca89259b37"
+    },
+    {
+      "id": "O-0033",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/orchestration/colab_runner.py",
+      "line": 1166,
+      "description": "_tail exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "9a62cc5a8c2a"
+    },
+    {
+      "id": "O-0034",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/orchestration/kaggle_runner.py",
+      "line": 724,
+      "description": "_tail exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/orchestration/colab_runner.py:1166:_tail",
+      "cluster_hash": "9a62cc5a8c2a"
+    },
+    {
+      "id": "O-0035",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/preflight_shortlist.py",
+      "line": 22,
+      "description": "_summary_float exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/jax/planet_flow_shortlist.py:68:_summary_float",
+      "cluster_hash": "b003c21effa6"
+    },
+    {
+      "id": "O-0036",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/planet_flow_shortlist.py",
+      "line": 68,
+      "description": "_summary_float exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "b003c21effa6"
+    },
+    {
+      "id": "O-0037",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 185,
+      "description": "_resolve_value_head exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "01d1146419ae"
+    },
+    {
+      "id": "O-0038",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 341,
+      "description": "_resolve_value_head exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "01d1146419ae"
+    },
+    {
+      "id": "O-0039",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 191,
+      "description": "encode exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "896820a0f892"
+    },
+    {
+      "id": "O-0040",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 347,
+      "description": "encode exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "896820a0f892"
+    },
+    {
+      "id": "O-0041",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 196,
+      "description": "critic exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "50073199b03f"
+    },
+    {
+      "id": "O-0042",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/policy.py",
+      "line": 352,
+      "description": "critic exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "50073199b03f"
+    },
+    {
+      "id": "O-0043",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/tournament/ranking.py",
+      "line": 13,
+      "description": "_win_rate exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "0457c59107c6"
+    },
+    {
+      "id": "O-0044",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/artifacts/tournament/unified/scoring.py",
+      "line": 26,
+      "description": "_win_rate exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/artifacts/tournament/ranking.py:13:_win_rate",
+      "cluster_hash": "0457c59107c6"
+    },
+    {
+      "id": "O-0045",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/sweep_score.py",
+      "line": 56,
+      "description": "__init__ exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "f6abf6fe9ba1"
+    },
+    {
+      "id": "O-0046",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/sweep_score.py",
+      "line": 133,
+      "description": "__init__ exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "f6abf6fe9ba1"
+    },
+    {
+      "id": "O-0047",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/sweep_score.py",
+      "line": 63,
+      "description": "rolling_window_means exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "aeeb7d8cb659"
+    },
+    {
+      "id": "O-0048",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/sweep_score.py",
+      "line": 140,
+      "description": "rolling_window_means exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "aeeb7d8cb659"
+    },
+    {
+      "id": "O-0049",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/telemetry.py",
+      "line": 27,
+      "description": "log exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "src/jax/train/checkpoint.py:58:log",
+      "cluster_hash": "f5ced4c7033b"
+    },
+    {
+      "id": "O-0050",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "src/jax/train/checkpoint.py",
+      "line": 58,
+      "description": "log exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "f5ced4c7033b"
+    },
+    {
+      "id": "O-0051",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_checkpoint_eval.py",
+      "line": 149,
+      "description": "fake_tournament_job exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "2b142003673a"
+    },
+    {
+      "id": "O-0052",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_checkpoint_eval.py",
+      "line": 191,
+      "description": "fake_tournament_job exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "2b142003673a"
+    },
+    {
+      "id": "O-0053",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_jax_seed_scheduler.py",
+      "line": 10,
+      "description": "_configure_rollout_groups exact body (5x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_curriculum.py:9:_configure_rollout_groups",
+      "cluster_hash": "8f1b53f8e938"
+    },
+    {
+      "id": "O-0054",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_jax_curriculum.py",
+      "line": 14,
+      "description": "_configure_rollout_groups exact body (5x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_curriculum.py:9:_configure_rollout_groups",
+      "cluster_hash": "8f1b53f8e938"
+    },
+    {
+      "id": "O-0055",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_run_paths.py",
+      "line": 14,
+      "description": "_configure_rollout_groups exact body (5x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_curriculum.py:9:_configure_rollout_groups",
+      "cluster_hash": "8f1b53f8e938"
+    },
+    {
+      "id": "O-0056",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_curriculum.py",
+      "line": 9,
+      "description": "_configure_rollout_groups exact body (5x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "8f1b53f8e938"
+    },
+    {
+      "id": "O-0057",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_jax_ppo.py",
+      "line": 20,
+      "description": "_configure_rollout_groups exact body (5x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_curriculum.py:9:_configure_rollout_groups",
+      "cluster_hash": "8f1b53f8e938"
+    },
+    {
+      "id": "O-0058",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_rollout_noop_opponent.py",
+      "line": 22,
+      "description": "_empty_snapshot_kwargs exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_opponent_mixed_sampling.py:39:_empty_snapshot_kwargs",
+      "cluster_hash": "8da9df0e6a73"
+    },
+    {
+      "id": "O-0059",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_opponent_mixed_sampling.py",
+      "line": 39,
+      "description": "_empty_snapshot_kwargs exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "8da9df0e6a73"
+    },
+    {
+      "id": "O-0060",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_trajectory_shield.py",
+      "line": 121,
+      "description": "_flat_edge_for_target exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "7e9070811211"
+    },
+    {
+      "id": "O-0061",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_trajectory_shield_factorized.py",
+      "line": 376,
+      "description": "_flat_edge_for_target exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_trajectory_shield.py:121:_flat_edge_for_target",
+      "cluster_hash": "7e9070811211"
+    },
+    {
+      "id": "O-0062",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_trajectory_shield.py",
+      "line": 129,
+      "description": "_edge_slot_for_target exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "4125cd36abad"
+    },
+    {
+      "id": "O-0063",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_trajectory_shield_factorized.py",
+      "line": 174,
+      "description": "_edge_slot_for_target exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_trajectory_shield.py:129:_edge_slot_for_target",
+      "cluster_hash": "4125cd36abad"
+    },
+    {
+      "id": "O-0064",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_rollout_selected_action_validation.py",
+      "line": 31,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_factored_action_builders.py:22:_task_cfg",
+      "cluster_hash": "38036b027f95"
+    },
+    {
+      "id": "O-0065",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_factored_sequence_scan.py",
+      "line": 19,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_factored_action_builders.py:22:_task_cfg",
+      "cluster_hash": "38036b027f95"
+    },
+    {
+      "id": "O-0066",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_launch_hygiene.py",
+      "line": 26,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_factored_action_builders.py:22:_task_cfg",
+      "cluster_hash": "38036b027f95"
+    },
+    {
+      "id": "O-0067",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_factored_action_builders.py",
+      "line": 22,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "38036b027f95"
+    },
+    {
+      "id": "O-0068",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_rollout_selected_action_validation.py",
+      "line": 37,
+      "description": "_train_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_factored_sequence_scan.py:25:_train_cfg",
+      "cluster_hash": "990f614b0b58"
+    },
+    {
+      "id": "O-0069",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_factored_sequence_scan.py",
+      "line": 25,
+      "description": "_train_cfg exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "990f614b0b58"
+    },
+    {
+      "id": "O-0070",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_planet_flow_compiler.py",
+      "line": 25,
+      "description": "_batched_reset exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "6fe7efbed8d5"
+    },
+    {
+      "id": "O-0071",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_planet_flow_reachability.py",
+      "line": 24,
+      "description": "_batched_reset exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_planet_flow_compiler.py:25:_batched_reset",
+      "cluster_hash": "6fe7efbed8d5"
+    },
+    {
+      "id": "O-0072",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_continuous_ship_action.py",
+      "line": 22,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "d6d04721c431"
+    },
+    {
+      "id": "O-0073",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_decoder_carry.py",
+      "line": 20,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_continuous_ship_action.py:22:_task_cfg",
+      "cluster_hash": "d6d04721c431"
+    },
+    {
+      "id": "O-0074",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_jax_policy_encoder.py",
+      "line": 31,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_continuous_ship_action.py:22:_task_cfg",
+      "cluster_hash": "d6d04721c431"
+    },
+    {
+      "id": "O-0075",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_jax_policy_factorized_decoder.py",
+      "line": 18,
+      "description": "_task_cfg exact body (4x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_continuous_ship_action.py:22:_task_cfg",
+      "cluster_hash": "d6d04721c431"
+    },
+    {
+      "id": "O-0076",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_intercept_edge_features.py",
+      "line": 23,
+      "description": "_cfg exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_feature_catalog_drift.py:23:_cfg",
+      "cluster_hash": "acc89227b946"
+    },
+    {
+      "id": "O-0077",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_feature_catalog_drift.py",
+      "line": 23,
+      "description": "_cfg exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "acc89227b946"
+    },
+    {
+      "id": "O-0078",
+      "category": "duplicate_function_body",
+      "severity": "medium",
+      "path": "tests/test_feature_encoding_golden.py",
+      "line": 28,
+      "description": "_cfg exact body (3x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_feature_catalog_drift.py:23:_cfg",
+      "cluster_hash": "acc89227b946"
+    },
+    {
+      "id": "O-0079",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_intercept_edge_features.py",
+      "line": 35,
+      "description": "_empty_fleets exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "dfd9cbe91b4e"
+    },
+    {
+      "id": "O-0080",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_trajectory_shield_factorized.py",
+      "line": 63,
+      "description": "_empty_fleets exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "tests/test_intercept_edge_features.py:35:_empty_fleets",
+      "cluster_hash": "dfd9cbe91b4e"
+    },
+    {
+      "id": "O-0081",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_kaggle_jax_backend.py",
+      "line": 48,
+      "description": "fake_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "bb4ed2ecf591"
+    },
+    {
+      "id": "O-0082",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_kaggle_jax_backend.py",
+      "line": 211,
+      "description": "fake_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "bb4ed2ecf591"
+    },
+    {
+      "id": "O-0083",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_cli_train_hosts.py",
+      "line": 131,
+      "description": "fake_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "4e43c6b68a2e"
+    },
+    {
+      "id": "O-0084",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "tests/test_cli_train_hosts.py",
+      "line": 283,
+      "description": "fake_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "4e43c6b68a2e"
+    },
+    {
+      "id": "O-0085",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "scripts/ce_optimize/capture_opponent_ladder_baseline.py",
+      "line": 35,
+      "description": "_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "c9895ac3cee5"
+    },
+    {
+      "id": "O-0086",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "scripts/ce_optimize/opponent_rollout_measure.py",
+      "line": 37,
+      "description": "_run exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "scripts/ce_optimize/capture_opponent_ladder_baseline.py:35:_run",
+      "cluster_hash": "c9895ac3cee5"
+    },
+    {
+      "id": "O-0087",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "scripts/ce_optimize/capture_opponent_ladder_baseline.py",
+      "line": 48,
+      "description": "_cold_cache_env exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "cluster_hash": "7b0226a1d9ed"
+    },
+    {
+      "id": "O-0088",
+      "category": "duplicate_function_body",
+      "severity": "low",
+      "path": "scripts/ce_optimize/opponent_rollout_measure.py",
+      "line": 50,
+      "description": "_cold_cache_env exact body (2x)",
+      "duplicate_type": "exact_copy",
+      "duplicate_of": "scripts/ce_optimize/capture_opponent_ladder_baseline.py:48:_cold_cache_env",
+      "cluster_hash": "7b0226a1d9ed"
+    },
+    {
+      "id": "O-0089",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/game/shield.py",
+      "line": 28,
+      "description": "ship_count_for_bucket_py",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/shield/trajectory.py:62:ship_count_for_bucket_jax"
+    },
+    {
+      "id": "O-0090",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/jax/shield/trajectory.py",
+      "line": 62,
+      "description": "ship_count_for_bucket_jax",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/game/shield.py:28:ship_count_for_bucket_py"
+    },
+    {
+      "id": "O-0091",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/game/shield.py",
+      "line": 39,
+      "description": "fleet_speed_py",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/shield/trajectory.py:231:_fleet_speed_for_ships_jax"
+    },
+    {
+      "id": "O-0092",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/jax/shield/trajectory.py",
+      "line": 231,
+      "description": "_fleet_speed_for_ships_jax",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/game/shield.py:39:fleet_speed_py"
+    },
+    {
+      "id": "O-0093",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/game/shield.py",
+      "line": 65,
+      "description": "_moving_circle_hit_time_py",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/shield/trajectory.py:139:_moving_circle_hit_time_jax"
+    },
+    {
+      "id": "O-0094",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/jax/shield/trajectory.py",
+      "line": 139,
+      "description": "_moving_circle_hit_time_jax",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/game/shield.py:65:_moving_circle_hit_time_py"
+    },
+    {
+      "id": "O-0095",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/game/shield.py",
+      "line": 299,
+      "description": "filter_moves_with_trajectory_shield",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/shield/trajectory.py:1041:apply_trajectory_shield_factorized_topk"
+    },
+    {
+      "id": "O-0096",
+      "category": "shield_python_jax_parallel",
+      "severity": "high",
+      "path": "src/jax/shield/trajectory.py",
+      "line": 1041,
+      "description": "apply_trajectory_shield_factorized_topk",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/game/shield.py:299:filter_moves_with_trajectory_shield"
+    },
+    {
+      "id": "O-0097",
+      "category": "env_parity_parallel",
+      "severity": "high",
+      "path": "src/jax/env.py",
+      "line": 1,
+      "description": "JAX env hot path",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "kaggle_environments/orbit_wars/orbit_wars.py:1 (external)"
+    },
+    {
+      "id": "O-0098",
+      "category": "env_parity_parallel",
+      "severity": "high",
+      "path": "tests/test_jax_env_parity.py",
+      "line": 321,
+      "description": "Reference parity tests",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/env.py:1"
+    },
+    {
+      "id": "O-0099",
+      "category": "submission_replay_parallel",
+      "severity": "medium",
+      "path": "src/jax/submission_runtime.py",
+      "line": 28,
+      "description": "jax_game_from_observation",
+      "duplicate_type": "structural_parallel"
+    },
+    {
+      "id": "O-0100",
+      "category": "submission_replay_parallel",
+      "severity": "medium",
+      "path": "src/jax/submission_runtime.py",
+      "line": 464,
+      "description": "jax_game_from_observation_fast",
+      "duplicate_type": "structural_parallel"
+    },
+    {
+      "id": "O-0101",
+      "category": "map_generation_parallel",
+      "severity": "high",
+      "path": "src/game/planet_generation.py",
+      "line": 1,
+      "description": "planet_generation.py",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/map_pool/bake.py:1"
+    },
+    {
+      "id": "O-0102",
+      "category": "map_generation_parallel",
+      "severity": "high",
+      "path": "src/game/comet_generation.py",
+      "line": 1,
+      "description": "comet_generation.py",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/jax/map_pool/bake.py:1"
+    },
+    {
+      "id": "O-0103",
+      "category": "config_surface_dual",
+      "severity": "high",
+      "path": "src/config/runtime.py",
+      "line": 332,
+      "description": "Derived opponents.mix.weights",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "src/opponents/curriculum.py:58"
+    },
+    {
+      "id": "O-0104",
+      "category": "config_surface_dual",
+      "severity": "high",
+      "path": "src/opponents/curriculum.py",
+      "line": 58,
+      "description": "Curriculum family probs",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "src/config/runtime.py:332"
+    },
+    {
+      "id": "O-0105",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/bracket_training.yaml",
+      "line": 8,
+      "description": "artifacts.bracket_training.qualifier_max_env_steps=500000000",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0106",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 87,
+      "description": "artifacts.bracket_training.qualifier_max_env_steps=500000000",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0107",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/_legacy/bracket_training.yaml",
+      "line": 7,
+      "description": "artifacts.bracket_training.qualifier_max_env_steps=500000000",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0108",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/bracket_training.yaml",
+      "line": 9,
+      "description": "artifacts.bracket_training.qualifier_eval_interval_updates=50",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0109",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 88,
+      "description": "artifacts.bracket_training.qualifier_eval_interval_updates=50",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0110",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/_legacy/bracket_training.yaml",
+      "line": 8,
+      "description": "artifacts.bracket_training.qualifier_eval_interval_updates=50",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0111",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/bracket_training.yaml",
+      "line": 12,
+      "description": "artifacts.unified_tournament.qualifier_mode=False",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0112",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 71,
+      "description": "artifacts.unified_tournament.qualifier_mode=False",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0113",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/_legacy/bracket_training.yaml",
+      "line": 11,
+      "description": "artifacts.unified_tournament.qualifier_mode=False",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0114",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/local_fast.yaml",
+      "line": 18,
+      "description": "artifacts.checkpoint_retention.keep_every_n_updates=0",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/base.yaml"
+    },
+    {
+      "id": "O-0115",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/planet_flow_proof.yaml",
+      "line": 27,
+      "description": "artifacts.checkpoint_retention.keep_every_n_updates=0",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/base.yaml"
+    },
+    {
+      "id": "O-0116",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 36,
+      "description": "artifacts.checkpoint_retention.keep_every_n_updates=0",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0117",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/local_fast.yaml",
+      "line": 19,
+      "description": "artifacts.checkpoint_retention.keep_best_k_by_metric=0",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/base.yaml"
+    },
+    {
+      "id": "O-0118",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/planet_flow_proof.yaml",
+      "line": 28,
+      "description": "artifacts.checkpoint_retention.keep_best_k_by_metric=0",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/base.yaml"
+    },
+    {
+      "id": "O-0119",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 37,
+      "description": "artifacts.checkpoint_retention.keep_best_k_by_metric=0",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0120",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/base.yaml",
+      "line": 72,
+      "description": "artifacts.unified_tournament.enforcement=False",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/hybrid_promotion.yaml"
+    },
+    {
+      "id": "O-0121",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/hybrid_promotion.yaml",
+      "line": 11,
+      "description": "artifacts.unified_tournament.enforcement=False",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/hybrid_promotion.yaml"
+    },
+    {
+      "id": "O-0122",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/unified_tournament.yaml",
+      "line": 7,
+      "description": "artifacts.unified_tournament.enforcement=False",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/artifacts/_legacy/hybrid_promotion.yaml"
+    },
+    {
+      "id": "O-0123",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/artifacts/_legacy/hybrid_promotion.yaml",
+      "line": 10,
+      "description": "artifacts.unified_tournament.enforcement=False",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0124",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/training/workstation.yaml",
+      "line": 9,
+      "description": "training.lean_rollout_metrics=True",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/training/base.yaml"
+    },
+    {
+      "id": "O-0125",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/training/smoke.yaml",
+      "line": 15,
+      "description": "training.lean_rollout_metrics=True",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/training/base.yaml"
+    },
+    {
+      "id": "O-0126",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/training/base.yaml",
+      "line": 22,
+      "description": "training.lean_rollout_metrics=True",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0127",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/task/rollout_selected_validate.yaml",
+      "line": 7,
+      "description": "task.map_pool_path='data/jax_map_pool/default_v1.npz'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/task/base.yaml"
+    },
+    {
+      "id": "O-0128",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/task/map_pool.yaml",
+      "line": 5,
+      "description": "task.map_pool_path='data/jax_map_pool/default_v1.npz'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/task/base.yaml"
+    },
+    {
+      "id": "O-0129",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/task/default.yaml",
+      "line": 5,
+      "description": "task.map_pool_path='data/jax_map_pool/default_v1.npz'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/task/base.yaml"
+    },
+    {
+      "id": "O-0130",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/task/base.yaml",
+      "line": 23,
+      "description": "task.map_pool_path='data/jax_map_pool/default_v1.npz'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0131",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_core.yaml",
+      "line": 9,
+      "description": "wandb_sweep.parameters.training.lr.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0132",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/preflight.yaml",
+      "line": 20,
+      "description": "wandb_sweep.parameters.training.lr.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0133",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_shield_experiment.yaml",
+      "line": 11,
+      "description": "wandb_sweep.parameters.training.lr.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0134",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_core.yaml",
+      "line": 9,
+      "description": "wandb_sweep.parameters.training.ent_coef.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0135",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/preflight.yaml",
+      "line": 20,
+      "description": "wandb_sweep.parameters.training.ent_coef.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0136",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_shield_experiment.yaml",
+      "line": 11,
+      "description": "wandb_sweep.parameters.training.ent_coef.distribution='log_uniform_values'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0137",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_core.yaml",
+      "line": 10,
+      "description": "wandb_sweep.parameters.training.ent_coef.min=0.001",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0138",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/preflight.yaml",
+      "line": 14,
+      "description": "wandb_sweep.parameters.training.ent_coef.min=0.001",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0139",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_shield_experiment.yaml",
+      "line": 12,
+      "description": "wandb_sweep.parameters.training.ent_coef.min=0.001",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0140",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_core.yaml",
+      "line": 11,
+      "description": "wandb_sweep.parameters.training.ent_coef.max=0.01",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0141",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/preflight.yaml",
+      "line": 17,
+      "description": "wandb_sweep.parameters.training.ent_coef.max=0.01",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0142",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/wandb_sweep/space/ppo_shield_experiment.yaml",
+      "line": 13,
+      "description": "wandb_sweep.parameters.training.ent_coef.max=0.01",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/wandb_sweep/space/ppo_core.yaml"
+    },
+    {
+      "id": "O-0143",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 5,
+      "description": "benchmark/gates.thresholds_key='learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0144",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 5,
+      "description": "benchmark/gates.thresholds_key='learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0145",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 5,
+      "description": "benchmark/gates.thresholds_key='learning_signal'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0146",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 3,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.model='planet_flow_target_heatmap'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0147",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 3,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.model='planet_flow_target_heatmap'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0148",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 3,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.model='planet_flow_target_heatmap'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0149",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 5,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.thresholds_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0150",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 5,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.thresholds_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0151",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 5,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.thresholds_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0152",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 23,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.train_base='planet_flow'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0153",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 24,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.train_base='planet_flow'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0154",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 22,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.train_base='planet_flow'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0155",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 30,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.require_planet_flow_control_metrics=True",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0156",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 31,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.require_planet_flow_control_metrics=True",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0157",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 29,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.require_planet_flow_control_metrics=True",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0158",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 31,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.max_post_mask_unreachable_demand_rate='from_thresholds'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0159",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 32,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.max_post_mask_unreachable_demand_rate='from_thresholds'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0160",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 30,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.max_post_mask_unreachable_demand_rate='from_thresholds'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0161",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 32,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.needs_calibration_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0162",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 33,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.needs_calibration_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml"
+    },
+    {
+      "id": "O-0163",
+      "category": "conf_repeated_leaf",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 31,
+      "description": "benchmark/gates.train.planet_flow_target_heatmap.evaluation.needs_calibration_key='planet_flow_learning_signal'",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0164",
+      "category": "gate_recipe",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_noop.yaml",
+      "line": 1,
+      "description": "Gate recipe beat_noop",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0165",
+      "category": "gate_recipe",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/beat_random.yaml",
+      "line": 1,
+      "description": "Gate recipe beat_random",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml:9 (shared template)"
+    },
+    {
+      "id": "O-0166",
+      "category": "gate_recipe",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/curriculum_staged.yaml",
+      "line": 1,
+      "description": "Gate recipe curriculum_staged",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml:9 (shared template)"
+    },
+    {
+      "id": "O-0167",
+      "category": "gate_recipe",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/admission.yaml",
+      "line": 1,
+      "description": "Gate recipe admission",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml:9 (shared template)"
+    },
+    {
+      "id": "O-0168",
+      "category": "gate_recipe",
+      "severity": "medium",
+      "path": "conf/benchmark/gates/win_proof_tournament.yaml",
+      "line": 1,
+      "description": "Gate recipe win_proof_tournament",
+      "duplicate_type": "config_surface",
+      "duplicate_of": "conf/benchmark/gates/beat_noop.yaml:9 (shared template)"
+    },
+    {
+      "id": "O-0169",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/artifacts/checkpoint_eval.py",
+      "line": 15,
+      "description": "hybrid:run_checkpoint_eval_job",
+      "duplicate_type": "pipeline_parallel",
+      "duplicate_of": "src/artifacts/tournament/eval.py:128"
+    },
+    {
+      "id": "O-0170",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/artifacts/qualifier_eval.py",
+      "line": 36,
+      "description": "bracket:run_qualifier_eval_job",
+      "duplicate_type": "pipeline_parallel",
+      "duplicate_of": "src/artifacts/tournament/eval.py:128"
+    },
+    {
+      "id": "O-0171",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/jax/tournament_qualifiers/eval.py",
+      "line": 196,
+      "description": "ssot:run_held_out_qualifier_eval",
+      "duplicate_type": "pipeline_parallel",
+      "duplicate_of": "src/artifacts/tournament/eval.py:128"
+    },
+    {
+      "id": "O-0172",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/artifacts/tournament/eval.py",
+      "line": 128,
+      "description": "kaggle:run_tournament",
+      "duplicate_type": "pipeline_parallel"
+    },
+    {
+      "id": "O-0173",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/jax/train/bracket_training.py",
+      "line": 36,
+      "description": "bracket:bracket_training_tick",
+      "duplicate_type": "pipeline_parallel",
+      "duplicate_of": "src/artifacts/tournament/eval.py:128"
+    },
+    {
+      "id": "O-0174",
+      "category": "eval_pipeline_parallel",
+      "severity": "high",
+      "path": "src/jax/tournament_qualifiers/runner.py",
+      "line": 91,
+      "description": "ssot:ssot_qualifier_tick",
+      "duplicate_type": "pipeline_parallel",
+      "duplicate_of": "src/artifacts/tournament/eval.py:128"
+    },
+    {
+      "id": "O-0175",
+      "category": "artifact_yaml_stub",
+      "severity": "high",
+      "path": "conf/artifacts/bracket_training.yaml",
+      "line": 1,
+      "description": "Stub\u2192_legacy",
+      "duplicate_type": "config_stub",
+      "duplicate_of": "conf/artifacts/_legacy/bracket_training.yaml"
+    },
+    {
+      "id": "O-0176",
+      "category": "artifact_yaml_stub",
+      "severity": "high",
+      "path": "conf/artifacts/hybrid_promotion.yaml",
+      "line": 1,
+      "description": "Stub\u2192_legacy",
+      "duplicate_type": "config_stub",
+      "duplicate_of": "conf/artifacts/_legacy/hybrid_promotion.yaml"
+    },
+    {
+      "id": "O-0177",
+      "category": "telemetry_layer_stack",
+      "severity": "medium",
+      "path": "src/jax/rollout/planet_flow_metric_descriptors.py",
+      "line": 13,
+      "description": "descriptors",
+      "duplicate_type": "layer_stack"
+    },
+    {
+      "id": "O-0178",
+      "category": "telemetry_layer_stack",
+      "severity": "medium",
+      "path": "src/telemetry/planet_flow_registry.py",
+      "line": 38,
+      "description": "registry",
+      "duplicate_type": "layer_stack",
+      "duplicate_of": "src/jax/rollout/planet_flow_metric_descriptors.py:13"
+    },
+    {
+      "id": "O-0179",
+      "category": "telemetry_layer_stack",
+      "severity": "medium",
+      "path": "src/telemetry/metrics/assembly.py",
+      "line": 1,
+      "description": "assembly",
+      "duplicate_type": "layer_stack",
+      "duplicate_of": "src/jax/rollout/planet_flow_metric_descriptors.py:13"
+    },
+    {
+      "id": "O-0180",
+      "category": "telemetry_layer_stack",
+      "severity": "medium",
+      "path": "src/jax/train/metrics.py",
+      "line": 19,
+      "description": "finalize",
+      "duplicate_type": "layer_stack",
+      "duplicate_of": "src/jax/rollout/planet_flow_metric_descriptors.py:13"
+    },
+    {
+      "id": "O-0181",
+      "category": "telemetry_layer_stack",
+      "severity": "medium",
+      "path": "src/jax/rollout/collect_kernel.py",
+      "line": 109,
+      "description": "inline",
+      "duplicate_type": "layer_stack",
+      "duplicate_of": "src/jax/rollout/planet_flow_metric_descriptors.py:13"
+    },
+    {
+      "id": "O-0182",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/__init__.py",
+      "line": 1,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0183",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/admission_throughput.py",
+      "line": 17,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0184",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/calibrate.py",
+      "line": 12,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0185",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/calibrate_qualifier_seeds.py",
+      "line": 15,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0186",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/calibrate_seed.py",
+      "line": 11,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0187",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/calibrate_unified.py",
+      "line": 12,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0188",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/common.py",
+      "line": 1,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0189",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/encode_turn.py",
+      "line": 8,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0190",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/env_parity_ab.py",
+      "line": 12,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0191",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/factorized.py",
+      "line": 8,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0192",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/gate.py",
+      "line": 23,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0193",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/learn_proof.py",
+      "line": 49,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0194",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/parser.py",
+      "line": 1,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0195",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/planet_flow.py",
+      "line": 11,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0196",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/rollout_phase_breakdown.py",
+      "line": 18,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0197",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/rollout_phase_profile.py",
+      "line": 100,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0198",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/sanity.py",
+      "line": 11,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0199",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/tournament_proof.py",
+      "line": 13,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0200",
+      "category": "cli_benchmark_wrapper",
+      "severity": "low",
+      "path": "src/cli/benchmark/training.py",
+      "line": 12,
+      "description": "CLI wrapper",
+      "duplicate_type": "cli_wrapper",
+      "duplicate_of": "src/benchmark|src/jax implementation"
+    },
+    {
+      "id": "O-0201",
+      "category": "promotion_name_collision",
+      "severity": "medium",
+      "path": "src/artifacts/promotion.py",
+      "line": 1,
+      "description": "promotion.py name collision",
+      "duplicate_type": "name_collision"
+    },
+    {
+      "id": "O-0202",
+      "category": "promotion_name_collision",
+      "severity": "medium",
+      "path": "src/artifacts/tournament/promotion.py",
+      "line": 1,
+      "description": "promotion.py name collision",
+      "duplicate_type": "name_collision"
+    },
+    {
+      "id": "O-0203",
+      "category": "promotion_name_collision",
+      "severity": "medium",
+      "path": "src/jax/tournament_qualifiers/promotion.py",
+      "line": 1,
+      "description": "promotion.py name collision",
+      "duplicate_type": "name_collision"
+    },
+    {
+      "id": "O-0204",
+      "category": "schema_embed_parallel",
+      "severity": "medium",
+      "path": "scripts/validate_kaggle_docker_submission.py",
+      "line": 286,
+      "description": "(config_dir / \"__init__.py\").write_text(CONFIG_TEMPLATE, encoding=\"utf",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/config/schema.py:1"
+    },
+    {
+      "id": "O-0205",
+      "category": "schema_embed_parallel",
+      "severity": "medium",
+      "path": "scripts/validate_kaggle_docker_submission.py",
+      "line": 287,
+      "description": "(config_dir / \"schema.py\").write_text(CONFIG_TEMPLATE, encoding=\"utf-8",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/config/schema.py:1"
+    },
+    {
+      "id": "O-0206",
+      "category": "schema_embed_parallel",
+      "severity": "medium",
+      "path": "scripts/validate_kaggle_docker_submission.py",
+      "line": 565,
+      "description": "CONFIG_TEMPLATE = \"\"\"from __future__ import annotations",
+      "duplicate_type": "structural_parallel",
+      "duplicate_of": "src/config/schema.py:1"
+    },
+    {
+      "id": "O-0207",
+      "category": "docs_canonical_spine",
+      "severity": "low",
+      "path": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md",
+      "line": 1,
+      "description": "Canonical SSOT doc",
+      "duplicate_type": "semantic_canonical"
+    },
+    {
+      "id": "O-0208",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/AGENT_CAPABILITIES.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0209",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/README.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0210",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/brainstorms/2026-06-03-gate5-unified-tournament-requirements.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0211",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0212",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0213",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0214",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0215",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0216",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/developer-experience/ow-long-cli-stderr-progress-no-tail-pipe.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0217",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0218",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0219",
+      "category": "docs_legacy_parallel",
+      "severity": "low",
+      "path": "docs/tools/README.md",
+      "line": 1,
+      "description": "Legacy parallel doc",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0220",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 5,
+      "description": "**Config \u2192 Kaggle pipeline (SSOT):** [`docs/brainstorms/2026-06-03-training-pipeline-ssot-",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0221",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 31,
+      "description": "uv run ow train ... artifacts=hybrid_promotion   # strict promotion: docker + tournament a",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0222",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 75,
+      "description": "- Prefer unified v2-only feature encoding and full rework over shims when simplifying enco",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0223",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 94,
+      "description": "- **Hybrid promotion / submit-valid:** Decision tree in `docs/AGENT_CAPABILITIES.md` (hybr",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0224",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 98,
+      "description": "- **Preflight gates:** Gates 2\u20134 read JAX learning-signal trend from `logs/*_jax.jsonl`; G",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0225",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 99,
+      "description": "- **SSOT train spine:** `artifacts=ssot_pipeline` \u2014 full landing needs schema + runtime + ",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0226",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 100,
+      "description": "- **Kaggle bracket ranking (legacy):** \u03bc/\u03c3 episode ratings; `artifacts=bracket_training` f",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0227",
+      "category": "agents_md_legacy_parallel",
+      "severity": "low",
+      "path": "AGENTS.md",
+      "line": 101,
+      "description": "- **Launch hygiene throughput (tier-1 vs tier-2):** `make test-launch-hygiene-throughput` ",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0228",
+      "category": "makefile_parallel_target",
+      "severity": "low",
+      "path": "Makefile",
+      "line": 55,
+      "description": "test-fast-parallel",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0229",
+      "category": "makefile_parallel_target",
+      "severity": "low",
+      "path": "Makefile",
+      "line": 62,
+      "description": "test-jax-parallel",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0230",
+      "category": "makefile_parallel_target",
+      "severity": "low",
+      "path": "Makefile",
+      "line": 95,
+      "description": "test-daily-parallel",
+      "duplicate_type": "config_surface"
+    },
+    {
+      "id": "O-0231",
+      "category": "html_operator_tool",
+      "severity": "low",
+      "path": "docs/tools/ssot-training-pipeline-flowchart.html",
+      "line": 1,
+      "description": "HTML operator map with legacy+SSOT overlap",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0232",
+      "category": "html_operator_tool",
+      "severity": "low",
+      "path": "docs/tools/config-frozen-defaults-picker.html",
+      "line": 1,
+      "description": "HTML operator map with legacy+SSOT overlap",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md"
+    },
+    {
+      "id": "O-0233",
+      "category": "semantic_key_canonical",
+      "severity": "low",
+      "path": "src/opponents/constants.py",
+      "line": 14,
+      "description": "Canonical nearest_sniper key",
+      "duplicate_type": "semantic_canonical",
+      "reference_count": 126,
+      "appendix": ".cursor/nearest_sniper-references.txt"
+    },
+    {
+      "category": "html_operator_tool",
+      "severity": "low",
+      "path": "docs/tools/config-frozen-defaults-picker.template.html",
+      "line": 1,
+      "description": "HTML operator tool",
+      "duplicate_type": "doc_narrative",
+      "duplicate_of": "docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md",
+      "id": "O-0234"
+    }
+  ],
+  "appendix": {
+    "nearest_sniper_references": ".cursor/nearest_sniper-references.txt",
+    "lines": 126
+  },
+  "total_occurrences": 234,
+  "counts_by_duplicate_type": {
+    "exact_copy": 88,
+    "structural_parallel": 17,
+    "config_surface": 69,
+    "pipeline_parallel": 6,
+    "config_stub": 2,
+    "layer_stack": 5,
+    "cli_wrapper": 19,
+    "name_collision": 3,
+    "semantic_canonical": 2,
+    "doc_narrative": 23
+  },
+  "counts_by_category": {
+    "identical_file": 2,
+    "duplicate_function_body": 86,
+    "shield_python_jax_parallel": 8,
+    "env_parity_parallel": 2,
+    "submission_replay_parallel": 2,
+    "map_generation_parallel": 2,
+    "config_surface_dual": 2,
+    "conf_repeated_leaf": 59,
+    "gate_recipe": 5,
+    "eval_pipeline_parallel": 6,
+    "artifact_yaml_stub": 2,
+    "telemetry_layer_stack": 5,
+    "cli_benchmark_wrapper": 19,
+    "promotion_name_collision": 3,
+    "schema_embed_parallel": 3,
+    "docs_canonical_spine": 1,
+    "docs_legacy_parallel": 12,
+    "agents_md_legacy_parallel": 8,
+    "makefile_parallel_target": 3,
+    "html_operator_tool": 3,
+    "semantic_key_canonical": 1
+  },
+  "validation": {
+    "self_referential_duplicate_of": 0,
+    "entries_with_duplicate_of": 156,
+    "self_ref_ids": [],
+    "fixed_turn_11b": 14
+  }
+}
