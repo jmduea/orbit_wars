@@ -347,6 +347,7 @@ def test_status_and_sync_use_session(tmp_path: Path, capsys) -> None:
     )
     status(request, cli=cli)
     assert sync(request, cli=cli) == 0
+    assert cli.exec_calls[-1][1] == 600
     assert cli.downloads[-1][1].endswith("worker-summary.json")
     synced_log = (
         tmp_path

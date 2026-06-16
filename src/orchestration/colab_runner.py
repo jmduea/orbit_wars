@@ -552,7 +552,7 @@ def sync(request: ColabRequest, *, cli: ColabCli | None = None) -> int:
         archive_result = colab.exec(
             request.session,
             command="",
-            timeout=120,
+            timeout=max(120, min(int(request.timeout), 600)),
             local_file=archive_path,
         )
     finally:
