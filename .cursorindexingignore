@@ -52,5 +52,4 @@ artifacts/
 .understand-anything/
 
 # --- Low-signal docs for day-to-day coding ---
-docs/archive/
 docs/production-ready-data-science.pdf

@@ -140,8 +140,8 @@ Use `training=planet_flow` (512 rollout / 2048 chunk / `max_moves_k=1`) on the p
 ## Related Issues
 
 - Preflight calibration profile + `window_mean` export (merge #173): `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md`
-- Plan: `docs/plans/2026-06-02-001-feat-planet-flow-sweep-v2-replay-plan.md`
-- Prior sweep plan (v1 rationale, superseded objective): `docs/plans/2026-06-01-004-feat-planet-flow-ppo-sweep-plan.md`
+- Plan: `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`
+- Prior sweep plan (v1 rationale, superseded objective): `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`
 - Benchmark subprocess observability (separate concern): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - Outer-loop shaping calibration (planned): rank with `min(noop, random)` held-out eval, not raw training win rate — `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md`
 - Sweep shortlist CLI deferred: GitHub issue #166

@@ -1,33 +1,36 @@
 ---
 
 ## title: Colab train host for preflight shortlist to remote long runs
+
 date: 2026-06-07
+last_updated: 2026-06-16
 category: architecture-patterns
 module: orchestration
 problem_type: architecture_pattern
 component: tooling
 severity: medium
 applies_when:
-  - "Local W&B preflight sweeps need a GPU host for multi-hour or multi-thousand-update training"
-  - "Choosing between ow train kaggle and a simpler remote tarball bootstrap path"
-  - "Wiring a third train host into ow train alongside local and kaggle"
+
+- "Local W&B preflight sweeps need a GPU host for multi-hour or multi-thousand-update training"
+- "Choosing between ow train kaggle and a simpler remote tarball bootstrap path"
+- "Wiring a third train host into ow train alongside local and kaggle"
 tags:
-  - colab
-  - remote-training
-  - train-host
-  - preflight-sweep
-  - google-colab-cli
-  - kaggle-runner-contrast
+- colab
+- remote-training
+- train-host
+- preflight-sweep
+- google-colab-cli
+- kaggle-runner-contrast
 related_components:
-  - src/cli/train_hosts.py
-  - src/cli/colab_runner.py
-  - src/orchestration/colab_runner.py
-  - src/orchestration/colab_cli.py
-  - src/orchestration/remote_package.py
-  - src/orchestration/remote_worker.py
-  - scripts/colab_worker_entry.py
-  - docs/colab_runner.md
-  - docs/kaggle_runner.md
+- src/cli/train_hosts.py
+- src/cli/colab_runner.py
+- src/orchestration/colab_runner.py
+- src/orchestration/colab_cli.py
+- src/orchestration/remote_package.py
+- src/orchestration/remote_worker.py
+- scripts/colab_worker_entry.py
+- docs/colab_runner.md
+- docs/kaggle_runner.md
 
 # Colab train host for preflight shortlist to remote long runs
 
@@ -44,7 +47,7 @@ An earlier path used `**ow train kaggle`** (`src/orchestration/kaggle_runner.py`
 
 [google-colab-cli](https://github.com/googlecolab/google-colab-cli) (0.5.9, June 2026) enables terminal-driven Colab VM lifecycle (`colab new`, `colab exec`, `colab upload/download`, `colab stop`). Colab accepts a **tarball + separate bootstrap script** — no single-file embedding — and offers T4/L4/A100 GPUs.
 
-**Shipped:** PR [#226](https://github.com/jmduea/orbit_wars/pull/226) merged at `7f7a38c`. U0 spike and U6 operator proof passed on T4 (10 updates, `exit_code` 0). Plan: `docs/plans/2026-06-07-005-feat-colab-train-host-plan.md`.
+**Shipped:** PR [#226](https://github.com/jmduea/orbit_wars/pull/226) merged at `7f7a38c`. U0 spike and U6 operator proof passed on T4 (10 updates, `exit_code` 0). Plan: `docs/solutions/architecture-patterns/colab-train-host-preflight-long-run.md`.
 
 ## Guidance
 
@@ -52,15 +55,15 @@ An earlier path used `**ow train kaggle`** (`src/orchestration/kaggle_runner.py`
 
 `ow train` routes three hosts via `src/cli/train_hosts.py`:
 
-
 | Host     | Entry                      | Remote shape               |
 | -------- | -------------------------- | -------------------------- |
 | `local`  | `uv run ow train …`        | N/A                        |
 | `kaggle` | `uv run ow train kaggle …` | Embedded kernel package    |
 | `colab`  | `uv run ow train colab …`  | Tarball + Python bootstrap |
 
+Colab subcommands: `preflight`, `prepare`, `launch`, `status`, `sync`, `shortlist`, `stop`, `monitor`.
 
-Colab subcommands: `preflight`, `prepare`, `launch`, `status`, `sync`, `shortlist`, `stop`.
+For multi-hour runs, use **`--monitor-after-launch`** (poll sync, stale detection, local checkpoint eval) — see [`colab-long-run-monitor-sync-recovery.md`](../workflow-issues/colab-long-run-monitor-sync-recovery.md).
 
 ### Shared packaging layer
 
@@ -86,13 +89,16 @@ wandb agent <entity>/orbit_wars/<sweep_id>
 uv run ow train colab shortlist --sweep-id <sweep_id> \
   --out outputs/colab_runner/shortlist.json
 
-# 3. Long run on Colab GPU
+# 3. Long run on Colab GPU (see workflow-issues/colab-long-run-monitor-sync-recovery.md for fixed-path recipe)
 uv run ow train colab launch \
   --from-shortlist outputs/colab_runner/shortlist.json --rank 0 \
   --gpu T4 --timeout 86400 \
-  training.total_updates=20000 \
+  --monitor-after-launch \
+  --interval-seconds 300 --stale-seconds 900 \
+  training.total_updates=2000 \
   output.campaign=colab_long \
-  task=map_pool
+  training=2p_32 \
+  curriculum=scripted_heavy
 
 # 4. Poll and pull artifacts locally
 uv run ow train colab status --session <slug>
@@ -108,13 +114,11 @@ Synced outputs land under `outputs/colab_runner/synced/<campaign>/` (checkpoints
 
 These landed during operator proof and are required for reliable automation:
 
-
 | Issue                                | Fix                                                                            |
 | ------------------------------------ | ------------------------------------------------------------------------------ |
 | `colab exec` without session context | All `colab upload/download/exec/stop/status` use `--session` flags (CLI 0.5.9) |
 | Shell bootstrap quoting failures     | Bootstrap is **Python** (uploaded via `colab exec -f`), not a shell heredoc    |
 | Directory download unsupported       | `sync` archives the remote campaign dir to a tarball before `colab download`   |
-
 
 ### Scope boundaries
 
@@ -125,7 +129,6 @@ These landed during operator proof and are required for reliable automation:
 
 ### Kaggle runner contrast
 
-
 | Dimension     | `ow train kaggle`                     | `ow train colab`                                                    |
 | ------------- | ------------------------------------- | ------------------------------------------------------------------- |
 | Payload       | Base64 embedded in single `script.py` | Tarball + `worker-env.json`                                         |
@@ -134,7 +137,6 @@ These landed during operator proof and are required for reliable automation:
 | W&B on remote | Deprecated / standalone only          | Optional via `worker-env.json` (`WANDB_API_KEY`)                    |
 | Shortlist     | `ow train kaggle shortlist`           | `ow train colab shortlist` (same `wandb_sweeps.shortlist_from_api`) |
 | Status        | Kaggle kernel slug                    | Colab session slug (`ow-colab_<campaign>-<sha>`)                    |
-
 
 Kaggle runner remains in the repo for diagnostics; Colab is the preferred remote long-run host after preflight.
 
@@ -165,8 +167,8 @@ uv run ow train colab preflight
 
 ```bash
 uv run ow train colab launch --gpu T4 --timeout 7200 \
-  training.total_updates=10 curriculum=off output.campaign=colab_smoke \
-  task=shield_cheap opponents=base opponents.mode.opponent=noop \
+  training.total_updates=10 curriculum=noop_only output.campaign=colab_smoke \
+  task=shield_cheap \
   telemetry.wandb.enabled=false
 uv run ow train colab sync --session ow-colab_smoke-12c2f68
 ```
@@ -185,9 +187,9 @@ Results: `exit_code` 0, cold update 1 `rollout_s≈70s`, steady-state update 10 
 
 ## Related
 
+- Long-run operations (monitor, sync tolerance, recovery, recipe selection): [`../workflow-issues/colab-long-run-monitor-sync-recovery.md`](../workflow-issues/colab-long-run-monitor-sync-recovery.md)
 - Operator reference: `[docs/colab_runner.md](../../colab_runner.md)`
 - Kaggle contrast: `[docs/kaggle_runner.md](../../kaggle_runner.md)`
-- Implementation plan: `[docs/plans/2026-06-07-005-feat-colab-train-host-plan.md](../../plans/2026-06-07-005-feat-colab-train-host-plan.md)`
+- Implementation plan: `[docs/solutions/architecture-patterns/colab-train-host-preflight-long-run.md](../architecture-patterns/colab-train-host-preflight-long-run.md)`
 - SSOT spine (local preflight → packaging → long train): `[ssot-training-pipeline-config-to-kaggle-submission.md](ssot-training-pipeline-config-to-kaggle-submission.md)` — Colab is an alternate **long-train host** for step 5, not a replacement for local gates/submit
 - Agent-native CLI patterns: `[../developer-experience/agent-native-operator-cli-phase1.md](../developer-experience/agent-native-operator-cli-phase1.md)`
-

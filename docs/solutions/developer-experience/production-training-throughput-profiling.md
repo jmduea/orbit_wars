@@ -25,7 +25,7 @@ related_components:
   - src/jax/action_sampling.py
   - src/jax/rollout/collect.py
   - src/jax/ppo_update.py
-  - scripts/issues_jax_30update_benchmark.py
+  - ow benchmark training
 ---
 
 # Profile production training throughput before optimizing JAX hot paths
@@ -130,13 +130,13 @@ regression** — e.g. HEAD looks 10–30× slower than an older baseline — use
 committed validation preset instead of ad-hoc smokes or tier-2 JSON:
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --preset validation --updates 30 --warmup 2 \
   --label <label> --out /tmp/<label>.json
 ```
 
 Read `env_steps_per_sec` plus `rollout_seconds_mean` / `update_seconds_mean` from
-the JSON payload. Do **not** treat tier-2 launch-hygiene e2e, `ssot_preflight`
+the JSON payload. Do **not** treat tier-2 launch-hygiene e2e, legacy preflight-only smokes,
 smokes, or multitask-smoke numbers as interchangeable with this preset.
 
 Preset comparability matters when bisecting: older artifacts (e.g.
@@ -202,7 +202,7 @@ For this regression, the split showed:
 | host overhead | 0.005 | Not a Python orchestration issue |
 
 The follow-up design was captured in
-`docs/plans/2026-06-01-launch-hygiene-rollout-throughput-design.md`: stop
+`docs/solutions/developer-experience/production-training-throughput-profiling.md`: stop
 micro-optimizing forbidden carry representation and design selected-action
 hygiene validation with rollout/PPO log-prob parity handled deliberately.
 
@@ -221,5 +221,5 @@ hygiene validation with rollout/PPO log-prob parity handled deliberately.
 - `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
   covers subprocess visibility during long benchmark training. This learning
   covers attribution once the benchmark is observable.
-- `docs/plans/2026-06-01-launch-hygiene-rollout-throughput-design.md`
+- `docs/solutions/developer-experience/production-training-throughput-profiling.md`
   records the rollout-throughput evidence and failed experiments.

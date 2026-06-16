@@ -1,6 +1,6 @@
 # Cursor setup (Orbit Wars)
 
-Agent orchestration uses **Cursor plugins** (user-installed), not repo-owned OMG/MCP tooling. Retired OMG files live under `docs/archive/omg/`.
+Agent orchestration uses **Cursor plugins** (user-installed), not repo-owned OMG/MCP tooling. Historical OMG/MCP mirror docs were removed from the tree once Cursor plugins replaced them.
 
 ## Required plugins
 
@@ -26,7 +26,7 @@ Do **not** run `scripts/install_understand_anything_cursor.sh` — use native pl
 | `.cursor/rules/hydra-config.mdc` | Config editing (file-scoped) |
 | `docs/ROADMAP.md` | Human priority index (not an agent gate) |
 | `.cursorignore` | Hard block: secrets + personal scratch (no `@` / search) |
-| `.cursorindexingignore` | Soft block: `outputs/`, caches, archive; keeps `src/`, `conf/`, `tests/`, active `docs/` |
+| `.cursorindexingignore` | Soft block: `outputs/`, caches; keeps `src/`, `conf/`, `tests/`, active `docs/` |
 
 ## Codebase indexing
 
@@ -34,10 +34,10 @@ Cursor respects `.gitignore` by default; this repo also ships explicit ignore fi
 
 | File | Use |
 |------|-----|
-| [`.cursorindexingignore`](../.cursorindexingignore) | Training artifacts, caches, `docs/archive/`, `.understand-anything/` graph JSON — still readable via `Read` / `@file` |
-| [`.cursorignore`](../.cursorignore) | `.env*`, `docs/Issues.md`, `docs/brain_dump.md` — do not reference in chat |
+| [`.cursorindexingignore`](../.cursorindexingignore) | Training artifacts, caches, `.understand-anything/` graph JSON — still readable via `Read` / `@file` |
+| [`.cursorignore`](../.cursorignore) | `.env*` and retired personal scratch paths — do not reference in chat |
 
-**Kept in search:** `src/`, `tests/`, `conf/`, `scripts/`, `AGENTS.md`, `docs/plans/`, `docs/solutions/`, `docs/benchmarks/`, `.cursor/rules/`.
+**Kept in search:** `src/`, `tests/`, `conf/`, `scripts/`, `AGENTS.md`, `docs/solutions/`, `docs/brainstorms/`, `docs/benchmarks/`, `.cursor/rules/`.
 
 **Kept discoverable under `outputs/`:** `outputs/indexes/` (e.g. `runs.jsonl` for `make agent-context`), `outputs/_meta/`.
 
@@ -87,4 +87,3 @@ make agent-context
 | GPU contention | Another session running pytest/train | Check terminals folder before starting heavy jobs |
 
 Do **not** delete `.audit/` or `.cursor/hooks/state/` in automation.
-

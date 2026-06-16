@@ -47,7 +47,7 @@ flowchart LR
 | Accumulate | `src/jax/rollout/metrics.py` `_base_episode_metrics()` | `survival_time_sum += terminal_survival_time * done` |
 | Finalize | `src/jax/train.py` `_finalize_cross_chunk_rate_metrics()` | `survival_time = survival_time_sum / episode_done` |
 | Log | `src/jax/train.py` training loop | Per-update record + curriculum payload |
-| Benchmark | `scripts/issues_jax_30update_benchmark.py` | `_survival_time_mean()` from rollout scalars |
+| Benchmark | `ow benchmark training` (`src/benchmark/training.py` presets) | `_survival_time_mean()` from rollout scalars |
 
 Registry: `src/telemetry/metric_registry.py` — group `game_state`, description *"Mean survival time for completed episodes."*
 

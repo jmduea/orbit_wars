@@ -36,7 +36,7 @@ The launch hygiene bundle (PR #163) correctly masked duplicate launches and frie
 
 ## Symptoms
 
-- Historical measurement via `scripts/benchmark_factorized_sampler.py` (batch=32, `trajectory_shield_mode=cheap`; canonical path is `src/jax/factorized_sampler_benchmark.py` via `ow benchmark factorized-sampler`):
+- Historical measurement via `ow benchmark factorized-sampler` (batch=32, `trajectory_shield_mode=cheap`; implementation in `src/benchmark/factorized_sampler.py`):
 
   | K | main (ms) | prefix-recompute hygiene (ms) | Slowdown |
   |---|-----------|-------------------------------|----------|
@@ -81,7 +81,7 @@ Rollout (`src/jax/action_sampling.py`) and PPO replay (`src/jax/factored_sequenc
 ```bash
 make test-launch-hygiene-throughput   # delegates to ow benchmark factorized-sampler
 uv run ow benchmark factorized-sampler --max-moves-k 5 --batch-size 32 --assert-max-ms 3.22
-# legacy: scripts/benchmark_factorized_sampler.py (stderr hints prefer ow command above)
+# prefer: uv run ow benchmark factorized-sampler
 ```
 
 Post-fix measured ~3.01 ms (2026-06-01). Do not relax the threshold until a run passes under the same recipe.
@@ -110,9 +110,5 @@ The oracle path (`compose_hygiene_with_shield_mask` / `hygiene_adjusted_bucket_m
 ## Related Issues
 
 - Actor–critic encode-once replay contract: `docs/architecture/jax-policy-encoder.md` (shared trunk, separate policy/value heads)
-- Requirements: `docs/brainstorms/2026-06-01-launch-hygiene-bundle-requirements.md` (R1–R9)
-- Plans: `docs/plans/2026-06-01-launch-hygiene-bundle-plan.md`, `docs/plans/2026-06-01-002-fix-launch-hygiene-throughput-plan.md`
-- Production-path timing follow-up: `docs/solutions/developer-experience/production-training-throughput-profiling.md`
-- Tier-2 fail / learner ablation tiebreaker: [launch-hygiene-learner-ablation-gate.md](../tooling-decisions/launch-hygiene-learner-ablation-gate.md)
-- PR: [#163](https://github.com/jmduea/orbit_wars/pull/163) (merged 2026-06-01)
-- Session history: [launch hygiene + throughput arc](c1094a23-fcdd-48fb-941a-e3da7e4fdbfe)
+- Requirements context: `docs/solutions/tooling-decisions/launch-hygiene-learner-ablation-gate.md` (tier-2 assessment and ablation tiebreaker)
+- Plans (landed): this doc and `docs/solutions/developer-experience/production-training-throughput-profiling.md`

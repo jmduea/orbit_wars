@@ -88,6 +88,7 @@ Agents default to `| tail` for long commands; with Python block buffering and pi
 
 ## Related
 
+- Colab long-run monitor (prefer over piping `launch`): `docs/solutions/workflow-issues/colab-long-run-monitor-sync-recovery.md`
 - Benchmark CLI package layout: `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Train subprocess streaming: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - **Canonical training spine (SSOT):** `docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`

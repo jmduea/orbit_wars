@@ -193,7 +193,7 @@ uv run ow train ... artifacts=hybrid_promotion   # legacy submit-valid: checkpoi
 
 **Default for new Kaggle-bound work** ([#211](https://github.com/jmduea/orbit_wars/issues/211)). Foundation slice (U1–U4) is merged; U5–U8 (JAX qualifiers, calibration, bracket/submission, legacy teardown) remain. Do **not** cite `hybrid_promotion`, Gate-5-first `tournament-proof`, or `bracket_training` as the production default — use this spine unless debugging legacy code paths.
 
-**Operator map:** [Interactive SSOT flowchart](tools/ssot-training-pipeline-flowchart.html) — click steps for R# requirements, CLI snippets, and side paths (fail/retry/`weak_config` terminals). Requirements: [`brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Plan: [`plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md).
+**Operator map:** [Interactive SSOT flowchart](tools/ssot-training-pipeline-flowchart.html) — click steps for R# requirements, CLI snippets, and side paths (fail/retry/`weak_config` terminals). Requirements: [`brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Plan: [`solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md).
 
 | Step | Stage | Agent commands |
 |------|--------|----------------|

@@ -100,6 +100,6 @@ git cherry-pick ce6714b   # if reflog shows the lost SHA
 
 ## Related Issues
 
-- Plan: `docs/plans/2026-06-01-agent-native-operator-cli-plan.md` (KTD5 branch isolation + stash)
+- Plan: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md` (KTD5 branch isolation + stash)
 - Merged PR: [#164](https://github.com/jmduea/orbit_wars/pull/164) (agent-native CLI; triggered cleanup timing)
 - Operator CLI after merge: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`

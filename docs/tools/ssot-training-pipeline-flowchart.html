@@ -690,7 +690,7 @@
         meta: "GPU · ~15–45 min per agent",
         body: "Coordinate short preflight and ablations through W&B sweeps. Each run proves learning stability (win-rate delta, KL, entropy vs preflight-calibration.json), logs metrics, and uploads checkpoint artifacts. Failed runs stay in W&B — no local bad-config cache.",
         sc: "Sweep-only ablations may stop after preflight pass (R30). Submit configs select a winner and continue to packaging.",
-        code: "uv run ow make wandb_sweep=ssot_preflight\nuv run ow sweep create --config conf/wandb_sweep/ssot_preflight.yaml\nwandb agent <entity>/<project>/<sweep_id>",
+        code: "uv run ow make wandb_sweep=preflight\nuv run ow sweep create --backend wandb --make wandb_sweep=preflight\nwandb agent <entity>/<project>/<sweep_id>",
         reqs: [
           { id: "R5", text: "Coordinate short preflight/ablations via W&B sweeps; each run logs learning-stability metrics and checkpoint artifacts; operator selects winner." },
           { id: "R6", text: "No config registry or bad-config cache; failed runs remain in W&B for comparison." },

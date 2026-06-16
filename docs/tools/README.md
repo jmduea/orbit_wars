@@ -12,7 +12,7 @@ Interactive annotated flowchart for the canonical config → Kaggle submission s
 xdg-open docs/tools/ssot-training-pipeline-flowchart.html   # or open in your browser
 ```
 
-Source of truth: [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Plan: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md). Learning: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md). Several stages are planned ([#211](https://github.com/jmduea/orbit_wars/issues/211)) — the chart notes what is not yet implemented.
+Source of truth: [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md). Plan: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md). Learning: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md). Several stages are planned ([#211](https://github.com/jmduea/orbit_wars/issues/211)) — the chart notes what is not yet implemented.
 
 **Legacy Gate 5 / hybrid paths** (still in repo until teardown): [`gate5-unified-tournament-submit-valid-funnel.md`](../solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md) — not the canonical spine; use the flowchart for production order.
 

@@ -24,7 +24,7 @@ related_components:
   - src/jax/planet_flow.py
   - src/features/catalog/edge.py
   - src/jax/train/sweep_score.py
-  - docs/brainstorms/2026-06-01-planet-flow-policy-requirements.md
+  - docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md
 ---
 
 # Planet Flow replay "wrong target" from catalog reachability, not angle bugs
@@ -67,7 +67,7 @@ Replay `replay_u000150_2p_random.html` (run `20260602T030312Z-s42-232b5bed`, che
 
 **Prevention:** Align PPO target space with compiler reachability so unreachable heatmap mass does not convert into misleading neutral spam.
 
-**Brainstorm outcome:** `docs/brainstorms/2026-06-02-planet-flow-reachability-contract-requirements.md` — adopt reachability-masked PPO (A) + hard gates (D); defer compiler rewrite (B); optional catalog threat slot (C-lite) if A+D insufficient.
+**Brainstorm outcome:** see this doc and `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md` — adopt reachability-masked PPO (A) + hard gates (D); defer compiler rewrite (B); optional catalog threat slot (C-lite) if A+D insufficient.
 
 ## Tests added
 
@@ -85,4 +85,4 @@ uv run pytest tests/test_planet_flow_compiler.py -q
 
 - JAX comet parity + CI: `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`
 - Prior sweep objective issue: `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md`
-- Pipeline plan: `docs/plans/2026-06-02-002-fix-planet-flow-angle-verify-relaunch-pipeline-plan.md`
+- Pipeline plan: `docs/solutions/logic-errors/planet-flow-catalog-reachability-mismatch.md`

@@ -33,7 +33,7 @@ related_components:
   - src/jax/comet_generation.py
   - src/jax/env.py
   - docs/benchmarks/cherry-pick-manifest.json
-  - docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md
+  - docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md
   - docs/solutions/conventions/jax-no-kaggle-callbacks.md
   - docs/solutions/workflow-issues/phase2-env-parity-cherry-pick-integration-admission.md
 ---
@@ -44,7 +44,7 @@ related_components:
 
 Phase 2 on `orbit_wars-integration` (`throughput-baseline-integration`) admitted picks **#1**, **#2**, and **3b** at integration HEAD **`9db50f5`**. Pick **#4** landed as greenfield pure JAX planet and comet generation at **`75a7cf2`** — no callbacks, no `src/game/*` imports on the hot path ([jax-no-kaggle-callbacks.md](../conventions/jax-no-kaggle-callbacks.md)).
 
-Adversarial review found **mechanical validity defects** at `75a7cf2` (too few planet groups, `initial_planets` desync after comet expire, comet ID allocation, shared px/py RNG key, inlined spawn subgraph). User adopted **mechanical fidelity** framing: JAX must obey Orbit Wars rules and emit only valid states — maps and comet paths **may differ** from `kaggle_environments` for the same seed. Plan: `docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md`.
+Adversarial review found **mechanical validity defects** at `75a7cf2` (too few planet groups, `initial_planets` desync after comet expire, comet ID allocation, shared px/py RNG key, inlined spawn subgraph). User adopted **mechanical fidelity** framing: JAX must obey Orbit Wars rules and emit only valid states — maps and comet paths **may differ** from `kaggle_environments` for the same seed. Plan: `docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md`.
 
 A fix slice at **`0eb349e`** passed fast gates (51 parity tests, tier-A trace hygiene) but caused **10m+ JAX compile** on smoke/light benchmarks. Operator **rejected** the fix and rolled the integration worktree back:
 
@@ -198,7 +198,7 @@ uv run ow benchmark training --preset primary --updates 3 --warmup 1 --label pic
 
 - Pick #3 throughput + admission recipe: [phase2-env-parity-cherry-pick-integration-admission.md](phase2-env-parity-cherry-pick-integration-admission.md)
 - JAX-only hot path: [jax-no-kaggle-callbacks.md](../conventions/jax-no-kaggle-callbacks.md)
-- Mechanical fidelity plan (fix rolled back): `docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md`
-- Session handoff: `docs/session-handoff/2026-06-06-phase2-env-parity-rollback-continued.md`
+- Mechanical fidelity plan (fix rolled back): `docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md`
+- Related workflow: `docs/solutions/workflow-issues/phase2-env-parity-cherry-pick-integration-admission.md`
 - Manifest pick state: `docs/benchmarks/cherry-pick-manifest.json` (`pick_4_attempt_2026_06_06`, `integration_state`)
 - Legacy comet callback pattern (refresh candidate): [jax-comet-kaggle-parity-ci-gate.md](../architecture-patterns/jax-comet-kaggle-parity-ci-gate.md)

@@ -45,14 +45,32 @@ uv run ow train colab shortlist --sweep-id <id> --out outputs/colab_runner/short
 uv run ow train colab launch --gpu T4 --timeout 86400 \
   --monitor-after-launch \
   --interval-seconds 300 --stale-seconds 900 \
+  --eval-baselines noop,random,sniper \
+  --eval-seeds 0,1,2,3,4 \
+  --eval-formats 2p_vs_baseline \
   training.total_updates=2000 \
-  opponents=throughput_recovery \
-  output.campaign=colab_long \
-  telemetry.wandb.enabled=true
+  training=2p_32 \
+  curriculum=scripted_heavy \
+  model=transformer_factorized_small \
+  model.max_moves_k=3 \
+  task.trajectory_shield_mode=tiered \
+  training.rollout_steps=512 \
+  training.reseed_every_updates=100 \
+  artifacts=disabled \
+  artifacts.checkpoint_every=50 \
+  output.campaign=colab_fixed_path_long \
+  telemetry.wandb.enabled=true \
+  telemetry.wandb.group=colab_fixed_path_long
 
-# Long run (from shortlist row 0, with extra overrides)
+# Long run (from shortlist row 0 — merge shortlist hyperparams onto fixed-path geometry above)
 uv run ow train colab launch --from-shortlist outputs/colab_runner/shortlist.json --rank 0 \
-  --gpu T4 training.total_updates=2000 task=map_pool
+  --gpu T4 --timeout 86400 \
+  --monitor-after-launch \
+  --interval-seconds 300 --stale-seconds 900 \
+  training.total_updates=2000 \
+  training=2p_32 \
+  curriculum=scripted_heavy \
+  output.campaign=colab_long
 
 # Poll + pull artifacts
 uv run ow train colab status --session ow-colab_long-<sha>
@@ -79,7 +97,7 @@ Useful worker environment keys:
 
 - `ORBIT_WARS_COLAB_WORKER_MODE` — `standalone` (v1 only)
 - `ORBIT_WARS_COLAB_TRUST_BASE_JAX` — default `0` (full `uv sync` JAX pins)
-- `WANDB_API_KEY` — optional; inject via `worker-env.json` for remote W&B logging
+- `WANDB_API_KEY` — optional; inject via `worker-env.json` for remote W&B logging (sourced from env or `~/.netrc`; embedded in tarball — treat `orbit_wars.tgz` and `outputs/colab_runner/kernel/` as secret-bearing). `package-summary.json` redacts the key as `<redacted>` but `worker-env.json` inside the tarball contains the live value.
 
 ## Preflight → long-run recipe
 
@@ -100,8 +118,9 @@ uv run ow train colab launch \
   --monitor-after-launch \
   --interval-seconds 300 --stale-seconds 900 \
   training.total_updates=2000 \
-  output.campaign=colab_long \
-  task=map_pool
+  training=2p_32 \
+  curriculum=scripted_heavy \
+  output.campaign=colab_long
 
 # Recovery/manual pull if the monitor terminal closed
 uv run ow train colab sync --session <slug>
@@ -141,8 +160,8 @@ Operator commands (Hydra overrides as separate CLI args):
 ```bash
 uv run ow train colab preflight
 uv run ow train colab launch --gpu T4 --timeout 7200 \
-  training.total_updates=10 curriculum=off output.campaign=colab_smoke \
-  task=shield_cheap opponents=base opponents.mode.opponent=noop \
+  training.total_updates=10 curriculum=noop_only output.campaign=colab_smoke \
+  task=shield_cheap \
   telemetry.wandb.enabled=false
 uv run ow train colab sync --session ow-colab_smoke-12c2f68
 uv run ow train colab stop --session ow-colab_smoke-12c2f68
@@ -163,12 +182,18 @@ uv run ow train colab launch --gpu T4 --timeout 86400 \
   --eval-seeds 0,1,2,3,4 \
   --eval-formats 2p_vs_baseline \
   training.total_updates=2000 \
-  artifacts.checkpoint_every=50 \
-  training.reseed_every_updates=100 \
+  training=2p_32 \
   curriculum=scripted_heavy \
+  model=transformer_factorized_small \
+  model.max_moves_k=3 \
+  task.trajectory_shield_mode=tiered \
+  training.rollout_steps=512 \
+  training.reseed_every_updates=100 \
+  artifacts=disabled \
+  artifacts.checkpoint_every=50 \
   output.campaign=colab_fixed_path_long \
   telemetry.wandb.enabled=true \
-  telemetry.wandb.tags=[preflight]
+  telemetry.wandb.group=colab_fixed_path_long
 ```
 
 If the monitor process exits or the terminal is interrupted, restart it against the same session:
@@ -203,5 +228,6 @@ For 4p, run a second targeted eval pass on promising checkpoints with `ow eval t
 ## Notes
 
 - One Colab session at a time; sync before `stop` when checkpoints matter.
+- Session slugs default to `ow-<campaign>-<git-sha>` — treat as operational identifiers; prefer `outputs/colab_runner/sessions.json` over pasting live slugs into shared channels.
 - Eval, Docker packaging validation, tournament ladders, and Kaggle submit stay **local**.
 - Do not pipe long `ow train colab launch` output through `tail`/`head`; JSON prints on stdout, progress on stderr from the worker stream.

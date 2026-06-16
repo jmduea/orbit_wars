@@ -3,6 +3,14 @@
 Created: 2026-06-14
 Status: active
 
+## Current next action (2026-06-16)
+
+1. Use **fixed-path pilot recipe** + `--monitor-after-launch` — see [`docs/solutions/workflow-issues/colab-long-run-monitor-sync-recovery.md`](docs/solutions/workflow-issues/colab-long-run-monitor-sync-recovery.md).
+2. Preflight shortlist from sweep **`0mn8n6g0`** only (`85u3e192` invalidated).
+3. Resume **locally** from synced checkpoints (`resume_checkpoint=...` on `ow train`); Colab v1 does not upload checkpoints for remote resume.
+4. Live session state: `outputs/colab_runner/sessions.json` and `outputs/colab_runner/monitor/<session>.json` — do not rely on pinned PIDs in this tracker.
+5. Integration promotion runbook below is **deferred** until long run passes continuation gates — agents must not run force-push/reset without explicit human approval.
+
 This tracker supersedes earlier scattered plans for the current Orbit Wars decision push. The operating goal is to launch an efficient Colab-backed training run from `orbit_wars-integration`, produce a submit-valid artifact plus convincing held-out evidence by 2026-06-20, and only then finish making `orbit_wars-integration` the clean successor to `main`.
 
 ## Priority Contract
@@ -15,6 +23,8 @@ This tracker supersedes earlier scattered plans for the current Orbit Wars decis
 6. After the long run is underway, shift attention to the integration promotion path.
 7. Do not push or change remotes unless explicitly requested.
 8. If credentials or manual Colab/W&B/Kaggle steps cannot be handled from the terminal, stop and ask for help.
+
+**Credentials:** W&B keys may be embedded in `worker-env.json` inside the Colab tarball (from `$WANDB_API_KEY` or `~/.netrc`). Treat `outputs/colab_runner/kernel/` and packaged tarballs as secret-bearing; rotate keys after suspected exposure. Colab auth uses `colab auth` OAuth locally.
 
 ## Launch Strategy
 
@@ -55,7 +65,7 @@ The exact continuation bar must be proposed from current calibration docs before
 Both monitoring and local audit state are required:
 
 - W&B is the live monitoring source.
-- Synced local `outputs/campaigns/...` state is the source for packaging, tournament proof, and auditability.
+- Synced local `outputs/colab_runner/synced/<campaign>/` state is the source for packaging, tournament proof, and auditability (local-only W&B preflight runs still land under `outputs/campaigns/`).
 
 ## Integration Promotion Track
 
@@ -82,8 +92,9 @@ Prefer simplicity over new branch/worktree sprawl. Preserve existing local chang
 - [x] Launch medium Colab pilot.
 - [x] Evaluate pilot against gate.
 - [x] Apply one focused iteration if pilot learning is weak or ambiguous.
-- [x] Launch monitored long Colab run after pilot/preflight evidence.
-- [x] Shift to integration promotion once long run is safely underway.
+- [x] Register corrected preflight sweep (`0mn8n6g0`) and invalidate `85u3e192`.
+- [x] Launch monitored long Colab run with **fixed-path pilot recipe** (not map_pool production_mix).
+- [ ] Shift to integration promotion once long run is **safely underway** (checkpoint cadence + learning gates — not merely launched).
 - [x] Audit `origin/main` divergence against integration.
 - [ ] Prepare the explicit integration-as-main branch promotion.
 
@@ -96,6 +107,8 @@ Initial boundary, subject to inspection:
 - Existing local changes must be preserved.
 
 ## Inspection Notes - 2026-06-14
+
+> **Superseded (2026-06-16):** The map_pool + `production_mix` long-run shape below failed pilot learning gates. Use the fixed-path pilot recipe and sweep `0mn8n6g0` per [`colab-long-run-monitor-sync-recovery.md`](docs/solutions/workflow-issues/colab-long-run-monitor-sync-recovery.md).
 
 Workspace:
 
@@ -256,7 +269,7 @@ Fixes made before relying on this path:
 - Corrected `conf/wandb_sweep/fixed/preflight.yaml` so `training.reseed_every_updates` is a W&B parameter spec (`value: 25`) rather than a bare scalar.
 - Corrected `ow sweep list` to query W&B with `api.project(project, entity=entity)`.
 - Corrected `ow sweep create --backend wandb` to pass `--project` and `--entity` through to `wandb sweep`.
-- Corrected shortlist ranking so `preflight_sweep_score` / `ssot_preflight_sweep_score` wins over raw `episode_reward_mean` when present.
+- Corrected shortlist ranking so `preflight_sweep_score` wins over raw `episode_reward_mean` when present (legacy sweeps may also log `ssot_preflight_sweep_score`).
 - Later verification found this registered W&B sweep is not suitable for preflight candidate selection because `train_bundle=production_mix` resolves to latest self-play, not noop/random. Treat sweep `85u3e192` as invalidated for long-run launch decisions.
 
 Next decision path:
@@ -350,7 +363,7 @@ Result:
 
 Correction:
 
-- `conf/wandb_sweep/fixed/preflight.yaml` now uses `train_bundle=opponent_recovery_floor`, which resolves to noop dispatch with self-play off and curriculum off.
+- `conf/wandb_sweep/fixed/preflight.yaml` now uses `curriculum=noop_only` (see current YAML — no `train_bundle` axis).
 - Tags now identify this as `noop` instead of `production_mix`.
 - Corrected W&B sweep registered: `jmduea-jdueadev/orbit_wars/0mn8n6g0`
 
@@ -410,7 +423,7 @@ Current branch state:
 - Local integration branch is ahead of `origin/main` by 34 commits and behind by 4 commits by raw graph count.
 - Remote `origin/refactor/artifacts-metric-promotion-commit` is stale at `515b69a`; local integration has not been pushed.
 - Local `main` is checked out in sibling worktree `/home/jmduea/projects/orbit_wars`, so a local branch pointer update for `main` must be done from that worktree or via an explicit push/reset workflow.
-- Sibling `/home/jmduea/projects/orbit_wars` has untracked local work: `docs/ideation/2026-06-06-progressive-map-complexity-curriculum-ideation.md`. Do not run branch-reset commands there until that file is intentionally preserved, moved, or committed.
+- Sibling `/home/jmduea/projects/orbit_wars` has untracked local work: `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md Do not run branch-reset commands there until that file is intentionally preserved, moved, or committed.
 - Local old-main backup branch created: `backup/main-pre-integration-20260616` -> `ec5dd7a`.
 
 Main-only work review:
@@ -439,6 +452,8 @@ Recommended promotion sequence when explicitly approved:
 Until remote promotion is explicitly approved, local work should continue on `refactor/artifacts-metric-promotion-commit`, treating it as the future main.
 
 ### Promotion Command Runbook
+
+> **Authorization required:** Do not run force-push, hard reset, or remote promotion commands unless a human explicitly approves. Complete the preflight checklist below first.
 
 These commands are the intended mechanical path once branch-ref changes are explicitly approved. They are written to preserve old `main` and make the ref movement obvious.
 

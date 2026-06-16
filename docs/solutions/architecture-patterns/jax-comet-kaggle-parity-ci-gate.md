@@ -35,7 +35,7 @@ related_components:
 
 After planet generation and rotation parity, the JAX training env still reserved `TOTAL_COMETS` planet slots but never spawned or moved comets. Kaggle adds neutral capture targets at fixed spawn steps with elliptical paths, 4-fold symmetry, per-spawn RNG, first-tick collision skip, expiry, and `initial_planets` sync. Training rollouts after step 50 therefore diverged from tournament physics even when other parity tests passed.
 
-Parity was verifiable locally via `make test-kaggle-parity`, but only a label-sync workflow ran on GitHub until PR [#188](https://github.com/jmduea/orbit_wars/pull/188) shipped the comet subsystem and `.github/workflows/kaggle-jax-parity.yml` together (plans `docs/plans/2026-06-03-008-feat-jax-comet-subsystem-plan.md`, `docs/plans/2026-06-03-009-feat-ci-kaggle-jax-parity-plan.md`).
+Parity was verifiable locally via `make test-kaggle-parity`, but only a label-sync workflow ran on GitHub until PR [#188](https://github.com/jmduea/orbit_wars/pull/188) shipped the comet subsystem and `.github/workflows/kaggle-jax-parity.yml` together (plans `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`, `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`).
 
 **Forward path (2026-06-06):** comet spawn belongs in **pure JAX** (`src/jax/comet_generation.py`), not `jax.pure_callback` + `src/game/comet_generation.py` in the hot path. See [jax-no-kaggle-callbacks.md](../conventions/jax-no-kaggle-callbacks.md). Phase 2 targets **mechanical fidelity** (valid rules-compliant states), not bit-exact seed replay against `kaggle_environments` — maps and comet paths may differ per seed.
 
@@ -146,7 +146,7 @@ Same file set as CI also runs via `make test-domain-jax-env` (alias for the pari
 - **JAX-only hot path convention:** [jax-no-kaggle-callbacks.md](../conventions/jax-no-kaggle-callbacks.md)
 - **Pick #4 rollback + compile gate:** [phase2-pick4-jax-compile-rollback-criteria.md](../workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md)
 - **Phase 2 cherry-pick admission:** [phase2-env-parity-cherry-pick-integration-admission.md](../workflow-issues/phase2-env-parity-cherry-pick-integration-admission.md)
-- Plans (implementation history): `docs/plans/2026-06-03-008-feat-jax-comet-subsystem-plan.md`, `docs/plans/2026-06-03-009-feat-ci-kaggle-jax-parity-plan.md`, `docs/plans/2026-06-06-001-fix-pick4-jax-parity-plan.md`
+- Plans (implementation history): `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`, `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md`, `docs/solutions/workflow-issues/phase2-pick4-jax-compile-rollback-criteria.md`
 - PR [#188](https://github.com/jmduea/orbit_wars/pull/188) — squash merge on `main` (callback-era comet subsystem)
 - **Canonical training spine (SSOT):** `docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`
 - Env invariant note (id↔row): `docs/solutions/logic-errors/planet-flow-catalog-reachability-mismatch.md` — comet spawn/expire should preserve the same invariant; refresh that doc if comet slot layout changes

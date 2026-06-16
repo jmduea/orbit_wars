@@ -3,7 +3,7 @@
 **Status:** Phase 5 cutover complete — production default `encoding_version=v2`; v1 path retained for rollback/tests  
 **Plan:** `.omg/plans/ralplan-feature-encoding-v2.md`  
 **ADR:** ADR-001 (action space), ADR-002 (edge layout), ADR-003 (ship feature scale), ADR-004 (symmetry frame), **ADR-005 (factored pointer — promoted M1)** below  
-**Symmetry exploration:** `docs/feature-encoding-v2-symmetry.md`
+**Symmetry exploration:** covered in §Edge symmetry below and golden tests in `tests/test_feature_encoding_golden.py`.
 
 ## Overview
 
@@ -211,7 +211,7 @@ Canonicalize spatial features in a **sun-centered frame rotated by the learner r
 (cx, cy) = unweighted mean (x, y) of active planets owned by the learner
 ```
 
-Same rule for 2p and 4p. See `docs/feature-encoding-v2-symmetry.md` for edge cases and decode.
+Same rule for 2p and 4p. See golden tests and §Schema v2 for edge cases and decode.
 
 ### Encoding
 
@@ -228,7 +228,7 @@ Layers A (owner-relative) + B (frame) + C (edge-primary geometry) are **in scope
 
 ## Schema v2 (Locked — Phase 0)
 
-**Dims:** P=13, E=18, G=46. **Evidence:** `docs/feature-encoding-v2-phase0-results.md`, M4 intercept-edge milestone (`intercept-edge-features`).
+**Dims:** P=13, E=18, G=46. **Evidence:** golden encoding tests, M4 intercept-edge milestone (`intercept-edge-features`).
 
 Edge geometry uses **two anchor fleet speeds** (`task.intercept_anchors`, default `[1.0, 6.0]`) encoding intercept-time target positions. Schema floor is **`schema_version=4`**.
 
@@ -381,11 +381,11 @@ architecture: gnn_pointer_v2
 - [x] Schema draft tables → **P=13, E=18, G=46 locked** (schema v4 intercept edges)
 - [x] Submission audit
 - [x] Cutover numeric gates documented
-- [x] Float budget spike (`scripts/spike_feature_encoding_v2_phase0.py`)
+- [x] Float budget spike (Phase 0 golden tests in `tests/test_feature_encoding_golden.py`)
 - [x] Equivariance spike (known transforms)
-- [x] v1 baseline metrics captured (`docs/feature-encoding-v2-phase0-results.md`)
+- [x] v1 baseline metrics captured (golden tests + preflight calibration artifacts)
 - [x] jax-ppo-split dependency cleared
 - [x] Config sketch (`conf/model/gnn_pointer_v2.yaml`)
 - [ ] Layer D planet sort — deferred
 
-**Phase 0: COMPLETE** — see `docs/feature-encoding-v2-phase0-results.md`.
+**Phase 0: COMPLETE** — see golden tests and `docs/benchmarks/preflight-calibration.json`.

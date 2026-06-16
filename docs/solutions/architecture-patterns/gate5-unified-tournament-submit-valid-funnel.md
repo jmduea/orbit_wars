@@ -25,7 +25,7 @@ tags:
 related_components:
   - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
-  - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/tools/ssot-training-pipeline-flowchart.html
   - src/artifacts/submit_valid_funnel.py
   - src/artifacts/checkpoint_eval.py
@@ -80,7 +80,7 @@ Primitives: `ow eval package --validate-docker`, `ow benchmark tournament-proof`
 - **Stage 2:** challenger vs incumbent at per-seed **100%** win requirement when a promoted incumbent exists.
 - Recalibrate floors with `ow benchmark calibrate-unified-tournament` before changing JSON thresholds — do not relax floors to make a failing run pass.
 
-Spec: `docs/brainstorms/2026-06-03-gate5-unified-tournament-requirements.md`. Plan: `docs/plans/2026-06-03-001-feat-gate5-unified-tournament-plan.md`.
+Spec: `docs/brainstorms/2026-06-03-gate5-unified-tournament-requirements.md`. Plan: `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`.
 
 ### Bootstrap incumbent is scripted nearest_sniper (not the checkpoint)
 
@@ -137,9 +137,9 @@ Running tournaments before Docker validation wastes GPU/time on unpublishable ch
 
 - **Interactive operator map (SSOT):** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - **Canonical spine (SSOT):** [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md)
-- Plan #013: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md)
+- Plan #013: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md)
 - Bracket training qualifier slice (legacy; 1.0 floors, separate from Gate 5 0.76 proof): [`kaggle-bracket-ranking-foundational-slice.md`](kaggle-bracket-ranking-foundational-slice.md)
 - Long CLI progress (stderr, no tail pipe): `docs/solutions/developer-experience/ow-long-cli-stderr-progress-no-tail-pipe.md`
 - Subprocess train streaming (calibration arms): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
 - Operator prompts: `docs/AGENT_CAPABILITIES.md`
-- Incumbent fix plan: `docs/plans/2026-06-03-004-fix-incumbent-nearest-sniper-bootstrap-plan.md`
+- Incumbent fix plan: `docs/solutions/architecture-patterns/gate5-unified-tournament-submit-valid-funnel.md`

@@ -46,6 +46,6 @@ Tier definitions, jit contract tests, and CI: `docs/architecture/jax-trace-tiers
 
 ## Related
 
-- Plan: `docs/plans/2026-06-04-006-feat-pure-jax-env-parity-plan.md`
-- Plan: `docs/plans/2026-06-04-008-feat-jax-trace-hygiene-plan.md`
+- Plan: `docs/solutions/conventions/jax-no-kaggle-callbacks.md`
+- Plan: `docs/solutions/conventions/jax-no-kaggle-callbacks.md`
 - Supersedes callback guidance in `docs/solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md` (update when JAX ports land)

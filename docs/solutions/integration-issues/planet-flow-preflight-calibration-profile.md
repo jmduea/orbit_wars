@@ -98,4 +98,4 @@ Planet Flow proof and preflight share one calibration entrypoint (`calibration_t
 - [Planet Flow catalog reachability mismatch](../logic-errors/planet-flow-catalog-reachability-mismatch.md) — separate compiler/telemetry failure mode at ~u150.
 - Operator flow: `docs/benchmarks/preflight-calibration.md`, `make preflight-calibrate`.
 - Merge playbook: [multi-branch agent merge orchestration](../workflow-issues/multi-branch-agent-merge-orchestration.md)
-- Merge context: PR [#173](https://github.com/jmduea/orbit_wars/pull/173), `docs/brainstorms/2026-06-02-merge-orchestration-requirements.md`.
+- Merge context: PR [#173](https://github.com/jmduea/orbit_wars/pull/173), `docs/solutions/workflow-issues/multi-branch-agent-merge-orchestration.md`.

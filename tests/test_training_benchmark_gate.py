@@ -292,7 +292,7 @@ def test_committed_cherry_pick_manifest_artifact() -> None:
     """Committed cherry-pick manifest scaffold (assessed_date in JSON).
 
     Populate baseline_gates and candidates[] after U1/U4–U5 gate captures per
-    docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md.
+    docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md.
     """
     path = Path("docs/benchmarks/cherry-pick-manifest.json")
     payload = json.loads(path.read_text(encoding="utf-8"))

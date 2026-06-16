@@ -135,7 +135,7 @@ Sweep → shortlist → noop smoke → learn-proof uses **window-mean** `approx_
 | `update_chunk_rows` | 1024 (base) / sweep axis | 2048 (workstation default) |
 | `max_moves_k` | 5 (model base) | 1 (one compound pressure action) |
 
-Gates 2–3 **VERIFIED** is **M1 learnability** only — not proof Planet Flow beats `factorized_topk` (that needs M2 paired comparison). See `docs/brainstorms/2026-06-01-planet-flow-policy-requirements.md` (R20, F4).
+Gates 2–3 **VERIFIED** is **M1 learnability** only — not proof Planet Flow beats `factorized_topk` (that needs M2 paired comparison). See `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md` (M1 vs M2 framing).
 
 ## Open work
 

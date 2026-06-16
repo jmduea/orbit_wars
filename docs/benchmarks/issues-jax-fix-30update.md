@@ -21,7 +21,7 @@
 
 ## Benchmark protocol
 
-- Script: `scripts/issues_jax_30update_benchmark.py`
+- Script: `ow benchmark training` (`src/benchmark/training.py` presets)
 - 30 measured updates after 2 warmup (JIT compile counted through update 3)
 - JSON includes `compile_seconds_to_update_3`, `rollout_seconds_mean`, `update_seconds_mean`, `tier`, `format`, `rollout_microbatch_envs`, `rollout_groups`
 
@@ -34,7 +34,7 @@ Artifact: `docs/benchmarks/baseline-30update.json`
 ### Workstation production profile (primary gate)
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --label workstation-production-30u \
   --tier workstation \
   --out docs/benchmarks/workstation-30update.json \

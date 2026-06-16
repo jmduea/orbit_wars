@@ -36,7 +36,7 @@ related_components:
 
 Orbit Wars runs on **one GPU**. Multiple Cursor agents can run shells in parallel; prose in `AGENTS.md` and `make agent-context` (`gpu_contention`) is advisory only. Operators and agents were still starting `ow train`, `pytest`, and `make test*` while another session had an active terminal in the same repo.
 
-This session shipped a **project hook** that denies **GPU-heavy** incoming shell commands when another Cursor terminal snapshot shows **GPU-heavy** work still running under this repo’s `cwd`. Light background processes (e.g. `python -m http.server` for the config picker) do not trigger contention. The same branch also refactored `src/jax/action_sampling.py` shield diagnostics (#197); that refactor is documented in `docs/plans/2026-06-04-005-refactor-action-sampling-scan-scaffolding-plan.md` — not duplicated here.
+This session shipped a **project hook** that denies **GPU-heavy** incoming shell commands when another Cursor terminal snapshot shows **GPU-heavy** work still running under this repo’s `cwd`. Light background processes (e.g. `python -m http.server` for the config picker) do not trigger contention. The same branch also refactored `src/jax/action_sampling.py` shield diagnostics (#197); that refactor is documented in `docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md` — not duplicated here.
 
 (session history) Prior work documented duplicate `wandb agent` contention in `AGENTS.md` and “check terminals folder” in merge-orchestration docs, but nothing enforced policy at shell time.
 
@@ -160,5 +160,5 @@ No `running_for_ms:` → not active → heavy command allowed.
 - [`docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`](agent-native-operator-cli-phase1.md) — operator CLI / `make agent-context` baseline; hook enforces GPU policy at shell time
 - [`docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`](seed-scheduler-calibration-agent-native-operator-phase2.md) — `make agent-context` GPU hint (advisory, `pgrep`-based)
 - [`docs/solutions/workflow-issues/multi-branch-agent-merge-orchestration.md`](../workflow-issues/multi-branch-agent-merge-orchestration.md) — check terminals before parallel pytest
-- [`docs/plans/2026-06-04-005-refactor-action-sampling-scan-scaffolding-plan.md`](../../plans/2026-06-04-005-refactor-action-sampling-scan-scaffolding-plan.md) — #197 shield diagnostics dedupe on same branch
+- [`docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md`](../../solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md) — #197 shield diagnostics dedupe on same branch
 - GitHub #204, #189 — perf work; hook is orthogonal but reduces accidental parallel GPU load

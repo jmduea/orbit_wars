@@ -1,6 +1,6 @@
 # Workstation validation — multi-seed seed sweep
 
-**Workstation validation default format is `2p_4p_16env`.** Canonical overrides live in `WORKSTATION_VALIDATION_OVERRIDES` (`scripts/issues_jax_30update_benchmark.py`, lines 58–67) or `--preset validation`:
+**Workstation validation default format is `2p_4p_16env`.** Canonical overrides live in `WORKSTATION_VALIDATION_OVERRIDES` (`ow benchmark training` (`src/benchmark/training.py` presets), lines 58–67) or `--preset validation`:
 
 | Field | Default |
 |-------|---------|
@@ -18,7 +18,7 @@ Single-seed 500-update gate: `docs/benchmarks/issues-jax-validation-500u.md`.
 Primary sweep (500 updates, self-play):
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --label validation-seed-<SEED>-500u \
   --tier workstation \
   --overrides \

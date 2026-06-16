@@ -6,11 +6,11 @@ date: 2026-06-03
 origin: operator/agent confusion across preflight gates, hybrid promotion, bracket qualifiers, and legacy artifact profiles
 related:
   - docs/tools/ssot-training-pipeline-flowchart.html
-  - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/competition/COMPETITION_OVERVIEW.md
   - docs/competition/COMPETITION_SUBMISSION.md
-  - docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md  # superseded-by-SSOT — qualifier order and async eval replaced by tournament qualifiers
+  - docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md  # superseded-by-SSOT — qualifier order and async eval replaced by tournament qualifiers
   - docs/brainstorms/2026-06-03-gate5-unified-tournament-requirements.md  # teardown target (R29) — alternate track only
 ---
 
@@ -20,7 +20,7 @@ related:
 
 Replace parallel, overlapping training/eval paths with **one canonical pipeline**: config setup → preliminary tests → **W&B sweep short preflight** (learning stability, ablations, artifact handoff) → **packaging validation** (Docker, **sweep winner checkpoint**) → **long train** (≤500M env steps, **W&B observability**) with rollout curriculum (random → noop-heavy → sniper-heavy) advanced by **tournament qualifiers** (fast JAX held-out eval, calibrated statistical floors) → main bracket (μ/σ) → **submission** (Docker packaging + upload with trained weights). **Sweep-only ablations** may stop after step 3 preflight pass; configs **destined for Kaggle submission** must complete steps 4–6. **Teardown** legacy spine components rather than deprecating them in place. **No custom config registry or bad-config cache** — W&B holds sweep history, metrics, and checkpoint artifacts.
 
-**Operator map:** interactive flowchart [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) (click steps for R# requirements, CLI snippets, and side paths). Implementation plan: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) · [#211](https://github.com/jmduea/orbit_wars/issues/211).
+**Operator map:** interactive flowchart [`docs/tools/ssot-training-pipeline-flowchart.html`](../tools/ssot-training-pipeline-flowchart.html) (click steps for R# requirements, CLI snippets, and side paths). Implementation plan: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md) · [#211](https://github.com/jmduea/orbit_wars/issues/211).
 
 ## Problem Frame
 
@@ -123,7 +123,7 @@ This document defines the **single SSOT** and what must be **removed or relocate
 
 **R19.** Stage promotion uses **calibrated statistical floors** per leg (documented in calibration JSON). Strict 100% is not required when calibration shows acceptable false-pass/false-fail rates. **Until** `qualifier-seed-calibration.json` is committed with per-stage false-pass ceilings, stage promotion and main-bracket entry are **blocked**; interim enforcement uses conservative per-leg minimum wins (no stage advance on tie games).
 
-**R20.** After stage 3 clearance, enter **main tournament bracket** (μ/σ updates). **In-scope MVP:** bracket state persistence, stage-3→main transition trigger, self-play opponent mixture hook derived from **learner ranking and bracket opponent rankings** (not ad-hoc historical snapshot pool alone). **Deferred:** full async round-robin worker (`docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md` U7–U8).
+**R20.** After stage 3 clearance, enter **main tournament bracket** (μ/σ updates). **In-scope MVP:** bracket state persistence, stage-3→main transition trigger, self-play opponent mixture hook derived from **learner ranking and bracket opponent rankings** (not ad-hoc historical snapshot pool alone). **Deferred:** full async round-robin worker (`docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md` U7–U8).
 
 ### Submission
 
@@ -166,7 +166,7 @@ This document defines the **single SSOT** and what must be **removed or relocate
 
 | Capability | Relocation |
 |------------|------------|
-| Planet Flow sweep / learn-proof | Standalone `docs/brainstorms/2026-06-02-planet-flow-proof-pipeline-requirements.md` track |
+| Planet Flow sweep / learn-proof | `docs/solutions/integration-issues/planet-flow-preflight-calibration-profile.md` |
 | Launch hygiene throughput tier-1/tier-2 | Performance gates in runbook, not pipeline stages |
 | Research / sweeps | `ow sweep`, W&B campaigns — **step 3** on SSOT spine; sweep-only ablations may stop after preflight pass |
 
@@ -224,7 +224,7 @@ flowchart TD
 
 - One linked doc path from `docs/README.md` / `AGENTS.md` to this SSOT; no competing “submit-valid” flowcharts elsewhere without “alternate track” header.
 - Agent capability map tests list SSOT primitives only for config→submit (no hybrid_promotion as default).
-- W&B SSOT sweep recipe (`conf/wandb_sweep/ssot_preflight.yaml` or successor) dogfooded for at least one winner → packaging → long train handoff.
+- W&B preflight sweep recipe (`conf/wandb_sweep/preflight.yaml`) dogfooded for at least one winner → packaging → long train handoff.
 - `qualifier-seed-calibration.json` committed before production enforcement of 5/10/20 hypothesis.
 - Long-run wall clock documented (#204) before production enforcement of long train (R12–R18) on one GPU.
 - Legacy spine YAML/profiles removed or moved; `uv run ow train` without profile does not start deprecated funnel.
@@ -234,7 +234,7 @@ flowchart TD
 **Deferred for later**
 
 - Exact Wilson/binomial formula and per-stage floor numbers (calibration campaign)
-- Full bracket round-robin async worker (`docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md` units U7–U8); SSOT defines behavior; worker wiring follows
+- Full bracket round-robin async worker (`docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md` units U7–U8); SSOT defines behavior; worker wiring follows
 - Gate 4 curriculum_staged as optional **non-Kaggle** research track if retained
 
 **Outside this product's identity**
@@ -254,7 +254,7 @@ flowchart TD
 
 **Resolve before planning**
 
-- **Sweep objective:** which metric ranks preflight winners (win-rate delta vs composite)? Default in `conf/wandb_sweep/ssot_preflight.yaml`.
+- **Sweep objective:** which metric ranks preflight winners (win-rate delta vs composite)? Default in `conf/wandb_sweep/preflight.yaml`.
 - **Preflight length:** exact update count / opponents per sweep run (inherit `preflight-calibration.json` recipes vs shorter)?
 
 **Deferred to planning**

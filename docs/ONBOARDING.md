@@ -232,7 +232,7 @@ These fields land in the run JSONL (`campaigns/*/runs/*/logs/*_jax.jsonl`) and i
 | Script | Purpose |
 |--------|---------|
 | `scripts/benchmark_jax_rl.py` | JAX RL throughput benchmarks |
-| `scripts/compare_attention_candidates.py` | Compare attention configs from logs |
+| `ow benchmark training` | Workstation throughput/compile benchmarks (`--preset validation|primary|admission`) |
 | `scripts/run_artifact_worker.py` | Artifact worker process |
 | `scripts/validate_kaggle_docker_submission.py` | Kaggle Docker submission validation |
 | `Makefile` | `setup`, `test-fast`, and domain test targets |

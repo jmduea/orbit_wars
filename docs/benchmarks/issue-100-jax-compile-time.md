@@ -8,7 +8,7 @@ Research spike closing [#100](https://github.com/jmduea/orbit_wars/issues/100).
 
 | Property | Value |
 |----------|-------|
-| Script | `scripts/issues_jax_30update_benchmark.py` |
+| Script | `ow benchmark training` (`src/benchmark/training.py` presets) |
 | Warmup | 2 updates (compile still counted through update 3) |
 | Steady-state timing | `seconds_per_update_mean` over measured updates after warmup |
 | Profile | `--preset validation` → `WORKSTATION_VALIDATION_OVERRIDES` |
@@ -16,7 +16,7 @@ Research spike closing [#100](https://github.com/jmduea/orbit_wars/issues/100).
 Why update 3: updates 1–2 are warmup iterations; by update 3 both per-format `collect_fn` jits and the shared `update_fn` jit have executed at least once on the production path. This matches the metric used in all prior workstation benchmark artifacts.
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --label issue-100-current-30u \
   --tier workstation \
   --preset validation \
@@ -81,7 +81,7 @@ For this stack size, **multi-minute first-run compile on GPU is normal** for JAX
 
 **Status: OK — no compile optimization escalation.**
 
-1. **Metric defined:** `compile_seconds_to_update_3` via `issues_jax_30update_benchmark.py` is the canonical compile baseline; it is already emitted in all workstation benchmark JSON.
+1. **Metric defined:** `compile_seconds_to_update_3` via `ow benchmark training --preset validation` is the canonical compile baseline; it is already emitted in all workstation benchmark JSON.
 2. **Within expected bounds:** Current 507 s is high-variance but same order of magnitude as the 207–415 s historical band on identical hardware. Steady-state throughput is healthy.
 3. **Action:** Treat compile and steady-state as separate gates. Use `--preset validation` + 30 updates for compile spot-checks before long runs. Re-run once if compile exceeds 400 s before opening an optimization issue.
 

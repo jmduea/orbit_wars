@@ -110,4 +110,4 @@ ow: error: invalid choice: 'gate'
 - [nuclear-cherry-pick-manifest-baseline-integration.md](nuclear-cherry-pick-manifest-baseline-integration.md)
 - [cursor-before-shell-gpu-terminal-contention.md](../developer-experience/cursor-before-shell-gpu-terminal-contention.md) — light `http.server` no longer blocks gate commands
 - `docs/benchmarks/cherry-pick-manifest.json` — `admission_profile`, baseline JSON path
-- `docs/session-handoff/2026-06-05-cherry-pick-manifest.md` — operator steps
+- Operator steps: this doc and `docs/solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md`

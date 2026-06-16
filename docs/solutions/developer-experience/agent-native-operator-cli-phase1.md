@@ -29,7 +29,7 @@ related_components:
 
 A 2026-06-01 agent-native audit scored Orbit Wars ~87% action parity (same `ow` CLI as humans) but **0/8 CRUD**, weak dynamic context, and silent async artifact work. Agents could train and benchmark but lacked list/show/status commands and session-scoped threshold/roadmap context.
 
-Phase 1 shipped in PR [#164](https://github.com/jmduea/orbit_wars/pull/164) on `main` (merge `0844515`). Feature branches created before that merge need `git merge main` or rebase to get `ow runs`, `make agent-context`, and related files. Phase 2 benchmark gates and Phase 3 refactors (YAML gate loader, `ow benchmark gate run`, `ow sweep`) shipped on `main` — see `docs/agent-native-phase2-status.md` and `docs/agent-native-phase3-status.md`. Post-#184 operator CRUD and seed interval **50** are in `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`.
+Phase 1 shipped in PR [#164](https://github.com/jmduea/orbit_wars/pull/164) on `main` (merge `0844515`). Feature branches created before that merge need `git merge main` or rebase to get `ow runs`, `make agent-context`, and related files. Phase 2 benchmark gates and Phase 3 refactors (YAML gate loader, `ow benchmark gate run`, `ow sweep`) shipped on `main` — see `docs/agent-native-phase3-status.md` and `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`. Post-#184 operator CRUD and seed interval **50** are in `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`.
 
 Parallel work during that PR used stash + branch isolation — see `docs/solutions/workflow-issues/git-stash-recovery-after-parallel-branch-cleanup.md`.
 
@@ -111,7 +111,7 @@ has logs/*_jax.jsonl and orbit_train_complete on stdout.
 
 ## Related Issues
 
-- Audit follow-up plan: `docs/plans/2026-06-01-agent-native-operator-cli-plan.md`
+- Audit follow-up plan: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
 - Phase 2+3 shipped: `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/agent-native-phase3-status.md`
 - GPU shell enforcement (project hooks): `docs/solutions/developer-experience/cursor-before-shell-gpu-terminal-contention.md`
 - Benchmark CLI package split (PR #202): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`

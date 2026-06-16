@@ -9,7 +9,7 @@ severity: medium
 applies_when:
   - "Choosing or changing joint MDP shaping (reward profile, training opponents, reseed_every_updates) before long GPU trains"
   - "Running or re-analyzing shape_cal_* calibration campaigns on one GPU"
-  - "Implementing or reviewing the shape-calibrate operator (planned; see docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md)"
+  - "Implementing or reviewing the shape-calibrate operator (planned; see this doc)"
 tags:
   - shape-calibrate
   - env-shaping
@@ -38,7 +38,7 @@ Orbit Wars spreads MDP shaping across Hydra groups (`conf/reward/`, `conf/oppone
 
 What was missing in this session was a single **measure → decide → pin** operator for **joint** shaping (reward × opponents × reseed), with an explicit split between **training MDP** fitness and **reference MDP** proof—the ICML auto-env-shaping pattern (train on shaped env, score on unshaped or held-out reference).
 
-This doc captures the **design** agreed in ideation, brainstorm, and plan (`docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`, `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`, `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`). Re-run `/ce-compound` after implementation ships to add verified CLI examples.
+This doc captures the **design** for the shape-calibrate operator (not yet fully implemented on main). Re-run `/ce-compound` after implementation ships to add verified CLI examples.
 
 ## Guidance
 
@@ -130,9 +130,6 @@ Decision artifact (intended shape, mirroring `docs/benchmarks/seed-scheduler-cal
 ## Related documentation
 
 - Benchmark CLI package (planned `shape-calibrate` subcommand): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
-- Ideation: `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`
-- Requirements: `docs/brainstorms/2026-06-03-shape-calibrate-requirements.md`
-- Plan: `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
 - `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md` — same operator pattern, reseed-only axis
 - `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md` — `run_ow_train` during sweeps
 - `docs/solutions/logic-errors/planet-flow-sweep-gameable-objective.md` — metric denominators and composite scores

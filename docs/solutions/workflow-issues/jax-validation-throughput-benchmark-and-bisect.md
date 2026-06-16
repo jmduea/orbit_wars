@@ -16,12 +16,11 @@ tags:
   - validation-preset
   - bisect
   - env-steps-per-sec
-  - ssot-preflight
+  - legacy-preflight-smoke
   - stagger
 related_components:
-  - scripts/issues_jax_30update_benchmark.py
+  - ow benchmark training
   - conf/training/2p4p_32_split.yaml
-  - conf/training/ssot_preflight.yaml
   - src/jax/env.py
   - src/jax/rollout/collect.py
 ---
@@ -34,7 +33,7 @@ A production-path throughput investigation compared baseline SHA `dcafdc8`
 (~3.8–4k `env_steps_per_sec` on the workstation validation profile) against
 HEAD (~299 `env_steps_per_sec` on the same apples-to-apples validation
 benchmark). That gap is **not** explained by rollout stagger performance work
-(`638cff5`), which fixes episode-spread cost on `training=ssot_preflight` but
+(`638cff5`), which fixes episode-spread cost on a **legacy preflight smoke profile** (since removed from `conf/training/`) but
 targets a different profile and metric window.
 
 Parallel smokes (`multitask_smoke`, `stagger_perf_smoke`, tier-2 launch-hygiene
@@ -49,7 +48,7 @@ benchmark produces false regressions or false confidence.
 Use the committed script and documented preset — not ad-hoc `ow train` smokes:
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --preset validation \
   --updates 30 \
   --warmup 2 \
@@ -58,7 +57,7 @@ uv run python scripts/issues_jax_30update_benchmark.py \
 ```
 
 The `--preset validation` bundle is `WORKSTATION_VALIDATION_OVERRIDES` in
-`scripts/issues_jax_30update_benchmark.py`:
+`ow benchmark training` (`src/benchmark/training.py` presets):
 
 - `training=2p4p_32_split` (32 envs, 2p/4p split groups)
 - `training.rollout_steps=128`, `epochs=2`, `update_chunk_rows=2048`
@@ -105,11 +104,11 @@ train-loop / rollout-group refactors — not stagger encode deferral. Confirm wi
 | Profile | Purpose | Throughput authority? |
 | --- | --- | --- |
 | `--preset validation` + 30 updates | Production-path apples-to-apples bisect | **Yes** for this investigation |
-| `training=ssot_preflight` smoke (10 updates) | SSOT preflight episode spread + rollout budget | No — stagger target only |
+| Legacy preflight smoke (10 updates, profile removed) | Episode spread + rollout budget experiments | No — stagger target only |
 | `scripts/ce_optimize/multitask_smoke_measure.py` | Encode/decode attribution | No — different overrides |
 | `make test-launch-hygiene-e2e-throughput` | Tier-2 vs pre-hygiene baseline JSON | Related but different gate and baseline SHA |
 
-Stagger perf (`638cff5`) is **verified** against `ssot_preflight` rollout
+Stagger perf (`638cff5`) is **verified** against that legacy preflight rollout
 seconds and `episode_done` cadence. A passing stagger smoke does **not** clear
 a failing validation benchmark at HEAD.
 
@@ -121,7 +120,7 @@ results are not reproducible and fixes chase the wrong subsystem (stagger vs env
 step vs collect).
 
 The validation script runs **outside pytest** with isolated worker env setup
-(see `scripts/kaggle_runtime_env.py`), avoiding the pytest JAX timing skew
+(see Kaggle notebook worker env wiring in `src/orchestration/kaggle_runner.py`), avoiding the pytest JAX timing skew
 documented in
 [launch-hygiene-incremental-carry-throughput.md](../performance-issues/launch-hygiene-incremental-carry-throughput.md).
 
@@ -133,7 +132,7 @@ documented in
 - When stagger, multitask-smoke, or tier-2 e2e numbers disagree — re-run
   validation preset at both SHAs first.
 - When planning cherry-pick / nuclear rollback workflows — see
-  `docs/brainstorms/2026-06-05-nuclear-cherry-pick-manifest-requirements.md`.
+  `docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md`.
 
 ## Examples
 
@@ -141,7 +140,7 @@ documented in
 
 ```bash
 git checkout <sha>
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --preset validation --updates 30 --warmup 2 \
   --label bisect-<short-sha> \
   --out docs/benchmarks/bisect-<short-sha>.json
@@ -167,7 +166,7 @@ dcafdc8 validation-500u.json (format=2p_4p_16env) vs HEAD --preset validation
   [production-training-throughput-profiling.md](../developer-experience/production-training-throughput-profiling.md)
 - Tier-2 launch-hygiene gate and learner ablation tiebreaker:
   [launch-hygiene-learner-ablation-gate.md](../tooling-decisions/launch-hygiene-learner-ablation-gate.md)
-- Comet / env-parity throughput plan: `docs/plans/2026-06-04-010-feat-env-parity-ab-throughput-plan.md`
-- Stagger perf plan (orthogonal fix): `docs/plans/2026-06-05-001-feat-rollout-stagger-perf-plan.md`
+- Comet / env-parity throughput plan: `docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md`
+- Stagger perf plan (orthogonal fix): `docs/solutions/workflow-issues/jax-validation-throughput-benchmark-and-bisect.md`
 - Validation benchmark index: `docs/benchmarks/issues-jax-validation-500u.md`
 - Open issues: [#204](https://github.com/jmduea/orbit_wars/issues/204) (SSOT wall clock), [#188](https://github.com/jmduea/orbit_wars/issues/188) area (comet env)

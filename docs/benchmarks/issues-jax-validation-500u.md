@@ -1,6 +1,6 @@
 # Issues.md JAX — 500-update workstation validation
 
-**Workstation validation default format is `2p_4p_16env`.** The canonical override bundle is `WORKSTATION_VALIDATION_OVERRIDES` in `scripts/issues_jax_30update_benchmark.py` (lines 58–67) or `--preset validation`, which sets `format=2p_4p_16env`, `training=workstation`, `opponents=self_play_only`, and `curriculum=off`.
+**Workstation validation default format is `2p_4p_16env`.** The canonical override bundle is `WORKSTATION_VALIDATION_OVERRIDES` in `ow benchmark training` (`src/benchmark/training.py` presets) (lines 58–67) or `--preset validation`, which sets `format=2p_4p_16env`, `training=workstation`, `opponents=self_play_only`, and `curriculum=off`.
 
 Multi-seed sweep results: `docs/benchmarks/validation-seed-sweep.md`.
 
@@ -21,7 +21,7 @@ Multi-seed sweep results: `docs/benchmarks/validation-seed-sweep.md`.
 Command (benchmark script):
 
 ```bash
-uv run python scripts/issues_jax_30update_benchmark.py \
+uv run ow benchmark training \
   --label workstation-validation-500u \
   --tier workstation \
   --preset validation \

@@ -83,5 +83,5 @@ uv run wandb sweep outputs/_meta/sweeps/2p_only_throughput.yaml
 ## Related docs
 
 - [Configuration guide](../../conf/README.md)
-- [Kaggle submission packaging](../kaggle_submission.md)
+- [Kaggle submission packaging](../competition/COMPETITION_SUBMISSION.md)
 - Output hygiene v2 roadmap: `.omg/plans/output-storage-roadmap.md`

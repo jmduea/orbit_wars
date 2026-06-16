@@ -27,7 +27,7 @@ tags:
   - svg-layout
 related_components:
   - docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md
-  - docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md
+  - docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md
   - docs/tools/ssot-training-pipeline-flowchart.html
   - docs/competition/COMPETITION_OVERVIEW.md
   - docs/competition/COMPETITION_SUBMISSION.md
@@ -46,7 +46,7 @@ Submit-valid closure stalled partly because Gate 4 wall clock and naming overlap
 
 The fix started as **documentation and planning** (requirements SSOT, plan, flowchart, [#211](https://github.com/jmduea/orbit_wars/issues/211) under epic [#205](https://github.com/jmduea/orbit_wars/issues/205)). **Foundation slice (PR [#212](https://github.com/jmduea/orbit_wars/pull/212))** implements U1–U4: seed partition, W&B preflight sweep recipe + scoring, packaging CLI flags, `artifacts=ssot_pipeline` stub. U5–U8 (JAX qualifiers, calibration, bracket/submission, legacy teardown) remain open on #211.
 
-**Operator map (interactive).** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) is the click-through spine: R# labels on nodes, aside panel with requirement text, and side paths for fail/retry/terminal outcomes. The plan mermaid in [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) must stay in sync with this chart (gates, loops, terminals).
+**Operator map (interactive).** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html) is the click-through spine: R# labels on nodes, aside panel with requirement text, and side paths for fail/retry/terminal outcomes. The plan mermaid in [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md) must stay in sync with this chart (gates, loops, terminals).
 
 ## Guidance
 
@@ -80,7 +80,7 @@ The fix started as **documentation and planning** (requirements SSOT, plan, flow
 
 **W&B on the SSOT spine.** Step 3 **is** the W&B sweep — short preflight runs, metrics, and checkpoint artifacts. Failed runs stay in W&B; operator selects a **winner** for packaging validation. Long train (step 5) runs with `telemetry.wandb` for observability and artifact lineage. **Sweep-only ablations** may stop after preflight pass without packaging or long train.
 
-**Implementation tracker.** Requirements → plan [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md) → interactive flowchart → [#211](https://github.com/jmduea/orbit_wars/issues/211). Teardown policy (R29): remove or relocate legacy spines; no “demoted but still default” paths in `AGENTS.md` / `docs/AGENT_CAPABILITIES.md`.
+**Implementation tracker.** Requirements → plan [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md) → interactive flowchart → [#211](https://github.com/jmduea/orbit_wars/issues/211). Teardown policy (R29): remove or relocate legacy spines; no “demoted but still default” paths in `AGENTS.md` / `docs/AGENT_CAPABILITIES.md`.
 
 **Flowchart control-flow invariants** (plan mermaid + HTML must match):
 
@@ -157,8 +157,8 @@ Three “canonical” orders, three threshold regimes (0.76 vs 1.0 vs hybrid pol
 ```
 # Steps 1–2: config + make test-fast
 # Step 3: W&B sweep short preflight (Gates 2–3 per agent)
-uv run ow make wandb_sweep=ssot_preflight
-uv run ow sweep create --config conf/wandb_sweep/ssot_preflight.yaml
+uv run ow make wandb_sweep=preflight
+uv run ow sweep create --backend wandb --make wandb_sweep=preflight
 wandb agent <entity>/<project>/<sweep_id>
 # Step 4: ow eval package --validate-docker on W&B winner checkpoint
 # Step 5: long train (future: artifacts=ssot_pipeline, telemetry.wandb.enabled=true)
@@ -187,7 +187,7 @@ Open the operator map: [`docs/tools/ssot-training-pipeline-flowchart.html`](../.
 
 - Interactive operator map: [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - Requirements: [`docs/brainstorms/2026-06-03-training-pipeline-ssot-requirements.md`](../../brainstorms/2026-06-03-training-pipeline-ssot-requirements.md)
-- Plan: [`docs/plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md`](../../plans/2026-06-03-013-feat-ssot-training-pipeline-plan.md)
+- Plan: [`docs/solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md`](../../solutions/architecture-patterns/ssot-training-pipeline-config-to-kaggle-submission.md)
 - Epic [#205](https://github.com/jmduea/orbit_wars/issues/205), implementation [#211](https://github.com/jmduea/orbit_wars/issues/211), perf [#204](https://github.com/jmduea/orbit_wars/issues/204)
 - Legacy submit-valid funnel (superseded for spine, still operational until teardown): [`gate5-unified-tournament-submit-valid-funnel.md`](gate5-unified-tournament-submit-valid-funnel.md)
 - Legacy bracket training slice (superseded for qualifier order/runtime): [`kaggle-bracket-ranking-foundational-slice.md`](kaggle-bracket-ranking-foundational-slice.md)

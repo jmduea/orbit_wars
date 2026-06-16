@@ -34,7 +34,7 @@ related_components:
 
 ## Context
 
-Plan 003 left seed-scheduler calibration partially done: training arms and `ow benchmark calibrate-seed-scheduler` existed, but the default `training.reseed_every_updates` was still auto-scale (`-1`) until U1–U3 GPU sweeps and held-out tournament eval finished. In parallel, the 2026-06-02 agent-native audit (`docs/audits/agent-native-architecture-2026-06-02.md`) scored high CLI parity but weak CRUD, thin session context, and workflow-only benchmark entry points.
+Plan 003 left seed-scheduler calibration partially done: training arms and `ow benchmark calibrate-seed-scheduler` existed, but the default `training.reseed_every_updates` was still auto-scale (`-1`) until U1–U3 GPU sweeps and held-out tournament eval finished. In parallel, the 2026-06-02 agent-native audit scored high CLI parity but weak CRUD, thin session context, and workflow-only benchmark entry points — see `docs/agent-native-phase3-status.md`.
 
 PR [#184](https://github.com/jmduea/orbit_wars/pull/184) (merge `191fef3` on `main`) closed plans 003, 015, 016, and 017: measured reseed interval **50**, locked defaults in Hydra/schema, and shipped deferred operator primitives plus a capability-map regression test.
 
@@ -128,10 +128,10 @@ uv run ow benchmark learn-proof --steps beat_noop,beat_random --eval-checkpoint 
 ## Related
 
 - PR [#184](https://github.com/jmduea/orbit_wars/pull/184) — shipped work
-- Plans (completed): `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`, `docs/plans/2026-06-02-015-feat-agent-native-audit-gaps-plan.md`, `docs/plans/2026-06-02-016-feat-agent-native-deferred-crud-plan.md`, `docs/plans/2026-06-02-017-feat-seed-u2-u3-capability-map-plan.md`
-- Audit: `docs/audits/agent-native-architecture-2026-06-02.md`
+- Plans (completed): `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
+- Operator status: `docs/agent-native-phase3-status.md`
 - Phase 1 CLI: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
 - Calibration subprocess UX: `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`
-- Joint env shaping calibration (planned; extends this pattern to reward×opponent×reseed): `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` — ideation `docs/ideation/2026-06-03-searchable-measurable-env-shaping-ideation.md`, plan `docs/plans/2026-06-03-003-feat-shape-calibrate-plan.md`
+- Joint env shaping calibration (planned; extends this pattern to reward×opponent×reseed): `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md` — ideation `docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md plan`docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md`
 - Benchmark CLI package (calibrate-seed-scheduler runner): `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - Stash recovery during parallel branches: `docs/solutions/workflow-issues/git-stash-recovery-after-parallel-branch-cleanup.md`

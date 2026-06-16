@@ -1,6 +1,6 @@
 # Agent-native Phase 3 — status (2026-06-03)
 
-Phase 3 backlog items from `docs/plans/2026-06-02-agent-native-phase3-refactors.md` that are **shipped on `main`**, plus seed-scheduler calibration closed in PR [#184](https://github.com/jmduea/orbit_wars/pull/184) (merge `191fef3`).
+Phase 3 benchmark/gate/sweep refactors that are **shipped on `main`**, plus seed-scheduler calibration closed in PR [#184](https://github.com/jmduea/orbit_wars/pull/184) (merge `191fef3`).
 
 ## Shipped
 
@@ -12,7 +12,7 @@ Phase 3 backlog items from `docs/plans/2026-06-02-agent-native-phase3-refactors.
 | 4 | Cursor session-start hook | `docs/CURSOR.md`, `.cursor/hooks.json` example — PR #180 |
 | 5 | Seed-scheduler calibration + operator phase 2 | `training.reseed_every_updates: 50` in `conf/training/base.yaml` and `src/config/schema.py`; `docs/benchmarks/seed-scheduler-calibration.json` (`decision.chosen_interval: 50`); learning doc below |
 
-**Completed plans:** `docs/plans/2026-06-01-003-feat-seed-scheduler-calibration-plan.md`, `docs/plans/2026-06-02-015-feat-agent-native-audit-gaps-plan.md`, `docs/plans/2026-06-02-016-feat-agent-native-deferred-crud-plan.md`, `docs/plans/2026-06-02-017-feat-seed-u2-u3-capability-map-plan.md`.
+**Completed work (learning docs):** `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`, `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`, `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`.
 
 ## Operator primitives (prefer over workflows)
 
@@ -39,11 +39,10 @@ uv run ow benchmark calibrate-seed-scheduler --analyze-only --dry-run
 ## Still open / deferred
 
 - **Launch hygiene Phase B** — optional throughput recovery; ROADMAP Later only.
-- **Planet Flow pipeline relaunch (U7)** — operator GPU after reachability mask; see reachability plan U7.
+- **Planet Flow pipeline relaunch (U7)** — operator GPU after reachability mask; see `docs/solutions/logic-errors/planet-flow-catalog-reachability-mismatch.md`.
 
 ## Related
 
 - **Canonical learning (calibration + phase-2 CLI):** `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
-- Phase 2 status: `docs/agent-native-phase2-status.md`
 - Phase 1 learning: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`
 - Planet Flow residuals closed: #168–#170 (see PR closing those issues)

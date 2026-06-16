@@ -20,6 +20,9 @@
     },
     "huggingface-skills": {
       "enabled": true
+    },
+    "superpowers": {
+      "enabled": true
     }
   }
 }

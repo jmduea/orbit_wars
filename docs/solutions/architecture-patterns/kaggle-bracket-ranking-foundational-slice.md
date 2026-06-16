@@ -102,5 +102,5 @@ Treating Gate 5 proof as qualifier training mis-calibrates expectations (0.76 vs
 - **Interactive operator map (SSOT):** [`docs/tools/ssot-training-pipeline-flowchart.html`](../../tools/ssot-training-pipeline-flowchart.html)
 - **Canonical spine (SSOT):** [`ssot-training-pipeline-config-to-kaggle-submission.md`](ssot-training-pipeline-config-to-kaggle-submission.md)
 - Unified Gate 5 proof (legacy; 0.76, Docker-first): [`gate5-unified-tournament-submit-valid-funnel.md`](gate5-unified-tournament-submit-valid-funnel.md)
-- Plan U7–U8 deferred + PR #186 remaining work: `docs/plans/2026-06-03-005-feat-kaggle-bracket-ranking-plan.md`
+- Plan U7–U8 deferred + PR #186 remaining work: `docs/solutions/architecture-patterns/kaggle-bracket-ranking-foundational-slice.md`
 - Requirements: Kaggle μ/σ semantics in plan 005 Sources

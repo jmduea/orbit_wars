@@ -3,7 +3,7 @@
   "assessed_date": "2026-06-02",
   "criterion": "Winner = better learner (preflight learn-proof gate trends), not throughput.",
   "hot_path_status": "exhausted",
-  "hot_path_reference": "docs/plans/2026-06-01-launch-hygiene-rollout-throughput-design.md",
+  "hot_path_reference": "docs/solutions/developer-experience/production-training-throughput-profiling.md",
   "thresholds_source": "docs/benchmarks/preflight-calibration.json",
   "arms": {
     "A_pre_hygiene": {

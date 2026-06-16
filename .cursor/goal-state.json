@@ -1,0 +1,10 @@
+{
+  "goal": "inventory the codebase for duplication and provide a comprehensive list of occurrences",
+  "subgoals": [],
+  "status": "active",
+  "turns_used": 0,
+  "max_turns": 20,
+  "created_at": "2026-06-16T00:00:00Z",
+  "last_verdict": null,
+  "last_reason": null
+}

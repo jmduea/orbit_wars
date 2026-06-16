@@ -30,7 +30,7 @@ related_components:
 
 ## Context
 
-Issue [#194](https://github.com/jmduea/orbit_wars/issues/194) / PR [#202](https://github.com/jmduea/orbit_wars/pull/202) (branch `issue/194-benchmark-cli-package`) completes follow-up plan U3 from `docs/plans/2026-06-03-012-refactor-benchmark-cli-package-plan.md`: the ~1510-line monolith `src/cli/benchmark.py` was unmaintainable and blocked further operator CLI work.
+Issue [#194](https://github.com/jmduea/orbit_wars/issues/194) / PR [#202](https://github.com/jmduea/orbit_wars/pull/202) (branch `issue/194-benchmark-cli-package`) completes follow-up plan U3 from `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`: the ~1510-line monolith `src/cli/benchmark.py` was unmaintainable and blocked further operator CLI work.
 
 Phase 1 src simplification (PR [#201](https://github.com/jmduea/orbit_wars/pull/201)) already extracted gates and other concerns; this change is **structural only** — same `ow benchmark` surface, help text, `LEARN_PROOF_PRIMITIVES`, and test import paths. Review follow-up commit `607e825` hardened agent-native discoverability (capability map rows, help registry tests, stale help strings).
 
@@ -118,7 +118,7 @@ if "(planned)" in cells[0].lower():
 
 ## Related
 
-- Plan: `docs/plans/2026-06-03-012-refactor-benchmark-cli-package-plan.md`
+- Plan: `docs/solutions/architecture-patterns/benchmark-cli-package-split-agent-native-parity.md`
 - GitHub: [#194](https://github.com/jmduea/orbit_wars/issues/194), [#202](https://github.com/jmduea/orbit_wars/pull/202)
 - Agent-native operator phases: `docs/solutions/developer-experience/agent-native-operator-cli-phase1.md`, `docs/solutions/developer-experience/seed-scheduler-calibration-agent-native-operator-phase2.md`
 - Benchmark subprocess UX (separate concern; update stale `src/cli/benchmark.py` refs when refreshing): `docs/solutions/developer-experience/benchmark-subprocess-training-observability.md`

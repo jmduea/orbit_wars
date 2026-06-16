@@ -23,7 +23,7 @@ related_components:
   - docs/benchmarks/launch-hygiene-ablation.json
   - docs/benchmarks/launch-hygiene-e2e-baseline.json
   - docs/operator-runbook.md
-  - scripts/issues_jax_30update_benchmark.py
+  - ow benchmark training
   - src/jax/action_sampling.py
 ---
 
@@ -40,7 +40,7 @@ Measured on RTX 5080 (2026-06-02, `main`):
 | `env_steps_per_sec` | 9,776 | 2,399 (−75.5%) | floor 8,799 |
 | `seconds_per_update_mean` | 1.64 | 6.67 (+307%) | ceiling 1.80 |
 
-Profiling ([rollout throughput design](../../plans/2026-06-01-launch-hygiene-rollout-throughput-design.md)) shows rollout collection (~13.7 s/update) dominates PPO (~0.7 s/update). Hot-path recovery options in `src/jax/action_sampling.py` are **exhausted**; Phase B (U7) is cancelled unless a new rollout sampling design lands.
+Profiling ([rollout throughput design](../../solutions/developer-experience/production-training-throughput-profiling.md)) shows rollout collection (~13.7 s/update) dominates PPO (~0.7 s/update). Hot-path recovery options in `src/jax/action_sampling.py` are **exhausted**; Phase B (U7) is cancelled unless a new rollout sampling design lands.
 
 When throughput parity looks unreachable, **do not** treat tier-2 pass as the only merge authority. Run a **learner ablation** and let preflight learn-proof gate trends decide.
 
@@ -61,7 +61,7 @@ These answer different questions. Mixing their `env_steps_per_sec` values produc
 | Benchmark | Baseline / recipe | Primary question | Throughput authority for |
 | --- | --- | --- | --- |
 | **Tier-2** (`make test-launch-hygiene-e2e-throughput`) | `docs/benchmarks/launch-hygiene-e2e-baseline.json` at pre-hygiene `79162a…`; `ow benchmark training --preset primary` | Did launch hygiene recover pre-hygiene e2e throughput? | **2026-06-02 merge decision** — keep hygiene when learner ablation wins |
-| **Validation** (`scripts/issues_jax_30update_benchmark.py --preset validation`) | Per-trial JSON at each SHA; current bundle is `training=2p4p_32_split` (older artifacts may use `format=2p_4p_16env` + `training=workstation`) | Where did cross-SHA env/rollout hot-path throughput regress? | **Bisect and cherry-pick workflows** — not tier-2 pass/fail |
+| **Validation** (`ow benchmark training --preset validation`) | Per-trial JSON at each SHA; current bundle is `training=2p4p_32_split` (older artifacts may use `format=2p_4p_16env` + `training=workstation`) | Where did cross-SHA env/rollout hot-path throughput regress? | **Bisect and cherry-pick workflows** — not tier-2 pass/fail |
 
 Tier-2 **failed out of band** in the 2026-06-02 decision; that does not block running the validation preset to localize newer slowdowns (comet env, train-loop refactors, etc.). Conversely, stagger perf or multitask-smoke wins do **not** clear a failing validation preset at HEAD. Bisect protocol and override-drift rules:
 [jax-validation-throughput-benchmark-and-bisect.md](../workflow-issues/jax-validation-throughput-benchmark-and-bisect.md).
@@ -144,7 +144,7 @@ Re-run procedure: `docs/operator-runbook.md` § Learner ablation.
 - Tier-1 O(K²) fix: [launch-hygiene-incremental-carry-throughput.md](../performance-issues/launch-hygiene-incremental-carry-throughput.md)
 - Production-path profiling: [production-training-throughput-profiling.md](../developer-experience/production-training-throughput-profiling.md)
 - Operator commands: [operator-runbook.md](../../operator-runbook.md)
-- Plan: [2026-06-02-013-feat-launch-hygiene-tier2-preflight-plan.md](../../plans/2026-06-02-013-feat-launch-hygiene-tier2-preflight-plan.md)
+- Plan: [2026-06-02-013-feat-launch-hygiene-tier2-preflight-plan.md](../../solutions/tooling-decisions/launch-hygiene-learner-ablation-gate.md)
 - Ablation artifact: [launch-hygiene-ablation.json](../../benchmarks/launch-hygiene-ablation.json)
 - PR: [#182](https://github.com/jmduea/orbit_wars/pull/182) (merged 2026-06-02)
 - Submit-valid agent funnel (#160/#161, hybrid promotion) is a **separate** workflow — see [AGENT_CAPABILITIES.md](../../AGENT_CAPABILITIES.md); do not conflate Docker/tournament proof with throughput or learn-proof gates.

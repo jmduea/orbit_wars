@@ -19,7 +19,7 @@ tags:
   - test-premerge
   - agent-sessions
 related_components:
-  - docs/brainstorms/2026-06-02-merge-orchestration-requirements.md
+  - docs/solutions/workflow-issues/multi-branch-agent-merge-orchestration.md
   - docs/benchmarks/preflight-profiles.json
   - docs/benchmarks/preflight-calibration.json
 ---
@@ -123,7 +123,7 @@ R10:   make test-premerge
 R13:   PR merge-sim/planet-flow-preflight → main (#173)
 ```
 
-**Operator reference diagram** (full playbook: `docs/brainstorms/2026-06-02-merge-orchestration-requirements.md`):
+**Operator reference diagram** (full playbook: this doc):
 
 ```mermaid
 flowchart TB
@@ -141,7 +141,7 @@ flowchart TB
 
 ## Related
 
-- Requirements source: `docs/brainstorms/2026-06-02-merge-orchestration-requirements.md`
+- Requirements source: this doc
 - Post-merge integration fix: [planet-flow-preflight-calibration-profile.md](../integration-issues/planet-flow-preflight-calibration-profile.md)
 - Planet Flow sweep/proof config: [planet-flow-sweep-gameable-objective.md](../logic-errors/planet-flow-sweep-gameable-objective.md)
 - Stash recovery: [git-stash-recovery-after-parallel-branch-cleanup.md](./git-stash-recovery-after-parallel-branch-cleanup.md)

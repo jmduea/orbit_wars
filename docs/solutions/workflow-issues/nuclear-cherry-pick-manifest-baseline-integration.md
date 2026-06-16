@@ -24,7 +24,7 @@ related_components:
   - docs/benchmarks/launch-hygiene-e2e-baseline.json
   - docs/nomenclature-rfc.md
   - tests/test_training_benchmark_gate.py
-  - docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md
+  - docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md
   - docs/solutions/workflow-issues/cherry-pick-admission-gate-unified-learn-throughput.md
 ---
 
@@ -48,7 +48,7 @@ Phase 1 anchor admission **passed** (2026-06-06): unified `admission` gate on th
 | 2 | `throughput-baseline-integration` | Granular env-parity hunks (file-level, not whole commits) | `make test-kaggle-parity` per hunk; fast validation smoke — **not** tier-2 e2e per pick |
 | 3 | integration head | Topological learning cherry-picks | parity → unified admission on integration head |
 
-Advance `throughput-baseline-integration` only when manifest gates pass (`admission_passed` on anchor, then parity per hunk in Phase 2); human merge to `main` when `integration_status: ready_for_main`. Re-run `make gate-admission` on the integration head after the parity stack is green. Do not use stagger smokes, `ssot_preflight`, or validation-preset bisect as tier-2 pass/fail — those answer different questions (see [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)).
+Advance `throughput-baseline-integration` only when manifest gates pass (`admission_passed` on anchor, then parity per hunk in Phase 2); human merge to `main` when `integration_status: ready_for_main`. Re-run `make gate-admission` on the integration head after the parity stack is green. Do not use stagger smokes, legacy preflight-only profiles, or validation-preset bisect as tier-2 pass/fail — those answer different questions (see [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)).
 
 Phase 2 picks env-parity substrate from merge-base→`main` at **file or hunk** granularity — not whole commits — so each step stays small and gateable. Fast gates (`make test-kaggle-parity`, short validation smoke) suffice per pick; reserve tier-2 e2e for integration-head admission, not every hunk.
 
@@ -135,7 +135,7 @@ Inspect the worktree artifact: `jq '{admission_passed, verdict, throughput_verdi
 
 ```bash
 # HEAD ~299 env_steps/sec on --preset validation does NOT override tier-2 admit at anchor
-uv run python scripts/issues_jax_30update_benchmark.py --preset validation ...
+uv run ow benchmark training --preset validation ...
 # → use for Phase 2 comet-era localization only
 ```
 
@@ -151,7 +151,7 @@ ls outputs/benchmarks/cherry-pick/anchor_throughput.json  # worktree-local, giti
 - Unified admission gate (PPO source, `--repo-root`, resolved config): [cherry-pick-admission-gate-unified-learn-throughput.md](cherry-pick-admission-gate-unified-learn-throughput.md)
 - Validation-preset bisect (orthogonal measurement frame): [jax-validation-throughput-benchmark-and-bisect.md](jax-validation-throughput-benchmark-and-bisect.md)
 - Tier-2 gate semantics and ablation tiebreaker: [launch-hygiene-learner-ablation-gate.md](../tooling-decisions/launch-hygiene-learner-ablation-gate.md)
-- Requirements: `docs/brainstorms/2026-06-05-nuclear-cherry-pick-manifest-requirements.md`
-- Implementation plan: `docs/plans/2026-06-05-002-feat-nuclear-cherry-pick-manifest-plan.md`
+- Requirements: this doc
+- Implementation plan: `docs/solutions/workflow-issues/nuclear-cherry-pick-manifest-baseline-integration.md`
 - Nomenclature RFC: `docs/nomenclature-rfc.md`
 - Long-lived integration pattern (feature landings): [multi-branch-agent-merge-orchestration.md](multi-branch-agent-merge-orchestration.md)

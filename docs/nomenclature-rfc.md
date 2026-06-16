@@ -3,7 +3,7 @@ date: 2026-06-05
 status: draft
 topic: user-facing-nomenclature
 related:
-  - docs/ideation/2026-06-05-orbit-wars-continuation-directions.md
+  - docs/solutions/developer-experience/shape-calibrate-env-shaping-calibration-operator.md
   - docs/operator-runbook.md
   - AGENTS.md
 ---
@@ -153,7 +153,7 @@ Doc pass only: dual labels in prose and `make help`, not mass renames.
 ## Related docs
 
 - [Operator runbook](operator-runbook.md) — throughput gate procedures
-- [Ideation: continuation directions](ideation/2026-06-05-orbit-wars-continuation-directions.md) — throughput recovery vs parity substrate
-- [JAX comet subsystem plan](plans/2026-06-03-008-feat-jax-comet-subsystem-plan.md) — parity work example
-- [CI Kaggle/JAX parity plan](plans/2026-06-03-009-feat-ci-kaggle-jax-parity-plan.md)
+- [Production throughput profiling](solutions/developer-experience/production-training-throughput-profiling.md) — throughput recovery vs parity substrate tradeoffs
+- [JAX comet subsystem plan](solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md) — parity work example
+- [CI Kaggle/JAX parity plan](solutions/architecture-patterns/jax-comet-kaggle-parity-ci-gate.md)
 - [ONBOARDING.md](ONBOARDING.md) — Key Concepts §3 (Python ↔ JAX parity)
