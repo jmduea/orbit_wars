@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime

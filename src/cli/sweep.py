@@ -32,10 +32,14 @@ def print_sweep_help() -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Unified W&B and Kaggle sweep orchestration.")
+    parser = argparse.ArgumentParser(
+        description="Unified W&B and Kaggle sweep orchestration."
+    )
     subparsers = parser.add_subparsers(dest="command")
 
-    create = subparsers.add_parser("create", help="Register a sweep on W&B or Kaggle worker path.")
+    create = subparsers.add_parser(
+        "create", help="Register a sweep on W&B or Kaggle worker path."
+    )
     create.add_argument(
         "--backend",
         choices=("wandb", "kaggle"),
@@ -94,7 +98,11 @@ def _resolve_wandb_yaml(args: argparse.Namespace) -> Path:
         return args.yaml
     if args.make:
         proc = subprocess.run(
-            [sys.executable, str(REPO_ROOT / "scripts" / "make_wandb_sweep.py"), args.make],
+            [
+                sys.executable,
+                str(REPO_ROOT / "scripts" / "make_wandb_sweep.py"),
+                args.make,
+            ],
             cwd=REPO_ROOT,
             check=False,
             capture_output=True,
@@ -222,9 +230,9 @@ def run_cancel_cli(args: argparse.Namespace) -> int:
         )
         return 0
 
-    import wandb  # type: ignore
-
     import subprocess
+
+    import wandb  # type: ignore
 
     cmd = [
         "wandb",

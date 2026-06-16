@@ -692,9 +692,7 @@ def _validate_artifact_pipeline_modes(cfg: TrainConfig) -> None:
 def _validate_curriculum_config(cfg: TrainConfig) -> None:
     curriculum = cfg.curriculum
     if not curriculum.stages:
-        raise ValueError(
-            "curriculum.stages must be non-empty."
-        )
+        raise ValueError("curriculum.stages must be non-empty.")
     if not curriculum.enabled and len(curriculum.stages) != 1:
         raise ValueError(
             "static curriculum profiles must set curriculum.enabled=false with exactly one stage."

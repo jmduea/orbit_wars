@@ -16,4 +16,3 @@ def run_factorized_sampler_cli(args: argparse.Namespace) -> int:
         repeats=int(args.repeats),
         assert_max_ms=args.assert_max_ms,
     )
-

@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import REPO_ROOT
+
 
 def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
     from src.jax.unified_tournament_calibration import (
@@ -118,4 +118,3 @@ def run_calibrate_unified_tournament_cli(args: argparse.Namespace) -> int:
         )
         return 1
     return 0
-

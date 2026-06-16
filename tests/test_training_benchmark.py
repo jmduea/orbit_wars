@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.jax.training_benchmark import (
+from src.benchmark.training import (
     PRIMARY_E2E_OVERRIDES,
     TrainingBenchmarkResult,
     compose_benchmark_config,

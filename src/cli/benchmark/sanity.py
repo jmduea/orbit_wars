@@ -4,26 +4,25 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import _git_head_sha, _init_benchmark_runtime
+
 
 def run_sanity_cli(args: argparse.Namespace) -> int:
     import jax
+    from src.benchmark.training import (
+        WORKSTATION_VALIDATION_OVERRIDES,
+        compose_benchmark_config,
+        run_training_benchmark,
+        training_benchmark_payload,
+    )
     from src.jax.preflight import (
         PreflightVerdict,
         compare_repro_snapshots,
         write_report,
     )
-    from src.jax.training_benchmark import (
-        compose_benchmark_config,
-        run_training_benchmark,
-        training_benchmark_payload,
-    )
 
     _init_benchmark_runtime()
-    from src.jax.training_benchmark import WORKSTATION_VALIDATION_OVERRIDES
 
     overrides = (
         list(args.overrides)
@@ -66,4 +65,3 @@ def run_sanity_cli(args: argparse.Namespace) -> int:
     write_report(args.out, report)
     print(json.dumps(report, indent=2))
     return 0 if verdict == PreflightVerdict.VERIFIED else 1
-

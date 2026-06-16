@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Callable
+
 import json
 import subprocess
 from copy import deepcopy
@@ -301,6 +303,7 @@ class CheckpointHandler:
     telemetry: _TelemetryLogger
     artifact_queue_dir: Path
     checkpoint_pipeline: AsyncArtifactPipeline | None
+    # pyrefly: ignore [bad-specialization]
     artifact_worker_state: dict[str, subprocess.Popen[object]] = field(
         default_factory=dict
     )

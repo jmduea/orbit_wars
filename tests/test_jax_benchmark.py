@@ -5,8 +5,8 @@ from src.benchmark.production import (
     production_benchmark_payload,
     rollout_group_summary,
 )
+from src.benchmark.training import resolve_benchmark_overrides
 from src.config import compose_hydra_train_config
-from src.jax.training_benchmark import resolve_benchmark_overrides
 
 
 def test_rollout_group_summary_uses_training_derived_env_counts() -> None:

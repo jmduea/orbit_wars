@@ -27,7 +27,7 @@ def init_historical_snapshot_pool(
 
 def add_historical_snapshot(
     pool: HistoricalSnapshotPool, params: dict, *, update: int
-) -> tuple[HistoricalSnapshotPool, dict[str, object]]:
+) -> tuple[HistoricalSnapshotPool, dict[str, bool | int | str]]:
     slot = int(pool.next_slot)
     snapshot_id = int(pool.next_id)
     new_params = jax.tree.map(

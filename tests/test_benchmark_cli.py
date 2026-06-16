@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.benchmark.training import TrainingBenchmarkResult
 from src.cli import benchmark as benchmark_cli
 from src.cli.benchmark import build_parser
-from src.jax.training_benchmark import TrainingBenchmarkResult
 
 
 def test_benchmark_parser_has_training_sanity_and_learn_proof() -> None:
@@ -224,7 +224,7 @@ def test_planet_flow_training_benchmark_requires_control_metrics(
 
     monkeypatch.setattr(benchmark_cli, "_init_benchmark_runtime", lambda: None)
     monkeypatch.setattr(
-        "src.jax.training_benchmark.run_training_benchmark",
+        "src.benchmark.training.run_training_benchmark",
         lambda *args, **kwargs: result,
     )
 

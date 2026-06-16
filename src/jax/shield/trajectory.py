@@ -698,9 +698,6 @@ def _unshielded_factorized_topk_result(
 
     This preserves the source/target top-k mask from feature encoding and only expands it across non-zero ship buckets.
     """
-    from src.features.registry import edge_k
-
-    k = edge_k(env_cfg)
     bucket_count = max(int(getattr(env_cfg, "ship_bucket_count", 1)), 1)
     planet_ships = (
         game.planets.ships if remaining_planet_ships is None else remaining_planet_ships
@@ -827,13 +824,7 @@ def selected_factored_launch_passes_cheap_shield_jax(
     source_ships = game.planets.ships[source_row]
     has_ships = (ships > 0.0) & (ships <= source_ships)
     sun_ok = ~bucket_sun_blocked[source_row, target_slot, bucket]
-    bucket_ok = (
-        edge_active
-        & (bucket > 0)
-        & real_bucket[bucket]
-        & has_ships
-        & sun_ok
-    )
+    bucket_ok = edge_active & (bucket > 0) & real_bucket[bucket] & has_ships & sun_ok
 
     should_check = (
         step_active.astype(bool)

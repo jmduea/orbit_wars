@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
-from src.cli.benchmark.common import REPO_ROOT, _git_head_sha, _init_benchmark_runtime
+from src.cli.benchmark.common import REPO_ROOT
+
 
 def run_calibrate_cli(args: argparse.Namespace) -> int:
     from src.jax.preflight_calibration import (
@@ -80,8 +80,10 @@ def run_calibrate_cli(args: argparse.Namespace) -> int:
         analyze_only=bool(args.analyze_only),
     )
     write_calibration_report(args.out, report)
-    if not args.dry_run and args.out.resolve() == default_calibration_json_path(REPO_ROOT).resolve():
+    if (
+        not args.dry_run
+        and args.out.resolve() == default_calibration_json_path(REPO_ROOT).resolve()
+    ):
         refresh_agents_md_thresholds(REPO_ROOT, report)
     print(json.dumps(report, indent=2))
     return 0
-

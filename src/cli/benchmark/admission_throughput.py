@@ -35,6 +35,7 @@ def run_admission_throughput_cli(args: argparse.Namespace) -> int:
         return 1
 
     if exit_code != 0:
+        # pyrefly: ignore [not-iterable]
         for reason in payload.get("gate_failures", []):
             print(str(reason), file=sys.stderr)
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from src.cli.benchmark.common import REPO_ROOT
+
 
 def run_shortlist_planet_flow_sweep_cli(args: argparse.Namespace) -> int:
     from src.jax.planet_flow_shortlist import (
@@ -56,4 +56,3 @@ def run_planet_flow_noop_smoke_cli(args: argparse.Namespace) -> int:
     write_smoke_report(args.out, report)
     print(json.dumps(report, indent=2))
     return 0 if report.get("any_passed") else 1
-

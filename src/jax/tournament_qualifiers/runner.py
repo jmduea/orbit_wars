@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-SsotQualifierPhase = Literal["all", "eval", "record"]
-
 from src.artifacts.tournament.bracket.state import (
     BracketEntry,
     bracket_state_path,
@@ -25,6 +23,8 @@ from src.jax.tournament_qualifiers.promotion import (
     evaluate_stage_promotion,
     opponent_family_probs_for_stage,
 )
+
+SsotQualifierPhase = Literal["all", "eval", "record"]
 
 
 @dataclass(frozen=True, slots=True)
