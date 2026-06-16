@@ -1,6 +1,6 @@
 {
     "editor.formatOnSave": true,
-    "files.autoSave": "onFocusChange",
+    "files.autoSave": "onWindowChange",
     "python.terminal.activateEnvInCurrentTerminal": true,
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     "[python]": {
@@ -63,5 +63,9 @@
     },
     "search.useIgnoreFiles": false,
     "search.experimental.useIgnoreFilesInFindFiles": true,
-    "livePreview.defaultPreviewPath": "/outputs/campaigns/preflight/runs/20260615T082146Z-s42-b60ab54d/evaluations/replay_u000100_e4e70b1aab834f2985276e2d349c8506/docker_validation/replays/replay_u000100_4p.html"
+    "livePreview.defaultPreviewPath": "/outputs/campaigns/preflight/runs/20260615T082146Z-s42-b60ab54d/evaluations/replay_u000100_e4e70b1aab834f2985276e2d349c8506/docker_validation/replays/replay_u000100_4p.html",
+    "ruff.lineLength": 88,
+    "evenBetterToml.formatter.alignComments": true,
+    "evenBetterToml.formatter.alignEntries": true,
+    "evenBetterToml.formatter.arrayAutoCollapse": false
 }

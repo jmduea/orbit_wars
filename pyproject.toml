@@ -62,6 +62,8 @@ infer-with-first-use = false
 [tool.pyrefly.errors]
 missing-attribute = false
 unnecessary-type-conversion = false
+implicit-import = false
+missing-argument = false
 
 [dependency-groups]
 dev = [

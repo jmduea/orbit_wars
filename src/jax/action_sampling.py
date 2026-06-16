@@ -123,7 +123,7 @@ def _sample_step_from_logits(
     ship_bucket_mask: jax.Array,
     deterministic: bool,
     deterministic_eval: bool = False,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     key_target, key_ship = jax.random.split(key)
     illegal_logit = jnp.finfo(jnp.float32).min
     noop_idx = target_logits.shape[-1] - 1
@@ -369,7 +369,7 @@ def _sample_factored_target_from_source_logits(
     source: jax.Array,
     stop: jax.Array,
     deterministic: bool,
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Sample target/ship factors from logits already conditioned on ``source``."""
 
     key_target, key_ship = jax.random.split(key)
@@ -454,13 +454,18 @@ def _sample_shielded_factored_sequence_with_params(
     game,
     batch: TurnBatch,
     params: dict,
-    policy: object,
+    policy: object | jax.Module,
     cfg: TrainConfig,
     *,
     deterministic: bool,
     deterministic_eval: bool = False,
     decoder_hidden_in: jax.Array | None = None,
 ) -> ShieldedSequenceSample:
+    from src.jax.factored_decode_scan import (
+        advance_scan_decode_carry,
+        init_scan_decode_carry,
+        scan_decode_step,
+    )
     from src.jax.factored_sequence_scan import (
         forward_factorized_critic,
         forward_factorized_encode,
@@ -471,11 +476,6 @@ def _sample_shielded_factored_sequence_with_params(
         apply_launch_to_cumulative_forbidden,
         build_hygiene_lookups,
         empty_forbidden_grid,
-    )
-    from src.jax.factored_decode_scan import (
-        advance_scan_decode_carry,
-        init_scan_decode_carry,
-        scan_decode_step,
     )
 
     env_count = batch.planet_features.shape[0]

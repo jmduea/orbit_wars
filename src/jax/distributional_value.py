@@ -52,7 +52,7 @@ def project_returns_to_two_hot(returns: jax.Array, support: jax.Array) -> jax.Ar
 
 def _project_return_atom_indices(
     returns: jax.Array, support: jax.Array
-) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """Return lower/upper atom indices and weights for C51 two-hot targets."""
 
     returns = returns.astype(jnp.float32)

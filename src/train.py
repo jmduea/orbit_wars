@@ -6,6 +6,8 @@ from pathlib import Path
 from hydra import main as hydra_main
 from omegaconf import DictConfig, OmegaConf
 
+from src.artifacts.packaging_validation import assert_ssot_packaging_gate
+
 from .config import register_runtime_resolvers, train_config_from_omegaconf
 from .jax.train import run_jax_training
 
@@ -38,8 +40,6 @@ def _run_training_from_cfg(cfg_raw: DictConfig) -> None:
         payload = OmegaConf.to_container(OmegaConf.structured(cfg), resolve=True)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return
-
-    from src.ssot.packaging_validation import assert_ssot_packaging_gate
 
     assert_ssot_packaging_gate(cfg)
     log_path = run_jax_training(cfg, cfg.resume_checkpoint)

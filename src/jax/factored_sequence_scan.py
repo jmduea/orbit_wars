@@ -88,7 +88,7 @@ def owned_planet_ships_from_turn_batch(
 
 def _replay_logprobs_with_prefix_forwards(
     params: dict,
-    policy: object,
+    policy: object | jax.Module,
     batch: TurnBatch,
     cfg: TrainConfig,
     *,
@@ -350,7 +350,7 @@ def _replay_logprobs_with_prefix_forwards(
 
 def forward_factorized_encode(
     params: dict,
-    policy: object,
+    policy: object | jax.Module,
     batch: TurnBatch,
 ):
     """Run the planet encoder once for a fixed ``TurnBatch``."""
@@ -362,7 +362,7 @@ def forward_factorized_encode(
 
 def forward_factorized_critic(
     params: dict,
-    policy: object,
+    policy: object | jax.Module,
     encoder_out,
     *,
     player_count: jax.Array,
@@ -376,7 +376,7 @@ def forward_factorized_critic(
 
 def forward_factored_policy(
     params: dict,
-    policy: object,
+    policy: object | jax.Module,
     batch: TurnBatch,
     cfg: TrainConfig,
     *,

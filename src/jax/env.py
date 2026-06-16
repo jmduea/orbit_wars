@@ -25,7 +25,12 @@ from src.game.constants import (
     SUN_RADIUS,
     TOTAL_COMETS,
 )
-from src.jax.map_pool.load import MapPoolConstants
+from src.jax.features import (
+    FeatureHistory,
+    TurnBatch,
+    empty_feature_history,
+    encode_learner_turn,
+)
 from src.jax.map_pool.comets import (
     JaxCometState,
     activate_baked_comet_group,
@@ -35,16 +40,11 @@ from src.jax.map_pool.comets import (
     expire_comets_pre_launch,
     is_comet_planet,
 )
+from src.jax.map_pool.load import MapPoolConstants
 from src.jax.rewards import apply_early_terminal_reward_shaping_jax
 
 _MAX_HOME_GROUPS = 10
 
-from .features import (
-    FeatureHistory,
-    TurnBatch,
-    empty_feature_history,
-    encode_learner_turn,
-)
 
 BOARD_CENTER = (50.0, 50.0)
 ROTATION_RADIUS_LIMIT = 50.0
