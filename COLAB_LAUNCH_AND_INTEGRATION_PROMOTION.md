@@ -82,8 +82,10 @@ Prefer simplicity over new branch/worktree sprawl. Preserve existing local chang
 - [x] Launch medium Colab pilot.
 - [x] Evaluate pilot against gate.
 - [x] Apply one focused iteration if pilot learning is weak or ambiguous.
-- [ ] Launch full long Colab run after pilot passes.
-- [ ] Shift to integration promotion once long run is safely underway.
+- [x] Launch monitored long Colab run after pilot/preflight evidence.
+- [x] Shift to integration promotion once long run is safely underway.
+- [x] Audit `origin/main` divergence against integration.
+- [ ] Prepare the explicit integration-as-main branch promotion.
 
 ## Current Workspace Boundary
 
@@ -357,3 +359,159 @@ Correction:
 3. Generate a Colab shortlist from that corrected sweep.
 4. Package/Docker validate the shortlist winner checkpoint.
 5. Launch the long Colab run from the validated shortlist winner's overrides only if the preflight objective and artifact validation pass.
+
+## Long Run and Monitor State - 2026-06-16
+
+The first automatic long-run attempt launched from local commit `2ceca69`:
+
+- Session: `ow-colab_fixed_path_long_auto-2ceca69`
+- Campaign: `colab_fixed_path_long_auto`
+- Result: failed before checkpoint 50.
+- Last synced update: 47.
+- Crash: JAX GPU OOM while copying PPO metrics to host, requesting approximately 10.10 GiB.
+- Root cause in launch selection: this attempt used plain defaults rather than the known-good fixed-path pilot recipe, so it ran random-only/default transformer geometry and hit the Colab T4 memory ceiling before any usable checkpoint was written.
+
+Operational fixes:
+
+- `2ceca69` added `ow train colab monitor` plus `--monitor-after-launch`.
+- `bca7074` raised the bounded Colab sync archive exec timeout for busy kernels from 120s to up to 600s for long-run defaults.
+- The failed session was stopped/confirmed gone before relaunching.
+
+Current monitored long run:
+
+- Commit: `bca7074`
+- Session: `ow-colab_fixed_path_long_pilot_recipe-bca7074`
+- Campaign: `colab_fixed_path_long_pilot_recipe`
+- Background monitor PID at launch audit time: `3523680`
+- Monitor log: `outputs/colab_runner/monitor/logs/ow-colab_fixed_path_long_pilot_recipe-bca7074.log`
+- Recipe source: fixed-path pilot overrides from `outputs/colab_runner/synced/colab_fixed_path_pilot/runs/20260616T003158Z-s42-0d3bada4/.hydra/overrides.yaml`
+- Important overrides: `training=2p_32`, `curriculum=scripted_heavy`, `model=transformer_factorized_small`, `model.max_moves_k=3`, shaped rewards, `task.trajectory_shield_mode=tiered`, `training.rollout_steps=512`, `training.reseed_every_updates=100`, artifact pipeline off, replay off, `artifacts.checkpoint_every=50`.
+
+Latest verified monitor state during this audit:
+
+- Run directory: `outputs/colab_runner/synced/colab_fixed_path_long_pilot_recipe/runs/20260616T022709Z-s42-210056b5`
+- Latest synced update: 2
+- Latest synced win rate: 0.71875
+- Stale: false
+- Checkpoints synced: 0
+
+## Integration-as-Main Promotion Audit - 2026-06-16
+
+Promotion posture: `orbit_wars-integration` is the source of truth. Do not merge `main` into integration. Do not let files from `main` overwrite integration unless a specific file or commit is re-audited and shown to improve learning quality, correctness, or throughput.
+
+Current branch state:
+
+- Integration worktree: `/home/jmduea/projects/orbit_wars-integration`
+- Current integration branch: `refactor/artifacts-metric-promotion-commit`
+- Current integration HEAD: `bca7074`
+- Local `main`: `ec5dd7a`
+- `origin/main`: `ec5dd7a`
+- Merge base with `origin/main`: `445580b6bb36`
+- Local integration branch is ahead of `origin/main` by 34 commits and behind by 4 commits by raw graph count.
+- Remote `origin/refactor/artifacts-metric-promotion-commit` is stale at `515b69a`; local integration has not been pushed.
+- Local `main` is checked out in sibling worktree `/home/jmduea/projects/orbit_wars`, so a local branch pointer update for `main` must be done from that worktree or via an explicit push/reset workflow.
+- Sibling `/home/jmduea/projects/orbit_wars` has untracked local work: `docs/ideation/2026-06-06-progressive-map-complexity-curriculum-ideation.md`. Do not run branch-reset commands there until that file is intentionally preserved, moved, or committed.
+- Local old-main backup branch created: `backup/main-pre-integration-20260616` -> `ec5dd7a`.
+
+Main-only work review:
+
+- `9c83003 feat(opponents): refactor opponent configuration and introduce train bundles`
+- `e565912 refactor(jax): O(K) incremental decode in rollout scan`
+
+Decision:
+
+- Do not cherry-pick these commits as-is.
+- Integration contains later work in the same areas:
+  - opponent/config evolution via `26a7053`, `95e7336`, `4fb4142`, and related cleanup commits.
+  - O(K)/decoder evolution via `92e33b2`, `fcc0c92`, and the current launch-hygiene/factorized sampling stack.
+- The current goal is therefore not "merge main"; it is "preserve old main, then make main point at integration."
+
+Recommended promotion sequence when explicitly approved:
+
+1. Ensure the Colab monitor is either healthy or intentionally stopped.
+2. Ensure both `/home/jmduea/projects/orbit_wars-integration` and `/home/jmduea/projects/orbit_wars` have no unrelated dirty work that would be lost.
+3. Preserve the old-main backup ref. Local backup already exists as `backup/main-pre-integration-20260616` -> `ec5dd7a`; create/push a remote backup only with explicit approval.
+4. Push local integration HEAD `bca7074` to the integration branch if desired for review continuity.
+5. Update `main` to `bca7074` using an explicit force-with-lease/reset path, not a merge commit.
+6. Re-fetch and verify `origin/main == bca7074`.
+7. Re-run the cheap acceptance checks from the promoted main checkout: `make test-fast`, `uv run ow train colab preflight`, and a monitor/status check for the active Colab run if it is still running.
+
+Until remote promotion is explicitly approved, local work should continue on `refactor/artifacts-metric-promotion-commit`, treating it as the future main.
+
+### Promotion Command Runbook
+
+These commands are the intended mechanical path once branch-ref changes are explicitly approved. They are written to preserve old `main` and make the ref movement obvious.
+
+Preflight checks:
+
+```bash
+cd /home/jmduea/projects/orbit_wars-integration
+uv run python scripts/check_integration_main_promotion.py
+git status --short
+git fetch origin --prune
+git rev-parse HEAD
+git rev-parse origin/main
+git rev-parse backup/main-pre-integration-20260616
+git rev-list --left-right --count HEAD...origin/main
+```
+
+Expected before promotion:
+
+- `HEAD` is the integration commit to promote, currently `bca7074`.
+- `origin/main` is the old main commit, currently `ec5dd7a`.
+- `backup/main-pre-integration-20260616` points at `ec5dd7a`.
+- `git status --short` contains no uncommitted work except intentionally handled tracker updates.
+- `scripts/check_integration_main_promotion.py` reports `ready_for_remote_promotion: true`.
+
+Current checker result before remote approval:
+
+- `ready_for_local_ref_move: true` when the tracker/script edits are allowed as in-progress work.
+- `ready_for_remote_promotion: false`.
+- Blocking warnings:
+  - sibling `/home/jmduea/projects/orbit_wars` contains untracked ideation doc work.
+  - `origin/refactor/artifacts-metric-promotion-commit` is stale at `515b69a` while local integration is `bca7074`.
+
+Preserve old main remotely, only when remote writes are approved:
+
+```bash
+git push origin ec5dd7a:refs/heads/backup/main-pre-integration-20260616
+```
+
+Optionally update the integration branch for review continuity:
+
+```bash
+git push origin HEAD:refs/heads/refactor/artifacts-metric-promotion-commit
+```
+
+Promote integration to main:
+
+```bash
+git push --force-with-lease=refs/heads/main:ec5dd7a origin HEAD:refs/heads/main
+git fetch origin --prune
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+```
+
+Local main worktree refresh, after preserving the untracked ideation doc in `/home/jmduea/projects/orbit_wars`:
+
+```bash
+cd /home/jmduea/projects/orbit_wars
+git status --short
+git fetch origin --prune
+git reset --hard origin/main
+```
+
+Post-promotion acceptance:
+
+```bash
+cd /home/jmduea/projects/orbit_wars
+make test-fast
+uv run ow train colab preflight
+```
+
+If the Colab long run is still active, also verify the monitor from the integration worktree:
+
+```bash
+cd /home/jmduea/projects/orbit_wars-integration
+ps -p 3523680 -o pid,etime,cmd
+tail -n 120 outputs/colab_runner/monitor/logs/ow-colab_fixed_path_long_pilot_recipe-bca7074.log
+```
