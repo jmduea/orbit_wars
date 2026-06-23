@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Mapping
 
 DEFAULT_WARMUP = 2
-DEFAULT_MAX_MEASURED_UPDATE = 20
+# Matches ``ow benchmark training --updates`` (measured rows after warmup).
+DEFAULT_MEASURED_UPDATE_COUNT = 20
+DEFAULT_MAX_MEASURED_UPDATE = DEFAULT_WARMUP + DEFAULT_MEASURED_UPDATE_COUNT
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +23,17 @@ class ThroughputWindow:
     @property
     def first_update(self) -> int:
         return self.warmup + 1
+
+    @classmethod
+    def from_training_benchmark(
+        cls,
+        *,
+        warmup: int = DEFAULT_WARMUP,
+        measured_update_count: int = DEFAULT_MEASURED_UPDATE_COUNT,
+    ) -> ThroughputWindow:
+        """Build window aligned with ``run_training_benchmark`` (--updates = measured count)."""
+
+        return cls(warmup=warmup, max_measured_update=warmup + measured_update_count)
 
     def includes(self, update: int) -> bool:
         return self.first_update <= update <= self.max_measured_update

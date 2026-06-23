@@ -7,6 +7,8 @@ import numpy as np
 
 import jax
 
+from src.artifacts.tournament.win_rate import win_rate as win_fraction
+
 
 def learner_won_from_final_scores(
     scores: np.ndarray,
@@ -31,12 +33,6 @@ def learner_won_from_final_scores(
         return False
     winners = np.flatnonzero(arr == best)
     return winners.size == 1 and int(winners[0]) == learner
-
-
-def win_fraction(wins: int, games: int) -> float | None:
-    if games <= 0:
-        return None
-    return float(wins) / float(games)
 
 
 def final_ship_scores(game, player_count: int) -> np.ndarray:

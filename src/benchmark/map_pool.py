@@ -5,11 +5,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+from src.benchmark.git_utils import git_head_sha
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR_VERSION = "map_pool_bake_v1"
@@ -17,17 +18,7 @@ DEFAULT_MAX_EXTRAPOLATED_SECS = 1800.0
 
 
 def _git_head_sha() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            cwd=REPO_ROOT,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return result.stdout.strip() or None
+    return git_head_sha(REPO_ROOT)
 
 
 def build_map_pool_parser(

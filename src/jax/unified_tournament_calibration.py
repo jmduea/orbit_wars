@@ -17,7 +17,8 @@ from src.artifacts.tournament.unified.spec import (
     UnifiedTournamentSpec,
     parse_unified_tournament_section,
 )
-from src.jax.preflight_calibration import default_calibration_json_path, git_head_sha
+from src.benchmark.git_utils import git_head_sha
+from src.jax.preflight_calibration import default_calibration_json_path
 
 DEFAULT_CALIBRATION_CHECKPOINT = Path(
     "outputs/campaigns/preflight_beat_random/runs/"

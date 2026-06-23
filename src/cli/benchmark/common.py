@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
+
+from src.benchmark.git_utils import git_head_sha
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -18,17 +19,7 @@ LEARN_PROOF_PRIMITIVES: tuple[str, ...] = (
 
 
 def _git_head_sha() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            cwd=REPO_ROOT,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return result.stdout.strip() or None
+    return git_head_sha(REPO_ROOT)
 
 
 def print_benchmark_help() -> None:

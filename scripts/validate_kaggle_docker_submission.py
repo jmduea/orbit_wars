@@ -39,6 +39,8 @@ RUNTIME_FILES = (
     "game/planet_generation.py",
     "game/shield_config.py",
     "game/shield.py",
+    "shield/__init__.py",
+    "shield/trajectory_core.py",
     "jax/rewards.py",
     "game/types.py",
     "jax/__init__.py",

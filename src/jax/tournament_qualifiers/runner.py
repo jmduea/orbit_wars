@@ -15,6 +15,7 @@ from src.artifacts.tournament.bracket.state import (
     save_bracket_state,
     upsert_entry,
 )
+from src.artifacts.submit_valid_pipeline import SSOT_PIPELINE, primary_submit_valid_pipeline
 from src.config import TrainConfig
 from src.jax.tournament_qualifiers.eval import run_held_out_qualifier_eval
 from src.jax.tournament_qualifiers.promotion import (
@@ -38,8 +39,7 @@ class SsotQualifierTick:
 
 
 def ssot_pipeline_enabled(cfg: TrainConfig) -> bool:
-    ssot = getattr(cfg.artifacts, "ssot_pipeline", None)
-    return bool(ssot and ssot.enabled)
+    return primary_submit_valid_pipeline(cfg) == SSOT_PIPELINE
 
 
 def _ssot_config(cfg: TrainConfig) -> Any:

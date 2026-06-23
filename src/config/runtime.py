@@ -7,7 +7,9 @@ from typing import Any
 from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
+from src.artifacts.submit_valid_pipeline import validate_submit_valid_pipelines_exclusive
 from src.opponents.constants import CURRICULUM_OPPONENT_FAMILIES
+from src.opponents.curriculum import first_stage_opponent_family_weights
 from src.telemetry.metric_registry import (
     CURRICULUM_PROMOTION_METRIC_NAMES,
     validate_scalar_update_metric_name,
@@ -310,13 +312,6 @@ def _curriculum_has_family(cfg: TrainConfig, family: str) -> bool:
     )
 
 
-def _first_stage_mix_weights(cfg: TrainConfig) -> dict[str, float]:
-    weights = {family: 0.0 for family in _CURRICULUM_FAMILIES}
-    if cfg.curriculum.stages:
-        weights.update(_stage_family_weights(cfg.curriculum.stages[0]))
-    return weights
-
-
 def _derive_private_opponents_from_curriculum(cfg: TrainConfig) -> None:
     """Populate the legacy runtime cache from the public curriculum profile."""
 
@@ -329,7 +324,6 @@ def _derive_private_opponents_from_curriculum(cfg: TrainConfig) -> None:
         cfg.opponents.dispatch = "self"
 
     cfg.opponents.alternate_player_sides = bool(cfg.curriculum.alternate_player_sides)
-    cfg.opponents.mix.weights = _first_stage_mix_weights(cfg)
     cfg.opponents.mix.temperature = 1.0
     cfg.opponents.snapshot = cfg.curriculum.snapshot
     cfg.opponents.self_play.enabled = _curriculum_has_family(
@@ -574,8 +568,9 @@ def _validate_planet_flow_profile(cfg: TrainConfig) -> None:
             "model.pointer_decoder=planet_flow_target_heatmap requires snapshot "
             "pool_size=0 and interval_updates=0 for P0 proof runs."
         )
-    historical_weight = float(cfg.opponents.mix.weights.get("historical", 0.0))
-    latest_weight = float(cfg.opponents.mix.weights.get("latest", 0.0))
+    family_weights = first_stage_opponent_family_weights(cfg)
+    historical_weight = float(family_weights.get("historical", 0.0))
+    latest_weight = float(family_weights.get("latest", 0.0))
     if historical_weight > 0.0 or latest_weight > 0.0:
         raise ValueError(
             "model.pointer_decoder=planet_flow_target_heatmap P0 proof runs must not "
@@ -678,15 +673,9 @@ def _validate_relative_path_fragment(value: str, *, field_name: str) -> None:
 
 
 def _validate_artifact_pipeline_modes(cfg: TrainConfig) -> None:
-    """Reject mutually exclusive training-time bracket hooks."""
+    """Reject mutually exclusive submit-valid training pipelines."""
 
-    artifacts = cfg.artifacts
-    if artifacts.bracket_training.enabled and artifacts.ssot_pipeline.enabled:
-        raise ValueError(
-            "artifacts.bracket_training.enabled and artifacts.ssot_pipeline.enabled "
-            "cannot both be true; use artifacts=ssot_pipeline (SSOT) or legacy "
-            "artifacts=bracket_training, not both."
-        )
+    validate_submit_valid_pipelines_exclusive(cfg)
 
 
 def _validate_curriculum_config(cfg: TrainConfig) -> None:

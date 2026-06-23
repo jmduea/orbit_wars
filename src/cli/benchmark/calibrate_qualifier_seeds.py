@@ -8,7 +8,7 @@ import sys
 import time
 
 from src.cli.benchmark.common import REPO_ROOT, _init_benchmark_runtime
-from src.jax.preflight_calibration import git_head_sha
+from src.benchmark.git_utils import git_head_sha
 from src.jax.qualifier_calibration import default_qualifier_calibration_stub
 
 

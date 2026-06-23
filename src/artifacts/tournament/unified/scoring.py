@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from src.artifacts.tournament.runner import challenger_won_2p
 from src.artifacts.tournament.types import MatchOutcome
+from src.artifacts.tournament.win_rate import win_rate as _win_rate
 
 FOUR_P_FORMATS = frozenset({"4p_free_for_all", "4p_challenger_vs_baselines"})
 
@@ -21,12 +22,6 @@ class UnifiedOpponentScore:
     combined: float | None
     passed: bool = False
     fail_reason: str | None = None
-
-
-def _win_rate(wins: int, games: int) -> float | None:
-    if games <= 0:
-        return None
-    return wins / games
 
 
 def combined_score(

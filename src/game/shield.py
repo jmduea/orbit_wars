@@ -23,23 +23,24 @@ from src.game.shield_config import (
     trajectory_shield_mode,
 )
 from src.game.types import GameState, PlanetState
+from src.shield.trajectory_core import (
+    acceptable_planet_hit,
+    bounds_exit_time,
+    fleet_speed,
+    line_circle_intersection_time,
+    moving_circle_hit_time,
+    ship_count_for_bucket,
+)
 
 
 def ship_count_for_bucket_py(
     available_ships: float | int, bucket: int, bucket_count: int
 ) -> int:
-    available = max(0, int(available_ships))
-    if available <= 0 or bucket <= 0:
-        return 0
-    fraction = float(bucket) / float(max(bucket_count - 1, 1))
-    ships = int(math.ceil(available * fraction))
-    return min(available, max(1, ships))
+    return ship_count_for_bucket(available_ships, bucket, bucket_count)
 
 
 def fleet_speed_py(ships: float, ship_speed: float = MAX_FLEET_SPEED) -> float:
-    safe = max(float(ships), 1.0)
-    speed = 1.0 + (ship_speed - 1.0) * (math.log(safe) / math.log(1000.0)) ** 1.5
-    return min(speed, ship_speed)
+    return fleet_speed(ships, ship_speed=ship_speed)
 
 
 def _planet_position_at_step(
@@ -73,27 +74,17 @@ def _moving_circle_hit_time_py(
     new_py: float,
     radius: float,
 ) -> float | None:
-    d0x = old_fx - old_px
-    d0y = old_fy - old_py
-    dvx = (new_fx - old_fx) - (new_px - old_px)
-    dvy = (new_fy - old_fy) - (new_py - old_py)
-    a = dvx * dvx + dvy * dvy
-    b = 2.0 * (d0x * dvx + d0y * dvy)
-    c = d0x * d0x + d0y * d0y - radius * radius
-    if c <= 0.0:
-        return 0.0
-    if a < 1e-12:
-        return None
-    disc = b * b - 4.0 * a * c
-    if disc < 0.0:
-        return None
-    sqrt_disc = math.sqrt(max(disc, 0.0))
-    denom = 2.0 * a
-    t1 = (-b - sqrt_disc) / denom
-    t2 = (-b + sqrt_disc) / denom
-    if t2 < 0.0 or t1 > 1.0:
-        return None
-    return max(0.0, t1)
+    return moving_circle_hit_time(
+        old_fx,
+        old_fy,
+        new_fx,
+        new_fy,
+        old_px,
+        old_py,
+        new_px,
+        new_py,
+        radius,
+    )
 
 
 def _line_circle_intersection_time_py(
@@ -105,53 +96,27 @@ def _line_circle_intersection_time_py(
     center_y: float,
     radius: float,
 ) -> float | None:
-    dx = end_x - start_x
-    dy = end_y - start_y
-    rel_x = start_x - center_x
-    rel_y = start_y - center_y
-    a = dx * dx + dy * dy
-    c = rel_x * rel_x + rel_y * rel_y - radius * radius
-    if c <= 0.0:
-        return 0.0
-    if a < 1e-12:
-        return None
-    b = 2.0 * (rel_x * dx + rel_y * dy)
-    disc = b * b - 4.0 * a * c
-    if disc < 0.0:
-        return None
-    sqrt_disc = math.sqrt(max(disc, 0.0))
-    denom = 2.0 * a
-    t1 = (-b - sqrt_disc) / denom
-    t2 = (-b + sqrt_disc) / denom
-    if t2 < 0.0 or t1 > 1.0:
-        return None
-    return max(0.0, t1)
+    return line_circle_intersection_time(
+        start_x, start_y, end_x, end_y, center_x, center_y, radius
+    )
 
 
 def _bounds_exit_time_py(
     start_x: float, start_y: float, end_x: float, end_y: float
 ) -> float | None:
-    dx = end_x - start_x
-    dy = end_y - start_y
-    times: list[float] = []
-    if dx > 0.0 and end_x > BOARD_SIZE:
-        times.append((BOARD_SIZE - start_x) / dx)
-    elif dx < 0.0 and end_x < 0.0:
-        times.append((0.0 - start_x) / dx)
-    if dy > 0.0 and end_y > BOARD_SIZE:
-        times.append((BOARD_SIZE - start_y) / dy)
-    elif dy < 0.0 and end_y < 0.0:
-        times.append((0.0 - start_y) / dy)
-    valid = [time for time in times if 0.0 <= time <= 1.0]
-    return min(valid) if valid else None
+    return bounds_exit_time(start_x, start_y, end_x, end_y)
 
 
 def _acceptable_planet_py(
     planet: PlanetState, player: int, target_id: int, hit_mode: str
 ) -> bool:
-    if hit_mode == "non_friendly":
-        return planet.owner != player
-    return planet.id == target_id
+    return acceptable_planet_hit(
+        planet_id=planet.id,
+        planet_owner=planet.owner,
+        player=player,
+        target_id=target_id,
+        hit_mode=hit_mode,
+    )
 
 
 def trajectory_shield_reason_for_launch(

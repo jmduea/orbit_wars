@@ -751,19 +751,5 @@ def _percentile(values: list[float], quantile: float) -> float | None:
     return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
 
-def git_head_sha(repo_root: Path) -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return result.stdout.strip() or None
-
-
 def default_calibration_json_path(repo_root: Path) -> Path:
     return repo_root / "docs" / "benchmarks" / "preflight-calibration.json"

@@ -71,20 +71,14 @@ def test_should_skip_opponent_batch_refresh_for_curriculum_noop_stage() -> None:
     assert should_skip_opponent_batch_refresh_2p(cfg, stage_view)
 
 
-def test_should_not_skip_when_curriculum_off_despite_noop_mix_weights() -> None:
+def test_should_not_skip_when_curriculum_off_with_non_noop_stage() -> None:
     cfg = TrainConfig()
     cfg.task.player_count = 2
     cfg.curriculum.enabled = False
+    cfg.curriculum.stages = [
+        {"id": "random_only", "opponent_families": {"random": 1.0, "noop": 0.0}}
+    ]
     cfg.opponents.dispatch = "self"
-    cfg.opponents.mix.weights = {
-        "latest": 0.0,
-        "historical": 0.0,
-        "nearest_sniper": 0.0,
-        "turtle": 0.0,
-        "opportunistic": 0.0,
-        "random": 0.0,
-        "noop": 1.0,
-    }
     controller = CurriculumController(cfg.curriculum, cfg.opponents.snapshot)
     stage_view = controller.stage_view(0, **_empty_snapshot_kwargs())
     assert not is_single_family_noop_stage_view(stage_view)

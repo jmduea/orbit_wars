@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import jax
 from src.artifacts.checkpoint_compat import is_planet_flow_pointer_decoder
 from src.config import TrainConfig
+from src.opponents.curriculum import first_stage_opponent_family_weights
 from src.jax.action_sampling import _sample_shielded_sequence_with_params
 from src.jax.decoder_carry import reset_decoder_hidden_on_done
 from src.jax.env import (
@@ -86,7 +87,7 @@ def _static_latest_only_self_play_sample_enabled(
             return False
         weights = dict(stages[0].get("opponent_families", {}) or {})
         return _is_latest_only_family_weights(weights)
-    return _is_latest_only_family_weights(dict(cfg.opponents.mix.weights or {}))
+    return _is_latest_only_family_weights(first_stage_opponent_family_weights(cfg))
 
 
 def _shield_transition_fields(diagnostics) -> dict[str, jax.Array]:

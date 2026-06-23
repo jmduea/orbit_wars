@@ -9,7 +9,7 @@ from src.cli.benchmark.common import REPO_ROOT
 
 
 def run_calibrate_seed_scheduler_cli(args: argparse.Namespace) -> int:
-    from src.jax.preflight_calibration import git_head_sha
+    from src.benchmark.git_utils import git_head_sha
     from src.jax.seed_scheduler_calibration import (
         DEFAULT_OPPONENTS,
         analyze_seed_sched_run,

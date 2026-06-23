@@ -6,14 +6,10 @@ from collections import defaultdict
 
 from src.config.schema import PromotionTournamentConfig
 
+from src.artifacts.tournament.win_rate import win_rate as _win_rate
+
 from .runner import challenger_won_2p
 from .types import AgentEntry, LeaderboardRow, MatchOutcome
-
-
-def _win_rate(wins: int, games: int) -> float | None:
-    if games <= 0:
-        return None
-    return wins / games
 
 
 def _pair_key(left: str, right: str) -> tuple[str, str]:

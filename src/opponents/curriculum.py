@@ -11,7 +11,20 @@ from src.opponents.constants import (
     OPPONENT_FAMILY_NAMES,
     OPPONENT_LATEST,
 )
+from src.config.schema import TrainConfig
 from src.opponents.pool import OPPONENT_FAMILY_IDS
+
+
+def first_stage_opponent_family_weights(cfg: TrainConfig) -> dict[str, float]:
+    """Authoritative first-stage opponent family weights from ``cfg.curriculum``."""
+
+    weights = {name: 0.0 for name in OPPONENT_FAMILY_NAMES}
+    stages = list(cfg.curriculum.stages or [])
+    if stages:
+        raw = dict(stages[0].get("opponent_families", {}) or {})
+        weights.update({str(key): float(value) for key, value in raw.items()})
+    return weights
+
 
 METRIC_KEYS = (
     "overall_win_rate",

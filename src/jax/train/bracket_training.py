@@ -18,6 +18,10 @@ from src.artifacts.tournament.bracket.state import (
     save_bracket_state,
     upsert_entry,
 )
+from src.artifacts.submit_valid_pipeline import (
+    BRACKET_TRAINING,
+    primary_submit_valid_pipeline,
+)
 from src.config import TrainConfig
 
 
@@ -30,7 +34,7 @@ class BracketTrainingTick:
 
 
 def bracket_training_enabled(cfg: TrainConfig) -> bool:
-    return bool(getattr(cfg.artifacts, "bracket_training", None) and cfg.artifacts.bracket_training.enabled)
+    return primary_submit_valid_pipeline(cfg) == BRACKET_TRAINING
 
 
 def bracket_training_tick(

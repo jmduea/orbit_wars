@@ -136,7 +136,10 @@ def test_compose_run_name_includes_hydra_job_when_present(monkeypatch) -> None:
     cfg.task.player_count = 2
     _configure_rollout_groups(cfg, [])
     cfg.opponents.self_play.enabled = False
-    cfg.opponents.mix.weights = {"random": 1.0, "latest": 0.0}
+    cfg.curriculum.enabled = False
+    cfg.curriculum.stages = [
+        {"id": "random_only", "opponent_families": {"random": 1.0, "latest": 0.0}}
+    ]
     cfg.training.total_updates = 1000
     cfg.training.num_envs = 16
     cfg.seed = 123

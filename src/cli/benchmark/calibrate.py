@@ -10,13 +10,13 @@ from src.cli.benchmark.common import REPO_ROOT
 
 
 def run_calibrate_cli(args: argparse.Namespace) -> int:
+    from src.benchmark.git_utils import git_head_sha
     from src.jax.preflight_calibration import (
         analyze_jsonl_path,
         build_calibration_report,
         default_calibration_json_path,
         derive_thresholds,
         discover_calibration_snapshots,
-        git_head_sha,
         refresh_agents_md_thresholds,
         run_calibration_sweep,
         summarize_calibration,

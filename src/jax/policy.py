@@ -173,6 +173,32 @@ def is_distributional_value_head(cfg: TrainConfig) -> bool:
     return cfg.model.value_head.strip().lower() == "distributional"
 
 
+def _composable_resolve_value_head(
+    value_head_module: nn.Module | None,
+    hidden_size: int,
+) -> nn.Module:
+    if value_head_module is None:
+        return SharedValueHead(hidden_size=hidden_size)
+    return value_head_module
+
+
+def _composable_encode(
+    encoder_module: nn.Module, batch: TurnBatch
+) -> PlanetEdgeEncoderOutput:
+    return encoder_module(batch)
+
+
+def _composable_critic(
+    value_head_module: nn.Module | None,
+    hidden_size: int,
+    encoder_out: PlanetEdgeEncoderOutput,
+    player_count: jax.Array | None,
+) -> ValueHeadOutput:
+    return _composable_resolve_value_head(value_head_module, hidden_size)(
+        encoder_out.value_input, player_count=player_count
+    )
+
+
 class ComposableFactorizedPlanetPolicy(nn.Module):
     """Encoder + factorized top-K pointer decoder for v2 planet-edge batches."""
 
@@ -183,15 +209,12 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
     hidden_size: int = 128
 
     def _resolve_value_head(self) -> nn.Module:
-        value_head_module = self.value_head_module
-        if value_head_module is None:
-            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        return value_head_module
+        return _composable_resolve_value_head(self.value_head_module, self.hidden_size)
 
     def encode(self, batch: TurnBatch) -> PlanetEdgeEncoderOutput:
         """Run the planet graph encoder once per fixed ``TurnBatch``."""
 
-        return self.encoder_module(batch)
+        return _composable_encode(self.encoder_module, batch)
 
     def critic(
         self,
@@ -200,8 +223,11 @@ class ComposableFactorizedPlanetPolicy(nn.Module):
     ) -> ValueHeadOutput:
         """Bootstrap value from cached encoder output."""
 
-        return self._resolve_value_head()(
-            encoder_out.value_input, player_count=player_count
+        return _composable_critic(
+            self.value_head_module,
+            self.hidden_size,
+            encoder_out,
+            player_count,
         )
 
     def decode(
@@ -339,15 +365,12 @@ class ComposablePlanetFlowPolicy(nn.Module):
     hidden_size: int = 128
 
     def _resolve_value_head(self) -> nn.Module:
-        value_head_module = self.value_head_module
-        if value_head_module is None:
-            value_head_module = SharedValueHead(hidden_size=self.hidden_size)
-        return value_head_module
+        return _composable_resolve_value_head(self.value_head_module, self.hidden_size)
 
     def encode(self, batch: TurnBatch) -> PlanetEdgeEncoderOutput:
         """Run the planet graph encoder once per fixed ``TurnBatch``."""
 
-        return self.encoder_module(batch)
+        return _composable_encode(self.encoder_module, batch)
 
     def critic(
         self,
@@ -356,8 +379,11 @@ class ComposablePlanetFlowPolicy(nn.Module):
     ) -> ValueHeadOutput:
         """Bootstrap value from cached encoder output."""
 
-        return self._resolve_value_head()(
-            encoder_out.value_input, player_count=player_count
+        return _composable_critic(
+            self.value_head_module,
+            self.hidden_size,
+            encoder_out,
+            player_count,
         )
 
     def decode(

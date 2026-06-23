@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -13,8 +12,10 @@ from src.artifacts.checkpoint_compat import (
     action_layout_version_for_pointer_decoder,
     pointer_decoder_for_model,
 )
+from src.benchmark.git_utils import git_identity
 from src.config import TrainConfig
 from src.config.rollout_allocation import rollout_player_counts, run_name_env_count
+from src.opponents.curriculum import first_stage_opponent_family_weights
 
 
 @dataclass(slots=True)
@@ -95,7 +96,7 @@ def _format_run_name_component(cfg: TrainConfig) -> str:
 def _opponent_run_name_component(cfg: TrainConfig) -> str:
     if bool(cfg.opponents.self_play.enabled):
         return "selfplay"
-    weights = cfg.opponents.mix.weights
+    weights = first_stage_opponent_family_weights(cfg)
     active_weights = {
         str(name): float(weight)
         for name, weight in weights.items()
@@ -334,18 +335,7 @@ def _cache_path(output_root: Path, cache_dir: Path, value: str) -> Path:
 
 def _git_identity() -> dict[str, object]:
     repo = Path(__file__).resolve().parents[1]
-    try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=repo, text=True
-        ).strip()
-        dirty = bool(
-            subprocess.check_output(
-                ["git", "status", "--porcelain"], cwd=repo, text=True
-            ).strip()
-        )
-        return {"commit": commit, "dirty": dirty}
-    except Exception:
-        return {"commit": None, "dirty": None}
+    return git_identity(repo)
 
 
 def _fsync_dir(path: Path) -> None:

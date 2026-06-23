@@ -23,10 +23,21 @@ def test_ssot_pipeline_artifacts_profile_composes() -> None:
 
 
 def test_bracket_training_and_ssot_pipeline_are_mutually_exclusive() -> None:
-    with pytest.raises(ValueError, match="cannot both be true"):
+    with pytest.raises(ValueError, match="mutually exclusive submit-valid pipelines"):
         compose_hydra_train_config(
             [
                 "artifacts=ssot_pipeline",
                 "artifacts.bracket_training.enabled=true",
+            ]
+        )
+
+
+def test_hybrid_promotion_and_ssot_pipeline_are_mutually_exclusive() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive submit-valid pipelines"):
+        compose_hydra_train_config(
+            [
+                "artifacts=ssot_pipeline",
+                "artifacts.promotion.strategy=hybrid",
+                "artifacts.artifact_pipeline.checkpoint_eval_async=true",
             ]
         )

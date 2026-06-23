@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from src.jax.admission_throughput import (
+from src.benchmark.jsonl_window import (
     ThroughputWindow,
-    _record_float,
-    _record_update,
+    record_float,
+    record_update,
     resolve_log_path_from_input,
 )
 from src.jax.preflight_calibration import read_jsonl_records
@@ -75,7 +75,7 @@ def _window_from_throughput(
 
 
 def _has_phase_timing(record: Mapping[str, object]) -> bool:
-    return _record_float(record, PHASE_SECOND_KEYS[0]) is not None
+    return record_float(record, PHASE_SECOND_KEYS[0]) is not None
 
 
 def extract_rollout_phase_breakdown_from_records(
@@ -88,7 +88,7 @@ def extract_rollout_phase_breakdown_from_records(
     resolved = _window_from_throughput(window)
     selected: list[Mapping[str, object]] = []
     for record in records:
-        update = _record_update(record)
+        update = record_update(record)
         if update is None or not resolved.includes(update):
             continue
         if not _has_phase_timing(record):
@@ -118,8 +118,8 @@ def extract_rollout_phase_breakdown_from_records(
         for name, sec_key, frac_key in zip(
             PHASE_NAMES, PHASE_SECOND_KEYS, PHASE_FRACTION_KEYS, strict=True
         ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
+            sec = record_float(record, sec_key)
+            frac = record_float(record, frac_key)
             if sec is not None:
                 phase_seconds[name].append(sec)
             if frac is not None:
@@ -130,16 +130,16 @@ def extract_rollout_phase_breakdown_from_records(
             OPPONENT_DETAIL_FRACTION_KEYS,
             strict=True,
         ):
-            sec = _record_float(record, sec_key)
-            frac = _record_float(record, frac_key)
+            sec = record_float(record, sec_key)
+            frac = record_float(record, frac_key)
             if sec is not None:
                 opponent_detail_seconds[name].append(sec)
             if frac is not None:
                 opponent_detail_fractions[name].append(frac)
-        measured = _record_float(record, MEASURED_TOTAL_KEY)
+        measured = record_float(record, MEASURED_TOTAL_KEY)
         if measured is not None:
             measured_totals.append(measured)
-        rollout_s = _record_float(record, "rollout_seconds")
+        rollout_s = record_float(record, "rollout_seconds")
         if rollout_s is not None:
             rollout_seconds.append(rollout_s)
 
@@ -166,7 +166,7 @@ def extract_rollout_phase_breakdown_from_records(
         "max_measured_update": resolved.max_measured_update,
         "measured_updates": len(selected),
         "updates_in_window": sorted(
-            u for u in (_record_update(record) for record in selected) if u is not None
+            u for u in (record_update(record) for record in selected) if u is not None
         ),
         "phases": phases_payload,
         "opponent_details": opponent_details_payload,

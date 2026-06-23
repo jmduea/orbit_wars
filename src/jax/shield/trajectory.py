@@ -62,6 +62,7 @@ class ShieldedBatchResult(NamedTuple):
 def ship_count_for_bucket_jax(
     available_ships: jax.Array, bucket: jax.Array, bucket_count: int
 ) -> jax.Array:
+    """JAX trace of ``src.shield.trajectory_core.ship_count_for_bucket``."""
     available = jnp.maximum(available_ships, 0.0)
     fraction = jnp.where(
         bucket <= 0,
@@ -229,6 +230,7 @@ def _rotating_planet_mask_jax(game) -> jax.Array:
 
 
 def _fleet_speed_for_ships_jax(ships: jax.Array) -> jax.Array:
+    """JAX trace of ``src.shield.trajectory_core.fleet_speed``."""
     speed = (
         1.0
         + (MAX_FLEET_SPEED - 1.0)

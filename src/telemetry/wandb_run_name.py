@@ -11,6 +11,7 @@ import yaml
 
 from src.config import TrainConfig
 from src.config.rollout_allocation import rollout_player_counts, run_name_env_count
+from src.opponents.curriculum import first_stage_opponent_family_weights
 
 SWEPT_KEY_EXCLUDE_PREFIXES: tuple[str, ...] = (
     "seed",
@@ -84,7 +85,7 @@ def _format_run_name_component(cfg: TrainConfig) -> str:
 def _opponent_run_name_component(cfg: TrainConfig) -> str:
     if bool(cfg.opponents.self_play.enabled):
         return "selfplay"
-    weights = cfg.opponents.mix.weights
+    weights = first_stage_opponent_family_weights(cfg)
     active_weights = {
         str(name): float(weight)
         for name, weight in weights.items()
