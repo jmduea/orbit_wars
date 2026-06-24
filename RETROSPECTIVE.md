@@ -18,7 +18,7 @@ I spent a little over a month on it, working solo, and made heavy use of AI codi
 
 **The agent showed early competence that didn't hold — it either plateaued or collapsed depending on the recipe. I chose to stop.**
 
-Pushing past this looked like it would require substantially more time than I was willing to commit including more tuning, more careful experimentation, and real debugging of training stability to disambiguate whether the cause was due to chosen hyperparameters or an issue in the ppo update logic/calculations itself. So I stopped on purpose, satisfied with what I've learned wor.
+Pushing past this looked like it would require substantially more time than I was willing to commit including more tuning, more careful experimentation, and real debugging of training stability to disambiguate whether the cause was due to chosen hyperparameters or an issue in the ppo update logic/calculations itself. So I stopped on purpose, satisfied with what I've learned.
 
 What I'm less satisfied with is *why* it failed: **I never fully isolated the cause before stopping, and even more importantly, I should have taken a more methodical approach to the project as a whole**. I have hypotheses as to what was the cause of the issues, but I recognize now that if I had started from a minimal baseline and methodically performed the experiments only changing one variable at a time, I'd know whether the bottleneck was the reward signal, the exploration/self-play dynamics, the policy architecture, or the PPO update stability itself immediately instead of having to go back and debug. That gap is itself one of the project's biggest lessons, and I get into why below.
 
