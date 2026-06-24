@@ -30,7 +30,7 @@ The durable result of the project, then, isn't a leaderboard placement. It's the
 
 ## What went well
 
-### Iteration speed is the thing that matters most
+### Iteration speed is incredibly value as long as it isn't at the cost of sound methodology.
 
 The single clearest takeaway: the ability to iterate quickly is what lets you actually evaluate ideas. Every part of the project that invested in faster, more reproducible experiments paid for itself, and every part that slowed iteration down hurt — regardless of how clever it was. I came away genuinely convinced that "how fast can I get a trustworthy answer to a question?" is the metric that governs progress on this kind of work. I think pairing that mentality with a more rigorous and methodical approach to experiment design will do me well in the future.
 
